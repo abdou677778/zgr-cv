@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -27,11 +26,7 @@ import {
   type ClientProfile,
   type ClientProfileSummary,
 } from "@/lib/client-profile-db";
-
-const SESSION_ENDPOINT_KEY = "zgr-cv-cloud-endpoint";
-const SESSION_TOKEN_KEY = "zgr-cv-cloud-token";
-const DEFAULT_CLOUD_ENDPOINT =
-  (import.meta.env.VITE_ZGR_API_URL as string | undefined)?.trim() || "/api/clients";
+import { CLIENTS_API_ENDPOINT, getAdminSession } from "@/lib/auth-client";
 
 export function ClientDatabaseDialog({
   open,
@@ -50,14 +45,6 @@ export function ClientDatabaseDialog({
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
-  const [endpoint, setEndpoint] = useState(() => {
-    if (typeof window === "undefined") return "/api/clients";
-    return sessionStorage.getItem(SESSION_ENDPOINT_KEY) || DEFAULT_CLOUD_ENDPOINT;
-  });
-  const [token, setToken] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return sessionStorage.getItem(SESSION_TOKEN_KEY) || "";
-  });
 
   const refresh = async () => {
     setBusy("refresh");
@@ -129,16 +116,15 @@ export function ClientDatabaseDialog({
   };
 
   const synchronize = async () => {
-    if (!token.trim()) {
-      setMessage("Saisissez le jeton privé configuré sur la fonction Cloudflare.");
+    const token = getAdminSession();
+    if (!token) {
+      setMessage("La session administrateur a expiré. Reconnectez-vous.");
       return;
     }
     setBusy("cloud");
     setMessage("");
     try {
-      sessionStorage.setItem(SESSION_ENDPOINT_KEY, endpoint.trim());
-      sessionStorage.setItem(SESSION_TOKEN_KEY, token.trim());
-      const result = await synchronizeClientProfiles(endpoint, token);
+      const result = await synchronizeClientProfiles(CLIENTS_API_ENDPOINT, token);
       await refresh();
       setMessage(
         `Synchronisation terminée : ${result.uploaded} envoyé(s), ${result.downloaded} récupéré(s), ${result.total} profil(s).`,
@@ -269,23 +255,9 @@ export function ClientDatabaseDialog({
                 envoyés ; aucun PDF ni aucune clé IA.
               </p>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Adresse de l’API</Label>
-              <Input
-                value={endpoint}
-                onChange={(event) => setEndpoint(event.target.value)}
-                placeholder="/api/clients"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Jeton privé de synchronisation</Label>
-              <Input
-                type="password"
-                value={token}
-                autoComplete="off"
-                onChange={(event) => setToken(event.target.value)}
-                placeholder="Conservé pour cette session uniquement"
-              />
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+              API R2 protégée par la session administrateur active. Aucun jeton supplémentaire à
+              saisir.
             </div>
             <Button
               type="button"
@@ -301,8 +273,8 @@ export function ClientDatabaseDialog({
               Synchroniser maintenant
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              Le jeton est stocké dans sessionStorage et disparaît à la fermeture de l’onglet. En
-              mode fichier local, utilisez l’URL HTTPS complète de votre fonction déployée.
+              La session disparaît à la fermeture de l’onglet et les profils restent chiffrés en
+              transit via HTTPS.
             </p>
           </aside>
         </div>

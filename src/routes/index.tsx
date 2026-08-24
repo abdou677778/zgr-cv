@@ -26,6 +26,7 @@ import {
   Save,
   Check,
   FileText,
+  LogOut,
 } from "lucide-react";
 import * as pdfjs from "pdfjs-dist";
 import pdfWorkerSource from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
@@ -75,6 +76,8 @@ import { AiFieldDialog, type AiFieldRequest } from "@/components/ai-field-dialog
 import { AiImportAssistant } from "@/components/ai-import-assistant";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "@/lib/ai-types";
 import { ClientDatabaseDialog } from "@/components/client-database-dialog";
+import { AdminLogin } from "@/components/admin-login";
+import { clearAdminSession, verifyAdminSession } from "@/lib/auth-client";
 import {
   getClientProfile,
   newClientProfileId,
@@ -243,6 +246,39 @@ const UI_COPY = {
 } as const;
 
 function Index() {
+  const [authState, setAuthState] = useState<"checking" | "authenticated" | "guest">("checking");
+
+  useEffect(() => {
+    let active = true;
+    void verifyAdminSession().then((valid) => {
+      if (active) setAuthState(valid ? "authenticated" : "guest");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (authState === "checking") {
+    return (
+      <div className="zgr-app-shell flex min-h-screen items-center justify-center text-sm font-medium text-slate-700">
+        <LoaderCircle className="mr-2 h-5 w-5 animate-spin text-primary" /> Vérification de la
+        session…
+      </div>
+    );
+  }
+  if (authState === "guest")
+    return <AdminLogin onAuthenticated={() => setAuthState("authenticated")} />;
+  return (
+    <Workspace
+      onLogout={() => {
+        clearAdminSession();
+        setAuthState("guest");
+      }}
+    />
+  );
+}
+
+function Workspace({ onLogout }: { onLogout: () => void }) {
   const [language, setLanguage] = useState<DocumentLanguage>("fr");
   const [cvByLanguage, setCvByLanguage] = useState<Record<DocumentLanguage, CV>>({
     ...sampleCVByLanguage,
@@ -454,16 +490,7 @@ function Index() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      const stored = aiSettings.rememberKeys
-        ? aiSettings
-        : {
-            ...aiSettings,
-            connections: aiSettings.connections.map((connection) => ({
-              ...connection,
-              apiKey: "",
-            })),
-          };
-      localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(stored));
+      localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(aiSettings));
     } catch (error) {
       console.warn("Les paramètres IA n’ont pas pu être sauvegardés localement.", error);
     }
@@ -1026,6 +1053,15 @@ function Index() {
             </Button>
             <Button variant="outline" size="sm" onClick={reset}>
               <RotateCcw className="mr-2 h-4 w-4" /> {ui.reset}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Se déconnecter"
+              title="Se déconnecter"
+              onClick={onLogout}
+            >
+              <LogOut className="h-4 w-4" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

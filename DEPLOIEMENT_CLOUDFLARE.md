@@ -1,26 +1,31 @@
-# Déploiement ZGR CV avec Cloudflare Pages et R2
+# Déploiement de l'API ZGR CV avec Cloudflare Worker et R2
 
 ## Architecture
 
-- `dist-spa/` : application Vite statique.
-- `functions/api/clients/` : API privée Cloudflare Pages Functions.
+- GitHub Pages : application Vite statique.
+- `cloudflare/worker.js` : API privée Cloudflare Worker.
 - `CLIENTS_BUCKET` : binding R2 qui stocke uniquement `clients/<ID>.json`.
-- `ZGR_SYNC_TOKEN` : secret serveur obligatoire, jamais placé dans Git ou dans le HTML.
+- `ADMIN_USERNAME` : variable non secrète correspondant au compte unique.
+- `ADMIN_PASSWORD` et `SESSION_SECRET` : secrets d'authentification serveur.
+- `GEMINI_API_KEYS` et `OPENROUTER_API_KEYS` : tableaux JSON de clés, côté serveur.
 
 ## Configuration
 
 1. Créer un bucket R2 nommé `zgr-cv-clients`.
-2. Créer un projet Cloudflare Pages relié au dépôt Git.
-3. Utiliser `npm run build:spa` comme commande et `dist-spa` comme dossier de sortie.
-4. Ajouter le binding R2 `CLIENTS_BUCKET` vers `zgr-cv-clients`.
-5. Ajouter le secret `ZGR_SYNC_TOKEN` avec une valeur aléatoire d’au moins 32 caractères.
-6. Redéployer le projet.
-7. Dans **Base de données → Sauvegarde Cloudflare R2**, conserver `/api/clients` et saisir le jeton uniquement pour la session.
+2. Déployer le Worker défini dans `wrangler.worker.jsonc`.
+3. Ajouter le binding R2 `CLIENTS_BUCKET` vers `zgr-cv-clients`.
+4. Définir `ADMIN_PASSWORD` et une valeur aléatoire d'au moins 40 caractères pour
+   `SESSION_SECRET` avec `wrangler secret put`.
+5. Définir `GEMINI_API_KEYS` et `OPENROUTER_API_KEYS` sous forme de tableaux JSON.
+6. Autoriser uniquement l'origine GitHub Pages et les origines locales de développement.
+7. Tester `/health`, la connexion, la synchronisation R2 et les deux fournisseurs IA.
 
-Pour une protection supplémentaire, placer le site derrière Cloudflare Access avec votre adresse
-email autorisée. Le jeton reste requis par l’API même si Access est mal configuré.
+L'API ne propose aucune inscription, création d'utilisateur ou récupération de mot
+de passe. La session HMAC expire après 12 heures. Les secrets ne doivent jamais être
+préfixés par `VITE_`, car toute variable Vite est publique dans le navigateur.
 
 ## Développement local
 
-Le fichier HTML autonome continue d’utiliser IndexedDB sans serveur. Pour tester R2 et les Functions,
-utiliser Wrangler Pages en local avec un bucket simulé ou distant selon la documentation Cloudflare.
+Le fichier HTML autonome continue d'utiliser IndexedDB pour ses données locales.
+Pour tester l'API distante depuis Vite, utiliser une origine locale explicitement
+autorisée et l'endpoint du Worker.

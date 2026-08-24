@@ -1,4 +1,5 @@
 import type { AiConnection, AiModelOption, AiRunResult, AiSettings, AiUsage } from "./ai-types";
+import { authenticatedFetch } from "./auth-client";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -65,7 +66,9 @@ async function requestJson(
   }, timeoutMs);
 
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
+    const response = url.startsWith("/")
+      ? await authenticatedFetch(url, { ...init, signal: controller.signal })
+      : await fetch(url, { ...init, signal: controller.signal });
     const body = await responseJson(response);
     return { response, body };
   } catch (error) {
@@ -115,12 +118,10 @@ function parseJson<T>(value: string): T {
   }
 }
 
-async function listGeminiModels(connection: AiConnection): Promise<AiModelOption[]> {
+async function listGeminiModels(_connection: AiConnection): Promise<AiModelOption[]> {
   const { response, body } = await requestJson(
-    "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
-    {
-      headers: { "x-goog-api-key": connection.apiKey },
-    },
+    "/api/ai/models?provider=gemini",
+    {},
     "Liste des modèles Gemini",
   );
   ensureOk(response, body, "Connexion Gemini refusée");
@@ -128,26 +129,21 @@ async function listGeminiModels(connection: AiConnection): Promise<AiModelOption
   return models.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const model = item as JsonRecord;
-    const methods = Array.isArray(model.supportedGenerationMethods)
-      ? model.supportedGenerationMethods
-      : [];
-    if (!methods.includes("generateContent") || typeof model.name !== "string") return [];
-    const id = model.name.replace(/^models\//, "");
+    if (typeof model.id !== "string") return [];
     return [
       {
-        id,
-        name: typeof model.displayName === "string" ? model.displayName : id,
-        // The models endpoint has no free-tier eligibility field.
-        free: false,
+        id: model.id,
+        name: typeof model.name === "string" ? model.name : model.id,
+        free: model.free === true,
       },
     ];
   });
 }
 
-async function listOpenRouterModels(connection: AiConnection): Promise<AiModelOption[]> {
+async function listOpenRouterModels(_connection: AiConnection): Promise<AiModelOption[]> {
   const { response, body } = await requestJson(
-    "https://openrouter.ai/api/v1/models?output_modalities=text",
-    { headers: { Authorization: `Bearer ${connection.apiKey}` } },
+    "/api/ai/models?provider=openrouter",
+    {},
     "Liste des modèles OpenRouter",
   );
   ensureOk(response, body, "Connexion OpenRouter refusée");
@@ -156,59 +152,25 @@ async function listOpenRouterModels(connection: AiConnection): Promise<AiModelOp
     if (!item || typeof item !== "object") return [];
     const model = item as JsonRecord;
     if (typeof model.id !== "string") return [];
-    const pricing =
-      model.pricing && typeof model.pricing === "object" ? (model.pricing as JsonRecord) : {};
-    const promptPrice = Number(pricing.prompt ?? Number.NaN);
-    const completionPrice = Number(pricing.completion ?? Number.NaN);
-    const free =
-      model.id.endsWith(":free") ||
-      (Number.isFinite(promptPrice) &&
-        promptPrice === 0 &&
-        Number.isFinite(completionPrice) &&
-        completionPrice === 0);
     return [
       {
         id: model.id,
         name: typeof model.name === "string" ? model.name : model.id,
-        free,
-        provider:
-          typeof model.canonical_slug === "string" ? model.canonical_slug.split("/")[0] : undefined,
+        free: model.free === true,
       },
     ];
   });
 }
 
 async function openRouterUsage(
-  connection: AiConnection,
+  _connection: AiConnection,
 ): Promise<Pick<AiUsage, "remotePercent" | "remoteLabel">> {
-  const { response, body } = await requestJson(
-    "https://openrouter.ai/api/v1/key",
-    { headers: { Authorization: `Bearer ${connection.apiKey}` } },
-    "Lecture de l’usage OpenRouter",
-  );
-  ensureOk(response, body, "Impossible de lire l’usage OpenRouter");
-  const data = body.data && typeof body.data === "object" ? (body.data as JsonRecord) : {};
-  const limit = Number(data.limit);
-  const remaining = Number(data.limit_remaining);
-  const usage = Number(data.usage);
-  if (Number.isFinite(limit) && limit > 0 && Number.isFinite(remaining)) {
-    const percent = Math.max(0, Math.min(100, ((limit - remaining) / limit) * 100));
-    return {
-      remotePercent: percent,
-      remoteLabel: `${percent.toFixed(1)} % de la limite de clé · ${Math.max(0, remaining).toFixed(2)} restant`,
-    };
-  }
-  return {
-    remoteLabel: Number.isFinite(usage)
-      ? `Usage OpenRouter déclaré : ${usage.toFixed(4)} USD · aucune limite de clé définie`
-      : "OpenRouter ne déclare aucune limite exploitable pour cette clé",
-  };
+  return { remoteLabel: "Clés OpenRouter protégées et gérées côté Cloudflare" };
 }
 
 export async function testAiConnection(
   connection: AiConnection,
 ): Promise<{ models: AiModelOption[]; model: string; usage: AiUsage }> {
-  if (!connection.apiKey.trim()) throw new Error("Ajoutez d’abord une clé API.");
   const models =
     connection.provider === "gemini"
       ? await listGeminiModels(connection)
@@ -243,42 +205,24 @@ async function generateGemini(
 ) {
   const model = connection.model.replace(/^models\//, "");
   const { response, body } = await requestJson(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    "/api/ai/generate",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": connection.apiKey },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
-        },
+        provider: "gemini",
+        model,
+        system,
+        prompt,
       }),
     },
     "Génération Gemini",
     options,
   );
   ensureOk(response, body, "Échec Gemini");
-  const candidates = Array.isArray(body.candidates) ? body.candidates : [];
-  const first =
-    candidates[0] && typeof candidates[0] === "object" ? (candidates[0] as JsonRecord) : {};
-  const content =
-    first.content && typeof first.content === "object" ? (first.content as JsonRecord) : {};
-  const parts = Array.isArray(content.parts) ? content.parts : [];
-  const text = parts
-    .flatMap((part) =>
-      part && typeof part === "object" && typeof (part as JsonRecord).text === "string"
-        ? [(part as JsonRecord).text as string]
-        : [],
-    )
-    .join("");
+  const text = typeof body.text === "string" ? body.text : "";
   if (!text) throw new Error("Gemini n’a renvoyé aucun contenu exploitable.");
-  const usage =
-    body.usageMetadata && typeof body.usageMetadata === "object"
-      ? (body.usageMetadata as JsonRecord)
-      : {};
-  return { text, tokens: Number(usage.totalTokenCount) || 0 };
+  return { text, tokens: Number(body.tokens) || 0 };
 }
 
 async function generateOpenRouter(
@@ -292,39 +236,28 @@ async function generateOpenRouter(
     .map((item) => item.trim())
     .filter(Boolean);
   const { response, body } = await requestJson(
-    "https://openrouter.ai/api/v1/chat/completions",
+    "/api/ai/generate",
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${connection.apiKey}`,
-        "X-OpenRouter-Title": "ZGR CV AI Assistant",
       },
       body: JSON.stringify({
+        provider: "openrouter",
         model: connection.model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        ...(order.length
-          ? { provider: { order, allow_fallbacks: connection.allowProviderFallbacks } }
-          : {}),
+        system,
+        prompt,
+        providerOrder: order.join(","),
+        allowProviderFallbacks: connection.allowProviderFallbacks,
       }),
     },
     "Génération OpenRouter",
     options,
   );
   ensureOk(response, body, "Échec OpenRouter");
-  const choices = Array.isArray(body.choices) ? body.choices : [];
-  const first = choices[0] && typeof choices[0] === "object" ? (choices[0] as JsonRecord) : {};
-  const message =
-    first.message && typeof first.message === "object" ? (first.message as JsonRecord) : {};
-  const text = typeof message.content === "string" ? message.content : "";
+  const text = typeof body.text === "string" ? body.text : "";
   if (!text) throw new Error("OpenRouter n’a renvoyé aucun contenu exploitable.");
-  const usage = body.usage && typeof body.usage === "object" ? (body.usage as JsonRecord) : {};
-  return { text, tokens: Number(usage.total_tokens) || 0 };
+  return { text, tokens: Number(body.tokens) || 0 };
 }
 
 function updateConnection(
@@ -349,9 +282,7 @@ export async function runAiJson<T>(
   let settings = initialSettings;
   const deadline = Date.now() + (options.maxTotalMs ?? DEFAULT_TOTAL_TIMEOUT_MS);
   const candidates = settings.connections
-    .filter(
-      (connection) => connection.enabled && connection.apiKey.trim() && connection.model.trim(),
-    )
+    .filter((connection) => connection.enabled && connection.model.trim())
     .sort((left, right) => left.priority - right.priority);
   if (!candidates.length)
     throw new Error("Aucune connexion IA active et complète. Ouvrez Paramètres IA.");

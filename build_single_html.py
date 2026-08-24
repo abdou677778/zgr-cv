@@ -89,9 +89,10 @@ def main():
         
     print(f"\n=== Succès ! Fichier HTML unique autonome créé : {os.path.abspath(output_html_path)} ===")
     
-    # Ouvrir dans le navigateur par défaut
-    print("Ouverture du fichier dans le navigateur...")
-    webbrowser.open(f"file://{os.path.abspath(output_html_path)}")
+    # L'ouverture est volontairement optionnelle pour que les builds CI restent silencieux.
+    if "--open" in sys.argv:
+        print("Ouverture du fichier dans le navigateur...")
+        webbrowser.open(f"file://{os.path.abspath(output_html_path)}")
 
 if __name__ == "__main__":
     main()

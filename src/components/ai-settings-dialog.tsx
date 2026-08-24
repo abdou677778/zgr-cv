@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, KeyRound, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, KeyRound, LoaderCircle, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   newAiConnection,
-  importAiKeys,
   type AiConnection,
   type AiProviderId,
   type AiSettings,
@@ -41,14 +39,10 @@ export function AiSettingsDialog({
 }) {
   const [draft, setDraft] = useState(value);
   const [testing, setTesting] = useState<string | null>(null);
-  const [bulkKeys, setBulkKeys] = useState("");
-  const [bulkMessage, setBulkMessage] = useState("");
 
   useEffect(() => {
     if (open) {
       setDraft(structuredClone(value));
-      setBulkKeys("");
-      setBulkMessage("");
     }
   }, [open, value]);
 
@@ -69,31 +63,6 @@ export function AiSettingsDialog({
     const connection = newAiConnection(provider);
     connection.priority = draft.connections.length + 1;
     setDraft((current) => ({ ...current, connections: [...current.connections, connection] }));
-  };
-
-  const importBulkKeys = () => {
-    const result = importAiKeys(bulkKeys, draft.connections);
-    if (!result.connections.length) {
-      setBulkMessage(
-        result.duplicates
-          ? "Aucune nouvelle clé : les clés reconnues sont déjà présentes."
-          : "Aucune clé Gemini ou OpenRouter valide n’a été reconnue.",
-      );
-      return;
-    }
-    setDraft((current) => ({
-      ...current,
-      connections: [...current.connections, ...result.connections],
-    }));
-    const details = [
-      `${result.connections.length} connexion${result.connections.length > 1 ? "s" : ""} ajoutée${result.connections.length > 1 ? "s" : ""}`,
-      result.duplicates ? `${result.duplicates} doublon${result.duplicates > 1 ? "s" : ""}` : "",
-      result.ignored
-        ? `${result.ignored} valeur${result.ignored > 1 ? "s" : ""} ignorée${result.ignored > 1 ? "s" : ""}`
-        : "",
-    ].filter(Boolean);
-    setBulkMessage(`${details.join(" · ")}. Testez ensuite chaque connexion.`);
-    setBulkKeys("");
   };
 
   const test = async (connection: AiConnection) => {
@@ -130,23 +99,22 @@ export function AiSettingsDialog({
         <DialogHeader>
           <DialogTitle>Paramètres IA</DialogTitle>
           <DialogDescription>
-            Configurez plusieurs clés Gemini ou OpenRouter. Les requêtes suivent la priorité et
-            basculent automatiquement si une connexion atteint sa limite ou devient indisponible.
+            Choisissez les modèles et leur priorité. Les clés privées sont gérées exclusivement par
+            Cloudflare et la rotation est automatique lorsqu’un quota est atteint.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              Cette application autonome appelle directement les fournisseurs. Les clés mémorisées
-              sont conservées dans le stockage local de ce navigateur, sans chiffrement serveur. Ne
-              partagez jamais le fichier ou le profil navigateur avec des clés enregistrées.
+              Aucune clé API n’est transmise au navigateur, stockée dans localStorage ou publiée sur
+              GitHub. Les appels passent par le Worker authentifié.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
             <input
               type="checkbox"
@@ -163,44 +131,6 @@ export function AiSettingsDialog({
             />
             Modèles gratuits uniquement
           </label>
-          <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
-            <input
-              type="checkbox"
-              checked={draft.rememberKeys}
-              onChange={(event) => setDraft({ ...draft, rememberKeys: event.target.checked })}
-            />
-            Mémoriser les clés localement
-          </label>
-        </div>
-
-        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-          <div>
-            <h3 className="text-sm font-semibold">Importer plusieurs clés</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Collez une liste libre : les clés Gemini modernes AQ., Gemini historiques AIza et
-              OpenRouter sont détectées, dédupliquées puis transformées en connexions séparées. Le
-              champ est vidé immédiatement après l’import.
-            </p>
-          </div>
-          <Textarea
-            value={bulkKeys}
-            onChange={(event) => {
-              setBulkKeys(event.target.value);
-              setBulkMessage("");
-            }}
-            rows={4}
-            spellCheck={false}
-            autoComplete="off"
-            className="font-mono text-xs"
-            placeholder={"AQ.…\nAIza…\nsk-or-v1-…"}
-            aria-label="Liste de clés API à importer"
-          />
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" size="sm" disabled={!bulkKeys.trim()} onClick={importBulkKeys}>
-              <KeyRound className="mr-2 h-4 w-4" /> Détecter et ajouter
-            </Button>
-            {bulkMessage && <p className="text-xs text-muted-foreground">{bulkMessage}</p>}
-          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -288,20 +218,6 @@ export function AiSettingsDialog({
                         updateConnection(connection.id, {
                           priority: Math.max(1, Number(event.target.value) || 1),
                         })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs">Clé API</Label>
-                    <Input
-                      type="password"
-                      autoComplete="off"
-                      value={connection.apiKey}
-                      placeholder={
-                        connection.provider === "gemini" ? "AQ.… ou AIza…" : "sk-or-v1-…"
-                      }
-                      onChange={(event) =>
-                        updateConnection(connection.id, { apiKey: event.target.value.trim() })
                       }
                     />
                   </div>
@@ -405,7 +321,7 @@ export function AiSettingsDialog({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={testing === connection.id || !connection.apiKey}
+                  disabled={testing === connection.id}
                   onClick={() => void test(connection)}
                 >
                   {testing === connection.id && (

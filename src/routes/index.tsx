@@ -81,7 +81,13 @@ import { ClientDatabaseDialog } from "@/components/client-database-dialog";
 import { AdminLogin } from "@/components/admin-login";
 import { AccountSettingsDialog } from "@/components/account-settings-dialog";
 import { PromptMasterDialog } from "@/components/prompt-master-dialog";
-import { clearAdminSession, verifyAdminSession, type SessionUser } from "@/lib/auth-client";
+import {
+  clearAdminSession,
+  getCurrentUser,
+  subscribeToSessionChanges,
+  verifyAdminSession,
+  type SessionUser,
+} from "@/lib/auth-client";
 import {
   getClientProfile,
   newClientProfileId,
@@ -250,35 +256,32 @@ const UI_COPY = {
 } as const;
 
 function Index() {
-  const [authState, setAuthState] = useState<"checking" | "authenticated" | "guest">("checking");
-  const [authUser, setAuthUser] = useState<SessionUser | null>(null);
+  const [authUser, setAuthUser] = useState<SessionUser | null>(() => getCurrentUser());
 
   useEffect(() => {
     let active = true;
-    void verifyAdminSession().then((user) => {
+    const validate = () => {
+      void verifyAdminSession().then((user) => {
+        if (active) setAuthUser(user);
+      });
+    };
+    const unsubscribe = subscribeToSessionChanges((user) => {
       if (!active) return;
       setAuthUser(user);
-      setAuthState(user ? "authenticated" : "guest");
     });
+    const validationTimer = window.setTimeout(validate, 150);
     return () => {
       active = false;
+      window.clearTimeout(validationTimer);
+      unsubscribe();
     };
   }, []);
 
-  if (authState === "checking") {
-    return (
-      <div className="zgr-app-shell flex min-h-screen items-center justify-center text-sm font-medium text-slate-700">
-        <LoaderCircle className="mr-2 h-5 w-5 animate-spin text-primary" /> Vérification de la
-        session…
-      </div>
-    );
-  }
-  if (authState === "guest" || !authUser)
+  if (!authUser)
     return (
       <AdminLogin
         onAuthenticated={(user) => {
           setAuthUser(user);
-          setAuthState("authenticated");
         }}
       />
     );
@@ -288,7 +291,6 @@ function Index() {
       onLogout={() => {
         clearAdminSession();
         setAuthUser(null);
-        setAuthState("guest");
       }}
     />
   );

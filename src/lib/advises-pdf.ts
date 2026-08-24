@@ -10,10 +10,11 @@ import calibriBoldUrl from "@/assets/fonts/Calibribold.ttf?inline";
 import type { CV } from "./cv-types";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
+import { ADVISES_TEMPLATE_ID } from "./document-templates";
 import notoSansScUrl from "@/assets/fonts/NotoSansSC-VF.ttf?inline";
 import notoSansArabicUrl from "@/assets/fonts/NotoSansArabic-VF.ttf?inline";
 
-export const ADVISES_TEMPLATE_ID = "advises-v1" as const;
+export { ADVISES_TEMPLATE_ID };
 let fontsRegistered = false;
 
 function registerFonts() {

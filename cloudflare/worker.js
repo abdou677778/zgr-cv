@@ -2,7 +2,7 @@ const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
 const MAX_ACCOUNT_BYTES = 16_384;
 const MAX_AI_BYTES = 120_000;
-const SESSION_TTL_SECONDS = 12 * 60 * 60;
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 // Cloudflare Workers currently rejects PBKDF2 iteration counts above 100,000.
 const PBKDF2_ITERATIONS = 100_000;
 const ID_PATTERN = /^ZGR-\d{8}-[A-Z0-9]{6,12}$/;
@@ -364,8 +364,7 @@ async function login(request, env, origin, ctx) {
     loginCount: (Number(user.loginCount) || 0) + 1,
     sessionVersion: Number(user.sessionVersion) || 1,
   };
-  await saveUser(env, storedUser);
-  const session = await issueSession(env, storedUser);
+  const [session] = await Promise.all([issueSession(env, storedUser), saveUser(env, storedUser)]);
   ctx.waitUntil(writeAudit(env, request, "login", username, "success"));
   return json({ ok: true, ...session, user: publicUser(storedUser) }, 200, origin);
 }

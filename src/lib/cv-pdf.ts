@@ -9,6 +9,7 @@ import type {
 import type { CV, Experience, Formation, Education } from "./cv-types";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
+import { CV_TEMPLATES, type CvTemplateId } from "./document-templates";
 import pdfMake from "pdfmake/build/pdfmake";
 import calibriRegularUrl from "@/assets/fonts/Calibri.ttf?inline";
 import calibriItalicUrl from "@/assets/fonts/Calibriitalic.ttf?inline";
@@ -53,22 +54,8 @@ const V2_MUTED = "#595959";
 const V2_BANNER_BG = "#f2f2f2";
 let fontsRegistered = false;
 
-export type CvTemplateId =
-  | "canadian-v1"
-  | "canadian-v2"
-  | "canadian-v3"
-  | "canadian-v4"
-  | "ats-a4"
-  | "arabic-pro-v1";
-
-export const CV_TEMPLATES: ReadonlyArray<{ id: CvTemplateId; name: string }> = [
-  { id: "canadian-v1", name: "CV Canadien V1" },
-  { id: "canadian-v2", name: "CV Canadien V2" },
-  { id: "canadian-v3", name: "CV Canadien V3" },
-  { id: "canadian-v4", name: "CV Canadien V4" },
-  { id: "ats-a4", name: "CV ATS Format A4" },
-  { id: "arabic-pro-v1", name: "CV PRO Arabe V1" },
-];
+export { CV_TEMPLATES };
+export type { CvTemplateId };
 
 const FONT_FILES = {
   "Calibri.ttf": calibriRegularUrl,

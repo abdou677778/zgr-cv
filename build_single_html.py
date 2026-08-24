@@ -10,12 +10,15 @@ def main():
     # Executer le build Vite
     try:
         # Sur Windows, shell=True est requis pour lancer npx dans powershell/cmd
+        build_env = os.environ.copy()
+        build_env["ZGR_AUTONOMOUS_BUILD"] = "1"
         result = subprocess.run(
             ["npx", "vite", "build", "--config", "vite.spa.config.ts"],
             shell=True,
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            env=build_env,
         )
         print(result.stdout)
     except subprocess.CalledProcessError as e:

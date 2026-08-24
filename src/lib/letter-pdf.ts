@@ -12,26 +12,12 @@ import calibriBoldItalicUrl from "@/assets/fonts/Calibribolditalic.ttf?inline";
 import type { CV } from "./cv-types";
 import { documentFont, languageInfo, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
+import { COVER_LETTER_TEMPLATES, type CoverLetterTemplateId } from "./document-templates";
 import notoSansScUrl from "@/assets/fonts/NotoSansSC-VF.ttf?inline";
 import notoSansArabicUrl from "@/assets/fonts/NotoSansArabic-VF.ttf?inline";
 
-export type CoverLetterTemplateId =
-  | "cover-letter-v1"
-  | "cover-letter-v2"
-  | "cover-letter-v3"
-  | "cover-letter-v4"
-  | "cover-letter-v5";
-
-export const COVER_LETTER_TEMPLATES: ReadonlyArray<{
-  id: CoverLetterTemplateId;
-  name: string;
-}> = [
-  { id: "cover-letter-v1", name: "Cover Letter V1 Canada" },
-  { id: "cover-letter-v2", name: "Cover Letter V2" },
-  { id: "cover-letter-v3", name: "Cover Letter V3" },
-  { id: "cover-letter-v4", name: "Cover Letter V4" },
-  { id: "cover-letter-v5", name: "Cover Letter V5 Europass" },
-];
+export { COVER_LETTER_TEMPLATES };
+export type { CoverLetterTemplateId };
 
 const A4_W = 595.28;
 const A4_H = 841.89;

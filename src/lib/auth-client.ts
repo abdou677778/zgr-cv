@@ -1,5 +1,7 @@
 const SESSION_KEY = "zgr-cv-admin-session";
 const SESSION_USER_KEY = "zgr-cv-session-user";
+const SESSION_CHANGED_EVENT = "zgr-cv-session-changed";
+const SESSION_VERIFY_TIMEOUT_MS = 6_000;
 const configuredClientsEndpoint =
   (import.meta.env.VITE_ZGR_API_URL as string | undefined)?.trim() || "/api/clients";
 
@@ -19,25 +21,88 @@ export type SessionUser = {
   loginCount: number;
 };
 
+function migrateLegacySession() {
+  if (typeof window === "undefined") return;
+  if (!localStorage.getItem(SESSION_KEY)) {
+    const legacyToken = sessionStorage.getItem(SESSION_KEY);
+    const legacyUser = sessionStorage.getItem(SESSION_USER_KEY);
+    if (legacyToken) localStorage.setItem(SESSION_KEY, legacyToken);
+    if (legacyUser) localStorage.setItem(SESSION_USER_KEY, legacyUser);
+  }
+  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_USER_KEY);
+}
+
+function tokenHasExpired(token: string) {
+  try {
+    const payload = token.split(".")[0];
+    const normalized = payload.replaceAll("-", "+").replaceAll("_", "/");
+    const claims = JSON.parse(
+      atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")),
+    ) as {
+      exp?: number;
+    };
+    return !Number.isFinite(claims.exp) || Number(claims.exp) * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+}
+
+function notifySessionChange() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_CHANGED_EVENT));
+}
+
+function saveSession(token: string, user: SessionUser) {
+  localStorage.setItem(SESSION_KEY, token);
+  localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_USER_KEY);
+  notifySessionChange();
+}
+
 export function getAdminSession() {
   if (typeof window === "undefined") return "";
-  return sessionStorage.getItem(SESSION_KEY) || "";
+  migrateLegacySession();
+  const token = localStorage.getItem(SESSION_KEY) || "";
+  if (token && tokenHasExpired(token)) {
+    clearAdminSession();
+    return "";
+  }
+  return token;
 }
 
 export function clearAdminSession() {
   if (typeof window !== "undefined") {
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_USER_KEY);
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_USER_KEY);
+    notifySessionChange();
   }
 }
 
 export function getCurrentUser(): SessionUser | null {
   if (typeof window === "undefined") return null;
+  if (!getAdminSession()) return null;
   try {
-    return JSON.parse(sessionStorage.getItem(SESSION_USER_KEY) || "null") as SessionUser | null;
+    return JSON.parse(localStorage.getItem(SESSION_USER_KEY) || "null") as SessionUser | null;
   } catch {
     return null;
   }
+}
+
+export function subscribeToSessionChanges(listener: (user: SessionUser | null) => void) {
+  if (typeof window === "undefined") return () => undefined;
+  const sync = () => listener(getCurrentUser());
+  const storageSync = (event: StorageEvent) => {
+    if (event.key === SESSION_KEY || event.key === SESSION_USER_KEY || event.key === null) sync();
+  };
+  window.addEventListener("storage", storageSync);
+  window.addEventListener(SESSION_CHANGED_EVENT, sync);
+  return () => {
+    window.removeEventListener("storage", storageSync);
+    window.removeEventListener(SESSION_CHANGED_EVENT, sync);
+  };
 }
 
 async function responseJson(response: Response) {
@@ -60,27 +125,36 @@ export async function loginAdmin(username: string, password: string) {
   });
   const body = await responseJson(response);
   if (!body.token || !body.user) throw new Error("Le serveur n’a pas créé de session.");
-  sessionStorage.setItem(SESSION_KEY, body.token);
-  sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(body.user));
+  saveSession(body.token, body.user);
   return body.user;
 }
 
 export async function verifyAdminSession(token = getAdminSession()) {
   if (!token) return null;
-  const response = await fetch(apiUrl("/api/auth/session"), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) {
-    clearAdminSession();
-    return null;
+  const cachedUser = getCurrentUser();
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), SESSION_VERIFY_TIMEOUT_MS);
+  try {
+    const response = await fetch(apiUrl("/api/auth/session"), {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    if (response.status === 401 || response.status === 403) {
+      clearAdminSession();
+      return null;
+    }
+    const body = await responseJson(response);
+    if (!body.user) {
+      clearAdminSession();
+      return null;
+    }
+    saveSession(token, body.user);
+    return body.user;
+  } catch {
+    return cachedUser;
+  } finally {
+    window.clearTimeout(timeout);
   }
-  const body = await responseJson(response);
-  if (!body.user) {
-    clearAdminSession();
-    return null;
-  }
-  sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(body.user));
-  return body.user;
 }
 
 export async function authenticatedFetch(path: string, init: RequestInit = {}) {

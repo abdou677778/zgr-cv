@@ -20,7 +20,7 @@
   `OPENROUTER_API_KEYS`
 
 Le Worker applique une origine CORS explicite, une session signée HMAC limitée à
-12 heures, des mots de passe PBKDF2-SHA256 salés individuellement, une révocation
+7 jours, des mots de passe PBKDF2-SHA256 salés individuellement, une révocation
 immédiate des sessions, une limite JSON de 5 Mo et un journal d’audit R2. Les mots
 de passe et les clés IA ne sont jamais inclus dans le dépôt, le build public ou le
 stockage local du navigateur.
@@ -29,7 +29,10 @@ stockage local du navigateur.
 
 Le workflow `.github/workflows/deploy-pages.yml` compile `dist-spa` à chaque push
 sur `main`, puis publie l’artefact avec GitHub Pages. La configuration Vite utilise
-des chemins relatifs pour fonctionner depuis un sous-dossier `github.io`.
+des chemins relatifs pour fonctionner depuis un sous-dossier `github.io`. Les
+moteurs PDF et leurs grandes polices sont chargés à la demande afin de garder la
+connexion et l’interface initiale légères. Le générateur autonome désactive cette
+division et conserve toutes les ressources dans son fichier HTML unique.
 
 ## Utilisation de la sauvegarde
 
@@ -38,9 +41,12 @@ Après la connexion avec un profil actif, ouvrir **Base de données** :
 1. L’endpoint est préconfiguré dans le build GitHub Pages.
 2. Cliquer sur **Synchroniser maintenant**.
 
-La session reste limitée à l’onglet. Les profils plus récents sont envoyés vers R2
-et les versions distantes plus récentes sont récupérées localement. Les PDF restent
-locaux ; seuls les JSON clients sont sauvegardés.
+La session est persistante, partagée entre les onglets du même navigateur et peut
+rester active simultanément sur plusieurs navigateurs, ordinateurs et téléphones.
+Chaque appareil possède son propre jeton signé. Une modification de mot de passe,
+de rôle ou d’état révoque les anciens jetons du profil. Les profils plus récents
+sont envoyés vers R2 et les versions distantes plus récentes sont récupérées
+localement. Les PDF restent locaux ; seuls les JSON clients sont sauvegardés.
 
 Les boutons IA appellent le Worker, qui sélectionne et fait tourner les clés Gemini
 ou OpenRouter côté serveur. L’administrateur peut conserver les clés d’environnement

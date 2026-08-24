@@ -1,17 +1,18 @@
 import type { CV } from "./cv-types";
-import { CV_TEMPLATES, createCvPdfBlob, type CvTemplateId } from "./cv-pdf";
 import {
+  ADVISES_TEMPLATE_ID,
   COVER_LETTER_TEMPLATES,
-  createCoverLetterPdfBlob,
+  CV_TEMPLATES,
   type CoverLetterTemplateId,
-} from "./letter-pdf";
-import { ADVISES_TEMPLATE_ID, createAdvisesPdfBlob } from "./advises-pdf";
+  type CvTemplateId,
+  type PdfTemplateId,
+} from "./document-templates";
 import { DOCUMENT_LANGUAGES, languageInfo, type DocumentLanguage } from "./document-language";
 import { DEFAULT_TEMPLATE_COLORS, type TemplateColorMap, type ThemeTemplateId } from "./pdf-theme";
 import { strToU8, zipSync } from "fflate";
 
 export type DocumentKind = "cv" | "cover-letter" | "advises";
-export type PdfTemplateId = CvTemplateId | CoverLetterTemplateId | typeof ADVISES_TEMPLATE_ID;
+export type { PdfTemplateId } from "./document-templates";
 
 export function getDocumentKinds(language: DocumentLanguage) {
   const names = {
@@ -52,9 +53,14 @@ export async function createDocumentPdfBlob(
   accentColor?: string,
 ) {
   if (kind === "cover-letter") {
+    const { createCoverLetterPdfBlob } = await import("./letter-pdf");
     return createCoverLetterPdfBlob(cv, templateId as CoverLetterTemplateId, language, accentColor);
   }
-  if (kind === "advises") return createAdvisesPdfBlob(cv, language, accentColor);
+  if (kind === "advises") {
+    const { createAdvisesPdfBlob } = await import("./advises-pdf");
+    return createAdvisesPdfBlob(cv, language, accentColor);
+  }
+  const { createCvPdfBlob } = await import("./cv-pdf");
   return createCvPdfBlob(cv, templateId as CvTemplateId, language, accentColor);
 }
 

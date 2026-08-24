@@ -1,15 +1,36 @@
 import { useState, type FormEvent } from "react";
-import { FileText, LoaderCircle, LockKeyhole, ShieldCheck } from "lucide-react";
+import {
+  ExternalLink,
+  FileText,
+  LoaderCircle,
+  LockKeyhole,
+  ShieldCheck,
+  WifiOff,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginAdmin, type SessionUser } from "@/lib/auth-client";
 
+const ONLINE_APP_URL = "https://abdou677778.github.io/zgr-cv/";
+
+function initialUsername() {
+  if (typeof window === "undefined") return "admin";
+  return new URLSearchParams(window.location.search).get("login")?.trim() || "admin";
+}
+
 export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const fileMode = typeof window !== "undefined" && window.location.protocol === "file:";
+
+  const openOnlineVersion = () => {
+    const target = new URL(ONLINE_APP_URL);
+    if (username.trim()) target.searchParams.set("login", username.trim());
+    window.location.assign(target.toString());
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -21,7 +42,9 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
       const message = failure instanceof Error ? failure.message : "Connexion impossible.";
       setError(
         failure instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(message)
-          ? "Service de connexion inaccessible. Vérifiez Internet puis réessayez."
+          ? fileMode
+            ? "Ce navigateur bloque la connexion Cloudflare depuis le fichier local. Ouvrez la version en ligne ci-dessous."
+            : "Service de connexion inaccessible. Vérifiez Internet puis réessayez."
           : message,
       );
     } finally {
@@ -51,6 +74,15 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
             <p>Accès privé. Seul l’administrateur peut créer, modifier ou désactiver un profil.</p>
           </div>
+          {fileMode && (
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+              <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <p>
+                Mode fichier local détecté. Pour une connexion fiable sur plusieurs navigateurs, PC
+                ou téléphones, utilisez la version HTTPS en ligne.
+              </p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="admin-username">Utilisateur</Label>
             <Input
@@ -90,6 +122,16 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             )}
             Se connecter
           </Button>
+          {fileMode && (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full rounded-xl border-indigo-200 bg-indigo-50 text-indigo-950 hover:bg-indigo-100"
+              onClick={openOnlineVersion}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" /> Ouvrir la version en ligne
+            </Button>
+          )}
         </form>
       </section>
     </main>

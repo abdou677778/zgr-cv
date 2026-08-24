@@ -1,0 +1,352 @@
+{
+  "CONTENU_FRANCAIS": {
+    "INFORMATIONS PERSONNELLES": {
+      "Nom complet": "Amine Bensalem",
+      "Poste": "Ingénieur logiciel full-stack",
+      "Téléphone": "+1 (438) 555-1842",
+      "Email": "amine.bensalem@example.com",
+      "Date de naissance": "15 mars 1992",
+      "Situation Familialle": "Célibataire",
+      "Permis de conduire": "Permis de conduire catégorie B, valide",
+      "Service National": "Dispensé",
+      "Wilaya": "Alger, Algérie",
+      "Pays": "Canada (résident temporaire avec projet de résidence permanente)",
+      "Adresse": "Montréal, QC, Canada",
+      "Statut de relocation": "Ouvert à la relocation partout au Canada"
+    },
+    "OBJECTIF PROFESSIONNEL": {
+      "Texte de l'objectif": "Ingénieur logiciel full-stack motivé, fort de plusieurs années d'expérience en développement web et en intégration d'API, souhaitant contribuer à des projets innovants au sein d'une entreprise canadienne axée sur la qualité, la collaboration et l'amélioration continue"
+    },
+    "COMPÉTENCES CLÉS": [
+      "Développement web full-stack avec JavaScript, TypeScript, Node.js et React",
+      "Conception, optimisation et maintenance de bases de données SQL et NoSQL",
+      "Conception et intégration d'API REST et GraphQL dans des architectures distribuées",
+      "Mise en place de pipelines CI/CD et utilisation de Docker dans un contexte DevOps",
+      "Pratiques de développement Agile et Scrum au sein d'équipes multidisciplinaires",
+      "Analyse des besoins métiers et traduction en solutions techniques robustes",
+      "Communication efficace, esprit d'équipe et capacité d'adaptation dans des environnements multiculturels"
+    ],
+    "LANGUES": {
+      "Arabe": "Langue maternelle",
+      "Kabyle": "Bon niveau oral",
+      "Français": "Courant professionnel",
+      "Anglais": "Intermédiaire avancé",
+      "Allemand": "Notions de base",
+      "Espagnol": "Notions de base"
+    },
+    "EXPÉRIENCE PROFESSIONNELLE": {
+      "Expérience 1": {
+        "Dates": "Juin 2022 – Octobre 2025",
+        "Lieu": "Montréal, QC, Canada",
+        "Titre du poste": "Développeur logiciel full-stack",
+        "Entreprise": "TechNova Solutions, Montréal",
+        "Description": [
+          "Concevoir, développer et maintenir des applications web SaaS en React et Node.js pour des clients nord-américains",
+          "Mettre en place des API REST sécurisées et documentées, intégrées à des services tiers et à des bases de données PostgreSQL",
+          "Collaborer avec les équipes produit, QA et UX dans un environnement Agile pour livrer des fonctionnalités incrémentales de haute qualité",
+          "Contribuer au processus de revue de code, au mentorat des développeurs juniors et à l'amélioration continue des standards de développement"
+        ]
+      },
+      "Expérience 2": {
+        "Dates": "Janvier 2019 – Mai 2022",
+        "Lieu": "Alger, Algérie",
+        "Titre du poste": "Développeur web",
+        "Entreprise": "DigitalDZ Studio, Alger",
+        "Description": [
+          "Développer des sites et applications web sur mesure en JavaScript, PHP et Laravel pour des PME locales",
+          "Participer à l'analyse des besoins des clients et à la rédaction des spécifications fonctionnelles et techniques",
+          "Optimiser les performances front-end et back-end afin d'améliorer l'expérience utilisateur et le référencement naturel",
+          "Assurer la maintenance applicative, la correction de bugs et l'évolution de fonctionnalités selon les retours clients"
+        ]
+      },
+      "Expérience 3": {
+        "Dates": "Septembre 2017 – Décembre 2018",
+        "Lieu": "Alger, Algérie",
+        "Titre du poste": "Stagiaire développeur logiciel",
+        "Entreprise": "Startup InnovIT, Alger",
+        "Description": [
+          "Participer au développement d'un prototype de plateforme web de gestion de projets internes",
+          "Contribuer à l'implémentation de modules front-end en HTML, CSS et JavaScript moderne",
+          "Rédiger une documentation technique de base pour faciliter la reprise et l'évolution du code par l'équipe",
+          "Collaborer avec l'équipe de recherche pour tester différentes approches d'architecture logicielle"
+        ]
+      },
+      "Expérience 4": {
+        "Dates": "Juin 2016 – Août 2017",
+        "Lieu": "Alger, Algérie",
+        "Titre du poste": "Développeur freelance",
+        "Entreprise": "Auto-entrepreneur",
+        "Description": [
+          "Réaliser des petits sites vitrines et des applications internes pour des commerçants et associations locales",
+          "Gérer l'ensemble du cycle de vie des projets, de la collecte des besoins à la mise en production",
+          "Assurer le support technique de base et la formation des utilisateurs finaux",
+          "Maintenir une relation client de proximité en proposant des améliorations régulières et adaptées"
+        ]
+      }
+    },
+    "ÉDUCATION": {
+      "Diplôme 1": {
+        "Date": "2015 – 2017",
+        "Lieu": "Alger, Algérie",
+        "Titre du diplôme": "Master en Informatique, spécialité Systèmes d'information",
+        "Institution": "Université des Sciences et de la Technologie Houari-Boumediene (USTHB)",
+        "Équivalence": "Équivalence en cours d'évaluation auprès des autorités compétentes canadiennes"
+      },
+      "Diplôme 2": {
+        "Date": "2012 – 2015",
+        "Lieu": "Alger, Algérie",
+        "Titre du diplôme": "Licence en Informatique",
+        "Institution": "Université des Sciences et de la Technologie Houari-Boumediene (USTHB)",
+        "Équivalence": "Diplôme comparable à un baccalauréat canadien en informatique selon les standards généraux"
+      },
+      "Diplôme 3": {
+        "Date": "2011 – 2012",
+        "Lieu": "Alger, Algérie",
+        "Titre du diplôme": "Première année préparatoire en sciences et technologies",
+        "Institution": "Institution universitaire publique à Alger",
+        "Équivalence": "Crédits préuniversitaires en sciences reconnus comme formation préparatoire",
+        "Option": "Sciences et technologies industrielles"
+      }
+    },
+    "FORMATION": {
+      "Formation 1": {
+        "Date": "2023",
+        "Lieu": "En ligne",
+        "Titre de la formation": "Développement avancé en React et TypeScript",
+        "Institution": "Plateforme de formation en ligne reconnue internationalement",
+        "Compétences acquises": "Maîtrise de la gestion d'état, des hooks avancés, du typage fort et des bonnes pratiques de performance en React"
+      },
+      "Formation 2": {
+        "Date": "2022",
+        "Lieu": "En ligne",
+        "Titre de la formation": "Introduction à Docker et aux pipelines CI/CD",
+        "Institution": "Fournisseur de cours en ligne spécialisé en technologies DevOps",
+        "Compétences acquises": "Conteneurisation d'applications, création de fichiers Docker et mise en place de pipelines CI/CD de base"
+      },
+      "Formation 3": {
+        "Date": "2021",
+        "Lieu": "En ligne",
+        "Titre de la formation": "Conception d'API REST sécurisées",
+        "Institution": "Plateforme d'apprentissage technique",
+        "Compétences acquises": "Conception d'API REST, gestion de l'authentification, de l'autorisation et des bonnes pratiques de sécurité"
+      },
+      "Formation 4": {
+        "Date": "2020",
+        "Lieu": "Alger, Algérie",
+        "Titre de la formation": "Méthodologies Agile et Scrum",
+        "Institution": "Centre de formation en management de projets",
+        "Compétences acquises": "Compréhension du cadre Scrum, des rôles, des rituels et de la planification incrémentale"
+      }
+    },
+    "PARTICIPATION": [
+      "Participation à un hackathon de 48 heures sur l'innovation numérique à Montréal, en tant que développeur full-stack",
+      "Participation régulière à des meetups techniques sur JavaScript, React et Node.js",
+      "Implication dans des communautés en ligne de développeurs pour l'échange de bonnes pratiques et de retours d'expérience",
+      "Contribution ponctuelle à des projets open source hébergés sur GitHub"
+    ],
+    "CERTIFICATIONS": {
+      "Titre 1": "Certification en développement web moderne avec JavaScript",
+      "Titre 2": "Certification en bases de données relationnelles et SQL",
+      "Titre 3": "Certification d'introduction au cloud computing",
+      "Titre 4": "Certification sur les fondamentaux de la cybersécurité pour les développeurs"
+    },
+    "CENTRES D'INTÉRÊT": [
+      "Veille technologique sur les nouvelles tendances en développement logiciel et en architecture cloud",
+      "Pratique du sport en salle et de la course à pied pour maintenir un bon équilibre de vie",
+      "Lecture d'ouvrages sur le développement personnel, la productivité et le travail en équipe",
+      "Voyages et découverte de nouvelles cultures, particulièrement en Amérique du Nord et en Europe"
+    ],
+    "RÉFÉRENCES": {
+      "references_texte": "Disponible sur demande"
+    },
+    "LETTRE DE MOTIVATION": {
+      "Salutation": "Madame, Monsieur",
+      "Paragraphe 1": "Actuellement développeur logiciel full-stack à Montréal, je souhaite mettre mes compétences techniques et mon sens de la collaboration au service de votre organisation, reconnue pour ses projets innovants et son environnement de travail stimulant",
+      "Paragraphe 2": "Au cours de mes expériences précédentes, j'ai participé à la conception et au développement d'applications web complètes, en travaillant sur le front-end et le back-end, ainsi que sur l'intégration d'API et l'optimisation des bases de données, ce qui m'a permis de livrer des solutions fiables et évolutives",
+      "Paragraphe 3": "Habitué à évoluer dans des équipes multiculturelles et à respecter des délais serrés, je suis convaincu que ma rigueur, ma capacité d'apprentissage rapide et mon enthousiasme pour les bonnes pratiques de développement représentent un réel atout pour contribuer efficacement à vos projets",
+      "Paragraphe 4 (conclusion)": "Je serais honoré de pouvoir discuter plus en détail de ma candidature lors d'un entretien et de vous présenter comment mon profil peut s'intégrer à vos besoins actuels et futurs",
+      "Formule de politesse": "Je vous prie d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées"
+    }
+  },
+  "CONTENU_ANGLAIS": {
+    "PERSONAL INFORMATION": {
+      "Full name": "Amine Bensalem",
+      "Position": "Full-stack software engineer",
+      "Phone": "+1 (438) 555-1842",
+      "Email": "amine.bensalem@example.com",
+      "Birthday": "March 15, 1992",
+      "Marital status": "Single",
+      "driving licence": "Valid category B driving licence",
+      "Military Service Status": "Exempted",
+      "Wilaya": "Algiers, Algeria",
+      "Country": "Canada (temporary resident with permanent residency project)",
+      "Address": "Montreal, QC, Canada",
+      "Relocation Status": "Open to relocation across Canada"
+    },
+    "PROFESSIONAL OBJECTIVE": {
+      "Objective Text": "Motivated full-stack software engineer with several years of experience in web application development and API integration, seeking to contribute to innovative projects within a Canadian company that values code quality, collaboration and continuous improvement"
+    },
+    "KEY SKILLS": [
+      "Full-stack web development using JavaScript, TypeScript, Node.js and React",
+      "Design, optimization and maintenance of SQL and NoSQL databases",
+      "Design and integration of REST and GraphQL APIs in distributed architectures",
+      "Implementation of CI/CD pipelines and use of Docker in a DevOps context",
+      "Application of Agile and Scrum methodologies within multidisciplinary teams",
+      "Requirements analysis and translation into robust and scalable technical solutions",
+      "Strong communication, teamwork spirit and adaptability in multicultural environments"
+    ],
+    "LANGUAGES": {
+      "Arabic": "Native language",
+      "Kabyle": "Good spoken proficiency",
+      "French": "Professional working proficiency",
+      "English": "Upper-intermediate proficiency",
+      "German": "Basic knowledge",
+      "Spanish": "Basic knowledge"
+    },
+    "PROFESSIONAL EXPERIENCE": {
+      "Experience 1": {
+        "Dates": "June 2022 – October 2025",
+        "Location": "Montreal, QC, Canada",
+        "Job Title": "Full-stack software developer",
+        "Company": "TechNova Solutions, Montreal",
+        "Description": [
+          "Designed, developed and maintained SaaS web applications using React and Node.js for North American clients",
+          "Implemented secure and well-documented REST APIs integrated with third-party services and PostgreSQL databases",
+          "Collaborated with product, QA and UX teams in an Agile environment to deliver incremental, high-quality features",
+          "Contributed to code review processes, mentoring of junior developers and continuous improvement of development standards"
+        ]
+      },
+      "Experience 2": {
+        "Dates": "January 2019 – May 2022",
+        "Location": "Algiers, Algeria",
+        "Job Title": "Web developer",
+        "Company": "DigitalDZ Studio, Algiers",
+        "Description": [
+          "Developed custom websites and web applications using JavaScript, PHP and Laravel for local small and medium-sized businesses",
+          "Participated in client requirements analysis and in drafting functional and technical specifications",
+          "Optimized front-end and back-end performance to improve user experience and search engine visibility",
+          "Provided application maintenance, bug fixing and feature enhancements based on client feedback"
+        ]
+      },
+      "Experience 3": {
+        "Dates": "September 2017 – December 2018",
+        "Location": "Algiers, Algeria",
+        "Job Title": "Software developer intern",
+        "Company": "Startup InnovIT, Algiers",
+        "Description": [
+          "Contributed to the development of a prototype web platform for internal project management",
+          "Implemented front-end modules using modern HTML, CSS and JavaScript",
+          "Prepared basic technical documentation to support future maintenance and evolution of the codebase",
+          "Collaborated with the research team to test different software architecture approaches"
+        ]
+      },
+      "Experience 4": {
+        "Dates": "June 2016 – August 2017",
+        "Location": "Algiers, Algeria",
+        "Job Title": "Freelance web developer",
+        "Company": "Self-employed",
+        "Description": [
+          "Delivered small showcase websites and internal tools for local merchants and associations",
+          "Managed the full project life cycle from requirements gathering to production deployment",
+          "Provided basic technical support and user training for delivered solutions",
+          "Maintained close client relationships by proposing regular and tailored improvements"
+        ]
+      }
+    },
+    "EDUCATION": {
+      "Diploma 1": {
+        "Date": "2015 – 2017",
+        "Location": "Algiers, Algeria",
+        "Diploma Title": "Master's degree in Computer Science, Information Systems specialization",
+        "Institution": "University of Science and Technology Houari-Boumediene (USTHB)",
+        "Equivalence": "Equivalence under evaluation by relevant Canadian authorities"
+      },
+      "Diploma 2": {
+        "Date": "2012 – 2015",
+        "Location": "Algiers, Algeria",
+        "Diploma Title": "Bachelor's degree in Computer Science",
+        "Institution": "University of Science and Technology Houari-Boumediene (USTHB)",
+        "Equivalence": "Comparable to a Canadian bachelor's degree in Computer Science according to general standards"
+      },
+      "Diploma 3": {
+        "Date": "2011 – 2012",
+        "Location": "Algiers, Algeria",
+        "Diploma Title": "Preparatory year in science and technology",
+        "Institution": "Public university institution in Algiers",
+        "Equivalence": "Pre-university science credits recognized as preparatory training"
+      }
+    },
+    "TRAINING": {
+      "Training 1": {
+        "Date": "2023",
+        "Location": "Online",
+        "Training Title": "Advanced React and TypeScript development",
+        "Institution": "Internationally recognized online learning platform",
+        "Skills Acquired": "Mastery of state management, advanced hooks, strong typing and performance best practices in React"
+      },
+      "Training 2": {
+        "Date": "2022",
+        "Location": "Online",
+        "Training Title": "Introduction to Docker and CI/CD pipelines",
+        "Institution": "Online course provider specialized in DevOps technologies",
+        "Skills Acquired": "Application containerization, Dockerfile creation and setup of basic CI/CD pipelines"
+      },
+      "Training 3": {
+        "Date": "2021",
+        "Location": "Online",
+        "Training Title": "Design of secure REST APIs",
+        "Institution": "Technical learning platform",
+        "Skills Acquired": "Design of REST APIs, management of authentication, authorization and security best practices"
+      },
+      "Training 4": {
+        "Date": "2020",
+        "Location": "Algiers, Algeria",
+        "Training Title": "Agile and Scrum methodologies",
+        "Institution": "Project management training center",
+        "Skills Acquired": "Understanding of the Scrum framework, roles, rituals and incremental planning"
+      }
+    },
+    "PARTICIPATION": [
+      "Participation in a 48-hour digital innovation hackathon in Montreal as a full-stack developer",
+      "Regular attendance at technical meetups focused on JavaScript, React and Node.js",
+      "Involvement in online developer communities to exchange best practices and lessons learned",
+      "Occasional contributions to open-source projects hosted on GitHub"
+    ],
+    "CERTIFICATIONS": {
+      "Titre 1": "Certification in modern web development with JavaScript",
+      "Titre 2": "Certification in relational databases and SQL",
+      "Titre 3": "Introduction to cloud computing certification",
+      "Titre 4": "Certification on cybersecurity fundamentals for developers"
+    },
+    "INTERESTS": [
+      "Technology watch on new trends in software development and cloud architecture",
+      "Gym workouts and running to maintain a healthy lifestyle balance",
+      "Reading books on personal development, productivity and teamwork",
+      "Traveling and discovering new cultures, especially in North America and Europe"
+    ],
+    "REFERENCES": {
+      "references_text_eng": "Available upon request"
+    },
+    "COVER LETTER": {
+      "Salutation": "Dear Sir or Madam",
+      "Paragraph 1": "Currently working as a full-stack software developer in Montreal, I am eager to leverage my technical skills and collaborative mindset to contribute to your organization, which is recognized for its innovative projects and engaging work environment",
+      "Paragraph 2": "Throughout my previous experiences, I have been involved in the design and development of end-to-end web applications, working on both front-end and back-end, integrating APIs and optimizing databases, which enabled me to deliver reliable and scalable solutions",
+      "Paragraph 3": "Accustomed to working in multicultural teams and meeting tight deadlines, I am confident that my rigor, ability to learn quickly and enthusiasm for software engineering best practices will allow me to contribute effectively to your projects",
+      "Paragraph 4 (conclusion)": "I would be honored to further discuss my application in an interview and to present how my profile can align with your current and future needs",
+      "Closing": "Yours sincerely"
+    }
+  },
+  "CONTENU_ADVISES": {
+    "INFORMATIONS_CANDIDATURE": {
+      "Candidature": "Candidature en réponse à une offre de développeur logiciel au Canada",
+      "Poste": "Développeur logiciel full-stack"
+    },
+    "PLAN_DE_DEVELOPPEMENT": {
+      "Action 01": "Approfondir la maîtrise de l'anglais professionnel, notamment à l'oral, pour faciliter la collaboration internationale",
+      "Action 02": "Renforcer les compétences en architecture logicielle et en conception orientée microservices",
+      "Action 03": "Poursuivre l'apprentissage des bonnes pratiques DevOps et de l'observabilité des applications",
+      "Action 04": "Participer régulièrement à des projets open source pour enrichir le portfolio et le réseau professionnel",
+      "Action 05": "Adapter le CV et les lettres de motivation aux attentes du marché canadien et des recruteurs locaux"
+    }
+  }
+}

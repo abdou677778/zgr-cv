@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zgr-cv",
+  "compatibility_date": "2026-08-24",
+  "pages_build_output_dir": "./dist-spa",
+  "r2_buckets": [
+    {
+      "binding": "CLIENTS_BUCKET",
+      "bucket_name": "zgr-cv-clients",
+    },
+  ],
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zgr-cv-storage-api",
+  "main": "cloudflare/worker.js",
+  "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "ALLOWED_ORIGINS": "http://localhost:4173,http://localhost:5173"
+  },
+  "r2_buckets": [
+    {
+      "binding": "CLIENTS_BUCKET",
+      "bucket_name": "zgr-cv-clients"
+    }
+  ]
+}

@@ -1,0 +1,199 @@
+{
+  "format": "ZGR_CV_LANGUAGE_TEST_V1",
+  "version": "1.0",
+  "language": "de",
+  "language_name": "Deutsch",
+  "direction": "ltr",
+  "purpose": "Jeu de données complet pour tester tous les modèles CV, lettres et conseils",
+  "document": {
+    "nom_complet": "Amine Bensalem",
+    "titre_poste": "Full-Stack-Softwareingenieur",
+    "telephone": "+1 (438) 555-1842",
+    "email": "amine.bensalem@example.com",
+    "adresse": "Montreal, QC, Kanada",
+    "statut_relocation": "Umzugsbereit innerhalb Kanadas",
+    "date_naissance": "15. März 1992",
+    "situation_familiale": "Ledig",
+    "permis_conduire": "Gültiger Führerschein der Klasse B",
+    "service_national": "Befreit",
+    "wilaya": "Algier, Algerien",
+    "pays": "Kanada (befristeter Aufenthalt mit geplantem Daueraufenthalt)",
+    "candidature": "Bewerbung auf eine Stelle als Softwareentwickler in Kanada",
+    "objectif": "Motivierter Full-Stack-Softwareingenieur mit mehrjähriger Erfahrung in Webentwicklung und API-Integration, der innovative Projekte in einem kanadischen Unternehmen mit Fokus auf Qualität, Zusammenarbeit und kontinuierliche Verbesserung unterstützen möchte",
+    "competences": [
+      "Full-Stack-Webentwicklung mit JavaScript, TypeScript, Node.js und React",
+      "Entwurf, Optimierung und Wartung von SQL- und NoSQL-Datenbanken",
+      "Entwurf und Integration von REST- und GraphQL-APIs in verteilten Architekturen",
+      "Einrichtung von CI/CD-Pipelines und Einsatz von Docker im DevOps-Umfeld",
+      "Anwendung von Agile- und Scrum-Methoden in multidisziplinären Teams",
+      "Anforderungsanalyse und Umsetzung in robuste, skalierbare technische Lösungen",
+      "Effektive Kommunikation, Teamgeist und Anpassungsfähigkeit in multikulturellen Umgebungen"
+    ],
+    "langues": {
+      "fr": "Verhandlungssicher",
+      "en": "Gute Mittelstufe",
+      "ar": "Muttersprache",
+      "de": "Grundkenntnisse",
+      "es": "Grundkenntnisse",
+      "kab": "Gute mündliche Kenntnisse"
+    },
+    "experiences": [
+      {
+        "id": "experience-01",
+        "dates": "Juni 2022 – Oktober 2025",
+        "lieu": "Montreal, Québec, Kanada",
+        "titre": "Full-Stack-Softwareentwickler",
+        "employeur": "TechNova Solutions, Montreal",
+        "descriptions": [
+          "Entwicklung und Wartung von SaaS-Webanwendungen mit React und Node.js für nordamerikanische Kunden",
+          "Implementierung sicherer, dokumentierter REST-APIs mit Drittanbieterdiensten und PostgreSQL",
+          "Zusammenarbeit mit Produkt-, QA- und UX-Teams zur agilen Bereitstellung hochwertiger Funktionen",
+          "Mitwirkung an Code-Reviews, Mentoring von Junior-Entwicklern und kontinuierlicher Standardverbesserung"
+        ]
+      },
+      {
+        "id": "experience-02",
+        "dates": "Januar 2019 – Mai 2022",
+        "lieu": "Algier, Algerien",
+        "titre": "Webentwickler",
+        "employeur": "DigitalDZ Studio, Algier",
+        "descriptions": [
+          "Entwicklung maßgeschneiderter Websites und Webanwendungen mit JavaScript, PHP und Laravel für lokale KMU",
+          "Analyse von Kundenanforderungen und Erstellung funktionaler sowie technischer Spezifikationen",
+          "Optimierung von Front- und Back-End für bessere Benutzererfahrung und Sichtbarkeit",
+          "Anwendungswartung, Fehlerbehebung und Weiterentwicklung nach Kundenfeedback"
+        ]
+      },
+      {
+        "id": "experience-03",
+        "dates": "September 2017 – Dezember 2018",
+        "lieu": "Algier, Algerien",
+        "titre": "Praktikant Softwareentwicklung",
+        "employeur": "Startup InnovIT, Algier",
+        "descriptions": [
+          "Mitarbeit an einem Webplattform-Prototyp für das interne Projektmanagement",
+          "Implementierung von Front-End-Modulen mit modernem HTML, CSS und JavaScript",
+          "Erstellung technischer Dokumentation zur Unterstützung von Wartung und Weiterentwicklung",
+          "Zusammenarbeit mit dem Forschungsteam bei der Bewertung verschiedener Softwarearchitekturen"
+        ]
+      },
+      {
+        "id": "experience-04",
+        "dates": "Juni 2016 – August 2017",
+        "lieu": "Algier, Algerien",
+        "titre": "Freiberuflicher Webentwickler",
+        "employeur": "Selbstständig",
+        "descriptions": [
+          "Umsetzung kleiner Unternehmenswebsites und interner Werkzeuge für lokale Händler und Vereine",
+          "Steuerung des gesamten Projektlebenszyklus von der Anforderung bis zum Produktivbetrieb",
+          "Technischer Basissupport und Schulung der Endanwender",
+          "Pflege enger Kundenbeziehungen durch regelmäßige, passende Verbesserungsvorschläge"
+        ]
+      }
+    ],
+    "formations": [
+      {
+        "id": "formation-01",
+        "date": "2023",
+        "lieu": "Online",
+        "titre": "Fortgeschrittene Entwicklung mit React und TypeScript",
+        "institution": "International anerkannte Online-Lernplattform",
+        "competences": "State-Management, fortgeschrittene Hooks, starke Typisierung und React-Performance-Praktiken"
+      },
+      {
+        "id": "formation-02",
+        "date": "2022",
+        "lieu": "Online",
+        "titre": "Einführung in Docker und CI/CD-Pipelines",
+        "institution": "Auf DevOps-Technologien spezialisierter Online-Kursanbieter",
+        "competences": "Containerisierung, Dockerfile-Erstellung und Einrichtung grundlegender CI/CD-Pipelines"
+      },
+      {
+        "id": "formation-03",
+        "date": "2021",
+        "lieu": "Online",
+        "titre": "Entwurf sicherer REST-APIs",
+        "institution": "Technische Lernplattform",
+        "competences": "REST-API-Design, Authentifizierung, Autorisierung und bewährte Sicherheitsverfahren"
+      },
+      {
+        "id": "formation-04",
+        "date": "2020",
+        "lieu": "Algier, Algerien",
+        "titre": "Agile- und Scrum-Methoden",
+        "institution": "Schulungszentrum für Projektmanagement",
+        "competences": "Verständnis des Scrum-Rahmens, der Rollen, Rituale und inkrementellen Planung"
+      }
+    ],
+    "educations": [
+      {
+        "id": "education-01",
+        "date": "2015 – 2017",
+        "lieu": "Algier, Algerien",
+        "titre": "Master in Informatik, Schwerpunkt Informationssysteme",
+        "institution": "Universität für Wissenschaft und Technologie Houari-Boumediene (USTHB)",
+        "option": "",
+        "equivalence": "Anerkennung wird derzeit von den zuständigen kanadischen Behörden geprüft"
+      },
+      {
+        "id": "education-02",
+        "date": "2012 – 2015",
+        "lieu": "Algier, Algerien",
+        "titre": "Bachelor in Informatik",
+        "institution": "Universität für Wissenschaft und Technologie Houari-Boumediene (USTHB)",
+        "option": "",
+        "equivalence": "Nach allgemeinen Standards mit einem kanadischen Bachelorabschluss in Informatik vergleichbar"
+      },
+      {
+        "id": "education-03",
+        "date": "2011 – 2012",
+        "lieu": "Algier, Algerien",
+        "titre": "Vorbereitungsjahr in Naturwissenschaften und Technik",
+        "institution": "Öffentliche Hochschule in Algier",
+        "option": "",
+        "equivalence": "Voruniversitäre naturwissenschaftliche Leistungen als Vorbereitungsausbildung anerkannt"
+      }
+    ],
+    "participations": [
+      "Teilnahme an einem 48-stündigen Hackathon für digitale Innovation in Montreal als Full-Stack-Entwickler",
+      "Regelmäßige Teilnahme an technischen Meetups zu JavaScript, React und Node.js",
+      "Engagement in Online-Entwicklergemeinschaften zum Austausch bewährter Verfahren",
+      "Gelegentliche Beiträge zu Open-Source-Projekten auf GitHub"
+    ],
+    "certifications": [
+      "Zertifizierung in moderner Webentwicklung mit JavaScript",
+      "Zertifizierung in relationalen Datenbanken und SQL",
+      "Einführungszertifizierung in Cloud Computing",
+      "Zertifizierung zu Grundlagen der Cybersicherheit für Entwickler"
+    ],
+    "interets": [
+      "Beobachtung neuer Trends in Softwareentwicklung und Cloud-Architektur",
+      "Fitness und Laufen für einen gesunden Lebensausgleich",
+      "Lektüre zu Persönlichkeitsentwicklung, Produktivität und Teamarbeit",
+      "Reisen und Entdeckung neuer Kulturen, besonders in Nordamerika und Europa"
+    ],
+    "references": [
+      "Auf Anfrage verfügbar"
+    ],
+    "lettre_motivation": {
+      "date": "",
+      "objet": "Bewerbung als Full-Stack-Softwareingenieur",
+      "destinataire": "",
+      "salutation": "Sehr geehrte Damen und Herren",
+      "paragraphes": [
+        "Derzeit arbeite ich als Full-Stack-Softwareentwickler in Montreal und möchte meine technischen Fähigkeiten sowie meine kooperative Arbeitsweise in Ihr für innovative Projekte bekanntes Unternehmen einbringen.",
+        "In meinen bisherigen Positionen habe ich vollständige Webanwendungen im Front- und Back-End entwickelt, APIs integriert und Datenbanken optimiert, um zuverlässige und skalierbare Lösungen bereitzustellen.",
+        "Die Arbeit in multikulturellen Teams und unter engen Fristen ist mir vertraut. Mit Sorgfalt, schneller Auffassungsgabe und Begeisterung für bewährte Entwicklungsverfahren kann ich Ihre Projekte wirksam unterstützen.",
+        "Gerne erläutere ich Ihnen in einem persönlichen Gespräch, wie mein Profil zu Ihren aktuellen und zukünftigen Anforderungen passt."
+      ],
+      "formule_politesse": "Mit freundlichen Grüßen"
+    },
+    "plan_developpement": [
+      "Berufliches Englisch, besonders die mündliche Kommunikation, vertiefen",
+      "Kenntnisse in Softwarearchitektur und Microservices stärken",
+      "DevOps-Verfahren und Anwendungsbeobachtbarkeit weiter ausbauen",
+      "Regelmäßig zu Open-Source-Projekten beitragen und das berufliche Netzwerk erweitern",
+      "Lebenslauf und Anschreiben auf den kanadischen Arbeitsmarkt abstimmen"
+    ]
+  }
+}

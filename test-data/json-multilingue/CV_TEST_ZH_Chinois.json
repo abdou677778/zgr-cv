@@ -1,0 +1,199 @@
+{
+  "format": "ZGR_CV_LANGUAGE_TEST_V1",
+  "version": "1.0",
+  "language": "zh",
+  "language_name": "中文",
+  "direction": "ltr",
+  "purpose": "Jeu de données complet pour tester tous les modèles CV, lettres et conseils",
+  "document": {
+    "nom_complet": "Amine Bensalem",
+    "titre_poste": "全栈软件工程师",
+    "telephone": "+1 (438) 555-1842",
+    "email": "amine.bensalem@example.com",
+    "adresse": "加拿大魁北克省蒙特利尔",
+    "statut_relocation": "可在加拿大境内搬迁",
+    "date_naissance": "1992年3月15日",
+    "situation_familiale": "未婚",
+    "permis_conduire": "持有有效B类驾驶执照",
+    "service_national": "已获豁免",
+    "wilaya": "阿尔及利亚阿尔及尔",
+    "pays": "加拿大（临时居民，计划申请永久居留）",
+    "candidature": "申请加拿大的软件开发职位",
+    "objectif": "积极进取的全栈软件工程师，拥有多年Web开发和API集成经验，希望在重视质量、协作和持续改进的加拿大企业中参与创新项目",
+    "competences": [
+      "使用JavaScript、TypeScript、Node.js和React进行全栈Web开发",
+      "SQL和NoSQL数据库的设计、优化与维护",
+      "分布式架构中REST和GraphQL API的设计与集成",
+      "CI/CD流水线实施以及Docker在DevOps环境中的应用",
+      "在跨职能团队中运用敏捷与Scrum方法",
+      "分析业务需求并转化为稳健、可扩展的技术方案",
+      "优秀的沟通、团队协作能力以及多元文化环境适应力"
+    ],
+    "langues": {
+      "fr": "专业工作水平",
+      "en": "中高级水平",
+      "ar": "母语",
+      "de": "基础水平",
+      "es": "基础水平",
+      "kab": "良好口语水平"
+    },
+    "experiences": [
+      {
+        "id": "experience-01",
+        "dates": "2022年6月 – 2025年10月",
+        "lieu": "加拿大魁北克省蒙特利尔",
+        "titre": "全栈软件开发工程师",
+        "employeur": "TechNova Solutions（蒙特利尔）",
+        "descriptions": [
+          "为北美客户设计、开发并维护基于React和Node.js的SaaS Web应用",
+          "实施安全且文档完善的REST API，并集成第三方服务与PostgreSQL数据库",
+          "与产品、QA和UX团队在敏捷环境中协作，持续交付高质量功能",
+          "参与代码审查、初级开发人员指导及开发标准的持续改进"
+        ]
+      },
+      {
+        "id": "experience-02",
+        "dates": "2019年1月 – 2022年5月",
+        "lieu": "阿尔及利亚阿尔及尔",
+        "titre": "Web开发工程师",
+        "employeur": "DigitalDZ Studio（阿尔及尔）",
+        "descriptions": [
+          "使用JavaScript、PHP和Laravel为本地中小企业开发定制网站与Web应用",
+          "参与客户需求分析以及功能和技术规范编写",
+          "优化前端和后端性能，提升用户体验与搜索可见度",
+          "负责应用维护、缺陷修复及基于客户反馈的功能迭代"
+        ]
+      },
+      {
+        "id": "experience-03",
+        "dates": "2017年9月 – 2018年12月",
+        "lieu": "阿尔及利亚阿尔及尔",
+        "titre": "软件开发实习生",
+        "employeur": "Startup InnovIT（阿尔及尔）",
+        "descriptions": [
+          "参与内部项目管理Web平台原型的开发",
+          "使用现代HTML、CSS和JavaScript实现前端模块",
+          "编写技术文档以支持代码维护和后续演进",
+          "与研究团队合作评估不同的软件架构方案"
+        ]
+      },
+      {
+        "id": "experience-04",
+        "dates": "2016年6月 – 2017年8月",
+        "lieu": "阿尔及利亚阿尔及尔",
+        "titre": "自由职业Web开发工程师",
+        "employeur": "自由职业",
+        "descriptions": [
+          "为本地商户和协会交付展示型网站及内部工具",
+          "管理从需求收集到生产部署的完整项目生命周期",
+          "提供基础技术支持和最终用户培训",
+          "通过定期提出针对性改进方案维护良好的客户关系"
+        ]
+      }
+    ],
+    "formations": [
+      {
+        "id": "formation-01",
+        "date": "2023",
+        "lieu": "在线",
+        "titre": "React与TypeScript高级开发",
+        "institution": "国际认可的在线学习平台",
+        "competences": "掌握状态管理、高级Hooks、强类型以及React性能最佳实践"
+      },
+      {
+        "id": "formation-02",
+        "date": "2022",
+        "lieu": "在线",
+        "titre": "Docker与CI/CD流水线入门",
+        "institution": "专注DevOps技术的在线课程机构",
+        "competences": "应用容器化、Dockerfile编写及基础CI/CD流水线搭建"
+      },
+      {
+        "id": "formation-03",
+        "date": "2021",
+        "lieu": "在线",
+        "titre": "安全REST API设计",
+        "institution": "技术学习平台",
+        "competences": "REST API设计、身份验证、授权及安全最佳实践"
+      },
+      {
+        "id": "formation-04",
+        "date": "2020",
+        "lieu": "阿尔及利亚阿尔及尔",
+        "titre": "敏捷与Scrum方法",
+        "institution": "项目管理培训中心",
+        "competences": "理解Scrum框架、角色、仪式与增量规划"
+      }
+    ],
+    "educations": [
+      {
+        "id": "education-01",
+        "date": "2015 – 2017",
+        "lieu": "阿尔及利亚阿尔及尔",
+        "titre": "计算机科学硕士（信息系统方向）",
+        "institution": "胡阿里·布迈丁科技大学（USTHB）",
+        "option": "",
+        "equivalence": "学历认证正在由加拿大相关主管机构评估"
+      },
+      {
+        "id": "education-02",
+        "date": "2012 – 2015",
+        "lieu": "阿尔及利亚阿尔及尔",
+        "titre": "计算机科学学士",
+        "institution": "胡阿里·布迈丁科技大学（USTHB）",
+        "option": "",
+        "equivalence": "依据通用标准，相当于加拿大计算机科学学士学位"
+      },
+      {
+        "id": "education-03",
+        "date": "2011 – 2012",
+        "lieu": "阿尔及利亚阿尔及尔",
+        "titre": "科学与技术预科",
+        "institution": "阿尔及尔公立大学机构",
+        "option": "",
+        "equivalence": "大学预科阶段的科学学分被认可为预备教育"
+      }
+    ],
+    "participations": [
+      "作为全栈开发人员参加蒙特利尔48小时数字创新黑客松",
+      "定期参加JavaScript、React和Node.js技术交流活动",
+      "参与在线开发者社区，分享最佳实践与经验",
+      "偶尔为GitHub上的开源项目贡献代码"
+    ],
+    "certifications": [
+      "现代JavaScript Web开发认证",
+      "关系型数据库与SQL认证",
+      "云计算入门认证",
+      "开发人员网络安全基础认证"
+    ],
+    "interets": [
+      "关注软件开发与云架构的新趋势",
+      "健身与跑步，保持健康的生活平衡",
+      "阅读个人成长、效率与团队协作类书籍",
+      "旅行并探索不同文化，尤其是北美和欧洲"
+    ],
+    "references": [
+      "可应要求提供"
+    ],
+    "lettre_motivation": {
+      "date": "",
+      "objet": "申请全栈软件工程师职位",
+      "destinataire": "",
+      "salutation": "尊敬的招聘负责人",
+      "paragraphes": [
+        "我目前在蒙特利尔担任全栈软件开发工程师，希望将技术能力和协作精神运用于贵组织，并为其创新项目和积极的工作环境作出贡献。",
+        "在以往经历中，我参与了端到端Web应用的设计与开发，负责前端、后端、API集成和数据库优化，从而交付可靠且可扩展的解决方案。",
+        "我熟悉多元文化团队和紧迫期限，相信严谨的工作态度、快速学习能力以及对工程最佳实践的重视能够帮助我有效支持贵方项目。",
+        "期待有机会在面试中进一步介绍我的申请，并说明我的经验如何满足贵组织当前和未来的需求。"
+      ],
+      "formule_politesse": "此致敬礼"
+    },
+    "plan_developpement": [
+      "提升职业英语水平，尤其是口语沟通能力",
+      "加强软件架构和微服务设计能力",
+      "持续学习DevOps实践和应用可观测性",
+      "定期参与开源项目，丰富作品集并拓展职业网络",
+      "根据加拿大市场和招聘实践调整简历与求职信"
+    ]
+  }
+}

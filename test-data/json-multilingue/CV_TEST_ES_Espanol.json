@@ -1,0 +1,199 @@
+{
+  "format": "ZGR_CV_LANGUAGE_TEST_V1",
+  "version": "1.0",
+  "language": "es",
+  "language_name": "Español",
+  "direction": "ltr",
+  "purpose": "Jeu de données complet pour tester tous les modèles CV, lettres et conseils",
+  "document": {
+    "nom_complet": "Amine Bensalem",
+    "titre_poste": "Ingeniero de software full-stack",
+    "telephone": "+1 (438) 555-1842",
+    "email": "amine.bensalem@example.com",
+    "adresse": "Montreal, QC, Canadá",
+    "statut_relocation": "Disponible para trasladarse a cualquier lugar de Canadá",
+    "date_naissance": "15 de marzo de 1992",
+    "situation_familiale": "Soltero",
+    "permis_conduire": "Permiso de conducir válido de categoría B",
+    "service_national": "Exento",
+    "wilaya": "Argel, Argelia",
+    "pays": "Canadá (residente temporal con proyecto de residencia permanente)",
+    "candidature": "Candidatura a una oportunidad de desarrollador de software en Canadá",
+    "objectif": "Ingeniero de software full-stack motivado, con varios años de experiencia en desarrollo web e integración de API, que desea contribuir a proyectos innovadores en una empresa canadiense orientada a la calidad, la colaboración y la mejora continua",
+    "competences": [
+      "Desarrollo web full-stack con JavaScript, TypeScript, Node.js y React",
+      "Diseño, optimización y mantenimiento de bases de datos SQL y NoSQL",
+      "Diseño e integración de API REST y GraphQL en arquitecturas distribuidas",
+      "Implementación de canalizaciones CI/CD y uso de Docker en un entorno DevOps",
+      "Aplicación de metodologías Agile y Scrum en equipos multidisciplinares",
+      "Análisis de requisitos y conversión en soluciones técnicas robustas y escalables",
+      "Comunicación eficaz, trabajo en equipo y adaptación a entornos multiculturales"
+    ],
+    "langues": {
+      "fr": "Competencia profesional",
+      "en": "Nivel intermedio alto",
+      "ar": "Lengua materna",
+      "de": "Conocimientos básicos",
+      "es": "Conocimientos básicos",
+      "kab": "Buen nivel oral"
+    },
+    "experiences": [
+      {
+        "id": "experience-01",
+        "dates": "Junio 2022 – Octubre 2025",
+        "lieu": "Montreal, QC, Canadá",
+        "titre": "Desarrollador de software full-stack",
+        "employeur": "TechNova Solutions, Montreal",
+        "descriptions": [
+          "Diseño, desarrollo y mantenimiento de aplicaciones web SaaS con React y Node.js para clientes norteamericanos",
+          "Implementación de API REST seguras y documentadas, integradas con servicios externos y PostgreSQL",
+          "Colaboración con los equipos de producto, QA y UX en un entorno Agile para entregar funcionalidades de calidad",
+          "Participación en revisiones de código, mentoría de desarrolladores junior y mejora continua de los estándares"
+        ]
+      },
+      {
+        "id": "experience-02",
+        "dates": "Enero 2019 – Mayo 2022",
+        "lieu": "Argel, Argelia",
+        "titre": "Desarrollador web",
+        "employeur": "DigitalDZ Studio, Argel",
+        "descriptions": [
+          "Desarrollo de sitios y aplicaciones web a medida con JavaScript, PHP y Laravel para pymes locales",
+          "Análisis de las necesidades del cliente y redacción de especificaciones funcionales y técnicas",
+          "Optimización del rendimiento front-end y back-end para mejorar la experiencia de usuario y el SEO",
+          "Mantenimiento de aplicaciones, corrección de errores y evolución funcional según las opiniones de los clientes"
+        ]
+      },
+      {
+        "id": "experience-03",
+        "dates": "Septiembre 2017 – Diciembre 2018",
+        "lieu": "Argel, Argelia",
+        "titre": "Desarrollador de software en prácticas",
+        "employeur": "Startup InnovIT, Argel",
+        "descriptions": [
+          "Participación en el desarrollo de un prototipo de plataforma web para la gestión interna de proyectos",
+          "Implementación de módulos front-end con HTML, CSS y JavaScript moderno",
+          "Redacción de documentación técnica para facilitar el mantenimiento y la evolución del código",
+          "Colaboración con el equipo de investigación para evaluar distintas arquitecturas de software"
+        ]
+      },
+      {
+        "id": "experience-04",
+        "dates": "Junio 2016 – Agosto 2017",
+        "lieu": "Argel, Argelia",
+        "titre": "Desarrollador web autónomo",
+        "employeur": "Trabajador autónomo",
+        "descriptions": [
+          "Creación de sitios web corporativos y herramientas internas para comercios y asociaciones locales",
+          "Gestión del ciclo completo del proyecto, desde la recopilación de requisitos hasta la producción",
+          "Soporte técnico básico y formación de los usuarios finales",
+          "Gestión de relaciones cercanas con los clientes y propuesta de mejoras adaptadas"
+        ]
+      }
+    ],
+    "formations": [
+      {
+        "id": "formation-01",
+        "date": "2023",
+        "lieu": "En línea",
+        "titre": "Desarrollo avanzado con React y TypeScript",
+        "institution": "Plataforma internacional de formación en línea",
+        "competences": "Gestión de estado, hooks avanzados, tipado fuerte y buenas prácticas de rendimiento en React"
+      },
+      {
+        "id": "formation-02",
+        "date": "2022",
+        "lieu": "En línea",
+        "titre": "Introducción a Docker y a las canalizaciones CI/CD",
+        "institution": "Proveedor de cursos en línea especializado en tecnologías DevOps",
+        "competences": "Contenedorización, creación de Dockerfiles e implementación de canalizaciones CI/CD básicas"
+      },
+      {
+        "id": "formation-03",
+        "date": "2021",
+        "lieu": "En línea",
+        "titre": "Diseño de API REST seguras",
+        "institution": "Plataforma de aprendizaje técnico",
+        "competences": "Diseño de API REST, autenticación, autorización y buenas prácticas de seguridad"
+      },
+      {
+        "id": "formation-04",
+        "date": "2020",
+        "lieu": "Argel, Argelia",
+        "titre": "Metodologías Agile y Scrum",
+        "institution": "Centro de formación en gestión de proyectos",
+        "competences": "Comprensión del marco Scrum, sus roles, ceremonias y planificación incremental"
+      }
+    ],
+    "educations": [
+      {
+        "id": "education-01",
+        "date": "2015 – 2017",
+        "lieu": "Argel, Argelia",
+        "titre": "Máster en Informática, especialidad en Sistemas de Información",
+        "institution": "Universidad de Ciencia y Tecnología Houari-Boumediene (USTHB)",
+        "option": "",
+        "equivalence": "Equivalencia en evaluación por las autoridades canadienses competentes"
+      },
+      {
+        "id": "education-02",
+        "date": "2012 – 2015",
+        "lieu": "Argel, Argelia",
+        "titre": "Grado en Informática",
+        "institution": "Universidad de Ciencia y Tecnología Houari-Boumediene (USTHB)",
+        "option": "",
+        "equivalence": "Título comparable a un grado canadiense en Informática según los estándares generales"
+      },
+      {
+        "id": "education-03",
+        "date": "2011 – 2012",
+        "lieu": "Argel, Argelia",
+        "titre": "Año preparatorio en ciencias y tecnología",
+        "institution": "Institución universitaria pública de Argel",
+        "option": "",
+        "equivalence": "Créditos preuniversitarios de ciencias reconocidos como formación preparatoria"
+      }
+    ],
+    "participations": [
+      "Participación como desarrollador full-stack en un hackatón de innovación digital de 48 horas en Montreal",
+      "Asistencia habitual a encuentros técnicos sobre JavaScript, React y Node.js",
+      "Participación en comunidades de desarrolladores para intercambiar buenas prácticas y experiencias",
+      "Contribuciones ocasionales a proyectos de código abierto alojados en GitHub"
+    ],
+    "certifications": [
+      "Certificación en desarrollo web moderno con JavaScript",
+      "Certificación en bases de datos relacionales y SQL",
+      "Certificación de introducción a la computación en la nube",
+      "Certificación en fundamentos de ciberseguridad para desarrolladores"
+    ],
+    "interets": [
+      "Seguimiento de tendencias en desarrollo de software y arquitectura cloud",
+      "Entrenamiento en gimnasio y carrera para mantener un estilo de vida equilibrado",
+      "Lectura sobre desarrollo personal, productividad y trabajo en equipo",
+      "Viajes y descubrimiento de nuevas culturas, especialmente en Norteamérica y Europa"
+    ],
+    "references": [
+      "Disponible previa solicitud"
+    ],
+    "lettre_motivation": {
+      "date": "",
+      "objet": "Candidatura al puesto de Ingeniero de software full-stack",
+      "destinataire": "",
+      "salutation": "Estimado señor o señora",
+      "paragraphes": [
+        "Actualmente trabajo como desarrollador de software full-stack en Montreal y deseo poner mis competencias técnicas y mi capacidad de colaboración al servicio de su organización, reconocida por sus proyectos innovadores y su entorno estimulante.",
+        "A lo largo de mi trayectoria he diseñado y desarrollado aplicaciones web completas, tanto front-end como back-end, además de integrar API y optimizar bases de datos para entregar soluciones fiables y escalables.",
+        "Acostumbrado a equipos multiculturales y plazos exigentes, estoy convencido de que mi rigor, mi rápida capacidad de aprendizaje y mi interés por las buenas prácticas me permitirán contribuir eficazmente a sus proyectos.",
+        "Me complacería conversar sobre mi candidatura en una entrevista y explicar cómo mi perfil puede responder a sus necesidades actuales y futuras."
+      ],
+      "formule_politesse": "Atentamente"
+    },
+    "plan_developpement": [
+      "Mejorar el inglés profesional, especialmente la comunicación oral",
+      "Reforzar las competencias en arquitectura de software y microservicios",
+      "Profundizar en las prácticas DevOps y la observabilidad de aplicaciones",
+      "Contribuir regularmente a proyectos de código abierto para ampliar el portafolio y la red profesional",
+      "Adaptar el CV y las cartas a las expectativas del mercado canadiense"
+    ]
+  }
+}

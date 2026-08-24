@@ -97,7 +97,7 @@ export function PromptMasterDialog({
           <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-900">
             <FileText className="mr-1 inline h-3.5 w-3.5" /> {PROMPT_FILE_NAME}
           </span>
-          <span>{masterPrompt.split(/\r?\n/).length} lignes</span>
+          <span>{masterPrompt.replace(/\r?\n$/, "").split(/\r?\n/).length} lignes</span>
           <span>·</span>
           <span>{masterPrompt.length.toLocaleString("fr-FR")} caractères</span>
         </div>
@@ -131,7 +131,7 @@ export function PromptMasterDialog({
               ) : (
                 <Copy className="mr-2 h-4 w-4" />
               )}
-              {copied ? "Copié" : "Copier le prompte"}
+              {copied ? "Copié" : "Copier le prompt"}
             </Button>
             <Button type="button" onClick={downloadPrompt}>
               <Download className="mr-2 h-4 w-4" /> Télécharger en TXT

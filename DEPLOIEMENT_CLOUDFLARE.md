@@ -25,7 +25,8 @@ Il n’existe aucune inscription publique. Seul l’administrateur crée les pro
 réinitialise leurs mots de passe. Au premier accès, le mot de passe d’amorçage est
 converti en enregistrement PBKDF2-SHA256 dans R2. La session HMAC expire après
 12 heures et contient une version permettant sa révocation après modification du
-mot de passe ou désactivation du profil.
+mot de passe ou désactivation du profil. Le Worker utilise 100 000 itérations
+PBKDF2, qui correspondent au plafond accepté par l’environnement Cloudflare.
 
 Les clés `GEMINI_API_KEYS` et `OPENROUTER_API_KEYS` restent invisibles. Les clés
 ajoutées par l’administrateur dans l’interface sont chiffrées AES-GCM dans R2 à

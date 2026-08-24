@@ -3,7 +3,8 @@ const MAX_LOGIN_BYTES = 4_096;
 const MAX_ACCOUNT_BYTES = 16_384;
 const MAX_AI_BYTES = 120_000;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
-const PBKDF2_ITERATIONS = 180_000;
+// Cloudflare Workers currently rejects PBKDF2 iteration counts above 100,000.
+const PBKDF2_ITERATIONS = 100_000;
 const ID_PATTERN = /^ZGR-\d{8}-[A-Z0-9]{6,12}$/;
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 const USERS_PREFIX = "system/users/";

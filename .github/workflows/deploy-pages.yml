@@ -28,6 +28,8 @@ jobs:
         env:
           VITE_ZGR_API_URL: https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/api/clients
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-spa

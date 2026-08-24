@@ -27,6 +27,7 @@ import {
   Check,
   FileText,
   LogOut,
+  UserCog,
 } from "lucide-react";
 import * as pdfjs from "pdfjs-dist";
 import pdfWorkerSource from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
@@ -77,7 +78,8 @@ import { AiImportAssistant } from "@/components/ai-import-assistant";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "@/lib/ai-types";
 import { ClientDatabaseDialog } from "@/components/client-database-dialog";
 import { AdminLogin } from "@/components/admin-login";
-import { clearAdminSession, verifyAdminSession } from "@/lib/auth-client";
+import { AccountSettingsDialog } from "@/components/account-settings-dialog";
+import { clearAdminSession, verifyAdminSession, type SessionUser } from "@/lib/auth-client";
 import {
   getClientProfile,
   newClientProfileId,
@@ -247,11 +249,14 @@ const UI_COPY = {
 
 function Index() {
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "guest">("checking");
+  const [authUser, setAuthUser] = useState<SessionUser | null>(null);
 
   useEffect(() => {
     let active = true;
-    void verifyAdminSession().then((valid) => {
-      if (active) setAuthState(valid ? "authenticated" : "guest");
+    void verifyAdminSession().then((user) => {
+      if (!active) return;
+      setAuthUser(user);
+      setAuthState(user ? "authenticated" : "guest");
     });
     return () => {
       active = false;
@@ -266,19 +271,28 @@ function Index() {
       </div>
     );
   }
-  if (authState === "guest")
-    return <AdminLogin onAuthenticated={() => setAuthState("authenticated")} />;
+  if (authState === "guest" || !authUser)
+    return (
+      <AdminLogin
+        onAuthenticated={(user) => {
+          setAuthUser(user);
+          setAuthState("authenticated");
+        }}
+      />
+    );
   return (
     <Workspace
+      user={authUser}
       onLogout={() => {
         clearAdminSession();
+        setAuthUser(null);
         setAuthState("guest");
       }}
     />
   );
 }
 
-function Workspace({ onLogout }: { onLogout: () => void }) {
+function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [language, setLanguage] = useState<DocumentLanguage>("fr");
   const [cvByLanguage, setCvByLanguage] = useState<Record<DocumentLanguage, CV>>({
     ...sampleCVByLanguage,
@@ -301,6 +315,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const [importMessage, setImportMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettings>(() => defaultAiSettings());
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [aiFieldRequest, setAiFieldRequest] = useState<AiFieldRequest | null>(null);
   const [clientDatabaseOpen, setClientDatabaseOpen] = useState(false);
@@ -1047,6 +1062,15 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
               onClick={() => setAiSettingsOpen(true)}
             >
               <Settings className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-sky-200 bg-sky-50/80 text-sky-900 hover:bg-sky-100"
+              onClick={() => setAccountSettingsOpen(true)}
+              title="Paramètres du compte"
+            >
+              <UserCog className="mr-2 h-4 w-4" /> {user.displayName}
             </Button>
             <Button variant="ghost" size="sm" onClick={loadSample}>
               {ui.example}
@@ -2076,6 +2100,13 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         onOpenChange={setAiSettingsOpen}
         value={aiSettings}
         onSave={setAiSettings}
+        canManageKeys={user.role === "admin"}
+      />
+      <AccountSettingsDialog
+        open={accountSettingsOpen}
+        onOpenChange={setAccountSettingsOpen}
+        user={user}
+        onSessionInvalidated={onLogout}
       />
       <AiFieldDialog
         request={aiFieldRequest}

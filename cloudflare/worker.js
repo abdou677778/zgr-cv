@@ -1,8 +1,14 @@
 const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
+const MAX_ACCOUNT_BYTES = 16_384;
 const MAX_AI_BYTES = 120_000;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
+const PBKDF2_ITERATIONS = 180_000;
 const ID_PATTERN = /^ZGR-\d{8}-[A-Z0-9]{6,12}$/;
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
+const USERS_PREFIX = "system/users/";
+const AUDIT_PREFIX = "system/audit/";
+const AI_KEYS_OBJECT = "system/secrets/ai-keys.enc.json";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -71,12 +77,186 @@ async function sessionKey(env, usages) {
   );
 }
 
-async function issueSession(env) {
+function normalizeUsername(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function randomBase64Url(size) {
+  return encodeBase64Url(crypto.getRandomValues(new Uint8Array(size)));
+}
+
+async function hashPassword(password, salt = randomBase64Url(16)) {
+  const material = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, [
+    "deriveBits",
+  ]);
+  const hash = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: decodeBase64Url(salt),
+      iterations: PBKDF2_ITERATIONS,
+    },
+    material,
+    256,
+  );
+  return {
+    algorithm: "PBKDF2-SHA256",
+    iterations: PBKDF2_ITERATIONS,
+    salt,
+    hash: encodeBase64Url(hash),
+  };
+}
+
+async function verifyPasswordHash(password, stored) {
+  if (
+    !stored ||
+    stored.algorithm !== "PBKDF2-SHA256" ||
+    stored.iterations !== PBKDF2_ITERATIONS ||
+    typeof stored.salt !== "string" ||
+    typeof stored.hash !== "string"
+  )
+    return false;
+  const candidate = await hashPassword(password, stored.salt);
+  try {
+    return crypto.subtle.timingSafeEqual(
+      decodeBase64Url(candidate.hash),
+      decodeBase64Url(stored.hash),
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function readR2Json(env, key) {
+  const object = await env.CLIENTS_BUCKET.get(key);
+  if (!object) return null;
+  try {
+    return JSON.parse(await object.text());
+  } catch {
+    return null;
+  }
+}
+
+function publicUser(user) {
+  return {
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+    active: user.active !== false,
+    createdAt: user.createdAt || null,
+    updatedAt: user.updatedAt || null,
+    lastLoginAt: user.lastLoginAt || null,
+    loginCount: Number(user.loginCount) || 0,
+    sessionVersion: Number(user.sessionVersion) || 1,
+  };
+}
+
+async function saveUser(env, user) {
+  await env.CLIENTS_BUCKET.put(
+    `${USERS_PREFIX}${encodeURIComponent(user.username)}.json`,
+    JSON.stringify(user),
+    {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: {
+        username: user.username,
+        displayName: String(user.displayName || user.username).slice(0, 120),
+        role: user.role,
+        active: user.active === false ? "false" : "true",
+        createdAt: String(user.createdAt || "").slice(0, 40),
+        updatedAt: String(user.updatedAt || "").slice(0, 40),
+        lastLoginAt: String(user.lastLoginAt || "").slice(0, 40),
+        loginCount: String(Number(user.loginCount) || 0),
+        sessionVersion: String(Number(user.sessionVersion) || 1),
+      },
+    },
+  );
+}
+
+async function getStoredUser(env, username) {
+  const normalized = normalizeUsername(username);
+  if (!USERNAME_PATTERN.test(normalized)) return null;
+  const user = await readR2Json(env, `${USERS_PREFIX}${encodeURIComponent(normalized)}.json`);
+  return user && user.username === normalized ? user : null;
+}
+
+function bootstrapAdmin(env) {
+  const username = normalizeUsername(env.ADMIN_USERNAME || "admin");
+  return {
+    username,
+    displayName: "Administrateur",
+    role: "admin",
+    active: true,
+    password: null,
+    sessionVersion: 1,
+    createdAt: null,
+    updatedAt: null,
+    lastLoginAt: null,
+    loginCount: 0,
+    bootstrap: true,
+  };
+}
+
+async function getLoginUser(env, username) {
+  const stored = await getStoredUser(env, username);
+  if (stored) return stored;
+  const admin = bootstrapAdmin(env);
+  return username === admin.username ? admin : null;
+}
+
+async function verifyUserPassword(user, password, env) {
+  if (user?.password) return verifyPasswordHash(password, user.password);
+  if (user?.bootstrap) {
+    const expected = typeof env.ADMIN_PASSWORD === "string" ? env.ADMIN_PASSWORD : "";
+    return expected.length >= 8 && secureEqual(password, expected);
+  }
+  await hashPassword(password || "invalid-password", "AAECAwQFBgcICQoLDA0ODw");
+  return false;
+}
+
+async function writeAudit(env, request, event, username, outcome = "success", details = {}) {
+  if (!env.CLIENTS_BUCKET) return;
+  const createdAt = new Date().toISOString();
+  const entry = {
+    id: crypto.randomUUID(),
+    event,
+    username: normalizeUsername(username) || "unknown",
+    outcome,
+    createdAt,
+    ip: String(request.headers.get("CF-Connecting-IP") || "").slice(0, 80),
+    country: String(request.cf?.country || "").slice(0, 8),
+    userAgent: String(request.headers.get("User-Agent") || "").slice(0, 300),
+    details,
+  };
+  await env.CLIENTS_BUCKET.put(
+    `${AUDIT_PREFIX}${Date.now()}-${entry.id}.json`,
+    JSON.stringify(entry),
+    {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: {
+        id: entry.id,
+        event: entry.event.slice(0, 80),
+        username: entry.username.slice(0, 32),
+        outcome: entry.outcome.slice(0, 20),
+        createdAt,
+        ip: entry.ip,
+        country: entry.country,
+      },
+    },
+  );
+}
+
+async function issueSession(env, user) {
   const key = await sessionKey(env, ["sign"]);
   if (!key) throw new Error("SESSION_SECRET absent ou trop court.");
   const issuedAt = Math.floor(Date.now() / 1000);
   const payload = encodeBase64Url(
-    JSON.stringify({ sub: "admin", iat: issuedAt, exp: issuedAt + SESSION_TTL_SECONDS }),
+    JSON.stringify({
+      sub: user.username,
+      role: user.role,
+      sv: Number(user.sessionVersion) || 1,
+      iat: issuedAt,
+      exp: issuedAt + SESSION_TTL_SECONDS,
+    }),
   );
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
   return {
@@ -87,9 +267,9 @@ async function issueSession(env) {
 
 async function verifySession(token, env) {
   const [payload, signature, extra] = token.split(".");
-  if (!payload || !signature || extra) return false;
+  if (!payload || !signature || extra) return null;
   const key = await sessionKey(env, ["verify"]);
-  if (!key) return false;
+  if (!key) return null;
   let verified = false;
   try {
     verified = await crypto.subtle.verify(
@@ -99,21 +279,39 @@ async function verifySession(token, env) {
       encoder.encode(payload),
     );
   } catch {
-    return false;
+    return null;
   }
-  if (!verified) return false;
+  if (!verified) return null;
   try {
     const claims = JSON.parse(decoder.decode(decodeBase64Url(payload)));
     const now = Math.floor(Date.now() / 1000);
-    return claims?.sub === "admin" && Number(claims.exp) > now && Number(claims.iat) <= now + 60;
+    if (
+      !USERNAME_PATTERN.test(normalizeUsername(claims?.sub)) ||
+      !["admin", "user"].includes(claims?.role) ||
+      Number(claims.exp) <= now ||
+      Number(claims.iat) > now + 60
+    )
+      return null;
+    return claims;
   } catch {
-    return false;
+    return null;
   }
 }
 
-async function authorized(request, env) {
+async function authenticatedUser(request, env) {
   const received = request.headers.get("Authorization") || "";
-  return received.startsWith("Bearer ") && verifySession(received.slice(7), env);
+  if (!received.startsWith("Bearer ")) return null;
+  const claims = await verifySession(received.slice(7), env);
+  if (!claims) return null;
+  const user = await getStoredUser(env, claims.sub);
+  if (
+    !user ||
+    user.active === false ||
+    user.role !== claims.role ||
+    (Number(user.sessionVersion) || 1) !== Number(claims.sv)
+  )
+    return null;
+  return user;
 }
 
 async function readJson(request, maxBytes) {
@@ -129,7 +327,7 @@ async function readJson(request, maxBytes) {
   }
 }
 
-async function login(request, env, origin) {
+async function login(request, env, origin, ctx) {
   let credentials;
   try {
     credentials = (await readJson(request, MAX_LOGIN_BYTES)).value;
@@ -142,20 +340,271 @@ async function login(request, env, origin) {
       );
     throw error;
   }
-  const expectedUser = String(env.ADMIN_USERNAME || "admin");
-  const expectedPassword = typeof env.ADMIN_PASSWORD === "string" ? env.ADMIN_PASSWORD : "";
-  const user = typeof credentials?.username === "string" ? credentials.username.trim() : "";
+  const username = normalizeUsername(credentials?.username);
   const password = typeof credentials?.password === "string" ? credentials.password : "";
-  const [userMatches, passwordMatches] = await Promise.all([
-    secureEqual(user, expectedUser),
-    secureEqual(password, expectedPassword),
-  ]);
-  if (!userMatches || !passwordMatches || expectedPassword.length < 8) {
+  const user = await getLoginUser(env, username);
+  const passwordMatches = user ? await verifyUserPassword(user, password, env) : false;
+  if (!user || user.active === false || !passwordMatches) {
+    if (!user) await hashPassword(password || "invalid-password", "AAECAwQFBgcICQoLDA0ODw");
+    ctx.waitUntil(writeAudit(env, request, "login", username, "failure"));
     await new Promise((resolve) => setTimeout(resolve, 650));
     return json({ error: "Identifiants incorrects." }, 401, origin);
   }
-  const session = await issueSession(env);
-  return json({ ok: true, ...session }, 200, origin);
+  const now = new Date().toISOString();
+  const storedUser = {
+    ...user,
+    bootstrap: undefined,
+    password: user.password || (await hashPassword(password)),
+    role: user.role === "admin" ? "admin" : "user",
+    active: true,
+    createdAt: user.createdAt || now,
+    updatedAt: now,
+    lastLoginAt: now,
+    loginCount: (Number(user.loginCount) || 0) + 1,
+    sessionVersion: Number(user.sessionVersion) || 1,
+  };
+  await saveUser(env, storedUser);
+  const session = await issueSession(env, storedUser);
+  ctx.waitUntil(writeAudit(env, request, "login", username, "success"));
+  return json({ ok: true, ...session, user: publicUser(storedUser) }, 200, origin);
+}
+
+async function listUsers(env, origin) {
+  const users = [];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix: USERS_PREFIX,
+      cursor,
+      include: ["customMetadata"],
+      limit: 500,
+    });
+    for (const object of page.objects) {
+      const metadata = object.customMetadata || {};
+      users.push({
+        username: metadata.username || "",
+        displayName: metadata.displayName || metadata.username || "Profil",
+        role: metadata.role === "admin" ? "admin" : "user",
+        active: metadata.active !== "false",
+        createdAt: metadata.createdAt || null,
+        updatedAt: metadata.updatedAt || null,
+        lastLoginAt: metadata.lastLoginAt || null,
+        loginCount: Number(metadata.loginCount) || 0,
+        sessionVersion: Number(metadata.sessionVersion) || 1,
+      });
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  if (!users.some((user) => user.role === "admin")) users.unshift(publicUser(bootstrapAdmin(env)));
+  users.sort((left, right) => {
+    if (left.role !== right.role) return left.role === "admin" ? -1 : 1;
+    return left.username.localeCompare(right.username);
+  });
+  return json({ users }, 200, origin);
+}
+
+function validPassword(password) {
+  return typeof password === "string" && password.length >= 10 && password.length <= 200;
+}
+
+async function createUser(request, env, actor, origin, ctx) {
+  let payload;
+  try {
+    payload = (await readJson(request, MAX_ACCOUNT_BYTES)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Données de profil invalides." }, error.status, origin);
+    throw error;
+  }
+  const username = normalizeUsername(payload?.username);
+  const displayName =
+    typeof payload?.displayName === "string" ? payload.displayName.trim().slice(0, 120) : "";
+  const password = typeof payload?.password === "string" ? payload.password : "";
+  if (!USERNAME_PATTERN.test(username))
+    return json(
+      {
+        error:
+          "Identifiant invalide : 3 à 32 caractères minuscules, chiffres, point, tiret ou soulignement.",
+      },
+      422,
+      origin,
+    );
+  if (username === normalizeUsername(env.ADMIN_USERNAME || "admin"))
+    return json({ error: "Ce nom est réservé à l’administrateur principal." }, 409, origin);
+  if (!displayName) return json({ error: "Le nom affiché est obligatoire." }, 422, origin);
+  if (!validPassword(password))
+    return json(
+      { error: "Le mot de passe doit contenir entre 10 et 200 caractères." },
+      422,
+      origin,
+    );
+  if (await getStoredUser(env, username))
+    return json({ error: "Ce profil existe déjà." }, 409, origin);
+  const now = new Date().toISOString();
+  const user = {
+    username,
+    displayName,
+    role: "user",
+    active: true,
+    password: await hashPassword(password),
+    sessionVersion: 1,
+    createdAt: now,
+    updatedAt: now,
+    lastLoginAt: null,
+    loginCount: 0,
+  };
+  await saveUser(env, user);
+  ctx.waitUntil(
+    writeAudit(env, request, "user_created", actor.username, "success", { target: username }),
+  );
+  return json({ ok: true, user: publicUser(user) }, 201, origin);
+}
+
+function accountUsername(pathname) {
+  const match = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+  return match ? normalizeUsername(decodeURIComponent(match[1])) : null;
+}
+
+function accountPasswordUsername(pathname) {
+  const match = pathname.match(/^\/api\/admin\/users\/([^/]+)\/password$/);
+  return match ? normalizeUsername(decodeURIComponent(match[1])) : null;
+}
+
+async function updateUser(request, env, actor, username, origin, ctx) {
+  const user = await getStoredUser(env, username);
+  if (!user) return json({ error: "Profil introuvable." }, 404, origin);
+  let payload;
+  try {
+    payload = (await readJson(request, MAX_ACCOUNT_BYTES)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Données de profil invalides." }, error.status, origin);
+    throw error;
+  }
+  const adminUsername = normalizeUsername(env.ADMIN_USERNAME || "admin");
+  const displayName =
+    typeof payload?.displayName === "string"
+      ? payload.displayName.trim().slice(0, 120)
+      : user.displayName;
+  const active = username === adminUsername ? true : payload?.active !== false;
+  if (!displayName) return json({ error: "Le nom affiché est obligatoire." }, 422, origin);
+  const changedActivity = user.active !== active;
+  const updated = {
+    ...user,
+    displayName,
+    active,
+    updatedAt: new Date().toISOString(),
+    sessionVersion: (Number(user.sessionVersion) || 1) + (changedActivity ? 1 : 0),
+  };
+  await saveUser(env, updated);
+  ctx.waitUntil(
+    writeAudit(env, request, "user_updated", actor.username, "success", {
+      target: username,
+      active,
+    }),
+  );
+  return json({ ok: true, user: publicUser(updated) }, 200, origin);
+}
+
+async function resetUserPassword(request, env, actor, username, origin, ctx) {
+  const user = await getStoredUser(env, username);
+  if (!user) return json({ error: "Profil introuvable." }, 404, origin);
+  let payload;
+  try {
+    payload = (await readJson(request, MAX_ACCOUNT_BYTES)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Mot de passe invalide." }, error.status, origin);
+    throw error;
+  }
+  const password = typeof payload?.password === "string" ? payload.password : "";
+  if (!validPassword(password))
+    return json(
+      { error: "Le mot de passe doit contenir entre 10 et 200 caractères." },
+      422,
+      origin,
+    );
+  const updated = {
+    ...user,
+    password: await hashPassword(password),
+    updatedAt: new Date().toISOString(),
+    sessionVersion: (Number(user.sessionVersion) || 1) + 1,
+  };
+  await saveUser(env, updated);
+  ctx.waitUntil(
+    writeAudit(env, request, "password_reset", actor.username, "success", { target: username }),
+  );
+  return json({ ok: true, logoutRequired: username === actor.username }, 200, origin);
+}
+
+async function changeOwnPassword(request, env, actor, origin, ctx) {
+  let payload;
+  try {
+    payload = (await readJson(request, MAX_ACCOUNT_BYTES)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Mot de passe invalide." }, error.status, origin);
+    throw error;
+  }
+  const currentPassword =
+    typeof payload?.currentPassword === "string" ? payload.currentPassword : "";
+  const newPassword = typeof payload?.newPassword === "string" ? payload.newPassword : "";
+  if (!(await verifyUserPassword(actor, currentPassword, env)))
+    return json({ error: "Le mot de passe actuel est incorrect." }, 403, origin);
+  if (!validPassword(newPassword))
+    return json(
+      { error: "Le nouveau mot de passe doit contenir entre 10 et 200 caractères." },
+      422,
+      origin,
+    );
+  const updated = {
+    ...actor,
+    password: await hashPassword(newPassword),
+    updatedAt: new Date().toISOString(),
+    sessionVersion: (Number(actor.sessionVersion) || 1) + 1,
+  };
+  await saveUser(env, updated);
+  ctx.waitUntil(writeAudit(env, request, "password_changed", actor.username, "success"));
+  return json({ ok: true, logoutRequired: true }, 200, origin);
+}
+
+async function deleteUser(request, env, actor, username, origin, ctx) {
+  const adminUsername = normalizeUsername(env.ADMIN_USERNAME || "admin");
+  if (username === adminUsername || username === actor.username)
+    return json(
+      { error: "Le compte administrateur actif ne peut pas être supprimé." },
+      409,
+      origin,
+    );
+  if (!(await getStoredUser(env, username)))
+    return json({ error: "Profil introuvable." }, 404, origin);
+  await env.CLIENTS_BUCKET.delete(`${USERS_PREFIX}${encodeURIComponent(username)}.json`);
+  ctx.waitUntil(
+    writeAudit(env, request, "user_deleted", actor.username, "success", { target: username }),
+  );
+  return json({ ok: true }, 200, origin);
+}
+
+async function listAudit(env, origin, requestedLimit) {
+  const limit = Math.min(200, Math.max(1, Number(requestedLimit) || 100));
+  const page = await env.CLIENTS_BUCKET.list({
+    prefix: AUDIT_PREFIX,
+    include: ["customMetadata"],
+    limit: 1000,
+  });
+  const entries = page.objects
+    .map((object) => ({
+      id: object.customMetadata?.id || object.key,
+      event: object.customMetadata?.event || "event",
+      username: object.customMetadata?.username || "unknown",
+      outcome: object.customMetadata?.outcome || "unknown",
+      createdAt: object.customMetadata?.createdAt || object.uploaded.toISOString(),
+      ip: object.customMetadata?.ip || "",
+      country: object.customMetadata?.country || "",
+    }))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, limit);
+  return json({ entries }, 200, origin);
 }
 
 function profileId(pathname) {
@@ -263,6 +712,165 @@ function secretKeys(value) {
     .filter(Boolean);
 }
 
+async function aiEncryptionKey(env, usages) {
+  if (typeof env.SESSION_SECRET !== "string" || env.SESSION_SECRET.length < 40) return null;
+  const raw = await crypto.subtle.digest(
+    "SHA-256",
+    encoder.encode(`${env.SESSION_SECRET}:zgr-ai-keys:v1`),
+  );
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, usages);
+}
+
+async function readManagedAiKeys(env) {
+  const encrypted = await readR2Json(env, AI_KEYS_OBJECT);
+  if (!encrypted) return [];
+  if (typeof encrypted.iv !== "string" || typeof encrypted.ciphertext !== "string") return [];
+  const key = await aiEncryptionKey(env, ["decrypt"]);
+  if (!key) return [];
+  try {
+    const clear = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: decodeBase64Url(encrypted.iv) },
+      key,
+      decodeBase64Url(encrypted.ciphertext),
+    );
+    const parsed = JSON.parse(decoder.decode(clear));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item) =>
+        item &&
+        typeof item.id === "string" &&
+        ["gemini", "openrouter"].includes(item.provider) &&
+        typeof item.key === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function writeManagedAiKeys(env, entries) {
+  const key = await aiEncryptionKey(env, ["encrypt"]);
+  if (!key) throw new Error("Clé de chiffrement IA indisponible.");
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    encoder.encode(JSON.stringify(entries)),
+  );
+  await env.CLIENTS_BUCKET.put(
+    AI_KEYS_OBJECT,
+    JSON.stringify({
+      version: 1,
+      iv: encodeBase64Url(iv),
+      ciphertext: encodeBase64Url(ciphertext),
+    }),
+    { httpMetadata: { contentType: "application/json; charset=utf-8" } },
+  );
+}
+
+async function providerKeys(provider, env) {
+  const environmentKeys = secretKeys(
+    provider === "gemini" ? env.GEMINI_API_KEYS : env.OPENROUTER_API_KEYS,
+  );
+  const managedKeys = (await readManagedAiKeys(env))
+    .filter((entry) => entry.provider === provider)
+    .map((entry) => entry.key);
+  return [...new Set([...managedKeys, ...environmentKeys])];
+}
+
+function validProviderKey(provider, key) {
+  if (typeof key !== "string" || key.length < 20 || key.length > 500) return false;
+  if (provider === "gemini") return /^(?:AIza|AQ\.)[A-Za-z0-9_-]+$/.test(key);
+  return /^sk-or-v1-[A-Za-z0-9_-]+$/.test(key);
+}
+
+async function aiKeyStatus(env, origin) {
+  const managed = await readManagedAiKeys(env);
+  const providers = {};
+  for (const provider of ["gemini", "openrouter"]) {
+    const environment = secretKeys(
+      provider === "gemini" ? env.GEMINI_API_KEYS : env.OPENROUTER_API_KEYS,
+    );
+    providers[provider] = {
+      environmentCount: environment.length,
+      managed: managed
+        .filter((entry) => entry.provider === provider)
+        .map((entry) => ({
+          id: entry.id,
+          label: entry.label || "Clé interface",
+          last4: entry.key.slice(-4),
+          createdAt: entry.createdAt,
+        })),
+    };
+  }
+  return json({ providers }, 200, origin);
+}
+
+async function saveAiKey(request, env, actor, origin, ctx) {
+  let payload;
+  try {
+    payload = (await readJson(request, MAX_ACCOUNT_BYTES)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Clé API invalide." }, error.status, origin);
+    throw error;
+  }
+  const provider =
+    payload?.provider === "openrouter"
+      ? "openrouter"
+      : payload?.provider === "gemini"
+        ? "gemini"
+        : null;
+  const key = typeof payload?.key === "string" ? payload.key.trim() : "";
+  const mode = payload?.mode === "replace" ? "replace" : "add";
+  const label =
+    typeof payload?.label === "string" ? payload.label.trim().slice(0, 80) : "Clé interface";
+  if (!provider || !validProviderKey(provider, key))
+    return json(
+      { error: "Le format de la clé API ne correspond pas au fournisseur choisi." },
+      422,
+      origin,
+    );
+  const current = await readManagedAiKeys(env);
+  const kept =
+    mode === "replace" ? current.filter((entry) => entry.provider !== provider) : current;
+  if (kept.some((entry) => entry.provider === provider && entry.key === key))
+    return json({ error: "Cette clé est déjà enregistrée." }, 409, origin);
+  const entry = {
+    id: crypto.randomUUID(),
+    provider,
+    key,
+    label: label || "Clé interface",
+    createdAt: new Date().toISOString(),
+  };
+  await writeManagedAiKeys(env, [...kept, entry]);
+  ctx.waitUntil(
+    writeAudit(env, request, "ai_key_saved", actor.username, "success", { provider, mode }),
+  );
+  return json({ ok: true, id: entry.id, last4: key.slice(-4) }, 201, origin);
+}
+
+function aiKeyId(pathname) {
+  const match = pathname.match(/^\/api\/admin\/ai-keys\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function deleteAiKey(request, env, actor, id, origin, ctx) {
+  const current = await readManagedAiKeys(env);
+  const target = current.find((entry) => entry.id === id);
+  if (!target)
+    return json({ error: "Clé interface introuvable ou gérée par Cloudflare." }, 404, origin);
+  await writeManagedAiKeys(
+    env,
+    current.filter((entry) => entry.id !== id),
+  );
+  ctx.waitUntil(
+    writeAudit(env, request, "ai_key_deleted", actor.username, "success", {
+      provider: target.provider,
+    }),
+  );
+  return json({ ok: true }, 200, origin);
+}
+
 async function fetchProvider(url, init, timeoutMs = 30_000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -281,7 +889,7 @@ async function providerError(response, fallback) {
 }
 
 async function listAiModels(provider, env, origin) {
-  const keys = secretKeys(provider === "gemini" ? env.GEMINI_API_KEYS : env.OPENROUTER_API_KEYS);
+  const keys = await providerKeys(provider, env);
   if (!keys.length)
     return json({ error: `Aucune clé ${provider} configurée côté serveur.` }, 503, origin);
   const response =
@@ -356,7 +964,7 @@ async function generateAi(request, env, origin) {
   )
     return json({ error: "Paramètres IA invalides." }, 422, origin);
 
-  const keys = secretKeys(provider === "gemini" ? env.GEMINI_API_KEYS : env.OPENROUTER_API_KEYS);
+  const keys = await providerKeys(provider, env);
   if (!keys.length)
     return json({ error: `Aucune clé ${provider} configurée côté serveur.` }, 503, origin);
   const random = crypto.getRandomValues(new Uint32Array(1))[0] % keys.length;
@@ -441,7 +1049,7 @@ async function generateAi(request, env, origin) {
   );
 }
 
-async function route(request, env) {
+async function route(request, env, ctx) {
   const url = new URL(request.url);
   const origin = allowedOrigin(request, env);
 
@@ -454,13 +1062,44 @@ async function route(request, env) {
     return json({ ok: true, service: "zgr-cv-storage-api" }, 200, origin);
   if (request.headers.get("Origin") && !origin)
     return json({ error: "Origine non autorisée." }, 403);
+  if (!env.CLIENTS_BUCKET) return json({ error: "Binding R2 CLIENTS_BUCKET absent." }, 503, origin);
   if (url.pathname === "/api/auth/login" && request.method === "POST")
-    return login(request, env, origin);
+    return login(request, env, origin, ctx);
 
-  if (!(await authorized(request, env)))
-    return json({ error: "Session expirée ou accès non autorisé." }, 401, origin);
+  const actor = await authenticatedUser(request, env);
+  if (!actor) return json({ error: "Session expirée ou accès non autorisé." }, 401, origin);
   if (url.pathname === "/api/auth/session" && request.method === "GET")
-    return json({ ok: true, user: "admin" }, 200, origin);
+    return json({ ok: true, user: publicUser(actor) }, 200, origin);
+  if (url.pathname === "/api/account/password" && request.method === "PUT")
+    return changeOwnPassword(request, env, actor, origin, ctx);
+
+  if (url.pathname.startsWith("/api/admin/")) {
+    if (actor.role !== "admin")
+      return json({ error: "Droits administrateur requis." }, 403, origin);
+    if (url.pathname === "/api/admin/users" && request.method === "GET")
+      return listUsers(env, origin);
+    if (url.pathname === "/api/admin/users" && request.method === "POST")
+      return createUser(request, env, actor, origin, ctx);
+    const passwordUsername = accountPasswordUsername(url.pathname);
+    if (passwordUsername && request.method === "PUT")
+      return resetUserPassword(request, env, actor, passwordUsername, origin, ctx);
+    const username = accountUsername(url.pathname);
+    if (username && request.method === "PUT")
+      return updateUser(request, env, actor, username, origin, ctx);
+    if (username && request.method === "DELETE")
+      return deleteUser(request, env, actor, username, origin, ctx);
+    if (url.pathname === "/api/admin/audit" && request.method === "GET")
+      return listAudit(env, origin, url.searchParams.get("limit"));
+    if (url.pathname === "/api/admin/ai-keys" && request.method === "GET")
+      return aiKeyStatus(env, origin);
+    if (url.pathname === "/api/admin/ai-keys" && request.method === "PUT")
+      return saveAiKey(request, env, actor, origin, ctx);
+    const keyId = aiKeyId(url.pathname);
+    if (keyId && request.method === "DELETE")
+      return deleteAiKey(request, env, actor, keyId, origin, ctx);
+    return json({ error: "Route d’administration introuvable." }, 404, origin);
+  }
+
   if (url.pathname === "/api/ai/models" && request.method === "GET") {
     const provider = url.searchParams.get("provider");
     if (provider !== "gemini" && provider !== "openrouter")
@@ -470,7 +1109,6 @@ async function route(request, env) {
   if (url.pathname === "/api/ai/generate" && request.method === "POST")
     return generateAi(request, env, origin);
 
-  if (!env.CLIENTS_BUCKET) return json({ error: "Binding R2 CLIENTS_BUCKET absent." }, 503, origin);
   if (url.pathname === "/api/clients" && request.method === "GET") return listProfiles(env, origin);
   const id = profileId(url.pathname);
   if (!id) return json({ error: "Route ou ID client invalide." }, 404, origin);
@@ -484,8 +1122,8 @@ async function route(request, env) {
 }
 
 export default {
-  fetch(request, env) {
-    return route(request, env).catch((error) => {
+  fetch(request, env, ctx) {
+    return route(request, env, ctx).catch((error) => {
       console.error(
         JSON.stringify({
           event: "worker_error",

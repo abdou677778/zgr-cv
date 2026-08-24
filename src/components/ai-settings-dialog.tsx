@@ -19,6 +19,7 @@ import {
   type AiSettings,
 } from "@/lib/ai-types";
 import { testAiConnection } from "@/lib/ai-client";
+import { getAiKeyStatus, removeAiKey, saveAiKey, type AiKeyStatus } from "@/lib/ai-key-client";
 
 function usagePercent(connection: AiConnection) {
   if (typeof connection.usage.remotePercent === "number") return connection.usage.remotePercent;
@@ -31,20 +32,94 @@ export function AiSettingsDialog({
   onOpenChange,
   value,
   onSave,
+  canManageKeys,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   value: AiSettings;
   onSave: (settings: AiSettings) => void;
+  canManageKeys: boolean;
 }) {
   const [draft, setDraft] = useState(value);
   const [testing, setTesting] = useState<string | null>(null);
+  const [keyStatus, setKeyStatus] = useState<AiKeyStatus | null>(null);
+  const [keyDraft, setKeyDraft] = useState<Record<AiProviderId, string>>({
+    gemini: "",
+    openrouter: "",
+  });
+  const [keyLabel, setKeyLabel] = useState<Record<AiProviderId, string>>({
+    gemini: "Clé Gemini",
+    openrouter: "Clé OpenRouter",
+  });
+  const [keyBusy, setKeyBusy] = useState("");
+  const [keyMessage, setKeyMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     if (open) {
       setDraft(structuredClone(value));
     }
   }, [open, value]);
+
+  useEffect(() => {
+    if (!open || !canManageKeys) return;
+    setKeyMessage(null);
+    void getAiKeyStatus()
+      .then(setKeyStatus)
+      .catch((error) =>
+        setKeyMessage({
+          ok: false,
+          text: error instanceof Error ? error.message : "Impossible de lire les clés serveur.",
+        }),
+      );
+  }, [open, canManageKeys]);
+
+  const refreshKeyStatus = async () => setKeyStatus(await getAiKeyStatus());
+
+  const persistKey = async (provider: AiProviderId, mode: "add" | "replace") => {
+    setKeyBusy(`${provider}-${mode}`);
+    setKeyMessage(null);
+    try {
+      await saveAiKey({
+        provider,
+        key: keyDraft[provider],
+        label: keyLabel[provider],
+        mode,
+      });
+      setKeyDraft((current) => ({ ...current, [provider]: "" }));
+      await refreshKeyStatus();
+      setKeyMessage({
+        ok: true,
+        text:
+          mode === "replace"
+            ? `Les clés ${provider} ajoutées depuis l’interface ont été remplacées.`
+            : `La clé ${provider} a été chiffrée et ajoutée côté serveur.`,
+      });
+    } catch (error) {
+      setKeyMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Enregistrement de la clé impossible.",
+      });
+    } finally {
+      setKeyBusy("");
+    }
+  };
+
+  const deleteServerKey = async (id: string) => {
+    setKeyBusy(`delete-${id}`);
+    setKeyMessage(null);
+    try {
+      await removeAiKey(id);
+      await refreshKeyStatus();
+      setKeyMessage({ ok: true, text: "Clé interface supprimée du stockage chiffré." });
+    } catch (error) {
+      setKeyMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Suppression impossible.",
+      });
+    } finally {
+      setKeyBusy("");
+    }
+  };
 
   const updateConnection = (id: string, patch: Partial<AiConnection>) =>
     setDraft((current) => ({
@@ -99,8 +174,8 @@ export function AiSettingsDialog({
         <DialogHeader>
           <DialogTitle>Paramètres IA</DialogTitle>
           <DialogDescription>
-            Choisissez les modèles et leur priorité. Les clés privées sont gérées exclusivement par
-            Cloudflare et la rotation est automatique lorsqu’un quota est atteint.
+            Choisissez les modèles et leur priorité. Les clés privées sont conservées côté serveur
+            et la rotation est automatique lorsqu’un quota est atteint.
           </DialogDescription>
         </DialogHeader>
 
@@ -108,11 +183,138 @@ export function AiSettingsDialog({
           <div className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              Aucune clé API n’est transmise au navigateur, stockée dans localStorage ou publiée sur
+              Aucune clé API n’est stockée dans localStorage, renvoyée au navigateur ou publiée sur
               GitHub. Les appels passent par le Worker authentifié.
             </p>
           </div>
         </div>
+
+        {canManageKeys ? (
+          <section className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
+            <div>
+              <h3 className="flex items-center gap-2 font-semibold text-violet-950">
+                <KeyRound className="h-5 w-5" /> Clés API serveur
+              </h3>
+              <p className="mt-1 text-xs text-violet-800">
+                La valeur est envoyée une seule fois par HTTPS, chiffrée AES-GCM dans R2 et jamais
+                relue par le navigateur. Les secrets Cloudflare existants restent prioritaires et ne
+                peuvent pas être affichés.
+              </p>
+            </div>
+            {keyMessage && (
+              <p
+                className={`rounded-lg border px-3 py-2 text-xs ${keyMessage.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}
+                role="status"
+              >
+                {keyMessage.text}
+              </p>
+            )}
+            <div className="grid gap-4 md:grid-cols-2">
+              {(["gemini", "openrouter"] as const).map((provider) => {
+                const status = keyStatus?.[provider];
+                return (
+                  <div key={provider} className="space-y-3 rounded-xl border bg-white p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold capitalize">{provider}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px]">
+                        {(status?.environmentCount || 0) + (status?.managed.length || 0)} clés
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Secrets Cloudflare : {status?.environmentCount ?? "…"} · Ajoutées ici :{" "}
+                      {status?.managed.length ?? "…"}
+                    </p>
+                    {!!status?.managed.length && (
+                      <div className="space-y-1.5">
+                        {status.managed.map((key) => (
+                          <div
+                            key={key.id}
+                            className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2 text-xs"
+                          >
+                            <span className="min-w-0 truncate">
+                              {key.label} · ••••{key.last4}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-red-600"
+                              aria-label={`Supprimer ${key.label}`}
+                              disabled={keyBusy === `delete-${key.id}`}
+                              onClick={() => void deleteServerKey(key.id)}
+                            >
+                              {keyBusy === `delete-${key.id}` ? (
+                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nom de la clé</Label>
+                      <Input
+                        value={keyLabel[provider]}
+                        onChange={(event) =>
+                          setKeyLabel((current) => ({
+                            ...current,
+                            [provider]: event.target.value.slice(0, 80),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nouvelle clé API</Label>
+                      <Input
+                        type="password"
+                        autoComplete="off"
+                        value={keyDraft[provider]}
+                        placeholder={provider === "gemini" ? "AIza… ou AQ.…" : "sk-or-v1-…"}
+                        onChange={(event) =>
+                          setKeyDraft((current) => ({
+                            ...current,
+                            [provider]: event.target.value.trim(),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!keyDraft[provider] || !!keyBusy}
+                        onClick={() => void persistKey(provider, "add")}
+                      >
+                        {keyBusy === `${provider}-add` && (
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Ajouter
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!keyDraft[provider] || !!keyBusy}
+                        onClick={() => void persistKey(provider, "replace")}
+                      >
+                        {keyBusy === `${provider}-replace` && (
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Remplacer les clés interface
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : (
+          <div className="rounded-xl border bg-slate-50 px-4 py-3 text-xs text-slate-600">
+            Les clés API sont gérées uniquement par le compte administrateur.
+          </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex items-center gap-2 rounded-md border p-3 text-sm">

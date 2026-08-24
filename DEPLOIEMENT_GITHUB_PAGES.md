@@ -4,7 +4,8 @@
 
 - **GitHub Pages** héberge uniquement l’interface statique.
 - **Cloudflare Worker** expose l’API privée de synchronisation.
-- **Cloudflare R2** stocke un objet JSON par client sous `clients/<ID>.json`.
+- **Cloudflare R2** stocke les JSON clients, les comptes hachés, le journal
+  d’audit et les clés IA ajoutées depuis l’interface sous forme chiffrée.
 - Les PDF restent générés dans le navigateur et ne sont pas envoyés dans R2.
 
 ## Ressources Cloudflare
@@ -13,14 +14,16 @@
 - Endpoint : `https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/api/clients`
 - Bucket privé : `zgr-cv-clients`
 - Binding : `CLIENTS_BUCKET`
-- Compte : un seul administrateur, sans inscription ni création d'utilisateur
+- Compte initial : administrateur d’amorçage, puis gestion de profils depuis
+  **Paramètres du compte**
 - Secrets Worker : `ADMIN_PASSWORD`, `SESSION_SECRET`, `GEMINI_API_KEYS` et
   `OPENROUTER_API_KEYS`
 
 Le Worker applique une origine CORS explicite, une session signée HMAC limitée à
-12 heures, une comparaison en temps constant, une limite JSON de 5 Mo et des
-journaux Cloudflare. Le mot de passe et les clés IA ne sont jamais inclus dans le
-dépôt, le build public, le stockage local ou le navigateur.
+12 heures, des mots de passe PBKDF2-SHA256 salés individuellement, une révocation
+immédiate des sessions, une limite JSON de 5 Mo et un journal d’audit R2. Les mots
+de passe et les clés IA ne sont jamais inclus dans le dépôt, le build public ou le
+stockage local du navigateur.
 
 ## Publication GitHub Pages
 
@@ -30,7 +33,7 @@ des chemins relatifs pour fonctionner depuis un sous-dossier `github.io`.
 
 ## Utilisation de la sauvegarde
 
-Après la connexion avec l'unique compte administrateur, ouvrir **Base de données** :
+Après la connexion avec un profil actif, ouvrir **Base de données** :
 
 1. L’endpoint est préconfiguré dans le build GitHub Pages.
 2. Cliquer sur **Synchroniser maintenant**.
@@ -40,7 +43,17 @@ et les versions distantes plus récentes sont récupérées localement. Les PDF 
 locaux ; seuls les JSON clients sont sauvegardés.
 
 Les boutons IA appellent le Worker, qui sélectionne et fait tourner les clés Gemini
-ou OpenRouter côté serveur. Aucune clé fournisseur n'est saisie dans l'interface.
+ou OpenRouter côté serveur. L’administrateur peut conserver les clés d’environnement
+Cloudflare ou en ajouter dans **Paramètres IA**. Une clé saisie est envoyée une seule
+fois au Worker, chiffrée avec AES-GCM dans R2, puis elle n’est plus renvoyée au
+navigateur.
+
+## Comptes et traçabilité
+
+L’administrateur peut créer, renommer, désactiver ou supprimer les profils, et
+réinitialiser leur mot de passe. Chaque utilisateur peut changer son propre mot de
+passe. Le journal d’audit conserve les connexions réussies ou refusées et les
+opérations administratives sans enregistrer de mot de passe ni de clé API.
 
 ## Maintenance
 

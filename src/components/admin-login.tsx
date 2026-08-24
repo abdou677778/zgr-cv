@@ -3,9 +3,9 @@ import { FileText, LoaderCircle, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { loginAdmin } from "@/lib/auth-client";
+import { loginAdmin, type SessionUser } from "@/lib/auth-client";
 
-export function AdminLogin({ onAuthenticated }: { onAuthenticated: (token: string) => void }) {
+export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,16 +37,14 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (token: strin
             </div>
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight">ZGR CV Studio</h1>
-              <p className="mt-1 text-xs text-indigo-100">Espace administrateur sécurisé</p>
+              <p className="mt-1 text-xs text-indigo-100">Espace utilisateurs sécurisé</p>
             </div>
           </div>
         </div>
         <form className="space-y-5 p-7" onSubmit={submit}>
           <div className="flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-900">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-            <p>
-              Compte unique. Aucune inscription et aucun compte secondaire ne peuvent être créés.
-            </p>
+            <p>Accès privé. Seul l’administrateur peut créer, modifier ou désactiver un profil.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="admin-username">Utilisateur</Label>

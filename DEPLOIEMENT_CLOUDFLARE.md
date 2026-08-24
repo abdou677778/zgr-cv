@@ -21,8 +21,10 @@
 6. Autoriser uniquement l'origine GitHub Pages et les origines locales de développement.
 7. Tester `/health`, la connexion, la synchronisation R2 et les deux fournisseurs IA.
 
-Il n’existe aucune inscription publique. Seul l’administrateur crée les profils et
-réinitialise leurs mots de passe. Au premier accès, le mot de passe d’amorçage est
+Il n’existe aucune inscription publique. Les profils administrateurs peuvent créer
+d’autres administrateurs ou des utilisateurs standards et réinitialiser leurs mots
+de passe. Les routes `/api/admin/*` vérifient le rôle côté Worker et répondent `403`
+aux utilisateurs standards. Au premier accès, le mot de passe d’amorçage est
 converti en enregistrement PBKDF2-SHA256 dans R2. La session HMAC expire après
 12 heures et contient une version permettant sa révocation après modification du
 mot de passe ou désactivation du profil. Le Worker utilise 100 000 itérations

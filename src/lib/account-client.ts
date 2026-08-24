@@ -1,6 +1,6 @@
 import { authenticatedFetch, type SessionUser } from "@/lib/auth-client";
 
-export type ManagedUser = SessionUser & { sessionVersion: number };
+export type ManagedUser = SessionUser & { sessionVersion: number; isPrimary?: boolean };
 
 export type AuditEntry = {
   id: string;
@@ -33,6 +33,7 @@ export async function createManagedUser(input: {
   username: string;
   displayName: string;
   password: string;
+  role: "admin" | "user";
 }) {
   return (await apiJson<{ user: ManagedUser }>("/api/admin/users", jsonRequest("POST", input)))
     .user;
@@ -40,7 +41,7 @@ export async function createManagedUser(input: {
 
 export async function updateManagedUser(
   username: string,
-  input: { displayName: string; active: boolean },
+  input: { displayName: string; active: boolean; role: "admin" | "user" },
 ) {
   return (
     await apiJson<{ user: ManagedUser }>(

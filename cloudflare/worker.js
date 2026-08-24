@@ -372,6 +372,7 @@ async function login(request, env, origin, ctx) {
 
 async function listUsers(env, origin) {
   const users = [];
+  const adminUsername = normalizeUsername(env.ADMIN_USERNAME || "admin");
   let cursor;
   do {
     const page = await env.CLIENTS_BUCKET.list({
@@ -392,11 +393,13 @@ async function listUsers(env, origin) {
         lastLoginAt: metadata.lastLoginAt || null,
         loginCount: Number(metadata.loginCount) || 0,
         sessionVersion: Number(metadata.sessionVersion) || 1,
+        isPrimary: metadata.username === adminUsername,
       });
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
-  if (!users.some((user) => user.role === "admin")) users.unshift(publicUser(bootstrapAdmin(env)));
+  if (!users.some((user) => user.username === adminUsername))
+    users.unshift({ ...publicUser(bootstrapAdmin(env)), isPrimary: true });
   users.sort((left, right) => {
     if (left.role !== right.role) return left.role === "admin" ? -1 : 1;
     return left.username.localeCompare(right.username);
@@ -421,6 +424,7 @@ async function createUser(request, env, actor, origin, ctx) {
   const displayName =
     typeof payload?.displayName === "string" ? payload.displayName.trim().slice(0, 120) : "";
   const password = typeof payload?.password === "string" ? payload.password : "";
+  const role = payload?.role === "admin" ? "admin" : "user";
   if (!USERNAME_PATTERN.test(username))
     return json(
       {
@@ -445,7 +449,7 @@ async function createUser(request, env, actor, origin, ctx) {
   const user = {
     username,
     displayName,
-    role: "user",
+    role,
     active: true,
     password: await hashPassword(password),
     sessionVersion: 1,
@@ -456,9 +460,12 @@ async function createUser(request, env, actor, origin, ctx) {
   };
   await saveUser(env, user);
   ctx.waitUntil(
-    writeAudit(env, request, "user_created", actor.username, "success", { target: username }),
+    writeAudit(env, request, "user_created", actor.username, "success", {
+      target: username,
+      role,
+    }),
   );
-  return json({ ok: true, user: publicUser(user) }, 201, origin);
+  return json({ ok: true, user: { ...publicUser(user), isPrimary: false } }, 201, origin);
 }
 
 function accountUsername(pathname) {
@@ -487,24 +494,35 @@ async function updateUser(request, env, actor, username, origin, ctx) {
     typeof payload?.displayName === "string"
       ? payload.displayName.trim().slice(0, 120)
       : user.displayName;
-  const active = username === adminUsername ? true : payload?.active !== false;
+  const protectedAccount = username === adminUsername || username === actor.username;
+  const requestedRole =
+    payload?.role === "admin" || payload?.role === "user" ? payload.role : user.role;
+  const role = username === adminUsername ? "admin" : protectedAccount ? user.role : requestedRole;
+  const active = protectedAccount ? true : payload?.active !== false;
   if (!displayName) return json({ error: "Le nom affiché est obligatoire." }, 422, origin);
   const changedActivity = user.active !== active;
+  const changedRole = user.role !== role;
   const updated = {
     ...user,
     displayName,
+    role,
     active,
     updatedAt: new Date().toISOString(),
-    sessionVersion: (Number(user.sessionVersion) || 1) + (changedActivity ? 1 : 0),
+    sessionVersion: (Number(user.sessionVersion) || 1) + (changedActivity || changedRole ? 1 : 0),
   };
   await saveUser(env, updated);
   ctx.waitUntil(
     writeAudit(env, request, "user_updated", actor.username, "success", {
       target: username,
       active,
+      role,
     }),
   );
-  return json({ ok: true, user: publicUser(updated) }, 200, origin);
+  return json(
+    { ok: true, user: { ...publicUser(updated), isPrimary: username === adminUsername } },
+    200,
+    origin,
+  );
 }
 
 async function resetUserPassword(request, env, actor, username, origin, ctx) {

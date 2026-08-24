@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type ComponentProps, type FormEvent } from "react";
 import {
   Activity,
   CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   LoaderCircle,
   Save,
@@ -51,6 +53,28 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("fr-FR");
 }
 
+function PasswordInput({ className, ...props }: ComponentProps<typeof Input>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        {...props}
+        type={visible ? "text" : "password"}
+        className={`pr-10 ${className || ""}`}
+      />
+      <button
+        type="button"
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-500 transition hover:text-indigo-700"
+        aria-label={visible ? "Masquer le mot de passe saisi" : "Afficher le mot de passe saisi"}
+        title={visible ? "Masquer" : "Afficher"}
+        onClick={() => setVisible((current) => !current)}
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
+
 export function AccountSettingsDialog({
   open,
   onOpenChange,
@@ -67,7 +91,12 @@ export function AccountSettingsDialog({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const [newUser, setNewUser] = useState({ username: "", displayName: "", password: "" });
+  const [newUser, setNewUser] = useState({
+    username: "",
+    displayName: "",
+    password: "",
+    role: "user" as "admin" | "user",
+  });
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const [ownPassword, setOwnPassword] = useState({ current: "", next: "", confirm: "" });
 
@@ -122,7 +151,7 @@ export function AccountSettingsDialog({
     setMessage(null);
     try {
       await createManagedUser(newUser);
-      setNewUser({ username: "", displayName: "", password: "" });
+      setNewUser({ username: "", displayName: "", password: "", role: "user" });
       setMessage({ ok: true, text: "Le nouveau profil peut maintenant se connecter." });
       await loadAdminData();
     } catch (error) {
@@ -142,6 +171,7 @@ export function AccountSettingsDialog({
       const updated = await updateManagedUser(profile.username, {
         displayName: profile.displayName,
         active: profile.active,
+        role: profile.role,
       });
       setUsers((current) =>
         current.map((item) => (item.username === profile.username ? updated : item)),
@@ -229,9 +259,8 @@ export function AccountSettingsDialog({
           <form className="grid gap-3 md:grid-cols-3" onSubmit={changePassword}>
             <div className="space-y-1.5">
               <Label htmlFor="own-current-password">Mot de passe actuel</Label>
-              <Input
+              <PasswordInput
                 id="own-current-password"
-                type="password"
                 autoComplete="current-password"
                 value={ownPassword.current}
                 onChange={(event) =>
@@ -242,9 +271,8 @@ export function AccountSettingsDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="own-new-password">Nouveau mot de passe</Label>
-              <Input
+              <PasswordInput
                 id="own-new-password"
-                type="password"
                 minLength={10}
                 autoComplete="new-password"
                 value={ownPassword.next}
@@ -254,9 +282,8 @@ export function AccountSettingsDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="own-confirm-password">Confirmer</Label>
-              <Input
+              <PasswordInput
                 id="own-confirm-password"
-                type="password"
                 minLength={10}
                 autoComplete="new-password"
                 value={ownPassword.confirm}
@@ -280,7 +307,7 @@ export function AccountSettingsDialog({
                 <UserPlus className="h-5 w-5 text-indigo-600" />
                 <h3 className="font-semibold">Créer un profil utilisateur</h3>
               </div>
-              <form className="grid gap-3 md:grid-cols-3" onSubmit={createProfile}>
+              <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={createProfile}>
                 <div className="space-y-1.5">
                   <Label htmlFor="new-username">Identifiant</Label>
                   <Input
@@ -307,10 +334,23 @@ export function AccountSettingsDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
+                  <Label htmlFor="new-user-role">Niveau d’accès</Label>
+                  <select
+                    id="new-user-role"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    value={newUser.role}
+                    onChange={(event) =>
+                      setNewUser({ ...newUser, role: event.target.value as "admin" | "user" })
+                    }
+                  >
+                    <option value="user">Utilisateur standard</option>
+                    <option value="admin">Administrateur — accès complet</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
                   <Label htmlFor="new-user-password">Mot de passe initial</Label>
-                  <Input
+                  <PasswordInput
                     id="new-user-password"
-                    type="password"
                     minLength={10}
                     autoComplete="new-password"
                     value={newUser.password}
@@ -318,7 +358,10 @@ export function AccountSettingsDialog({
                     required
                   />
                 </div>
-                <Button className="md:col-span-3 md:w-fit" disabled={busy === "create"}>
+                <Button
+                  className="md:col-span-2 md:w-fit xl:col-span-4"
+                  disabled={busy === "create"}
+                >
                   {busy === "create" ? (
                     <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
@@ -339,6 +382,11 @@ export function AccountSettingsDialog({
                   {users.length} profils
                 </span>
               </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-relaxed text-emerald-900">
+                Les mots de passe enregistrés sont hachés et ne peuvent jamais être relus. Vous
+                pouvez afficher temporairement une valeur pendant sa saisie ou définir un nouveau
+                mot de passe. Toute réinitialisation ferme immédiatement les sessions du profil.
+              </div>
               {loading ? (
                 <div className="flex items-center py-8 text-sm text-muted-foreground">
                   <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Chargement…
@@ -346,13 +394,25 @@ export function AccountSettingsDialog({
               ) : (
                 <div className="space-y-3">
                   {users.map((profile) => {
-                    const isAdmin = profile.role === "admin";
+                    const isProtected = profile.isPrimary || profile.username === user.username;
                     return (
                       <div key={profile.username} className="space-y-3 rounded-xl border p-4">
-                        <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr_auto_auto] lg:items-end">
+                        <div className="grid gap-3 lg:grid-cols-[1fr_1.1fr_190px_auto_auto] lg:items-end">
                           <div>
                             <p className="text-xs text-muted-foreground">Identifiant</p>
-                            <p className="font-semibold">{profile.username}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold">{profile.username}</p>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${profile.role === "admin" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}
+                              >
+                                {profile.role === "admin" ? "Administrateur" : "Utilisateur"}
+                              </span>
+                              {profile.isPrimary && (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                  Principal
+                                </span>
+                              )}
+                            </div>
                             <p className="mt-1 text-[11px] text-muted-foreground">
                               Dernière connexion : {formatDate(profile.lastLoginAt)} ·{" "}
                               {profile.loginCount} connexions
@@ -373,11 +433,34 @@ export function AccountSettingsDialog({
                               }
                             />
                           </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Niveau d’accès</Label>
+                            <select
+                              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60"
+                              value={profile.role}
+                              disabled={isProtected}
+                              onChange={(event) =>
+                                setUsers((current) =>
+                                  current.map((item) =>
+                                    item.username === profile.username
+                                      ? {
+                                          ...item,
+                                          role: event.target.value as "admin" | "user",
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            >
+                              <option value="user">Utilisateur standard</option>
+                              <option value="admin">Administrateur</option>
+                            </select>
+                          </div>
                           <label className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm">
                             <input
                               type="checkbox"
                               checked={profile.active}
-                              disabled={isAdmin}
+                              disabled={isProtected}
                               onChange={(event) =>
                                 setUsers((current) =>
                                   current.map((item) =>
@@ -405,7 +488,7 @@ export function AccountSettingsDialog({
                                 <Save className="h-4 w-4" />
                               )}
                             </Button>
-                            {!isAdmin && (
+                            {!isProtected && (
                               <Button
                                 type="button"
                                 size="icon"
@@ -420,39 +503,39 @@ export function AccountSettingsDialog({
                             )}
                           </div>
                         </div>
-                        {!isAdmin && (
-                          <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-end">
-                            <div className="min-w-0 flex-1 space-y-1.5">
-                              <Label className="text-xs">Nouveau mot de passe</Label>
-                              <Input
-                                type="password"
-                                minLength={10}
-                                autoComplete="new-password"
-                                value={resetPasswords[profile.username] || ""}
-                                onChange={(event) =>
-                                  setResetPasswords((current) => ({
-                                    ...current,
-                                    [profile.username]: event.target.value,
-                                  }))
-                                }
-                              />
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              disabled={
-                                (resetPasswords[profile.username] || "").length < 10 ||
-                                busy === `password-${profile.username}`
+                        <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-end">
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <Label className="text-xs">
+                              Nouveau mot de passe
+                              {profile.username === user.username ? " — votre compte" : ""}
+                            </Label>
+                            <PasswordInput
+                              minLength={10}
+                              autoComplete="new-password"
+                              value={resetPasswords[profile.username] || ""}
+                              onChange={(event) =>
+                                setResetPasswords((current) => ({
+                                  ...current,
+                                  [profile.username]: event.target.value,
+                                }))
                               }
-                              onClick={() => void resetPassword(profile.username)}
-                            >
-                              {busy === `password-${profile.username}` && (
-                                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                              )}
-                              Réinitialiser
-                            </Button>
+                            />
                           </div>
-                        )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={
+                              (resetPasswords[profile.username] || "").length < 10 ||
+                              busy === `password-${profile.username}`
+                            }
+                            onClick={() => void resetPassword(profile.username)}
+                          >
+                            {busy === `password-${profile.username}` && (
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                            )}
+                            Réinitialiser
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}

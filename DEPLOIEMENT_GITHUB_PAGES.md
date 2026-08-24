@@ -50,10 +50,14 @@ navigateur.
 
 ## Comptes et traçabilité
 
-L’administrateur peut créer, renommer, désactiver ou supprimer les profils, et
-réinitialiser leur mot de passe. Chaque utilisateur peut changer son propre mot de
-passe. Le journal d’audit conserve les connexions réussies ou refusées et les
-opérations administratives sans enregistrer de mot de passe ni de clé API.
+L’administrateur peut créer un profil avec le rôle **Administrateur** ou
+**Utilisateur standard**, le renommer, modifier son rôle, le désactiver ou le
+supprimer, et réinitialiser son mot de passe. Un utilisateur standard n’accède ni
+à la gestion des profils ni aux clés API. Chaque utilisateur peut changer son
+propre mot de passe. Les mots de passe sont hachés : ils ne sont jamais lisibles ni
+récupérables, mais une nouvelle valeur peut être affichée pendant sa saisie. Le
+journal d’audit conserve les connexions réussies ou refusées et les opérations
+administratives sans enregistrer de mot de passe ni de clé API.
 
 ## Maintenance
 

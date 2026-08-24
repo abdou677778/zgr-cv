@@ -2,8 +2,13 @@ const SESSION_KEY = "zgr-cv-admin-session";
 const SESSION_USER_KEY = "zgr-cv-session-user";
 const SESSION_CHANGED_EVENT = "zgr-cv-session-changed";
 const SESSION_VERIFY_TIMEOUT_MS = 6_000;
+const FILE_CLIENTS_API_ENDPOINT = "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/api/clients";
+const defaultClientsEndpoint =
+  typeof window !== "undefined" && window.location.protocol === "file:"
+    ? FILE_CLIENTS_API_ENDPOINT
+    : "/api/clients";
 const configuredClientsEndpoint =
-  (import.meta.env.VITE_ZGR_API_URL as string | undefined)?.trim() || "/api/clients";
+  (import.meta.env.VITE_ZGR_API_URL as string | undefined)?.trim() || defaultClientsEndpoint;
 
 export const API_ROOT = configuredClientsEndpoint.replace(/\/api\/clients\/?$/, "");
 export const CLIENTS_API_ENDPOINT = `${API_ROOT}/api/clients`;

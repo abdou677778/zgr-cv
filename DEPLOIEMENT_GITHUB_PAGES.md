@@ -32,7 +32,8 @@ sur `main`, puis publie l’artefact avec GitHub Pages. La configuration Vite ut
 des chemins relatifs pour fonctionner depuis un sous-dossier `github.io`. Les
 moteurs PDF et leurs grandes polices sont chargés à la demande afin de garder la
 connexion et l’interface initiale légères. Le générateur autonome désactive cette
-division et conserve toutes les ressources dans son fichier HTML unique.
+division, conserve toutes les ressources dans son fichier HTML unique et injecte
+l’URL HTTPS du Worker afin que l’authentification fonctionne depuis `file://`.
 
 ## Utilisation de la sauvegarde
 

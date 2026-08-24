@@ -18,7 +18,12 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
     try {
       onAuthenticated(await loginAdmin(username, password));
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Connexion impossible.");
+      const message = failure instanceof Error ? failure.message : "Connexion impossible.";
+      setError(
+        failure instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(message)
+          ? "Service de connexion inaccessible. Vérifiez Internet puis réessayez."
+          : message,
+      );
     } finally {
       setBusy(false);
     }

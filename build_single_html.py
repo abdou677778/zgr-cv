@@ -12,6 +12,9 @@ def main():
         # Sur Windows, shell=True est requis pour lancer npx dans powershell/cmd
         build_env = os.environ.copy()
         build_env["ZGR_AUTONOMOUS_BUILD"] = "1"
+        build_env["VITE_ZGR_API_URL"] = (
+            "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/api/clients"
+        )
         result = subprocess.run(
             ["npx", "vite", "build", "--config", "vite.spa.config.ts"],
             shell=True,

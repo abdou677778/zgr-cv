@@ -36,6 +36,13 @@ partir de `SESSION_SECRET`; leur valeur n’est jamais retournée au navigateur.
 secrets ne doivent jamais être préfixés par `VITE_`, car toute variable Vite est
 publique dans le navigateur.
 
+`PUT /api/admin/ai-keys` vérifie désormais la clé avant stockage : récupération des
+modèles compatibles puis génération JSON courte avec cette clé exacte. Les routes
+de modèles et de génération parcourent le pool de clés dans l’ordre et poursuivent
+automatiquement sur les réponses de quota, délai ou erreur temporaire. Le
+comptage administratif déduplique les clés identiques présentes à la fois dans un
+secret Cloudflare et dans le stockage chiffré R2.
+
 ## Développement local
 
 Le fichier HTML autonome continue d'utiliser IndexedDB pour ses données locales.

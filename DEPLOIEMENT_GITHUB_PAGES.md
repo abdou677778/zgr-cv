@@ -48,6 +48,13 @@ Cloudflare ou en ajouter dans **Paramètres IA**. Une clé saisie est envoyée u
 fois au Worker, chiffrée avec AES-GCM dans R2, puis elle n’est plus renvoyée au
 navigateur.
 
+Le panneau suit un parcours unique : **fournisseur → clé → test réel → modèles →
+sauvegarde**. Une nouvelle clé n’est enregistrée que si la liste des modèles et une
+génération JSON de contrôle réussissent. Un seul modèle est sélectionné par
+fournisseur et partagé par son pool de clés. La priorité des clés est calculée
+automatiquement ; sur quota, délai ou erreur serveur, le Worker essaie la clé
+suivante, puis le fournisseur suivant si l’auto-switch est actif.
+
 ## Comptes et traçabilité
 
 L’administrateur peut créer un profil avec le rôle **Administrateur** ou

@@ -53,7 +53,7 @@ export const newAiConnection = (provider: AiProviderId = "gemini"): AiConnection
   id: crypto.randomUUID(),
   label: provider === "gemini" ? "Gemini — clé principale" : "OpenRouter — clé principale",
   provider,
-  model: provider === "gemini" ? "gemini-2.5-flash" : "google/gemini-2.5-flash-lite",
+  model: provider === "gemini" ? "gemini-2.5-flash" : "openrouter/free",
   enabled: true,
   priority: 1,
   dailyRequestLimit: provider === "gemini" ? 20 : 50,

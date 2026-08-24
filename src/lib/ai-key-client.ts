@@ -1,11 +1,12 @@
 import { authenticatedFetch } from "@/lib/auth-client";
-import type { AiProviderId } from "@/lib/ai-types";
+import type { AiModelOption, AiProviderId } from "@/lib/ai-types";
 
 export type ManagedAiKey = {
   id: string;
   label: string;
   last4: string;
   createdAt: string;
+  priority: number;
 };
 
 export type AiKeyStatus = Record<
@@ -29,8 +30,17 @@ export async function saveAiKey(input: {
   key: string;
   label: string;
   mode: "add" | "replace";
+  model?: string;
 }) {
-  return apiJson<{ ok: boolean; id: string; last4: string }>("/api/admin/ai-keys", {
+  return apiJson<{
+    ok: boolean;
+    id: string;
+    last4: string;
+    model: string;
+    models: AiModelOption[];
+    generationVerified: boolean;
+    tokens: number;
+  }>("/api/admin/ai-keys", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

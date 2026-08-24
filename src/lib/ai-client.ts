@@ -147,7 +147,11 @@ async function listOpenRouterModels(_connection: AiConnection): Promise<AiModelO
     "Liste des modèles OpenRouter",
   );
   ensureOk(response, body, "Connexion OpenRouter refusée");
-  const models = Array.isArray(body.data) ? body.data : [];
+  const models = Array.isArray(body.models)
+    ? body.models
+    : Array.isArray(body.data)
+      ? body.data
+      : [];
   return models.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const model = item as JsonRecord;

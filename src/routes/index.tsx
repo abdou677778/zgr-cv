@@ -28,6 +28,7 @@ import {
   FileText,
   LogOut,
   UserCog,
+  BookOpenText,
 } from "lucide-react";
 import * as pdfjs from "pdfjs-dist";
 import pdfWorkerSource from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
@@ -79,6 +80,7 @@ import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "@/lib/a
 import { ClientDatabaseDialog } from "@/components/client-database-dialog";
 import { AdminLogin } from "@/components/admin-login";
 import { AccountSettingsDialog } from "@/components/account-settings-dialog";
+import { PromptMasterDialog } from "@/components/prompt-master-dialog";
 import { clearAdminSession, verifyAdminSession, type SessionUser } from "@/lib/auth-client";
 import {
   getClientProfile,
@@ -317,6 +319,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+  const [promptMasterOpen, setPromptMasterOpen] = useState(false);
   const [aiFieldRequest, setAiFieldRequest] = useState<AiFieldRequest | null>(null);
   const [clientDatabaseOpen, setClientDatabaseOpen] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
@@ -1053,6 +1056,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               onClick={() => setAiAssistantOpen(true)}
             >
               <Bot className="mr-2 h-4 w-4 text-violet-600" /> Assistant IA
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-amber-200 bg-amber-50/80 text-amber-900 hover:bg-amber-100"
+              onClick={() => setPromptMasterOpen(true)}
+            >
+              <BookOpenText className="mr-2 h-4 w-4 text-amber-600" /> Prompte
             </Button>
             <Button
               variant="ghost"
@@ -2102,6 +2113,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         onSave={setAiSettings}
         canManageKeys={user.role === "admin"}
       />
+      <PromptMasterDialog open={promptMasterOpen} onOpenChange={setPromptMasterOpen} />
       <AccountSettingsDialog
         open={accountSettingsOpen}
         onOpenChange={setAccountSettingsOpen}

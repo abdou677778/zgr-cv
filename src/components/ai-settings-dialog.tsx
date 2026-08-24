@@ -54,9 +54,14 @@ function linkedSettings(value: AiSettings): AiSettings {
       if (seen.has(connection.provider)) return false;
       seen.add(connection.provider);
       return true;
-    })
-    .map((connection, index) => ({ ...connection, priority: index + 1 }));
-  return { ...value, connections };
+    });
+  for (const provider of PROVIDERS) {
+    if (!seen.has(provider)) connections.push(newAiConnection(provider));
+  }
+  return {
+    ...value,
+    connections: connections.map((connection, index) => ({ ...connection, priority: index + 1 })),
+  };
 }
 
 function providerConnection(settings: AiSettings, provider: AiProviderId) {

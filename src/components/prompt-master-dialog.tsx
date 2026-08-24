@@ -13,6 +13,21 @@ import {
 } from "@/components/ui/dialog";
 
 const PROMPT_FILE_NAME = "PROMPT_MAITRE_CV_JSON_7_LANGUES.txt";
+const PROMPT_START_MARKER = "RÔLE ET OBJECTIF UNIQUE";
+const PROMPT_END_MARKER = "FIN DU PROMPT À COPIER";
+
+function getOperationalPrompt(source: string) {
+  const startIndex = source.indexOf(PROMPT_START_MARKER);
+  if (startIndex === -1) return source.trim();
+
+  const endMarkerIndex = source.indexOf(PROMPT_END_MARKER, startIndex);
+  const endLineIndex = endMarkerIndex === -1 ? -1 : source.lastIndexOf("\n", endMarkerIndex);
+  const endIndex = endLineIndex >= startIndex ? endLineIndex : endMarkerIndex;
+  const content = endIndex === -1 ? source.slice(startIndex) : source.slice(startIndex, endIndex);
+  return content.trimEnd();
+}
+
+const operationalPrompt = getOperationalPrompt(masterPrompt);
 
 function fallbackCopy(value: string) {
   const field = document.createElement("textarea");
@@ -50,15 +65,15 @@ export function PromptMasterDialog({
 
   const copyPrompt = async () => {
     try {
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(masterPrompt);
-      else fallbackCopy(masterPrompt);
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(operationalPrompt);
+      else fallbackCopy(operationalPrompt);
       setCopied(true);
       setMessage("Prompt maître copié intégralement dans le presse-papiers.");
       if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
       resetTimer.current = window.setTimeout(() => setCopied(false), 2500);
     } catch {
       try {
-        fallbackCopy(masterPrompt);
+        fallbackCopy(operationalPrompt);
         setCopied(true);
         setMessage("Prompt maître copié intégralement dans le presse-papiers.");
       } catch {
@@ -68,7 +83,7 @@ export function PromptMasterDialog({
   };
 
   const downloadPrompt = () => {
-    const blob = new Blob([masterPrompt], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([operationalPrompt], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -97,15 +112,15 @@ export function PromptMasterDialog({
           <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-900">
             <FileText className="mr-1 inline h-3.5 w-3.5" /> {PROMPT_FILE_NAME}
           </span>
-          <span>{masterPrompt.replace(/\r?\n$/, "").split(/\r?\n/).length} lignes</span>
+          <span>{operationalPrompt.split(/\r?\n/).length} lignes</span>
           <span>·</span>
-          <span>{masterPrompt.length.toLocaleString("fr-FR")} caractères</span>
+          <span>{operationalPrompt.length.toLocaleString("fr-FR")} caractères</span>
         </div>
 
         <Textarea
           readOnly
           aria-label="Prompt maître complet"
-          value={masterPrompt}
+          value={operationalPrompt}
           className="h-[58vh] resize-none whitespace-pre-wrap bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-100"
           onFocus={(event) => event.currentTarget.select()}
         />

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Award,
   BadgeCheck,
@@ -56,8 +56,10 @@ import {
   Trophy,
   UserRound,
   UsersRound,
+  Upload,
   Wrench,
   X,
+  icons as LucideIcons,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -127,11 +129,38 @@ const SECTION_ICON_COMPONENTS = {
   share: Share2,
 } satisfies Record<string, LucideIcon>;
 
-export type SectionIconName = keyof typeof SECTION_ICON_COMPONENTS;
+const EXTRA_ICON_COMPONENTS = Object.fromEntries(
+  Object.entries(LucideIcons)
+    .filter(
+      ([name, component]) =>
+        !name.startsWith("Lucide") &&
+        !name.endsWith("Icon") &&
+        typeof component === "object" &&
+        !(name.toLowerCase() in SECTION_ICON_COMPONENTS),
+    )
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(0, 300),
+) as Record<string, LucideIcon>;
+
+const ICON_CATALOG: Record<string, LucideIcon> = {
+  ...SECTION_ICON_COMPONENTS,
+  ...EXTRA_ICON_COMPONENTS,
+};
+
+export type SectionIconName = string;
+
+export type SectionCustomIcon = {
+  dataUrl: string;
+  name: string;
+  format: "svg" | "png" | "webp";
+  width: number;
+  height: number;
+};
 
 export type SectionAppearance = {
   title: string;
   icon: SectionIconName;
+  customIcon?: SectionCustomIcon;
 };
 
 export type SectionAppearanceMap = Record<string, SectionAppearance>;
@@ -168,6 +197,34 @@ const ACCENTS: Record<string, { tile: string; icon: string }> = {
   development: { tile: "bg-lime-100", icon: "text-lime-700" },
 };
 
+function normalizeCustomIcon(value: unknown): SectionCustomIcon | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<SectionCustomIcon>;
+  const format = candidate.format;
+  const dataUrl = typeof candidate.dataUrl === "string" ? candidate.dataUrl : "";
+  const allowedPrefix =
+    format === "svg"
+      ? "data:image/svg+xml"
+      : format === "png"
+        ? "data:image/png;base64,"
+        : format === "webp"
+          ? "data:image/webp;base64,"
+          : "";
+  if (!allowedPrefix || !dataUrl.startsWith(allowedPrefix) || dataUrl.length > 220_000) {
+    return undefined;
+  }
+  const width = Number(candidate.width);
+  const height = Number(candidate.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width !== height) return undefined;
+  return {
+    dataUrl,
+    format: format as SectionCustomIcon["format"],
+    width,
+    height,
+    name: typeof candidate.name === "string" ? candidate.name.slice(0, 80) : "Icône personnalisée",
+  };
+}
+
 export function normalizeSectionAppearance(value: unknown): SectionAppearanceMap {
   const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   return Object.fromEntries(
@@ -182,18 +239,117 @@ export function normalizeSectionAppearance(value: unknown): SectionAppearanceMap
           title:
             typeof candidate.title === "string" ? candidate.title.slice(0, 60) : fallback.title,
           icon:
-            typeof candidate.icon === "string" && candidate.icon in SECTION_ICON_COMPONENTS
+            typeof candidate.icon === "string" && candidate.icon in ICON_CATALOG
               ? (candidate.icon as SectionIconName)
               : fallback.icon,
+          customIcon: normalizeCustomIcon(candidate.customIcon),
         },
       ];
     }),
   );
 }
 
-function SectionGlyph({ name, className }: { name: SectionIconName; className?: string }) {
-  const Icon = SECTION_ICON_COMPONENTS[name] || FileText;
+function SectionGlyph({
+  name,
+  customIcon,
+  className,
+}: {
+  name: SectionIconName;
+  customIcon?: SectionCustomIcon;
+  className?: string;
+}) {
+  if (customIcon) {
+    return <img src={customIcon.dataUrl} alt="" className={cn("object-contain", className)} />;
+  }
+  const Icon = ICON_CATALOG[name] || FileText;
   return <Icon className={className} strokeWidth={1.9} />;
+}
+
+const CUSTOM_ICON_MAX_BYTES = 150 * 1024;
+
+function fileAsDataUrl(file: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Lecture du fichier impossible."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function validateRasterIcon(file: File): Promise<SectionCustomIcon> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => reject(new Error("L’image ne peut pas être décodée."));
+      image.src = objectUrl;
+    });
+    if (dimensions.width !== dimensions.height) {
+      throw new Error("L’icône doit être parfaitement carrée (largeur = hauteur).");
+    }
+    if (dimensions.width < 128 || dimensions.width > 512) {
+      throw new Error("Dimensions requises : entre 128 × 128 et 512 × 512 px.");
+    }
+    return {
+      dataUrl: await fileAsDataUrl(file),
+      name: file.name,
+      format: file.type === "image/png" ? "png" : "webp",
+      width: dimensions.width,
+      height: dimensions.height,
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function validateSvgIcon(file: File): Promise<SectionCustomIcon> {
+  const documentNode = new DOMParser().parseFromString(await file.text(), "image/svg+xml");
+  const root = documentNode.documentElement;
+  if (root.tagName.toLowerCase() !== "svg" || documentNode.querySelector("parsererror")) {
+    throw new Error("Le fichier SVG est invalide.");
+  }
+  documentNode
+    .querySelectorAll("script, foreignObject, iframe, object, embed, image, style")
+    .forEach((node) => node.remove());
+  documentNode.querySelectorAll("*").forEach((element) => {
+    for (const attribute of [...element.attributes]) {
+      const name = attribute.name.toLowerCase();
+      if (name.startsWith("on") || name === "style") element.removeAttribute(attribute.name);
+      if ((name === "href" || name === "xlink:href") && !attribute.value.startsWith("#")) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+  });
+  const viewBox = (root.getAttribute("viewBox") || "").trim().split(/[ ,]+/).map(Number);
+  const width =
+    viewBox.length === 4 ? viewBox[2] : Number.parseFloat(root.getAttribute("width") || "");
+  const height =
+    viewBox.length === 4 ? viewBox[3] : Number.parseFloat(root.getAttribute("height") || "");
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width !== height) {
+    throw new Error("Le SVG doit posséder un viewBox carré.");
+  }
+  if (width < 24 || width > 512)
+    throw new Error("ViewBox SVG requis : carré, entre 24 et 512 unités.");
+  root.setAttribute("width", "128");
+  root.setAttribute("height", "128");
+  const safeSvg = new XMLSerializer().serializeToString(root);
+  return {
+    dataUrl: await fileAsDataUrl(new Blob([safeSvg], { type: "image/svg+xml" })),
+    name: file.name,
+    format: "svg",
+    width,
+    height,
+  };
+}
+
+async function validateCustomIcon(file: File) {
+  if (file.size > CUSTOM_ICON_MAX_BYTES) {
+    throw new Error("Le fichier dépasse 150 Ko.");
+  }
+  if (file.type === "image/svg+xml") return validateSvgIcon(file);
+  if (file.type === "image/png" || file.type === "image/webp") return validateRasterIcon(file);
+  throw new Error("Formats acceptés : SVG, PNG ou WebP uniquement.");
 }
 
 function IconPicker({
@@ -204,21 +360,38 @@ function IconPicker({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  value: SectionIconName;
-  onChange: (value: SectionIconName) => void;
+  value: SectionAppearance;
+  onChange: (value: SectionAppearance) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const uploadRef = useRef<HTMLInputElement>(null);
   const icons = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return (Object.keys(SECTION_ICON_COMPONENTS) as SectionIconName[]).filter(
-      (name) => !query || name.includes(query),
-    );
+    return Object.keys(ICON_CATALOG).filter((name) => !query || name.toLowerCase().includes(query));
   }, [search]);
+
+  const importCustomIcon = async (file?: File) => {
+    if (!file) return;
+    setUploadError("");
+    setUploading(true);
+    try {
+      const customIcon = await validateCustomIcon(file);
+      onChange({ ...value, customIcon });
+      onOpenChange(false);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Import de l’icône impossible.");
+    } finally {
+      setUploading(false);
+      if (uploadRef.current) uploadRef.current.value = "";
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[82vh] max-w-2xl overflow-hidden border-slate-200 p-0">
-        <DialogHeader className="border-b border-slate-200 px-6 py-5">
+      <DialogContent className="flex h-[min(88vh,780px)] max-w-3xl flex-col overflow-hidden border-slate-200 p-0">
+        <DialogHeader className="shrink-0 border-b border-slate-200 px-6 py-5">
           <DialogTitle className="flex items-center gap-3 text-lg">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-100 text-cyan-600">
               <Sparkles className="h-5 w-5" />
@@ -226,24 +399,64 @@ function IconPicker({
             Choisir une icône
           </DialogTitle>
           <DialogDescription>
-            Icônes vectorielles nettes dans toutes les résolutions.
+            351 icônes vectorielles professionnelles ou une icône personnalisée contrôlée.
           </DialogDescription>
         </DialogHeader>
-        <div className="border-b border-slate-200 px-5 py-4">
+        <div className="shrink-0 border-b border-slate-200 px-5 py-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder={`Rechercher parmi ${Object.keys(SECTION_ICON_COMPONENTS).length} icônes…`}
+              placeholder={`Rechercher parmi ${Object.keys(ICON_CATALOG).length} icônes…`}
               className="h-11 rounded-xl border-slate-300 pl-10"
               autoFocus
             />
           </div>
         </div>
-        <div className="overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+          <div className="mb-5 rounded-2xl border border-dashed border-cyan-300 bg-cyan-50/60 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white text-cyan-600 shadow-sm">
+                {value.customIcon ? (
+                  <SectionGlyph
+                    name={value.icon}
+                    customIcon={value.customIcon}
+                    className="h-7 w-7"
+                  />
+                ) : (
+                  <Upload className="h-5 w-5" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-slate-800">Importer une icône personnalisée</p>
+                <p className="text-xs leading-relaxed text-slate-500">
+                  SVG carré 24–512 unités, ou PNG/WebP carré 128–512 px · 150 Ko maximum.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={uploading}
+                onClick={() => uploadRef.current?.click()}
+                className="rounded-xl bg-white"
+              >
+                <Upload className="mr-2 h-4 w-4" /> {uploading ? "Validation…" : "Importer"}
+              </Button>
+              <input
+                ref={uploadRef}
+                type="file"
+                aria-label="Fichier d’icône personnalisée"
+                accept="image/svg+xml,image/png,image/webp,.svg,.png,.webp"
+                className="hidden"
+                onChange={(event) => void importCustomIcon(event.target.files?.[0])}
+              />
+            </div>
+            {uploadError && <p className="mt-3 text-sm font-medium text-rose-600">{uploadError}</p>}
+          </div>
+
           <div className="mb-4 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <span>Icônes de section</span>
+            <span>Icônes professionnelles</span>
             <span className="rounded-full bg-slate-100 px-2 py-1">{icons.length}</span>
           </div>
           <div className="grid grid-cols-5 gap-2 sm:grid-cols-7">
@@ -254,18 +467,18 @@ function IconPicker({
                 aria-label={`Icône ${name}`}
                 title={name}
                 onClick={() => {
-                  onChange(name);
+                  onChange({ ...value, icon: name, customIcon: undefined });
                   onOpenChange(false);
                 }}
                 className={cn(
                   "relative flex aspect-square items-center justify-center rounded-xl border text-slate-500 transition hover:-translate-y-0.5 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-600",
-                  value === name
+                  !value.customIcon && value.icon === name
                     ? "border-cyan-400 bg-cyan-50 text-cyan-600 shadow-sm"
                     : "border-transparent bg-slate-50",
                 )}
               >
                 <SectionGlyph name={name} className="h-5 w-5" />
-                {value === name && (
+                {!value.customIcon && value.icon === name && (
                   <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-cyan-500 text-white">
                     <Check className="h-3 w-3" />
                   </span>
@@ -273,6 +486,9 @@ function IconPicker({
               </button>
             ))}
           </div>
+          {!icons.length && (
+            <p className="py-12 text-center text-sm text-slate-500">Aucune icône correspondante.</p>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -333,7 +549,11 @@ export function CvSectionPanel({
               accent.icon,
             )}
           >
-            <SectionGlyph name={appearance.icon} className="h-5 w-5" />
+            <SectionGlyph
+              name={appearance.icon}
+              customIcon={appearance.customIcon}
+              className="h-5 w-5"
+            />
           </span>
           <span className="truncate text-[15px] font-semibold text-slate-950">{title}</span>
           {typeof count === "number" && (
@@ -422,7 +642,11 @@ export function CvSectionPanel({
                   aria-label="Changer l’icône"
                   title="Changer l’icône"
                 >
-                  <SectionGlyph name={appearance.icon} className="h-5 w-5" />
+                  <SectionGlyph
+                    name={appearance.icon}
+                    customIcon={appearance.customIcon}
+                    className="h-5 w-5"
+                  />
                 </button>
                 <Input
                   value={appearance.title}
@@ -459,8 +683,8 @@ export function CvSectionPanel({
       <IconPicker
         open={iconsOpen}
         onOpenChange={setIconsOpen}
-        value={appearance.icon}
-        onChange={(icon) => onAppearanceChange({ ...appearance, icon })}
+        value={appearance}
+        onChange={onAppearanceChange}
       />
     </section>
   );
@@ -491,7 +715,11 @@ export function HiddenSectionTray({
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-3 text-sm text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
           >
             <Plus className="h-4 w-4" />
-            <SectionGlyph name={section.appearance.icon} className="h-4 w-4" />
+            <SectionGlyph
+              name={section.appearance.icon}
+              customIcon={section.appearance.customIcon}
+              className="h-4 w-4"
+            />
             {section.appearance.title.trim() || section.title}
           </button>
         ))}

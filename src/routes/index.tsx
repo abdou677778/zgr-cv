@@ -81,6 +81,7 @@ import { AdminLogin } from "@/components/admin-login";
 import { AccountSettingsDialog } from "@/components/account-settings-dialog";
 import { PromptMasterDialog } from "@/components/prompt-master-dialog";
 import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
+import { ExperienceWorkspace } from "@/components/cv-experience-workspace";
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
 import {
   CvSectionPanel,
@@ -338,6 +339,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     objective: true,
   });
+  const [editingExperienceId, setEditingExperienceId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [pdfPreview, setPdfPreview] = useState<{ blob: Blob; url: string; key: string } | null>(
     null,
@@ -663,14 +665,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     });
 
   // experiences
-  const addExp = () =>
+  const addExp = () => {
+    const id = newId();
     setCv((c) => ({
       ...c,
       experiences: [
         ...c.experiences,
-        { id: newId(), dates: "", lieu: "", titre: "", employeur: "", descriptions: [""] },
+        { id, dates: "", lieu: "", titre: "", employeur: "", descriptions: [""] },
       ],
     }));
+    setEditingExperienceId(id);
+  };
   const updateExp = (id: string, patch: Partial<Experience>) =>
     setCv((c) => ({
       ...c,
@@ -679,6 +684,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const removeExp = (id: string, index: number) => {
     removeIndexedVisibility("experience", index);
     setCv((c) => ({ ...c, experiences: c.experiences.filter((e) => e.id !== id) }));
+    if (editingExperienceId === id) setEditingExperienceId(null);
   };
 
   // formations
@@ -1563,143 +1569,35 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             appearance={appearanceFor("experience")}
             onAppearanceChange={(appearance) => setAppearanceFor("experience", appearance)}
             open={sectionIsOpen("experience")}
-            onOpenChange={(open) => setSectionOpen("experience", open)}
+            onOpenChange={(open) => {
+              setSectionOpen("experience", open);
+              if (!open) setEditingExperienceId(null);
+            }}
             visible={sectionIsVisible("experience")}
             onVisibleChange={(visible) => setSectionVisible("experience", visible)}
             count={cv.experiences.length}
             onAdd={addExp}
           >
-            <div className="space-y-3">
-              {cv.experiences.map((e, experienceIndex) => (
-                <div
-                  key={e.id}
-                  className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
-                >
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field
-                      label={form.dates}
-                      {...visibilityProps(`experience.${experienceIndex}.dates`)}
-                      {...aiFieldProps(form.dates, e.dates, (value) =>
-                        updateExp(e.id, { dates: value.slice(0, 40) }),
-                      )}
-                    >
-                      <Input
-                        value={e.dates}
-                        onChange={(ev) => updateExp(e.id, { dates: ev.target.value.slice(0, 40) })}
-                      />
-                    </Field>
-                    <Field
-                      label={form.place}
-                      {...visibilityProps(`experience.${experienceIndex}.lieu`)}
-                      {...aiFieldProps(form.place, e.lieu, (value) =>
-                        updateExp(e.id, { lieu: value.slice(0, 80) }),
-                      )}
-                    >
-                      <Input
-                        value={e.lieu}
-                        onChange={(ev) => updateExp(e.id, { lieu: ev.target.value.slice(0, 80) })}
-                      />
-                    </Field>
-                    <Field
-                      label={form.title}
-                      {...visibilityProps(`experience.${experienceIndex}.titre`)}
-                      {...aiFieldProps(form.title, e.titre, (value) =>
-                        updateExp(e.id, { titre: value.slice(0, 120) }),
-                      )}
-                    >
-                      <Input
-                        value={e.titre}
-                        onChange={(ev) => updateExp(e.id, { titre: ev.target.value.slice(0, 120) })}
-                      />
-                    </Field>
-                    <Field
-                      label={form.employer}
-                      {...visibilityProps(`experience.${experienceIndex}.employeur`)}
-                      {...aiFieldProps(form.employer, e.employeur, (value) =>
-                        updateExp(e.id, { employeur: value.slice(0, 120) }),
-                      )}
-                    >
-                      <Input
-                        value={e.employeur}
-                        onChange={(ev) =>
-                          updateExp(e.id, { employeur: ev.target.value.slice(0, 120) })
-                        }
-                      />
-                    </Field>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-muted-foreground">
-                      {form.achievements}
-                    </Label>
-                    {e.descriptions.map((d, i) => (
-                      <div key={i} className="flex gap-2">
-                        <AiFieldButton
-                          label={`${form.achievements} ${i + 1}`}
-                          onClick={() =>
-                            openAiField(`${form.achievements} ${i + 1}`, d, (value) => {
-                              const next = [...e.descriptions];
-                              next[i] = value.slice(0, 300);
-                              updateExp(e.id, { descriptions: next });
-                            })
-                          }
-                        />
-                        <VisibilityButton
-                          label={`${form.achievements} ${i + 1}`}
-                          visible={isVisible(`experience.${experienceIndex}.description.${i}`)}
-                          onToggle={() =>
-                            toggleVisibility(`experience.${experienceIndex}.description.${i}`)
-                          }
-                        />
-                        <div
-                          className={`min-w-0 flex-1 ${
-                            isVisible(`experience.${experienceIndex}.description.${i}`)
-                              ? ""
-                              : "opacity-55 grayscale-[20%]"
-                          }`}
-                        >
-                          <Input
-                            value={d}
-                            onChange={(ev) => {
-                              const next = [...e.descriptions];
-                              next[i] = ev.target.value.slice(0, 300);
-                              updateExp(e.id, { descriptions: next });
-                            }}
-                          />
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            removeIndexedVisibility(`experience.${experienceIndex}.description`, i);
-                            updateExp(e.id, {
-                              descriptions: e.descriptions.filter((_, j) => j !== i),
-                            });
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => updateExp(e.id, { descriptions: [...e.descriptions, ""] })}
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> {form.addLine}
-                    </Button>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeExp(e.id, experienceIndex)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" /> {form.delete}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ExperienceWorkspace
+              experiences={cv.experiences}
+              editingId={editingExperienceId}
+              labels={{
+                dates: form.dates,
+                place: form.place,
+                title: form.title,
+                employer: form.employer,
+                achievements: form.achievements,
+                addLine: form.addLine,
+                delete: form.delete,
+              }}
+              onEdit={setEditingExperienceId}
+              onUpdate={updateExp}
+              onRemove={removeExp}
+              isVisible={isVisible}
+              onToggleVisibility={toggleVisibility}
+              onRemoveIndexedVisibility={removeIndexedVisibility}
+              onAi={openAiField}
+            />
           </CvSectionPanel>
 
           <CvSectionPanel

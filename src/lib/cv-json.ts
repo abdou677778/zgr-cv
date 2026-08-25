@@ -8,6 +8,7 @@ import {
 } from "./cv-types";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
+import { normalizeCompanyLogo } from "./company-logo";
 
 export type JsonImportLanguage = "auto" | "fr" | "en";
 
@@ -139,6 +140,8 @@ function directCv(source: JsonRecord): CV {
         titre: text(item.titre),
         employeur: text(item.employeur),
         descriptions: stringList(item.descriptions),
+        descriptions_format: normalizeObjectiveFormat(item.descriptions_format),
+        logo: normalizeCompanyLogo(item.logo),
       }),
     ),
     formations: formations.map(
@@ -201,6 +204,8 @@ function structuredCv(root: JsonRecord, language: "fr" | "en"): CV {
       titre: firstText(item, french ? "Titre du poste" : "Job Title"),
       employeur: firstText(item, french ? "Entreprise" : "Company"),
       descriptions: stringList(item.Description),
+      descriptions_format: normalizeObjectiveFormat(item.descriptions_format),
+      logo: normalizeCompanyLogo(item.logo),
     }),
   );
 

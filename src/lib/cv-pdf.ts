@@ -209,6 +209,112 @@ function objectivePdfContent(
   } as Content;
 }
 
+type RichInline = string | ObjectiveRun[];
+
+function richRunsForElement(
+  element: Element,
+  transformText: (text: string) => string,
+): ObjectiveRun[] {
+  const runs: ObjectiveRun[] = [];
+  const pushText = (text: string, style: Omit<ObjectiveRun, "text"> = {}) => {
+    if (!text) return;
+    const transformed = transformText(text.replace(/\u00a0/g, " "));
+    const previous = runs.at(-1);
+    if (
+      previous &&
+      previous.bold === style.bold &&
+      previous.italics === style.italics &&
+      previous.decoration === style.decoration &&
+      previous.link === style.link
+    ) {
+      previous.text += transformed;
+    } else {
+      runs.push({ text: transformed, ...style });
+    }
+  };
+  const visit = (node: Node, inherited: Omit<ObjectiveRun, "text"> = {}) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      pushText(node.textContent || "", inherited);
+      return;
+    }
+    if (!(node instanceof HTMLElement)) return;
+    if (node.tagName === "BR") {
+      pushText("\n", inherited);
+      return;
+    }
+    const next = { ...inherited };
+    if (node.matches("b,strong")) next.bold = true;
+    if (node.matches("i,em")) next.italics = true;
+    if (node.matches("u")) next.decoration = "underline";
+    if (node.matches("s,strike,del")) next.decoration = "lineThrough";
+    if (node.matches("a")) {
+      const href = node.getAttribute("href") || "";
+      if (/^(https?:|mailto:)/i.test(href)) next.link = href;
+    }
+    for (const child of [...node.childNodes]) visit(child, next);
+  };
+  for (const child of [...element.childNodes]) visit(child);
+  return runs.filter((run) => run.text.length > 0);
+}
+
+function experienceRichDescriptions(
+  experience: Experience,
+  transformText = (text: string) => text,
+): RichInline[] {
+  const fallback = experience.descriptions
+    .filter(Boolean)
+    .map((item) => transformText(item)) as RichInline[];
+  const html = normalizeObjectiveFormat(experience.descriptions_format).html;
+  if (!html || typeof DOMParser === "undefined") return fallback;
+  const documentNode = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  let elements = [...documentNode.body.querySelectorAll(":scope > ul > li, :scope > ol > li")];
+  if (!elements.length) {
+    elements = [...documentNode.body.querySelectorAll(":scope > p, :scope > div")];
+  }
+  const richItems = elements
+    .map((element) => richRunsForElement(element, transformText))
+    .filter((runs) => runs.some((run) => run.text.trim().length > 0));
+  return richItems.length === fallback.length ? richItems : fallback;
+}
+
+function achievementText(
+  experience: Experience,
+  text: RichInline,
+  baseFontSize: number,
+  defaults: Record<string, unknown> = {},
+): Content {
+  const format = normalizeObjectiveFormat(experience.descriptions_format);
+  return {
+    ...defaults,
+    text,
+    fontSize: Number((baseFontSize * (format.fontSize / 15)).toFixed(2)),
+    ...(format.alignment ? { alignment: format.alignment } : {}),
+    ...(format.color ? { color: format.color } : {}),
+  } as Content;
+}
+
+function companyLine(
+  experience: Experience,
+  text: string,
+  logoSize: number,
+  defaults: Record<string, unknown> = {},
+  rtl = false,
+): Content {
+  if (!experience.logo?.dataUrl) return { ...defaults, text } as Content;
+  const { margin, ...textDefaults } = defaults;
+  const logo = {
+    width: logoSize,
+    image: experience.logo.dataUrl,
+    fit: [logoSize, logoSize],
+  } as Content;
+  const body = { width: "*", ...textDefaults, text } as Content;
+  return {
+    columns: rtl ? [body, logo] : [logo, body],
+    columnGap: 4,
+    ...(margin ? { margin } : {}),
+  } as Content;
+}
+
 function contactLine(icon: keyof typeof CONTACT_ICONS, text: string): Content {
   return {
     columns: [
@@ -463,6 +569,7 @@ function formatCvDate(value: string, language: DocumentLanguage) {
 }
 
 function experienceBlock(e: Experience, language: DocumentLanguage): Content {
+  const descriptions = experienceRichDescriptions(e);
   return {
     unbreakable: true,
     columns: [
@@ -482,8 +589,11 @@ function experienceBlock(e: Experience, language: DocumentLanguage): Content {
         width: "*",
         stack: [
           { text: e.titre || "", bold: true },
-          { text: e.employeur || "", color: MUTED },
-          { ul: e.descriptions.filter(Boolean), margin: [0, 4, 0, 0] },
+          companyLine(e, e.employeur || "", 11, { color: MUTED }),
+          {
+            ul: descriptions.map((item) => achievementText(e, item, 11)),
+            margin: [0, 4, 0, 0],
+          },
         ],
       },
     ],
@@ -1021,7 +1131,11 @@ const V2_CHECK_MARKER = `<svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/
 // marker starts level with the cap height, so only a tiny optical offset is used.
 const V2_LIST_MARKER_TOP = 0.25;
 
-function v2List(items: string[], marker: "diamond" | "check" = "diamond"): Content {
+function v2List(
+  items: RichInline[],
+  marker: "diamond" | "check" = "diamond",
+  experience?: Experience,
+): Content {
   return {
     stack: items.filter(Boolean).map((item) => ({
       unbreakable: true,
@@ -1032,7 +1146,9 @@ function v2List(items: string[], marker: "diamond" | "check" = "diamond"): Conte
           fit: [7, 7],
           margin: [0, V2_LIST_MARKER_TOP, 3, 0],
         },
-        { width: "*", text: item },
+        experience
+          ? achievementText(experience, item, 10, { width: "*" })
+          : { width: "*", text: item },
       ],
       columnGap: 4,
       margin: [0, 0, 0, 2],
@@ -1041,6 +1157,7 @@ function v2List(items: string[], marker: "diamond" | "check" = "diamond"): Conte
 }
 
 function v2ExperienceBlock(experience: Experience, language: DocumentLanguage): Content {
+  const descriptions = experienceRichDescriptions(experience);
   return {
     columns: [
       {
@@ -1059,14 +1176,13 @@ function v2ExperienceBlock(experience: Experience, language: DocumentLanguage): 
         width: "*",
         stack: [
           { text: (experience.titre || "").toLocaleUpperCase("fr"), bold: true, fontSize: 11 },
-          {
-            text: (experience.employeur || "").toLocaleUpperCase("fr"),
+          companyLine(experience, (experience.employeur || "").toLocaleUpperCase("fr"), 11, {
             bold: true,
             fontSize: 11,
             color: V2_MUTED,
             margin: [0, 2, 0, 3],
-          },
-          v2List(experience.descriptions),
+          }),
+          v2List(descriptions, "diamond", experience),
         ],
       },
     ],
@@ -1369,7 +1485,7 @@ function v3SectionTitle(label: string, topMargin = 7): Content {
   } as Content;
 }
 
-function v3List(items: string[], markerColor = V3_ACCENT): Content {
+function v3List(items: RichInline[], markerColor = V3_ACCENT, experience?: Experience): Content {
   return {
     stack: items.filter(Boolean).map((item) => ({
       unbreakable: true,
@@ -1381,7 +1497,9 @@ function v3List(items: string[], markerColor = V3_ACCENT): Content {
           fontSize: 8.76,
           lineHeight: 1.5,
         },
-        { width: "*", text: item, fontSize: 8.76, lineHeight: 1.5 },
+        experience
+          ? achievementText(experience, item, 8.76, { width: "*", lineHeight: 1.5 })
+          : { width: "*", text: item, fontSize: 8.76, lineHeight: 1.5 },
       ],
       columnGap: 8,
     })),
@@ -1391,7 +1509,7 @@ function v3List(items: string[], markerColor = V3_ACCENT): Content {
 
 function v3ExperienceBlock(experience: Experience, language: DocumentLanguage): Content {
   const labels = cvCopy(language);
-  const descriptions = experience.descriptions.filter(Boolean);
+  const descriptions = experienceRichDescriptions(experience);
   const employerAndPlace = joinV3OrganizationAndPlace(
     experience.employeur || "",
     experience.lieu || "",
@@ -1417,16 +1535,15 @@ function v3ExperienceBlock(experience: Experience, language: DocumentLanguage): 
           },
           ...(employerAndPlace
             ? [
-                {
-                  text: employerAndPlace,
+                companyLine(experience, employerAndPlace, 9, {
                   margin: [0, 0, 0, descriptions.length ? 2 : 0],
-                } as Content,
+                }),
               ]
             : []),
           ...(descriptions.length
             ? [
                 { text: labels.responsibilities, margin: [0, 0, 0, 0] } as Content,
-                v3List(descriptions),
+                v3List(descriptions, V3_ACCENT, experience),
               ]
             : []),
         ],
@@ -1748,7 +1865,7 @@ function v4SectionTitle(
   } as Content;
 }
 
-function v4List(items: string[], fontSize = V4_BODY_SIZE): Content {
+function v4List(items: RichInline[], fontSize = V4_BODY_SIZE, experience?: Experience): Content {
   return {
     stack: items.filter(Boolean).map((item) => ({
       unbreakable: true,
@@ -1760,13 +1877,19 @@ function v4List(items: string[], fontSize = V4_BODY_SIZE): Content {
           lineHeight: 1.38,
           color: V4_GROUP_HEADING,
         },
-        {
-          width: "*",
-          text: item,
-          fontSize,
-          lineHeight: 1.38,
-          color: V4_TEXT,
-        },
+        experience
+          ? achievementText(experience, item, fontSize, {
+              width: "*",
+              lineHeight: 1.38,
+              color: V4_TEXT,
+            })
+          : {
+              width: "*",
+              text: item,
+              fontSize,
+              lineHeight: 1.38,
+              color: V4_TEXT,
+            },
       ],
       columnGap: 8,
       margin: [0, 0, 0, 1],
@@ -1804,27 +1927,30 @@ function v4ItemTitle(title: string, date: string, language: DocumentLanguage): C
 }
 
 function v4ExperienceBlock(experience: Experience, language: DocumentLanguage): Content {
-  const descriptions = experience.descriptions.filter(Boolean);
+  const descriptions = experienceRichDescriptions(experience);
   const [firstDescription, ...remainingDescriptions] = descriptions;
   const employerAndPlace = joinV3OrganizationAndPlace(experience.employeur, experience.lieu);
   const heading: Content[] = [
     v4ItemTitle(experience.titre, formatCvDate(experience.dates, language), language),
   ];
   if (employerAndPlace) {
-    heading.push({
-      text: employerAndPlace,
-      fontSize: V4_BODY_SIZE,
-      lineHeight: 1.3,
-      color: V4_TEXT,
-      margin: [0, 0, 0, firstDescription ? 2 : 0],
-    } as Content);
+    heading.push(
+      companyLine(experience, employerAndPlace, V4_BODY_SIZE, {
+        fontSize: V4_BODY_SIZE,
+        lineHeight: 1.3,
+        color: V4_TEXT,
+        margin: [0, 0, 0, firstDescription ? 2 : 0],
+      }),
+    );
   }
-  if (firstDescription) heading.push(v4List([firstDescription]));
+  if (firstDescription) heading.push(v4List([firstDescription], V4_BODY_SIZE, experience));
 
   return {
     stack: [
       { unbreakable: true, stack: heading } as Content,
-      remainingDescriptions.length ? v4List(remainingDescriptions) : ({ text: "" } as Content),
+      remainingDescriptions.length
+        ? v4List(remainingDescriptions, V4_BODY_SIZE, experience)
+        : ({ text: "" } as Content),
     ],
     margin: [0, 0, 0, 10],
   } as Content;
@@ -2074,7 +2200,7 @@ function v5SectionHeading(label: string, topMargin: number): Content {
   } as Content;
 }
 
-function v5List(items: string[], indent = 18): Content {
+function v5List(items: RichInline[], indent = 18, experience?: Experience): Content {
   return {
     stack: items.filter(Boolean).map((item) => ({
       unbreakable: true,
@@ -2086,12 +2212,17 @@ function v5List(items: string[], indent = 18): Content {
           fontSize: V5_BODY_SIZE,
           lineHeight: 1.32,
         },
-        {
-          width: "*",
-          text: item,
-          fontSize: V5_BODY_SIZE,
-          lineHeight: 1.32,
-        },
+        experience
+          ? achievementText(experience, item, V5_BODY_SIZE, {
+              width: "*",
+              lineHeight: 1.32,
+            })
+          : {
+              width: "*",
+              text: item,
+              fontSize: V5_BODY_SIZE,
+              lineHeight: 1.32,
+            },
       ],
       columnGap: 8,
       margin: [0, 0, 0, 1],
@@ -2102,7 +2233,7 @@ function v5List(items: string[], indent = 18): Content {
 
 function v5ExperienceBlock(experience: Experience, language: DocumentLanguage): Content {
   const labels = cvCopy(language);
-  const descriptions = experience.descriptions.filter(Boolean);
+  const descriptions = experienceRichDescriptions(experience);
   const [firstDescription, ...remainingDescriptions] = descriptions;
   const employerAndPlace = joinV3OrganizationAndPlace(
     experience.employeur || "",
@@ -2110,13 +2241,14 @@ function v5ExperienceBlock(experience: Experience, language: DocumentLanguage): 
   );
   const lead: Content[] = [];
   if (employerAndPlace) {
-    lead.push({
-      text: employerAndPlace,
-      bold: true,
-      fontSize: 11,
-      lineHeight: 1.2,
-      margin: [0, 0, 0, 2],
-    } as Content);
+    lead.push(
+      companyLine(experience, employerAndPlace, 11, {
+        bold: true,
+        fontSize: 11,
+        lineHeight: 1.2,
+        margin: [0, 0, 0, 2],
+      }),
+    );
   }
   lead.push({
     columns: [
@@ -2141,13 +2273,15 @@ function v5ExperienceBlock(experience: Experience, language: DocumentLanguage): 
   } as Content);
   if (firstDescription) {
     lead.push({ text: labels.responsibilities, margin: [0, 0, 0, 1] } as Content);
-    lead.push(v5List([firstDescription], 26));
+    lead.push(v5List([firstDescription], 26, experience));
   }
 
   return {
     stack: [
       { unbreakable: true, stack: lead } as Content,
-      remainingDescriptions.length ? v5List(remainingDescriptions, 26) : ({ text: "" } as Content),
+      remainingDescriptions.length
+        ? v5List(remainingDescriptions, 26, experience)
+        : ({ text: "" } as Content),
     ],
     margin: [0, 0, 0, 12],
   } as Content;
@@ -2490,7 +2624,7 @@ function arabicProDate(value: string, language: DocumentLanguage, rtl: boolean) 
   return formatted.replace(/([\p{L}]+)\s+(\d{4})/gu, "$2 $1");
 }
 
-function arabicProBullet(text: string, rtl: boolean): Content {
+function arabicProBullet(text: RichInline, rtl: boolean, experience?: Experience): Content {
   const marker = {
     width: 9,
     text: "•",
@@ -2499,13 +2633,19 @@ function arabicProBullet(text: string, rtl: boolean): Content {
     alignment: "center",
     margin: [0, 0, 0, 0],
   } as Content;
-  const body = {
-    width: "*",
-    text: arabicProSafeText(text, rtl),
-    alignment: rtl ? "right" : "left",
-    fontSize: 7.35,
-    lineHeight: 1.08,
-  } as Content;
+  const body = experience
+    ? achievementText(experience, text, 7.35, {
+        width: "*",
+        alignment: rtl ? "right" : "left",
+        lineHeight: 1.08,
+      })
+    : ({
+        width: "*",
+        text: arabicProSafeText(String(text), rtl),
+        alignment: rtl ? "right" : "left",
+        fontSize: 7.35,
+        lineHeight: 1.08,
+      } as Content);
   return {
     columns: rtl ? [body, marker] : [marker, body],
     columnGap: 3,
@@ -2519,6 +2659,9 @@ function arabicProExperience(
   rtl: boolean,
   bulletLimit = 2,
 ): Content {
+  const descriptions = experienceRichDescriptions(experience, (text) =>
+    arabicProSafeText(text, rtl),
+  );
   const main = {
     width: "*",
     stack: [
@@ -2532,20 +2675,19 @@ function arabicProExperience(
         color: ARABIC_PRO_DARK,
         alignment: rtl ? "right" : "left",
       },
-      {
-        text: arabicProSafeText(
-          [experience.employeur, experience.lieu].filter(Boolean).join(", "),
-          rtl,
-        ),
-        color: ARABIC_PRO_MUTED,
-        fontSize: 7.35,
-        alignment: rtl ? "right" : "left",
-        margin: [0, 0.3, 0, 1],
-      },
-      ...experience.descriptions
-        .filter(Boolean)
-        .slice(0, bulletLimit)
-        .map((item) => arabicProBullet(item, rtl)),
+      companyLine(
+        experience,
+        arabicProSafeText([experience.employeur, experience.lieu].filter(Boolean).join(", "), rtl),
+        8,
+        {
+          color: ARABIC_PRO_MUTED,
+          fontSize: 7.35,
+          alignment: rtl ? "right" : "left",
+          margin: [0, 0.3, 0, 1],
+        },
+        rtl,
+      ),
+      ...descriptions.slice(0, bulletLimit).map((item) => arabicProBullet(item, rtl, experience)),
     ],
   } as Content;
   const dates = {

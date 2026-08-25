@@ -114,6 +114,7 @@ export function CvRichTextEditor({
   defaultAlignment = "left",
   maxLength = 800,
   placeholder = "Rédigez votre profil professionnel…",
+  contextLabel = "profil professionnel",
 }: {
   value: string;
   format?: ObjectiveFormat;
@@ -123,6 +124,7 @@ export function CvRichTextEditor({
   defaultAlignment?: Exclude<ObjectiveTextAlignment, "">;
   maxLength?: number;
   placeholder?: string;
+  contextLabel?: string;
 }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const normalizedFormat = normalizeObjectiveFormat(format);
@@ -173,7 +175,7 @@ export function CvRichTextEditor({
     <div className="overflow-hidden rounded-xl border border-slate-400 bg-white shadow-sm shadow-slate-900/5">
       <div
         role="toolbar"
-        aria-label="Mise en forme du profil professionnel"
+        aria-label={`Mise en forme de ${contextLabel}`}
         className="flex min-h-14 flex-nowrap items-center gap-0 border-b border-slate-300 bg-white px-3 py-2"
       >
         <ToolbarButton label="Gras" onClick={() => runCommand("bold")}>
@@ -220,7 +222,7 @@ export function CvRichTextEditor({
           type="button"
           onClick={onAi}
           className="ml-1 inline-flex h-10 shrink-0 items-center gap-1 rounded-lg px-2 font-semibold text-violet-600 transition hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-          aria-label="Améliorer le profil avec l’intelligence artificielle"
+          aria-label={`Améliorer ${contextLabel} avec l’intelligence artificielle`}
           title="Améliorer avec l’IA"
         >
           <Sparkles className="h-5 w-5" />
@@ -262,7 +264,7 @@ export function CvRichTextEditor({
             value={normalizedFormat.fontSize}
             onChange={(event) => updateFormat({ fontSize: Number(event.target.value) })}
             className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-violet-500"
-            aria-label="Taille du texte du profil"
+            aria-label={`Taille du texte de ${contextLabel}`}
           >
             {[12, 13, 14, 15, 16, 18, 20, 22].map((size) => (
               <option key={size} value={size}>
@@ -281,10 +283,10 @@ export function CvRichTextEditor({
             value={effectiveColor}
             onChange={(event) => updateFormat({ color: event.target.value })}
             className="h-7 w-8 cursor-pointer rounded-md border border-slate-300 bg-white p-0.5"
-            aria-label="Couleur du texte du profil"
+            aria-label={`Couleur du texte de ${contextLabel}`}
           />
         </label>
-        <div className="flex items-center gap-1" aria-label="Couleurs rapides du profil">
+        <div className="flex items-center gap-1" aria-label={`Couleurs rapides de ${contextLabel}`}>
           {PROFILE_COLORS.map((color) => (
             <button
               key={color.value}
@@ -315,7 +317,7 @@ export function CvRichTextEditor({
           ref={editorRef}
           role="textbox"
           aria-multiline="true"
-          aria-label="Profil professionnel"
+          aria-label={contextLabel}
           contentEditable
           suppressContentEditableWarning
           data-placeholder={placeholder}

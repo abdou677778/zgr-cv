@@ -5,6 +5,16 @@ export type Experience = {
   titre: string;
   employeur: string;
   descriptions: string[];
+  descriptions_format?: ObjectiveFormat;
+  logo?: CompanyLogo;
+};
+
+export type CompanyLogo = {
+  /** Safe, compact raster image embedded in JSON and every generated PDF. */
+  dataUrl: string;
+  name: string;
+  width: number;
+  height: number;
 };
 
 export type Formation = {

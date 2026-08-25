@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Briefcase,
@@ -7,18 +7,20 @@ import {
   Eye,
   EyeOff,
   GripVertical,
+  ImagePlus,
   ListChecks,
   MapPin,
   Pencil,
-  Plus,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import type { Experience } from "@/lib/cv-types";
+import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
+import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
+import type { CompanyLogo, Experience } from "@/lib/cv-types";
 import { cn } from "@/lib/utils";
 
 type ExperienceWorkspaceLabels = {
@@ -41,8 +43,93 @@ type ExperienceWorkspaceProps = {
   isVisible: (path: string) => boolean;
   onToggleVisibility: (path: string) => void;
   onRemoveIndexedVisibility: (prefix: string, index: number) => void;
+  onLogoChange: (index: number, logo?: CompanyLogo) => void;
   onAi: (label: string, value: string, onApply: (next: string) => void) => void;
 };
+
+const COMPANY_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const COMPANY_LOGO_SIZE = 128;
+const COMPANY_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+function readImageDimensions(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Le logo ne peut pas être décodé."));
+    image.src = url;
+  });
+}
+
+async function prepareCompanyLogo(file: File): Promise<CompanyLogo> {
+  if (!COMPANY_LOGO_TYPES.has(file.type)) {
+    throw new Error("Formats acceptés : PNG, JPG/JPEG ou WebP.");
+  }
+  if (file.size > COMPANY_LOGO_MAX_BYTES) {
+    throw new Error("Le fichier original dépasse 2 Mo.");
+  }
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await readImageDimensions(objectUrl);
+    if (image.naturalWidth < 64 || image.naturalHeight < 64) {
+      throw new Error("Résolution minimale : 64 × 64 px.");
+    }
+    if (image.naturalWidth > 4096 || image.naturalHeight > 4096) {
+      throw new Error("Résolution maximale : 4096 × 4096 px.");
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = COMPANY_LOGO_SIZE;
+    canvas.height = COMPANY_LOGO_SIZE;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Conversion du logo impossible dans ce navigateur.");
+    const available = COMPANY_LOGO_SIZE - 16;
+    const ratio = Math.min(available / image.naturalWidth, available / image.naturalHeight);
+    const width = Math.max(1, Math.round(image.naturalWidth * ratio));
+    const height = Math.max(1, Math.round(image.naturalHeight * ratio));
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      image,
+      Math.round((COMPANY_LOGO_SIZE - width) / 2),
+      Math.round((COMPANY_LOGO_SIZE - height) / 2),
+      width,
+      height,
+    );
+    const dataUrl = canvas.toDataURL("image/png");
+    if (dataUrl.length > 300_000) throw new Error("Le logo optimisé reste trop volumineux.");
+    return {
+      dataUrl,
+      name: file.name.slice(0, 80),
+      width: COMPANY_LOGO_SIZE,
+      height: COMPANY_LOGO_SIZE,
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function achievementsHtml(items: string[]) {
+  return `<ul>${items
+    .filter(Boolean)
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join("")}</ul>`;
+}
+
+function achievementsFromText(value: string) {
+  return value
+    .split(/\n+/u)
+    .map((item) => item.replace(/^\s*(?:[•·▪◦*-]|\d+[.)])\s*/u, "").trim())
+    .filter(Boolean)
+    .slice(0, 20)
+    .map((item) => item.slice(0, 500));
+}
 
 function VisibilityButton({
   label,
@@ -125,8 +212,12 @@ export function ExperienceWorkspace({
   isVisible,
   onToggleVisibility,
   onRemoveIndexedVisibility,
+  onLogoChange,
   onAi,
 }: ExperienceWorkspaceProps) {
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [logoError, setLogoError] = useState("");
+  const [logoLoading, setLogoLoading] = useState(false);
   const experienceIndex = experiences.findIndex((item) => item.id === editingId);
   const experience = experienceIndex >= 0 ? experiences[experienceIndex] : null;
 
@@ -155,6 +246,11 @@ export function ExperienceWorkspace({
                 className="group flex min-h-[74px] items-center gap-3 px-4 py-3 transition hover:bg-indigo-50/45 sm:px-5"
               >
                 <GripVertical className="h-5 w-5 shrink-0 text-slate-300" aria-hidden="true" />
+                {item.logo && (
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white">
+                    <img src={item.logo.dataUrl} alt="" className="h-7 w-7 object-contain" />
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => onEdit(item.id)}
@@ -210,6 +306,30 @@ export function ExperienceWorkspace({
   const employer = experience.employeur.trim() || "Employeur à compléter";
   const fieldPath = (field: "dates" | "lieu" | "titre" | "employeur") =>
     `experience.${experienceIndex}.${field}`;
+  const achievementsText = experience.descriptions.join("\n");
+  const normalizedAchievementsFormat = normalizeObjectiveFormat(experience.descriptions_format);
+  const achievementsFormat = normalizedAchievementsFormat.html
+    ? normalizedAchievementsFormat
+    : {
+        ...normalizedAchievementsFormat,
+        html: achievementsHtml(experience.descriptions),
+      };
+  const allAchievementsVisible = experience.descriptions.every((_, index) =>
+    isVisible(`experience.${experienceIndex}.description.${index}`),
+  );
+  const updateAchievements = (value: string, html: string) => {
+    const descriptions = achievementsFromText(value);
+    for (let index = experience.descriptions.length - 1; index >= descriptions.length; index -= 1) {
+      onRemoveIndexedVisibility(`experience.${experienceIndex}.description`, index);
+    }
+    onUpdate(experience.id, {
+      descriptions,
+      descriptions_format: {
+        ...normalizedAchievementsFormat,
+        html,
+      },
+    });
+  };
 
   return (
     <div className="-m-4 overflow-hidden bg-white sm:-m-5">
@@ -285,15 +405,79 @@ export function ExperienceWorkspace({
               )
             }
           >
-            <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-400" />
-              <Input
-                value={experience.employeur}
-                onChange={(event) =>
-                  onUpdate(experience.id, { employeur: event.target.value.slice(0, 120) })
-                }
-                className="h-11 rounded-xl bg-white pl-10"
-              />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-indigo-300 bg-indigo-50 text-indigo-500 transition hover:border-indigo-500 hover:bg-indigo-100"
+                  aria-label={
+                    experience.logo
+                      ? "Remplacer le logo de l’entreprise"
+                      : "Importer le logo de l’entreprise"
+                  }
+                  title={experience.logo ? "Remplacer le logo" : "Importer le logo"}
+                >
+                  {experience.logo ? (
+                    <img src={experience.logo.dataUrl} alt="" className="h-8 w-8 object-contain" />
+                  ) : (
+                    <ImagePlus className="h-5 w-5" />
+                  )}
+                </button>
+                <div className="relative min-w-0 flex-1">
+                  <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-400" />
+                  <Input
+                    value={experience.employeur}
+                    onChange={(event) =>
+                      onUpdate(experience.id, { employeur: event.target.value.slice(0, 120) })
+                    }
+                    className="h-11 rounded-xl bg-white pl-10"
+                  />
+                </div>
+                {experience.logo && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onLogoChange(experienceIndex, undefined)}
+                    className="h-9 w-9 shrink-0 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                    aria-label="Retirer le logo de l’entreprise"
+                    title="Retirer le logo"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                  className="sr-only"
+                  aria-label="Fichier du logo de l’entreprise"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    setLogoError("");
+                    setLogoLoading(true);
+                    void prepareCompanyLogo(file)
+                      .then((logo) => onLogoChange(experienceIndex, logo))
+                      .catch((error) =>
+                        setLogoError(
+                          error instanceof Error ? error.message : "Import du logo impossible.",
+                        ),
+                      )
+                      .finally(() => {
+                        setLogoLoading(false);
+                        if (logoInputRef.current) logoInputRef.current.value = "";
+                      });
+                  }}
+                />
+              </div>
+              <p className="text-[10px] leading-relaxed text-slate-400">
+                {logoLoading
+                  ? "Optimisation du logo…"
+                  : "PNG, JPG ou WebP · 64 à 4096 px · 2 Mo max · ajusté automatiquement en 128 × 128 px."}
+              </p>
+              {logoError && <p className="text-xs font-medium text-rose-600">{logoError}</p>}
             </div>
           </ExperienceField>
           <ExperienceField
@@ -353,87 +537,50 @@ export function ExperienceWorkspace({
                 <p className="text-[11px] text-slate-400">Une réalisation précise par ligne</p>
               </div>
             </div>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">
-              {experience.descriptions.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">
+                {experience.descriptions.length}
+              </span>
+              {experience.descriptions.length > 0 && (
+                <VisibilityButton
+                  label={labels.achievements}
+                  visible={allAchievementsVisible}
+                  onToggle={() =>
+                    experience.descriptions.forEach((_, index) => {
+                      const path = `experience.${experienceIndex}.description.${index}`;
+                      if (isVisible(path) === allAchievementsVisible) onToggleVisibility(path);
+                    })
+                  }
+                />
+              )}
+            </div>
           </div>
-          <div className="space-y-3 p-4">
-            {experience.descriptions.map((description, index) => {
-              const descriptionPath = `experience.${experienceIndex}.description.${index}`;
-              const descriptionLabel = `${labels.achievements} ${index + 1}`;
-              return (
-                <div key={index} className="flex items-start gap-2">
-                  <span className="mt-3.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />
-                  <div className="min-w-0 flex-1">
-                    <Textarea
-                      value={description}
-                      onChange={(event) => {
-                        const next = [...experience.descriptions];
-                        next[index] = event.target.value.slice(0, 300);
-                        onUpdate(experience.id, { descriptions: next });
-                      }}
-                      className={cn(
-                        "min-h-[70px] resize-y rounded-xl bg-white leading-relaxed",
-                        !isVisible(descriptionPath) && "opacity-55 grayscale-[20%]",
-                      )}
-                    />
-                    <div className="mt-1 text-right text-[10px] text-slate-400">
-                      {description.length}/300
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col gap-1">
-                    <AiButton
-                      label={descriptionLabel}
-                      onClick={() =>
-                        onAi(descriptionLabel, description, (value) => {
-                          const next = [...experience.descriptions];
-                          next[index] = value.slice(0, 300);
-                          onUpdate(experience.id, { descriptions: next });
-                        })
-                      }
-                    />
-                    <VisibilityButton
-                      label={descriptionLabel}
-                      visible={isVisible(descriptionPath)}
-                      onToggle={() => onToggleVisibility(descriptionPath)}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        onRemoveIndexedVisibility(
-                          `experience.${experienceIndex}.description`,
-                          index,
-                        );
-                        onUpdate(experience.id, {
-                          descriptions: experience.descriptions.filter(
-                            (_, itemIndex) => itemIndex !== index,
-                          ),
-                        });
-                      }}
-                      className="h-7 w-7 rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                      aria-label={`Supprimer ${descriptionLabel}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                onUpdate(experience.id, {
-                  descriptions: [...experience.descriptions, ""],
+          <div className={cn("p-4", !allAchievementsVisible && "opacity-60")}>
+            <CvRichTextEditor
+              value={achievementsText}
+              format={achievementsFormat}
+              onChange={updateAchievements}
+              onFormatChange={(format) => onUpdate(experience.id, { descriptions_format: format })}
+              onAi={() =>
+                onAi(labels.achievements, achievementsText, (value) => {
+                  const descriptions = achievementsFromText(value);
+                  onUpdate(experience.id, {
+                    descriptions,
+                    descriptions_format: {
+                      ...normalizedAchievementsFormat,
+                      html: achievementsHtml(descriptions),
+                    },
+                  });
                 })
               }
-              className="rounded-xl border-dashed"
-            >
-              <Plus className="mr-2 h-4 w-4" /> {labels.addLine}
-            </Button>
+              defaultAlignment="left"
+              maxLength={4_000}
+              placeholder="Ajoutez une réalisation par ligne…"
+              contextLabel="réalisations professionnelles"
+            />
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+              Une ligne correspond à une puce dans tous les modèles et dans le PDF ATS.
+            </p>
           </div>
         </div>
       </div>

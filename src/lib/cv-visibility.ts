@@ -35,15 +35,24 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
   const experiences = (sectionVisible("experience") ? cv.experiences : [])
     .map((item, itemIndex) => {
       const prefix = `experience.${itemIndex}`;
+      const descriptions = item.descriptions.filter((_, index) =>
+        visible(`${prefix}.description.${index}`),
+      );
+      const employerVisible = visible(`${prefix}.employeur`);
       const next: Experience = {
         ...item,
         dates: visible(`${prefix}.dates`) ? item.dates : "",
         lieu: visible(`${prefix}.lieu`) ? item.lieu : "",
         titre: visible(`${prefix}.titre`) ? item.titre : "",
-        employeur: visible(`${prefix}.employeur`) ? item.employeur : "",
-        descriptions: item.descriptions.filter((_, index) =>
-          visible(`${prefix}.description.${index}`),
-        ),
+        employeur: employerVisible ? item.employeur : "",
+        logo: employerVisible ? item.logo : undefined,
+        descriptions,
+        descriptions_format:
+          descriptions.length === item.descriptions.length
+            ? item.descriptions_format
+            : item.descriptions_format
+              ? { ...item.descriptions_format, html: "" }
+              : undefined,
       };
       return next;
     })

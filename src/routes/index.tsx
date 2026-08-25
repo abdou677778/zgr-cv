@@ -36,6 +36,7 @@ import {
   type Experience,
   type Formation,
   type Education,
+  type CompanyLogo,
   emptyCV,
   newId,
 } from "@/lib/cv-types";
@@ -681,6 +682,21 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       ...c,
       experiences: c.experiences.map((e) => (e.id === id ? { ...e, ...patch } : e)),
     }));
+  const updateExperienceLogo = (index: number, logo?: CompanyLogo) =>
+    setCvByLanguage((current) => {
+      const next = { ...current };
+      for (const item of DOCUMENT_LANGUAGES) {
+        const languageCv = current[item.id];
+        if (!languageCv.experiences[index]) continue;
+        next[item.id] = {
+          ...languageCv,
+          experiences: languageCv.experiences.map((experience, experienceIndex) =>
+            experienceIndex === index ? { ...experience, logo } : experience,
+          ),
+        };
+      }
+      return next;
+    });
   const removeExp = (id: string, index: number) => {
     removeIndexedVisibility("experience", index);
     setCv((c) => ({ ...c, experiences: c.experiences.filter((e) => e.id !== id) }));
@@ -1596,6 +1612,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               isVisible={isVisible}
               onToggleVisibility={toggleVisibility}
               onRemoveIndexedVisibility={removeIndexedVisibility}
+              onLogoChange={updateExperienceLogo}
               onAi={openAiField}
             />
           </CvSectionPanel>

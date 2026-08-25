@@ -44,6 +44,18 @@ export type LettreMotivation = {
   formule_politesse: string;
 };
 
+export type ObjectiveTextAlignment = "" | "left" | "center" | "right";
+
+export type ObjectiveFormat = {
+  /** Safe inline HTML produced by the profile editor; the plain ATS text stays in `objectif`. */
+  html: string;
+  alignment: ObjectiveTextAlignment;
+  /** Editor reference size in pixels. PDF templates apply the same proportional scale. */
+  fontSize: number;
+  /** Empty keeps the original template color. */
+  color: string;
+};
+
 export type CV = {
   nom_complet: string;
   titre_poste: string;
@@ -59,6 +71,7 @@ export type CV = {
   pays: string;
   candidature: string;
   objectif: string;
+  objectif_format?: ObjectiveFormat;
   competences: string[];
   langues: Langues;
   experiences: Experience[];
@@ -89,6 +102,7 @@ export const emptyCV: CV = {
   pays: "",
   candidature: "",
   objectif: "",
+  objectif_format: { html: "", alignment: "", fontSize: 15, color: "" },
   competences: ["", "", "", "", "", "", ""],
   langues: { fr: "", en: "", ar: "", de: "", es: "", kab: "" },
   experiences: [],

@@ -7,6 +7,7 @@ import {
   type Formation,
 } from "./cv-types";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
+import { normalizeObjectiveFormat } from "./cv-objective-format";
 
 export type JsonImportLanguage = "auto" | "fr" | "en";
 
@@ -120,6 +121,7 @@ function directCv(source: JsonRecord): CV {
     pays: text(source.pays),
     candidature: text(source.candidature),
     objectif: text(source.objectif),
+    objectif_format: normalizeObjectiveFormat(source.objectif_format),
     competences: stringList(source.competences),
     langues: {
       fr: text(langues.fr),

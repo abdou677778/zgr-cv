@@ -21,17 +21,18 @@ const hasEducationContent = (item: Education) =>
  */
 export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
   const visible = (path: string) => cvElementIsVisible(hidden, path);
+  const sectionVisible = (id: string) => visible(`section.${id}`);
   const scalar = <K extends keyof CV>(key: K, path = `personal.${String(key)}`): CV[K] =>
-    visible(path) ? cv[key] : ("" as CV[K]);
+    sectionVisible("personal") && visible(path) ? cv[key] : ("" as CV[K]);
 
   const langues = Object.fromEntries(
     (Object.keys(cv.langues) as Array<keyof Langues>).map((key) => [
       key,
-      visible(`languages.${key}`) ? cv.langues[key] : "",
+      sectionVisible("languages") && visible(`languages.${key}`) ? cv.langues[key] : "",
     ]),
   ) as Langues;
 
-  const experiences = cv.experiences
+  const experiences = (sectionVisible("experience") ? cv.experiences : [])
     .map((item, itemIndex) => {
       const prefix = `experience.${itemIndex}`;
       const next: Experience = {
@@ -48,7 +49,7 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
     })
     .filter(hasExperienceContent);
 
-  const formations = cv.formations
+  const formations = (sectionVisible("training") ? cv.formations : [])
     .map((item, itemIndex) => {
       const prefix = `formation.${itemIndex}`;
       const next: Formation = {
@@ -63,7 +64,7 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
     })
     .filter(hasFormationContent);
 
-  const educations = cv.educations
+  const educations = (sectionVisible("education") ? cv.educations : [])
     .map((item, itemIndex) => {
       const prefix = `education.${itemIndex}`;
       const next: Education = {
@@ -79,18 +80,27 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
     })
     .filter(hasEducationContent);
 
-  const lettreMotivation: LettreMotivation = {
-    date: visible("letter.date") ? cv.lettre_motivation.date : "",
-    objet: visible("letter.objet") ? cv.lettre_motivation.objet : "",
-    destinataire: visible("letter.destinataire") ? cv.lettre_motivation.destinataire : "",
-    salutation: visible("letter.salutation") ? cv.lettre_motivation.salutation : "",
-    paragraphes: cv.lettre_motivation.paragraphes.filter((_, index) =>
-      visible(`letter.paragraphes.${index}`),
-    ),
-    formule_politesse: visible("letter.formule_politesse")
-      ? cv.lettre_motivation.formule_politesse
-      : "",
-  };
+  const lettreMotivation: LettreMotivation = sectionVisible("letter")
+    ? {
+        date: visible("letter.date") ? cv.lettre_motivation.date : "",
+        objet: visible("letter.objet") ? cv.lettre_motivation.objet : "",
+        destinataire: visible("letter.destinataire") ? cv.lettre_motivation.destinataire : "",
+        salutation: visible("letter.salutation") ? cv.lettre_motivation.salutation : "",
+        paragraphes: cv.lettre_motivation.paragraphes.filter((_, index) =>
+          visible(`letter.paragraphes.${index}`),
+        ),
+        formule_politesse: visible("letter.formule_politesse")
+          ? cv.lettre_motivation.formule_politesse
+          : "",
+      }
+    : {
+        date: "",
+        objet: "",
+        destinataire: "",
+        salutation: "",
+        paragraphes: [],
+        formule_politesse: "",
+      };
 
   return {
     ...cv,
@@ -107,19 +117,33 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
     wilaya: scalar("wilaya"),
     pays: scalar("pays"),
     candidature: scalar("candidature"),
-    objectif: visible("objective") ? cv.objectif : "",
-    competences: cv.competences.filter((_, index) => visible(`skills.${index}`)),
+    objectif: sectionVisible("objective") && visible("objective") ? cv.objectif : "",
+    objectif_format:
+      sectionVisible("objective") && visible("objective")
+        ? cv.objectif_format
+        : { html: "", alignment: "", fontSize: 15, color: "" },
+    competences: sectionVisible("skills")
+      ? cv.competences.filter((_, index) => visible(`skills.${index}`))
+      : [],
     langues,
     experiences,
     formations,
     educations,
-    participations: cv.participations.filter((_, index) => visible(`participations.${index}`)),
-    certifications: cv.certifications.filter((_, index) => visible(`certifications.${index}`)),
-    interets: cv.interets.filter((_, index) => visible(`interets.${index}`)),
-    references: cv.references.filter((_, index) => visible(`references.${index}`)),
+    participations: sectionVisible("volunteering")
+      ? cv.participations.filter((_, index) => visible(`participations.${index}`))
+      : [],
+    certifications: sectionVisible("certifications")
+      ? cv.certifications.filter((_, index) => visible(`certifications.${index}`))
+      : [],
+    interets: sectionVisible("interests")
+      ? cv.interets.filter((_, index) => visible(`interets.${index}`))
+      : [],
+    references: sectionVisible("references")
+      ? cv.references.filter((_, index) => visible(`references.${index}`))
+      : [],
     lettre_motivation: lettreMotivation,
-    plan_developpement: cv.plan_developpement.filter((_, index) =>
-      visible(`plan_developpement.${index}`),
-    ),
+    plan_developpement: sectionVisible("development")
+      ? cv.plan_developpement.filter((_, index) => visible(`plan_developpement.${index}`))
+      : [],
   };
 }

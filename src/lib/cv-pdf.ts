@@ -7,6 +7,7 @@ import type {
   TVirtualFileSystem,
 } from "pdfmake/interfaces";
 import type { CV, Experience, Formation, Education } from "./cv-types";
+import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
 import { CV_TEMPLATES, type CvTemplateId } from "./document-templates";
@@ -122,6 +123,90 @@ function ensureFonts() {
   pdfMake.addVirtualFileSystem(vfs);
   pdfMake.addFonts(CV_FONTS);
   fontsRegistered = true;
+}
+
+type ObjectiveRun = {
+  text: string;
+  bold?: boolean;
+  italics?: boolean;
+  decoration?: "underline" | "lineThrough";
+  link?: string;
+};
+
+function objectiveRichRuns(cv: CV, transformText = (text: string) => text): ObjectiveRun[] {
+  const html = normalizeObjectiveFormat(cv.objectif_format).html;
+  if (!html || typeof DOMParser === "undefined") return [{ text: transformText(cv.objectif) }];
+
+  const documentNode = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const runs: ObjectiveRun[] = [];
+  const pushText = (text: string, style: Omit<ObjectiveRun, "text"> = {}) => {
+    if (!text) return;
+    const transformed = transformText(text.replace(/\u00a0/g, " "));
+    const previous = runs.at(-1);
+    if (
+      previous &&
+      previous.bold === style.bold &&
+      previous.italics === style.italics &&
+      previous.decoration === style.decoration &&
+      previous.link === style.link
+    ) {
+      previous.text += transformed;
+    } else {
+      runs.push({ text: transformed, ...style });
+    }
+  };
+
+  const visit = (node: Node, inherited: Omit<ObjectiveRun, "text"> = {}) => {
+    if (node.nodeType === 3) {
+      pushText(node.textContent || "", inherited);
+      return;
+    }
+    if (!(node instanceof HTMLElement)) return;
+    const tag = node.tagName;
+    if (tag === "BR") {
+      pushText("\n", inherited);
+      return;
+    }
+    const next = { ...inherited };
+    if (tag === "B" || tag === "STRONG") next.bold = true;
+    if (tag === "I" || tag === "EM") next.italics = true;
+    if (tag === "U") next.decoration = "underline";
+    if (tag === "S" || tag === "STRIKE" || tag === "DEL") next.decoration = "lineThrough";
+    if (tag === "A") {
+      const href = node.getAttribute("href") || "";
+      if (/^(https?:|mailto:)/i.test(href)) next.link = href;
+    }
+    if (tag === "LI") {
+      const parentTag = node.parentElement?.tagName;
+      const index = [...(node.parentElement?.children || [])].indexOf(node) + 1;
+      pushText(parentTag === "OL" ? `${index}. ` : "• ", next);
+    }
+    for (const child of [...node.childNodes]) visit(child, next);
+    if (["BLOCKQUOTE", "DIV", "LI", "P"].includes(tag)) pushText("\n", inherited);
+  };
+
+  for (const child of [...documentNode.body.childNodes]) visit(child);
+  const last = runs.at(-1);
+  if (last) last.text = last.text.replace(/\n+$/g, "");
+  return runs.filter((run) => run.text.length > 0).length
+    ? runs.filter((run) => run.text.length > 0)
+    : [{ text: transformText(cv.objectif) }];
+}
+
+function objectivePdfContent(
+  cv: CV,
+  baseFontSize: number,
+  defaults: Record<string, unknown> = {},
+  transformText?: (text: string) => string,
+): Content {
+  const format = normalizeObjectiveFormat(cv.objectif_format);
+  return {
+    ...defaults,
+    text: objectiveRichRuns(cv, transformText),
+    fontSize: Number((baseFontSize * (format.fontSize / 15)).toFixed(2)),
+    ...(format.alignment ? { alignment: format.alignment } : {}),
+    ...(format.color ? { color: format.color } : {}),
+  } as Content;
 }
 
 function contactLine(icon: keyof typeof CONTACT_ICONS, text: string): Content {
@@ -726,7 +811,7 @@ function buildCvPdfV1(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
 
   const content: Content[] = [header(cv)];
 
-  if (cv.objectif) content.push(...section(labels.objective, { text: cv.objectif }));
+  if (cv.objectif) content.push(...section(labels.objective, objectivePdfContent(cv, 12)));
 
   const competences = cv.competences.filter(Boolean);
   if (competences.length) content.push(...section(labels.skills, { ul: competences }));
@@ -1101,7 +1186,7 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     pushSection(title, v2List([first], marker), rest.length ? [v2List(rest, marker)] : []);
   };
 
-  if (cv.objectif) pushSection(labels.objective, { text: cv.objectif });
+  if (cv.objectif) pushSection(labels.objective, objectivePdfContent(cv, 10.6));
 
   const competences = cv.competences.filter(Boolean);
   if (competences.length) pushListSection(labels.skills, competences);
@@ -1476,7 +1561,7 @@ function buildCvPdfV3(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     pushSection(title, v3List([first]), rest.length ? [v3List(rest)] : []);
   };
 
-  if (cv.objectif) pushSection(labels.objective, { text: cv.objectif });
+  if (cv.objectif) pushSection(labels.objective, objectivePdfContent(cv, 9));
 
   const experiences = cv.experiences.filter(
     (experience) => experience.titre || experience.employeur || experience.dates,
@@ -1806,13 +1891,11 @@ function buildCvPdfV4(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
 
   if (cv.objectif) {
     pushSection(v4SectionTitle(labels.objective, 0, 5, language), [
-      {
-        text: cv.objectif,
-        fontSize: V4_BODY_SIZE,
+      objectivePdfContent(cv, V4_BODY_SIZE, {
         lineHeight: 1.42,
         color: V4_TEXT,
         margin: [0, 0, 0, 10],
-      },
+      }),
     ]);
   }
 
@@ -2121,12 +2204,13 @@ function buildCvPdfAtsA4(cv: CV, language: DocumentLanguage): TDocumentDefinitio
   };
 
   if (cv.objectif) {
-    pushSection(labels.objective, {
-      text: cv.objectif,
-      fontSize: V5_BODY_SIZE,
-      lineHeight: 1.32,
-      alignment: language === "ar" ? "right" : undefined,
-    } as Content);
+    pushSection(
+      labels.objective,
+      objectivePdfContent(cv, V5_BODY_SIZE, {
+        lineHeight: 1.32,
+        alignment: language === "ar" ? "right" : undefined,
+      }),
+    );
   }
 
   const competences = cv.competences.filter(Boolean);
@@ -2719,12 +2803,15 @@ function buildCvPdfArabicProV1(cv: CV, language: DocumentLanguage): TDocumentDef
 
   if (cv.objectif.trim()) {
     pushSection(labels.objective, [
-      {
-        text: arabicProSafeText(cv.objectif, rtl),
-        alignment: rtl ? "right" : "left",
-        fontSize: 7.65,
-        lineHeight: 1.08,
-      },
+      objectivePdfContent(
+        cv,
+        7.65,
+        {
+          alignment: rtl ? "right" : "left",
+          lineHeight: 1.08,
+        },
+        (text) => arabicProSafeText(text, rtl),
+      ),
     ]);
   }
 

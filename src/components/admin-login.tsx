@@ -4,13 +4,14 @@ import {
   FileText,
   LoaderCircle,
   LockKeyhole,
+  RefreshCcw,
   ShieldCheck,
   WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { loginAdmin, type SessionUser } from "@/lib/auth-client";
+import { clearAdminSession, loginAdmin, type SessionUser } from "@/lib/auth-client";
 
 const ONLINE_APP_URL = "https://abdou677778.github.io/zgr-cv/";
 
@@ -24,27 +25,43 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [networkFailure, setNetworkFailure] = useState(false);
   const fileMode = typeof window !== "undefined" && window.location.protocol === "file:";
 
   const openOnlineVersion = () => {
     const target = new URL(ONLINE_APP_URL);
     if (username.trim()) target.searchParams.set("login", username.trim());
+    target.searchParams.set("refresh", Date.now().toString());
     window.location.assign(target.toString());
+  };
+
+  const repairSession = () => {
+    clearAdminSession();
+    const target = fileMode ? new URL(ONLINE_APP_URL) : new URL(window.location.href);
+    if (username.trim()) target.searchParams.set("login", username.trim());
+    target.searchParams.set("refresh", Date.now().toString());
+    window.location.replace(target.toString());
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError("");
+    setNetworkFailure(false);
     try {
       onAuthenticated(await loginAdmin(username, password));
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : "Connexion impossible.";
+      const isNetworkFailure =
+        failure instanceof TypeError ||
+        failure instanceof DOMException ||
+        /failed to fetch|networkerror|load failed|abort|timeout|délai/i.test(message);
+      setNetworkFailure(isNetworkFailure);
       setError(
-        failure instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(message)
+        isNetworkFailure
           ? fileMode
             ? "Ce navigateur bloque la connexion Cloudflare depuis le fichier local. Ouvrez la version en ligne ci-dessous."
-            : "Service de connexion inaccessible. Vérifiez Internet puis réessayez."
+            : "Le navigateur n’a pas joint le service. Une ancienne session, le cache ou une extension peut bloquer la connexion."
           : message,
       );
     } finally {
@@ -106,9 +123,21 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             />
           </div>
           {error && (
-            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-              {error}
-            </p>
+            <div className="space-y-2">
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+                {error}
+              </p>
+              {networkFailure && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 w-full rounded-xl border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"
+                  onClick={repairSession}
+                >
+                  <RefreshCcw className="mr-2 h-4 w-4" /> Réparer la session et actualiser
+                </Button>
+              )}
+            </div>
           )}
           <Button
             type="submit"

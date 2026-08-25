@@ -83,6 +83,7 @@ import { AccountSettingsDialog } from "@/components/account-settings-dialog";
 import { PromptMasterDialog } from "@/components/prompt-master-dialog";
 import {
   clearAdminSession,
+  getAdminSession,
   getCurrentUser,
   subscribeToSessionChanges,
   verifyAdminSession,
@@ -260,19 +261,33 @@ function Index() {
 
   useEffect(() => {
     let active = true;
+    let lastValidationAt = 0;
     const validate = () => {
+      lastValidationAt = Date.now();
       void verifyAdminSession().then((user) => {
         if (active) setAuthUser(user);
       });
+    };
+    const validateWhenActive = () => {
+      if (
+        document.visibilityState === "visible" &&
+        getAdminSession() &&
+        Date.now() - lastValidationAt > 60_000
+      )
+        validate();
     };
     const unsubscribe = subscribeToSessionChanges((user) => {
       if (!active) return;
       setAuthUser(user);
     });
     const validationTimer = window.setTimeout(validate, 150);
+    window.addEventListener("online", validateWhenActive);
+    document.addEventListener("visibilitychange", validateWhenActive);
     return () => {
       active = false;
       window.clearTimeout(validationTimer);
+      window.removeEventListener("online", validateWhenActive);
+      document.removeEventListener("visibilitychange", validateWhenActive);
       unsubscribe();
     };
   }, []);

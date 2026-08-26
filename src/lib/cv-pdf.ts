@@ -2869,15 +2869,12 @@ function arabicProGrid(
     const row = items.slice(index, index + columns);
     rows.push({
       columns: [
-        ...row.map((item) =>
-          format
+        ...row.map((item) => {
+          const body = format
             ? richListText(format, item, 7, {
                 width: "*",
                 bold: true,
                 alignment: rtl ? "right" : "left",
-                decoration: "underline",
-                decorationStyle: "dotted",
-                decorationColor: ARABIC_PRO_MUTED,
                 margin: [0, 0, 4, 1],
               })
             : ({
@@ -2886,12 +2883,21 @@ function arabicProGrid(
                 bold: true,
                 fontSize: 7,
                 alignment: rtl ? "right" : "left",
-                decoration: "underline",
-                decorationStyle: "dotted",
-                decorationColor: ARABIC_PRO_MUTED,
                 margin: [0, 0, 4, 1],
-              } as Content),
-        ),
+              } as Content);
+          const marker = {
+            width: 6,
+            text: "•",
+            bold: true,
+            color: ARABIC_PRO_ACCENT,
+            alignment: "center",
+          } as Content;
+          return {
+            width: "*",
+            columns: rtl ? [body, marker] : [marker, body],
+            columnGap: 2,
+          } as Content;
+        }),
         ...Array.from({ length: columns - row.length }, () => ({ width: "*", text: "" })),
       ],
       columnGap: 6,
@@ -3073,6 +3079,22 @@ function buildCvPdfArabicProV1(cv: CV, language: DocumentLanguage): TDocumentDef
   ).slice(0, 4);
   if (skills.length)
     pushSection(labels.skills, [arabicProGrid(skills, rtl, 4, cv.competences_format)]);
+
+  const participations = richListItems(cv.participations, cv.participations_format, (text) =>
+    arabicProSafeText(text, rtl),
+  );
+  if (participations.length)
+    pushSection(labels.participation, [
+      arabicProGrid(participations, rtl, 2, cv.participations_format),
+    ]);
+
+  const certifications = richListItems(cv.certifications, cv.certifications_format, (text) =>
+    arabicProSafeText(text, rtl),
+  );
+  if (certifications.length)
+    pushSection(labels.certifications, [
+      arabicProGrid(certifications, rtl, 2, cv.certifications_format),
+    ]);
 
   const languages = cvLanguages(cv, language, false);
   if (languages.length) pushSection(labels.languages, [arabicProLanguages(cv, language, rtl)]);

@@ -84,6 +84,7 @@ import { AccountSettingsDialog } from "@/components/account-settings-dialog";
 import { PromptMasterDialog } from "@/components/prompt-master-dialog";
 import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
 import { ExperienceWorkspace } from "@/components/cv-experience-workspace";
+import { EducationWorkspace, FormationWorkspace } from "@/components/cv-learning-workspaces";
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
 import {
   CvSectionPanel,
@@ -378,6 +379,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     objective: true,
   });
   const [editingExperienceId, setEditingExperienceId] = useState<string | null>(null);
+  const [editingFormationId, setEditingFormationId] = useState<string | null>(null);
+  const [editingEducationId, setEditingEducationId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [pdfPreview, setPdfPreview] = useState<{ blob: Blob; url: string; key: string } | null>(
     null,
@@ -764,14 +767,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   };
 
   // formations
-  const addForm = () =>
+  const addForm = () => {
+    const id = newId();
     setCv((c) => ({
       ...c,
       formations: [
         ...c.formations,
-        { id: newId(), date: "", lieu: "", titre: "", institution: "", competences: "" },
+        { id, date: "", lieu: "", titre: "", institution: "", competences: "" },
       ],
     }));
+    setEditingFormationId(id);
+  };
   const updateForm = (id: string, patch: Partial<Formation>) =>
     setCv((c) => ({
       ...c,
@@ -780,16 +786,18 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const removeForm = (id: string, index: number) => {
     removeIndexedVisibility("formation", index);
     setCv((c) => ({ ...c, formations: c.formations.filter((f) => f.id !== id) }));
+    if (editingFormationId === id) setEditingFormationId(null);
   };
 
   // educations
-  const addEdu = () =>
+  const addEdu = () => {
+    const id = newId();
     setCv((c) => ({
       ...c,
       educations: [
         ...c.educations,
         {
-          id: newId(),
+          id,
           date: "",
           lieu: "",
           titre: "",
@@ -799,6 +807,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         },
       ],
     }));
+    setEditingEducationId(id);
+  };
   const updateEdu = (id: string, patch: Partial<Education>) =>
     setCv((c) => ({
       ...c,
@@ -807,6 +817,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const removeEdu = (id: string, index: number) => {
     removeIndexedVisibility("education", index);
     setCv((c) => ({ ...c, educations: c.educations.filter((e) => e.id !== id) }));
+    if (editingEducationId === id) setEditingEducationId(null);
   };
 
   const reset = () => {
@@ -1654,99 +1665,33 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             appearance={appearanceFor("training")}
             onAppearanceChange={(appearance) => setAppearanceFor("training", appearance)}
             open={sectionIsOpen("training")}
-            onOpenChange={(open) => setSectionOpen("training", open)}
+            onOpenChange={(open) => {
+              setSectionOpen("training", open);
+              if (!open) setEditingFormationId(null);
+            }}
             visible={sectionIsVisible("training")}
             onVisibleChange={(visible) => setSectionVisible("training", visible)}
             count={cv.formations.length}
             onAdd={addForm}
           >
-            <div className="space-y-3">
-              {cv.formations.map((f, formationIndex) => (
-                <div
-                  key={f.id}
-                  className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
-                >
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field
-                      label={ui.date}
-                      {...visibilityProps(`formation.${formationIndex}.date`)}
-                      {...aiFieldProps(ui.date, f.date, (value) =>
-                        updateForm(f.id, { date: value.slice(0, 40) }),
-                      )}
-                    >
-                      <Input
-                        value={f.date}
-                        onChange={(ev) => updateForm(f.id, { date: ev.target.value.slice(0, 40) })}
-                      />
-                    </Field>
-                    <Field
-                      label={form.place}
-                      {...visibilityProps(`formation.${formationIndex}.lieu`)}
-                      {...aiFieldProps(form.place, f.lieu, (value) =>
-                        updateForm(f.id, { lieu: value.slice(0, 80) }),
-                      )}
-                    >
-                      <Input
-                        value={f.lieu}
-                        onChange={(ev) => updateForm(f.id, { lieu: ev.target.value.slice(0, 80) })}
-                      />
-                    </Field>
-                    <Field
-                      label={form.title}
-                      {...visibilityProps(`formation.${formationIndex}.titre`)}
-                      {...aiFieldProps(form.title, f.titre, (value) =>
-                        updateForm(f.id, { titre: value.slice(0, 120) }),
-                      )}
-                    >
-                      <Input
-                        value={f.titre}
-                        onChange={(ev) =>
-                          updateForm(f.id, { titre: ev.target.value.slice(0, 120) })
-                        }
-                      />
-                    </Field>
-                    <Field
-                      label={form.institution}
-                      {...visibilityProps(`formation.${formationIndex}.institution`)}
-                      {...aiFieldProps(form.institution, f.institution, (value) =>
-                        updateForm(f.id, { institution: value.slice(0, 120) }),
-                      )}
-                    >
-                      <Input
-                        value={f.institution}
-                        onChange={(ev) =>
-                          updateForm(f.id, { institution: ev.target.value.slice(0, 120) })
-                        }
-                      />
-                    </Field>
-                  </div>
-                  <Field
-                    label={form.acquiredSkills}
-                    {...visibilityProps(`formation.${formationIndex}.competences`)}
-                    {...aiFieldProps(form.acquiredSkills, f.competences, (value) =>
-                      updateForm(f.id, { competences: value.slice(0, 400) }),
-                    )}
-                  >
-                    <Textarea
-                      rows={2}
-                      value={f.competences}
-                      onChange={(ev) =>
-                        updateForm(f.id, { competences: ev.target.value.slice(0, 400) })
-                      }
-                    />
-                  </Field>
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeForm(f.id, formationIndex)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" /> {form.delete}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <FormationWorkspace
+              items={cv.formations}
+              editingId={editingFormationId}
+              labels={{
+                date: ui.date,
+                place: form.place,
+                title: form.title,
+                institution: form.institution,
+                delete: form.delete,
+              }}
+              acquiredSkillsLabel={form.acquiredSkills}
+              onEdit={setEditingFormationId}
+              onUpdate={updateForm}
+              onRemove={removeForm}
+              isVisible={isVisible}
+              onToggleVisibility={toggleVisibility}
+              onAi={openAiField}
+            />
           </CvSectionPanel>
 
           <CvSectionPanel
@@ -1755,110 +1700,34 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             appearance={appearanceFor("education")}
             onAppearanceChange={(appearance) => setAppearanceFor("education", appearance)}
             open={sectionIsOpen("education")}
-            onOpenChange={(open) => setSectionOpen("education", open)}
+            onOpenChange={(open) => {
+              setSectionOpen("education", open);
+              if (!open) setEditingEducationId(null);
+            }}
             visible={sectionIsVisible("education")}
             onVisibleChange={(visible) => setSectionVisible("education", visible)}
             count={cv.educations.length}
             onAdd={addEdu}
           >
-            <div className="space-y-3">
-              {cv.educations.map((e, educationIndex) => (
-                <div
-                  key={e.id}
-                  className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
-                >
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field
-                      label={ui.date}
-                      {...visibilityProps(`education.${educationIndex}.date`)}
-                      {...aiFieldProps(ui.date, e.date, (value) =>
-                        updateEdu(e.id, { date: value.slice(0, 40) }),
-                      )}
-                    >
-                      <Input
-                        value={e.date}
-                        onChange={(ev) => updateEdu(e.id, { date: ev.target.value.slice(0, 40) })}
-                      />
-                    </Field>
-                    <Field
-                      label={form.place}
-                      {...visibilityProps(`education.${educationIndex}.lieu`)}
-                      {...aiFieldProps(form.place, e.lieu, (value) =>
-                        updateEdu(e.id, { lieu: value.slice(0, 80) }),
-                      )}
-                    >
-                      <Input
-                        value={e.lieu}
-                        onChange={(ev) => updateEdu(e.id, { lieu: ev.target.value.slice(0, 80) })}
-                      />
-                    </Field>
-                    <Field
-                      label={form.title}
-                      {...visibilityProps(`education.${educationIndex}.titre`)}
-                      {...aiFieldProps(form.title, e.titre, (value) =>
-                        updateEdu(e.id, { titre: value.slice(0, 120) }),
-                      )}
-                    >
-                      <Input
-                        value={e.titre}
-                        onChange={(ev) => updateEdu(e.id, { titre: ev.target.value.slice(0, 120) })}
-                      />
-                    </Field>
-                    <Field
-                      label={form.institution}
-                      {...visibilityProps(`education.${educationIndex}.institution`)}
-                      {...aiFieldProps(form.institution, e.institution, (value) =>
-                        updateEdu(e.id, { institution: value.slice(0, 120) }),
-                      )}
-                    >
-                      <Input
-                        value={e.institution}
-                        onChange={(ev) =>
-                          updateEdu(e.id, { institution: ev.target.value.slice(0, 120) })
-                        }
-                      />
-                    </Field>
-                    <Field
-                      label={form.option}
-                      {...visibilityProps(`education.${educationIndex}.option`)}
-                      {...aiFieldProps(form.option, e.option, (value) =>
-                        updateEdu(e.id, { option: value.slice(0, 120) }),
-                      )}
-                    >
-                      <Input
-                        value={e.option}
-                        onChange={(ev) =>
-                          updateEdu(e.id, { option: ev.target.value.slice(0, 120) })
-                        }
-                      />
-                    </Field>
-                    <Field
-                      label={form.equivalence}
-                      {...visibilityProps(`education.${educationIndex}.equivalence`)}
-                      {...aiFieldProps(form.equivalence, e.equivalence, (value) =>
-                        updateEdu(e.id, { equivalence: value.slice(0, 200) }),
-                      )}
-                    >
-                      <Input
-                        value={e.equivalence}
-                        onChange={(ev) =>
-                          updateEdu(e.id, { equivalence: ev.target.value.slice(0, 200) })
-                        }
-                      />
-                    </Field>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeEdu(e.id, educationIndex)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" /> {form.delete}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <EducationWorkspace
+              items={cv.educations}
+              editingId={editingEducationId}
+              labels={{
+                date: ui.date,
+                place: form.place,
+                title: form.title,
+                institution: form.institution,
+                delete: form.delete,
+              }}
+              optionLabel={form.option}
+              equivalenceLabel={form.equivalence}
+              onEdit={setEditingEducationId}
+              onUpdate={updateEdu}
+              onRemove={removeEdu}
+              isVisible={isVisible}
+              onToggleVisibility={toggleVisibility}
+              onAi={openAiField}
+            />
           </CvSectionPanel>
 
           <CvSectionPanel

@@ -37,6 +37,7 @@ import {
   type Formation,
   type Education,
   type CompanyLogo,
+  type ObjectiveFormat,
   emptyCV,
   newId,
 } from "@/lib/cv-types";
@@ -142,6 +143,42 @@ const PDF_WORKER_URL = URL.createObjectURL(
 );
 
 pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+
+type RichListValueKey = "competences" | "participations" | "certifications" | "interets";
+type RichListFormatKey =
+  | "competences_format"
+  | "participations_format"
+  | "certifications_format"
+  | "interets_format";
+
+function escapeRichListHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function richListHtml(items: string[]) {
+  return `<ul>${items
+    .filter(Boolean)
+    .map((item) => `<li>${escapeRichListHtml(item)}</li>`)
+    .join("")}</ul>`;
+}
+
+function richListItemsFromText(value: string, maxItems = 40, maxItemLength = 500) {
+  return value
+    .split(/\n+/u)
+    .map((item) => item.replace(/^\s*(?:[•·▪◦*-]|\d+[.)])\s*/u, "").trim())
+    .filter(Boolean)
+    .slice(0, maxItems)
+    .map((item) => item.slice(0, maxItemLength));
+}
+
+function richListEditorFormat(items: string[], format: ObjectiveFormat | undefined) {
+  const normalized = normalizeObjectiveFormat(format);
+  return normalized.html ? normalized : { ...normalized, html: richListHtml(items) };
+}
 
 function replaceLegacyEnglishDefaults(
   stored: unknown,
@@ -616,6 +653,29 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         html: html.slice(0, 12_000),
       },
     }));
+  const setRichListText = (
+    valueKey: RichListValueKey,
+    formatKey: RichListFormatKey,
+    visibilityPrefix: string,
+    value: string,
+    html: string,
+    maxItems = 40,
+    maxItemLength = 500,
+  ) => {
+    const items = richListItemsFromText(value, maxItems, maxItemLength);
+    const previousItems = cv[valueKey];
+    for (let index = previousItems.length - 1; index >= items.length; index -= 1) {
+      removeIndexedVisibility(visibilityPrefix, index);
+    }
+    setCv((current) => ({
+      ...current,
+      [valueKey]: items,
+      [formatKey]: {
+        ...normalizeObjectiveFormat(current[formatKey]),
+        html: html.slice(0, 30_000),
+      },
+    }));
+  };
   const openAiField = (label: string, value: string, onApply: (next: string) => void) =>
     setAiFieldRequest({ label, value, onApply });
   const aiFieldProps = (label: string, value: string, onApply: (next: string) => void) => ({
@@ -1476,65 +1536,36 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("skills")}
             onVisibleChange={(visible) => setSectionVisible("skills", visible)}
             count={cv.competences.length}
-            onAdd={() => set("competences", [...cv.competences, ""])}
           >
-            <div className="grid gap-2 sm:grid-cols-2">
-              {cv.competences.map((c, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <AiFieldButton
-                    label={`${form.skill} ${i + 1}`}
-                    onClick={() =>
-                      openAiField(`${form.skill} ${i + 1}`, c, (value) => {
-                        const next = [...cv.competences];
-                        next[i] = value.slice(0, 120);
-                        set("competences", next);
-                      })
-                    }
-                  />
-                  <VisibilityButton
-                    label={`${form.skill} ${i + 1}`}
-                    visible={isVisible(`skills.${i}`)}
-                    onToggle={() => toggleVisibility(`skills.${i}`)}
-                  />
-                  <div
-                    className={`min-w-0 flex-1 ${
-                      isVisible(`skills.${i}`) ? "" : "opacity-55 grayscale-[20%]"
-                    }`}
-                  >
-                    <Input
-                      value={c}
-                      placeholder={`${form.skill} ${i + 1}`}
-                      onChange={(e) => {
-                        const next = [...cv.competences];
-                        next[i] = e.target.value.slice(0, 120);
-                        set("competences", next);
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => set("competences", [...cv.competences, ""])}
-              >
-                <Plus className="mr-2 h-4 w-4" /> {form.add}
-              </Button>
-              {cv.competences.length > 1 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    removeIndexedVisibility("skills", cv.competences.length - 1);
-                    set("competences", cv.competences.slice(0, -1));
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> {form.remove}
-                </Button>
-              )}
-            </div>
+            <CvRichTextEditor
+              value={cv.competences.join("\n")}
+              format={richListEditorFormat(cv.competences, cv.competences_format)}
+              onChange={(value, html) =>
+                setRichListText("competences", "competences_format", "skills", value, html, 40, 300)
+              }
+              onFormatChange={(format) => set("competences_format", format)}
+              onAi={() =>
+                openAiField(form.skills, cv.competences.join("\n"), (value) => {
+                  const items = richListItemsFromText(value, 40, 300);
+                  setRichListText(
+                    "competences",
+                    "competences_format",
+                    "skills",
+                    items.join("\n"),
+                    richListHtml(items),
+                    40,
+                    300,
+                  );
+                })
+              }
+              defaultAlignment={language === "ar" ? "right" : "left"}
+              maxLength={8_000}
+              placeholder={`${form.skill} — une compétence par ligne…`}
+              contextLabel="compétences clés"
+            />
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Une ligne correspond à une puce dans tous les modèles et dans le PDF ATS.
+            </p>
           </CvSectionPanel>
 
           <CvSectionPanel
@@ -1840,25 +1871,40 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("volunteering")}
             onVisibleChange={(visible) => setSectionVisible("volunteering", visible)}
             count={cv.participations.length}
-            onAdd={() => set("participations", [...cv.participations, ""])}
           >
-            <ListCard
-              title={form.volunteering}
-              items={cv.participations}
-              onChange={(v) => set("participations", v)}
-              visibilityPrefix="participations"
-              isVisible={isVisible}
-              onToggleVisibility={toggleVisibility}
-              onRemoveVisibility={removeIndexedVisibility}
-              language={language}
-              onAiItem={(index, value) =>
-                openAiField(`${form.volunteering} ${index + 1}`, value, (nextValue) => {
-                  const next = [...cv.participations];
-                  next[index] = nextValue.slice(0, 240);
-                  set("participations", next);
+            <CvRichTextEditor
+              value={cv.participations.join("\n")}
+              format={richListEditorFormat(cv.participations, cv.participations_format)}
+              onChange={(value, html) =>
+                setRichListText(
+                  "participations",
+                  "participations_format",
+                  "participations",
+                  value,
+                  html,
+                )
+              }
+              onFormatChange={(format) => set("participations_format", format)}
+              onAi={() =>
+                openAiField(form.volunteering, cv.participations.join("\n"), (value) => {
+                  const items = richListItemsFromText(value);
+                  setRichListText(
+                    "participations",
+                    "participations_format",
+                    "participations",
+                    items.join("\n"),
+                    richListHtml(items),
+                  );
                 })
               }
+              defaultAlignment={language === "ar" ? "right" : "left"}
+              maxLength={12_000}
+              placeholder={`${form.volunteering} — une participation par ligne…`}
+              contextLabel="participations professionnelles et bénévoles"
             />
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Une ligne correspond à une puce dans tous les modèles et dans le PDF ATS.
+            </p>
           </CvSectionPanel>
 
           <CvSectionPanel
@@ -1871,25 +1917,40 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("certifications")}
             onVisibleChange={(visible) => setSectionVisible("certifications", visible)}
             count={cv.certifications.length}
-            onAdd={() => set("certifications", [...cv.certifications, ""])}
           >
-            <ListCard
-              title={form.certifications}
-              items={cv.certifications}
-              onChange={(v) => set("certifications", v)}
-              visibilityPrefix="certifications"
-              isVisible={isVisible}
-              onToggleVisibility={toggleVisibility}
-              onRemoveVisibility={removeIndexedVisibility}
-              language={language}
-              onAiItem={(index, value) =>
-                openAiField(`${form.certifications} ${index + 1}`, value, (nextValue) => {
-                  const next = [...cv.certifications];
-                  next[index] = nextValue.slice(0, 240);
-                  set("certifications", next);
+            <CvRichTextEditor
+              value={cv.certifications.join("\n")}
+              format={richListEditorFormat(cv.certifications, cv.certifications_format)}
+              onChange={(value, html) =>
+                setRichListText(
+                  "certifications",
+                  "certifications_format",
+                  "certifications",
+                  value,
+                  html,
+                )
+              }
+              onFormatChange={(format) => set("certifications_format", format)}
+              onAi={() =>
+                openAiField(form.certifications, cv.certifications.join("\n"), (value) => {
+                  const items = richListItemsFromText(value);
+                  setRichListText(
+                    "certifications",
+                    "certifications_format",
+                    "certifications",
+                    items.join("\n"),
+                    richListHtml(items),
+                  );
                 })
               }
+              defaultAlignment={language === "ar" ? "right" : "left"}
+              maxLength={12_000}
+              placeholder={`${form.certifications} — une certification par ligne…`}
+              contextLabel="certifications professionnelles"
             />
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Une ligne correspond à une puce dans tous les modèles et dans le PDF ATS.
+            </p>
           </CvSectionPanel>
 
           <CvSectionPanel
@@ -1902,25 +1963,34 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("interests")}
             onVisibleChange={(visible) => setSectionVisible("interests", visible)}
             count={cv.interets.length}
-            onAdd={() => set("interets", [...cv.interets, ""])}
           >
-            <ListCard
-              title={form.interests}
-              items={cv.interets}
-              onChange={(v) => set("interets", v)}
-              visibilityPrefix="interets"
-              isVisible={isVisible}
-              onToggleVisibility={toggleVisibility}
-              onRemoveVisibility={removeIndexedVisibility}
-              language={language}
-              onAiItem={(index, value) =>
-                openAiField(`${form.interests} ${index + 1}`, value, (nextValue) => {
-                  const next = [...cv.interets];
-                  next[index] = nextValue.slice(0, 240);
-                  set("interets", next);
+            <CvRichTextEditor
+              value={cv.interets.join("\n")}
+              format={richListEditorFormat(cv.interets, cv.interets_format)}
+              onChange={(value, html) =>
+                setRichListText("interets", "interets_format", "interets", value, html)
+              }
+              onFormatChange={(format) => set("interets_format", format)}
+              onAi={() =>
+                openAiField(form.interests, cv.interets.join("\n"), (value) => {
+                  const items = richListItemsFromText(value);
+                  setRichListText(
+                    "interets",
+                    "interets_format",
+                    "interets",
+                    items.join("\n"),
+                    richListHtml(items),
+                  );
                 })
               }
+              defaultAlignment={language === "ar" ? "right" : "left"}
+              maxLength={12_000}
+              placeholder={`${form.interests} — un centre d’intérêt par ligne…`}
+              contextLabel="centres d’intérêt"
             />
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Une ligne correspond à une puce dans tous les modèles et dans le PDF ATS.
+            </p>
           </CvSectionPanel>
 
           <CvSectionPanel

@@ -83,13 +83,17 @@ export type CV = {
   objectif: string;
   objectif_format?: ObjectiveFormat;
   competences: string[];
+  competences_format?: ObjectiveFormat;
   langues: Langues;
   experiences: Experience[];
   formations: Formation[];
   educations: Education[];
   participations: string[];
+  participations_format?: ObjectiveFormat;
   certifications: string[];
+  certifications_format?: ObjectiveFormat;
   interets: string[];
+  interets_format?: ObjectiveFormat;
   references: string[];
   lettre_motivation: LettreMotivation;
   plan_developpement: string[];
@@ -114,13 +118,17 @@ export const emptyCV: CV = {
   objectif: "",
   objectif_format: { html: "", alignment: "", fontSize: 15, color: "" },
   competences: ["", "", "", "", "", "", ""],
+  competences_format: { html: "", alignment: "", fontSize: 15, color: "" },
   langues: { fr: "", en: "", ar: "", de: "", es: "", kab: "" },
   experiences: [],
   formations: [],
   educations: [],
   participations: [],
+  participations_format: { html: "", alignment: "", fontSize: 15, color: "" },
   certifications: [],
+  certifications_format: { html: "", alignment: "", fontSize: 15, color: "" },
   interets: [],
+  interets_format: { html: "", alignment: "", fontSize: 15, color: "" },
   references: [],
   lettre_motivation: {
     date: "",

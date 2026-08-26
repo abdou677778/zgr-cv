@@ -124,6 +124,7 @@ function directCv(source: JsonRecord): CV {
     objectif: text(source.objectif),
     objectif_format: normalizeObjectiveFormat(source.objectif_format),
     competences: stringList(source.competences),
+    competences_format: normalizeObjectiveFormat(source.competences_format),
     langues: {
       fr: text(langues.fr),
       en: text(langues.en),
@@ -166,8 +167,11 @@ function directCv(source: JsonRecord): CV {
       }),
     ),
     participations: stringList(source.participations),
+    participations_format: normalizeObjectiveFormat(source.participations_format),
     certifications: stringList(source.certifications),
+    certifications_format: normalizeObjectiveFormat(source.certifications_format),
     interets: stringList(source.interets),
+    interets_format: normalizeObjectiveFormat(source.interets_format),
     references: stringList(source.references),
     lettre_motivation: {
       date: text(lettre.date),

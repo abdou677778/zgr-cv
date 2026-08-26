@@ -6,7 +6,7 @@ import type {
   TFontDictionary,
   TVirtualFileSystem,
 } from "pdfmake/interfaces";
-import type { CV, Experience, Formation, Education } from "./cv-types";
+import type { CV, Experience, Formation, Education, ObjectiveFormat } from "./cv-types";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
@@ -257,14 +257,13 @@ function richRunsForElement(
   return runs.filter((run) => run.text.length > 0);
 }
 
-function experienceRichDescriptions(
-  experience: Experience,
+function richListItems(
+  items: string[],
+  formatValue: ObjectiveFormat | undefined,
   transformText = (text: string) => text,
 ): RichInline[] {
-  const fallback = experience.descriptions
-    .filter(Boolean)
-    .map((item) => transformText(item)) as RichInline[];
-  const html = normalizeObjectiveFormat(experience.descriptions_format).html;
+  const fallback = items.filter(Boolean).map((item) => transformText(item)) as RichInline[];
+  const html = normalizeObjectiveFormat(formatValue).html;
   if (!html || typeof DOMParser === "undefined") return fallback;
   const documentNode = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
   let elements = [...documentNode.body.querySelectorAll(":scope > ul > li, :scope > ol > li")];
@@ -277,19 +276,45 @@ function experienceRichDescriptions(
   return richItems.length === fallback.length ? richItems : fallback;
 }
 
-function achievementText(
-  experience: Experience,
+function richListText(
+  formatValue: ObjectiveFormat | undefined,
   text: RichInline,
   baseFontSize: number,
   defaults: Record<string, unknown> = {},
 ): Content {
-  const format = normalizeObjectiveFormat(experience.descriptions_format);
+  const format = normalizeObjectiveFormat(formatValue);
   return {
     ...defaults,
     text,
     fontSize: Number((baseFontSize * (format.fontSize / 15)).toFixed(2)),
     ...(format.alignment ? { alignment: format.alignment } : {}),
     ...(format.color ? { color: format.color } : {}),
+  } as Content;
+}
+
+function experienceRichDescriptions(
+  experience: Experience,
+  transformText = (text: string) => text,
+) {
+  return richListItems(experience.descriptions, experience.descriptions_format, transformText);
+}
+
+function achievementText(
+  experience: Experience,
+  text: RichInline,
+  baseFontSize: number,
+  defaults: Record<string, unknown> = {},
+) {
+  return richListText(experience.descriptions_format, text, baseFontSize, defaults);
+}
+
+function richListUl(
+  items: string[],
+  format: ObjectiveFormat | undefined,
+  baseFontSize: number,
+): Content {
+  return {
+    ul: richListItems(items, format).map((item) => richListText(format, item, baseFontSize)),
   } as Content;
 }
 
@@ -924,7 +949,8 @@ function buildCvPdfV1(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
   if (cv.objectif) content.push(...section(labels.objective, objectivePdfContent(cv, 12)));
 
   const competences = cv.competences.filter(Boolean);
-  if (competences.length) content.push(...section(labels.skills, { ul: competences }));
+  if (competences.length)
+    content.push(...section(labels.skills, richListUl(competences, cv.competences_format, 12)));
 
   if (langues.length)
     content.push(
@@ -978,13 +1004,18 @@ function buildCvPdfV1(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
   }
 
   const parts = cv.participations.filter(Boolean);
-  if (parts.length) content.push(...section(labels.participation, { ul: parts }));
+  if (parts.length)
+    content.push(...section(labels.participation, richListUl(parts, cv.participations_format, 12)));
 
   const certs = cv.certifications.filter(Boolean);
-  if (certs.length) content.push(...section(labels.certifications, { ul: certs }));
+  if (certs.length)
+    content.push(
+      ...section(labels.certifications, richListUl(certs, cv.certifications_format, 12)),
+    );
 
   const ints = cv.interets.filter(Boolean);
-  if (ints.length) content.push(...section(labels.interests, { ul: ints }));
+  if (ints.length)
+    content.push(...section(labels.interests, richListUl(ints, cv.interets_format, 12)));
 
   const extras = additionalInformation(cv, language);
   if (extras.length) content.push(...section(labels.additional, { ul: extras }));
@@ -1134,7 +1165,7 @@ const V2_LIST_MARKER_TOP = 0.25;
 function v2List(
   items: RichInline[],
   marker: "diamond" | "check" = "diamond",
-  experience?: Experience,
+  format?: ObjectiveFormat,
 ): Content {
   return {
     stack: items.filter(Boolean).map((item) => ({
@@ -1146,9 +1177,7 @@ function v2List(
           fit: [7, 7],
           margin: [0, V2_LIST_MARKER_TOP, 3, 0],
         },
-        experience
-          ? achievementText(experience, item, 10, { width: "*" })
-          : { width: "*", text: item },
+        format ? richListText(format, item, 10, { width: "*" }) : { width: "*", text: item },
       ],
       columnGap: 4,
       margin: [0, 0, 0, 2],
@@ -1182,7 +1211,7 @@ function v2ExperienceBlock(experience: Experience, language: DocumentLanguage): 
             color: V2_MUTED,
             margin: [0, 2, 0, 3],
           }),
-          v2List(descriptions, "diamond", experience),
+          v2List(descriptions, "diamond", experience.descriptions_format),
         ],
       },
     ],
@@ -1295,17 +1324,23 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     title: string,
     items: string[],
     marker: "diamond" | "check" = "diamond",
+    format?: ObjectiveFormat,
   ) => {
-    const filtered = items.filter(Boolean);
+    const filtered = richListItems(items, format);
     if (!filtered.length) return;
     const [first, ...rest] = filtered;
-    pushSection(title, v2List([first], marker), rest.length ? [v2List(rest, marker)] : []);
+    pushSection(
+      title,
+      v2List([first], marker, format),
+      rest.length ? [v2List(rest, marker, format)] : [],
+    );
   };
 
   if (cv.objectif) pushSection(labels.objective, objectivePdfContent(cv, 10.6));
 
   const competences = cv.competences.filter(Boolean);
-  if (competences.length) pushListSection(labels.skills, competences);
+  if (competences.length)
+    pushListSection(labels.skills, competences, "diamond", cv.competences_format);
 
   if (langues.length) {
     pushSection(labels.languages, {
@@ -1355,13 +1390,15 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
   }
 
   const participations = cv.participations.filter(Boolean);
-  if (participations.length) pushListSection(labels.participation, participations);
+  if (participations.length)
+    pushListSection(labels.participation, participations, "diamond", cv.participations_format);
 
   const certifications = cv.certifications.filter(Boolean);
-  if (certifications.length) pushListSection(labels.certifications, certifications, "check");
+  if (certifications.length)
+    pushListSection(labels.certifications, certifications, "check", cv.certifications_format);
 
   const interests = cv.interets.filter(Boolean);
-  if (interests.length) pushListSection(labels.interests, interests);
+  if (interests.length) pushListSection(labels.interests, interests, "diamond", cv.interets_format);
 
   const extras = additionalInformation(cv, language);
   if (extras.length) pushListSection(labels.additional, extras);
@@ -1485,7 +1522,7 @@ function v3SectionTitle(label: string, topMargin = 7): Content {
   } as Content;
 }
 
-function v3List(items: RichInline[], markerColor = V3_ACCENT, experience?: Experience): Content {
+function v3List(items: RichInline[], markerColor = V3_ACCENT, format?: ObjectiveFormat): Content {
   return {
     stack: items.filter(Boolean).map((item) => ({
       unbreakable: true,
@@ -1497,8 +1534,8 @@ function v3List(items: RichInline[], markerColor = V3_ACCENT, experience?: Exper
           fontSize: 8.76,
           lineHeight: 1.5,
         },
-        experience
-          ? achievementText(experience, item, 8.76, { width: "*", lineHeight: 1.5 })
+        format
+          ? richListText(format, item, 8.76, { width: "*", lineHeight: 1.5 })
           : { width: "*", text: item, fontSize: 8.76, lineHeight: 1.5 },
       ],
       columnGap: 8,
@@ -1543,7 +1580,7 @@ function v3ExperienceBlock(experience: Experience, language: DocumentLanguage): 
           ...(descriptions.length
             ? [
                 { text: labels.responsibilities, margin: [0, 0, 0, 0] } as Content,
-                v3List(descriptions, V3_ACCENT, experience),
+                v3List(descriptions, V3_ACCENT, experience.descriptions_format),
               ]
             : []),
         ],
@@ -1671,11 +1708,15 @@ function buildCvPdfV3(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     content.push(...v3Section(title, first, rest, isFirstSection));
     isFirstSection = false;
   };
-  const pushListSection = (title: string, items: string[]) => {
-    const filtered = items.filter(Boolean);
+  const pushListSection = (title: string, items: string[], format?: ObjectiveFormat) => {
+    const filtered = richListItems(items, format);
     if (!filtered.length) return;
     const [first, ...rest] = filtered;
-    pushSection(title, v3List([first]), rest.length ? [v3List(rest)] : []);
+    pushSection(
+      title,
+      v3List([first], V3_ACCENT, format),
+      rest.length ? [v3List(rest, V3_ACCENT, format)] : [],
+    );
   };
 
   if (cv.objectif) pushSection(labels.objective, objectivePdfContent(cv, 9));
@@ -1714,8 +1755,8 @@ function buildCvPdfV3(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
 
   const competences = cv.competences.filter(Boolean);
   if (competences.length) {
-    const [first, ...rest] = competences;
-    const skillsColumns = (items: string[], showLabel: boolean): Content => ({
+    const [first, ...rest] = richListItems(competences, cv.competences_format);
+    const skillsColumns = (items: RichInline[], showLabel: boolean): Content => ({
       columns: [
         { width: V3_LEFT_COLUMN, text: "" },
         {
@@ -1732,7 +1773,7 @@ function buildCvPdfV3(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
                   } as Content,
                 ]
               : []),
-            v3List(items),
+            v3List(items, V3_ACCENT, cv.competences_format),
           ],
         },
       ],
@@ -1746,13 +1787,15 @@ function buildCvPdfV3(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
   }
 
   const participations = cv.participations.filter(Boolean);
-  if (participations.length) pushListSection(labels.participation, participations);
+  if (participations.length)
+    pushListSection(labels.participation, participations, cv.participations_format);
 
   const certifications = cv.certifications.filter(Boolean);
-  if (certifications.length) pushListSection(labels.certifications, certifications);
+  if (certifications.length)
+    pushListSection(labels.certifications, certifications, cv.certifications_format);
 
   const interests = cv.interets.filter(Boolean);
-  if (interests.length) pushListSection(labels.interests, interests);
+  if (interests.length) pushListSection(labels.interests, interests, cv.interets_format);
 
   const extras = additionalInformation(cv, language);
   if (extras.length) pushListSection(labels.additional, extras);
@@ -1865,7 +1908,7 @@ function v4SectionTitle(
   } as Content;
 }
 
-function v4List(items: RichInline[], fontSize = V4_BODY_SIZE, experience?: Experience): Content {
+function v4List(items: RichInline[], fontSize = V4_BODY_SIZE, format?: ObjectiveFormat): Content {
   return {
     stack: items.filter(Boolean).map((item) => ({
       unbreakable: true,
@@ -1877,8 +1920,8 @@ function v4List(items: RichInline[], fontSize = V4_BODY_SIZE, experience?: Exper
           lineHeight: 1.38,
           color: V4_GROUP_HEADING,
         },
-        experience
-          ? achievementText(experience, item, fontSize, {
+        format
+          ? richListText(format, item, fontSize, {
               width: "*",
               lineHeight: 1.38,
               color: V4_TEXT,
@@ -1943,13 +1986,14 @@ function v4ExperienceBlock(experience: Experience, language: DocumentLanguage): 
       }),
     );
   }
-  if (firstDescription) heading.push(v4List([firstDescription], V4_BODY_SIZE, experience));
+  if (firstDescription)
+    heading.push(v4List([firstDescription], V4_BODY_SIZE, experience.descriptions_format));
 
   return {
     stack: [
       { unbreakable: true, stack: heading } as Content,
       remainingDescriptions.length
-        ? v4List(remainingDescriptions, V4_BODY_SIZE, experience)
+        ? v4List(remainingDescriptions, V4_BODY_SIZE, experience.descriptions_format)
         : ({ text: "" } as Content),
     ],
     margin: [0, 0, 0, 10],
@@ -2009,10 +2053,13 @@ function buildCvPdfV4(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     const [first, ...rest] = blocks;
     content.push({ unbreakable: true, stack: [title, first] } as Content, ...rest);
   };
-  const pushListSection = (title: Content, items: string[]) => {
-    const [first, ...rest] = items;
-    content.push({ unbreakable: true, stack: [title, v4List([first])] } as Content);
-    if (rest.length) content.push(v4List(rest));
+  const pushListSection = (title: Content, items: string[], format?: ObjectiveFormat) => {
+    const [first, ...rest] = richListItems(items, format);
+    content.push({
+      unbreakable: true,
+      stack: [title, v4List([first], V4_BODY_SIZE, format)],
+    } as Content);
+    if (rest.length) content.push(v4List(rest, V4_BODY_SIZE, format));
   };
 
   if (cv.objectif) {
@@ -2053,17 +2100,29 @@ function buildCvPdfV4(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
 
   const participations = cv.participations.filter(Boolean);
   if (participations.length) {
-    pushListSection(v4SectionTitle(labels.volunteering, 10, 6, language), participations);
+    pushListSection(
+      v4SectionTitle(labels.volunteering, 10, 6, language),
+      participations,
+      cv.participations_format,
+    );
   }
 
   const certifications = cv.certifications.filter(Boolean);
   if (certifications.length) {
-    pushListSection(v4SectionTitle(labels.certifications, 10, 6, language), certifications);
+    pushListSection(
+      v4SectionTitle(labels.certifications, 10, 6, language),
+      certifications,
+      cv.certifications_format,
+    );
   }
 
   const interests = cv.interets.filter(Boolean);
   if (interests.length) {
-    pushListSection(v4SectionTitle(labels.interests, 10, 6, language), interests);
+    pushListSection(
+      v4SectionTitle(labels.interests, 10, 6, language),
+      interests,
+      cv.interets_format,
+    );
   }
 
   const langues = cvLanguages(cv, language, false).map(([label, value]) => `${label} : ${value}`);
@@ -2073,7 +2132,11 @@ function buildCvPdfV4(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
 
   const competences = cv.competences.filter(Boolean);
   if (competences.length) {
-    pushListSection(v4SectionTitle(labels.skills, 10, 6, language), competences);
+    pushListSection(
+      v4SectionTitle(labels.skills, 10, 6, language),
+      competences,
+      cv.competences_format,
+    );
   }
 
   const extras = additionalInformation(cv, language);
@@ -2200,7 +2263,7 @@ function v5SectionHeading(label: string, topMargin: number): Content {
   } as Content;
 }
 
-function v5List(items: RichInline[], indent = 18, experience?: Experience): Content {
+function v5List(items: RichInline[], indent = 18, format?: ObjectiveFormat): Content {
   return {
     stack: items.filter(Boolean).map((item) => ({
       unbreakable: true,
@@ -2212,8 +2275,8 @@ function v5List(items: RichInline[], indent = 18, experience?: Experience): Cont
           fontSize: V5_BODY_SIZE,
           lineHeight: 1.32,
         },
-        experience
-          ? achievementText(experience, item, V5_BODY_SIZE, {
+        format
+          ? richListText(format, item, V5_BODY_SIZE, {
               width: "*",
               lineHeight: 1.32,
             })
@@ -2273,14 +2336,14 @@ function v5ExperienceBlock(experience: Experience, language: DocumentLanguage): 
   } as Content);
   if (firstDescription) {
     lead.push({ text: labels.responsibilities, margin: [0, 0, 0, 1] } as Content);
-    lead.push(v5List([firstDescription], 26, experience));
+    lead.push(v5List([firstDescription], 26, experience.descriptions_format));
   }
 
   return {
     stack: [
       { unbreakable: true, stack: lead } as Content,
       remainingDescriptions.length
-        ? v5List(remainingDescriptions, 26, experience)
+        ? v5List(remainingDescriptions, 26, experience.descriptions_format)
         : ({ text: "" } as Content),
     ],
     margin: [0, 0, 0, 12],
@@ -2348,7 +2411,11 @@ function buildCvPdfAtsA4(cv: CV, language: DocumentLanguage): TDocumentDefinitio
   }
 
   const competences = cv.competences.filter(Boolean);
-  if (competences.length) pushSection(labels.skills, v5List(competences));
+  if (competences.length)
+    pushSection(
+      labels.skills,
+      v5List(richListItems(competences, cv.competences_format), 18, cv.competences_format),
+    );
 
   const experiences = cv.experiences.filter(
     (experience) => experience.titre || experience.employeur || experience.dates,
@@ -2384,14 +2451,25 @@ function buildCvPdfAtsA4(cv: CV, language: DocumentLanguage): TDocumentDefinitio
 
   const participations = cv.participations.filter(Boolean);
   if (participations.length) {
-    pushSection(labels.participation, v5List(participations));
+    pushSection(
+      labels.participation,
+      v5List(richListItems(participations, cv.participations_format), 18, cv.participations_format),
+    );
   }
 
   const certifications = cv.certifications.filter(Boolean);
-  if (certifications.length) pushSection(labels.certifications, v5List(certifications));
+  if (certifications.length)
+    pushSection(
+      labels.certifications,
+      v5List(richListItems(certifications, cv.certifications_format), 18, cv.certifications_format),
+    );
 
   const interests = cv.interets.filter(Boolean);
-  if (interests.length) pushSection(labels.interests, v5List(interests));
+  if (interests.length)
+    pushSection(
+      labels.interests,
+      v5List(richListItems(interests, cv.interets_format), 18, cv.interets_format),
+    );
 
   const extras = additionalInformation(cv, language);
   if (extras.length) pushSection(labels.additional, v5List(extras));
@@ -2780,23 +2858,40 @@ function arabicProEducation(
   } as Content;
 }
 
-function arabicProGrid(items: string[], rtl: boolean, columns = 3): Content {
+function arabicProGrid(
+  items: RichInline[],
+  rtl: boolean,
+  columns = 3,
+  format?: ObjectiveFormat,
+): Content {
   const rows: Content[] = [];
   for (let index = 0; index < items.length; index += columns) {
     const row = items.slice(index, index + columns);
     rows.push({
       columns: [
-        ...row.map((item) => ({
-          width: "*",
-          text: arabicProSafeText(item, rtl),
-          bold: true,
-          fontSize: 7,
-          alignment: rtl ? "right" : "left",
-          decoration: "underline",
-          decorationStyle: "dotted",
-          decorationColor: ARABIC_PRO_MUTED,
-          margin: [0, 0, 4, 1],
-        })),
+        ...row.map((item) =>
+          format
+            ? richListText(format, item, 7, {
+                width: "*",
+                bold: true,
+                alignment: rtl ? "right" : "left",
+                decoration: "underline",
+                decorationStyle: "dotted",
+                decorationColor: ARABIC_PRO_MUTED,
+                margin: [0, 0, 4, 1],
+              })
+            : ({
+                width: "*",
+                text: arabicProSafeText(String(item), rtl),
+                bold: true,
+                fontSize: 7,
+                alignment: rtl ? "right" : "left",
+                decoration: "underline",
+                decorationStyle: "dotted",
+                decorationColor: ARABIC_PRO_MUTED,
+                margin: [0, 0, 4, 1],
+              } as Content),
+        ),
         ...Array.from({ length: columns - row.length }, () => ({ width: "*", text: "" })),
       ],
       columnGap: 6,
@@ -2973,14 +3068,20 @@ function buildCvPdfArabicProV1(cv: CV, language: DocumentLanguage): TDocumentDef
     education.map((item) => arabicProEducation(item, language, rtl)),
   );
 
-  const skills = cv.competences.filter(Boolean).slice(0, 4);
-  if (skills.length) pushSection(labels.skills, [arabicProGrid(skills, rtl, 4)]);
+  const skills = richListItems(cv.competences, cv.competences_format, (text) =>
+    arabicProSafeText(text, rtl),
+  ).slice(0, 4);
+  if (skills.length)
+    pushSection(labels.skills, [arabicProGrid(skills, rtl, 4, cv.competences_format)]);
 
   const languages = cvLanguages(cv, language, false);
   if (languages.length) pushSection(labels.languages, [arabicProLanguages(cv, language, rtl)]);
 
-  const interests = cv.interets.filter(Boolean);
-  if (interests.length) pushSection(labels.interests, [arabicProGrid(interests, rtl, 4)]);
+  const interests = richListItems(cv.interets, cv.interets_format, (text) =>
+    arabicProSafeText(text, rtl),
+  );
+  if (interests.length)
+    pushSection(labels.interests, [arabicProGrid(interests, rtl, 4, cv.interets_format)]);
 
   return {
     info: {

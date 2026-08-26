@@ -22,6 +22,17 @@ const hasEducationContent = (item: Education) =>
 export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
   const visible = (path: string) => cvElementIsVisible(hidden, path);
   const sectionVisible = (id: string) => visible(`section.${id}`);
+  const visibleList = (items: string[], sectionId: string, prefix: string) =>
+    sectionVisible(sectionId) ? items.filter((_, index) => visible(`${prefix}.${index}`)) : [];
+  const visibleListFormat = (
+    items: string[],
+    sectionId: string,
+    prefix: string,
+    format: CV["competences_format"],
+  ) => {
+    const filtered = visibleList(items, sectionId, prefix);
+    return filtered.length === items.length ? format : format ? { ...format, html: "" } : undefined;
+  };
   const scalar = <K extends keyof CV>(key: K, path = `personal.${String(key)}`): CV[K] =>
     sectionVisible("personal") && visible(path) ? cv[key] : ("" as CV[K]);
 
@@ -131,22 +142,33 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
       sectionVisible("objective") && visible("objective")
         ? cv.objectif_format
         : { html: "", alignment: "", fontSize: 15, color: "" },
-    competences: sectionVisible("skills")
-      ? cv.competences.filter((_, index) => visible(`skills.${index}`))
-      : [],
+    competences: visibleList(cv.competences, "skills", "skills"),
+    competences_format: visibleListFormat(
+      cv.competences,
+      "skills",
+      "skills",
+      cv.competences_format,
+    ),
     langues,
     experiences,
     formations,
     educations,
-    participations: sectionVisible("volunteering")
-      ? cv.participations.filter((_, index) => visible(`participations.${index}`))
-      : [],
-    certifications: sectionVisible("certifications")
-      ? cv.certifications.filter((_, index) => visible(`certifications.${index}`))
-      : [],
-    interets: sectionVisible("interests")
-      ? cv.interets.filter((_, index) => visible(`interets.${index}`))
-      : [],
+    participations: visibleList(cv.participations, "volunteering", "participations"),
+    participations_format: visibleListFormat(
+      cv.participations,
+      "volunteering",
+      "participations",
+      cv.participations_format,
+    ),
+    certifications: visibleList(cv.certifications, "certifications", "certifications"),
+    certifications_format: visibleListFormat(
+      cv.certifications,
+      "certifications",
+      "certifications",
+      cv.certifications_format,
+    ),
+    interets: visibleList(cv.interets, "interests", "interets"),
+    interets_format: visibleListFormat(cv.interets, "interests", "interets", cv.interets_format),
     references: sectionVisible("references")
       ? cv.references.filter((_, index) => visible(`references.${index}`))
       : [],

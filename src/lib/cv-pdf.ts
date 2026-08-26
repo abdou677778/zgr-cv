@@ -11,6 +11,7 @@ import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
 import { CV_TEMPLATES, type CvTemplateId } from "./document-templates";
+import { toPdfRtlVisualText } from "./arabic-pdf-text";
 import pdfMake from "pdfmake/build/pdfmake";
 import calibriRegularUrl from "@/assets/fonts/Calibri.ttf?inline";
 import calibriItalicUrl from "@/assets/fonts/Calibriitalic.ttf?inline";
@@ -2531,7 +2532,7 @@ function arabicProContact(
   } as Content;
   const textNode = {
     width: "auto",
-    text: arabicProSafeText(text, rtl),
+    text: arabicProPdfText(text, rtl, 30),
     fontSize: 7.8,
     bold: true,
     color: ARABIC_PRO_DARK,
@@ -2639,7 +2640,7 @@ function arabicProSectionTitle(parts: readonly [string, string], rtl: boolean): 
   return {
     stack: [
       {
-        text: arabicProSafeText(title, rtl),
+        text: arabicProPdfText(title, rtl, 34),
         color: ARABIC_PRO_ACCENT,
         bold: true,
         fontSize: 11.8,
@@ -2667,6 +2668,10 @@ function arabicProSectionTitle(parts: readonly [string, string], rtl: boolean): 
 function arabicProSafeText(text: string, rtl: boolean) {
   if (!rtl) return text;
   const technicalTerms: ReadonlyArray<readonly [RegExp, string]> = [
+    [/TechNova Solutions/gi, "تك نوفا سوليوشنز"],
+    [/DigitalDZ Studio/gi, "ديجيتال دي زد ستوديو"],
+    [/Startup InnovIT/gi, "ستارت أب إنوفيت"],
+    [/USTHB/gi, "يو إس تي إتش بي"],
     [/Node\.js/gi, "نود جي إس"],
     [/JavaScript/gi, "جافاسكريبت"],
     [/TypeScript/gi, "تايب سكريبت"],
@@ -2696,6 +2701,15 @@ function arabicProSafeText(text: string, rtl: boolean) {
   return localized.replace(/[A-Za-z][A-Za-z0-9.+/#-]*/g, (token) => `\u200e${token}\u200e`);
 }
 
+function arabicProPdfText(text: string, rtl: boolean, maxLineLength = 82) {
+  const safeText = arabicProSafeText(text, rtl);
+  return rtl ? toPdfRtlVisualText(safeText, maxLineLength) : safeText;
+}
+
+function arabicProPlainInline(text: RichInline) {
+  return typeof text === "string" ? text : text.map((run) => run.text).join("");
+}
+
 function arabicProDate(value: string, language: DocumentLanguage, rtl: boolean) {
   const formatted = formatCvDate(value, language);
   if (!rtl) return formatted;
@@ -2711,19 +2725,27 @@ function arabicProBullet(text: RichInline, rtl: boolean, experience?: Experience
     alignment: "center",
     margin: [0, 0, 0, 0],
   } as Content;
-  const body = experience
-    ? achievementText(experience, text, 7.35, {
+  const body = rtl
+    ? ({
         width: "*",
-        alignment: rtl ? "right" : "left",
-        lineHeight: 1.08,
-      })
-    : ({
-        width: "*",
-        text: arabicProSafeText(String(text), rtl),
-        alignment: rtl ? "right" : "left",
+        text: arabicProPdfText(arabicProPlainInline(text), true, 76),
+        alignment: "right",
         fontSize: 7.35,
         lineHeight: 1.08,
-      } as Content);
+      } as Content)
+    : experience
+      ? achievementText(experience, text, 7.35, {
+          width: "*",
+          alignment: rtl ? "right" : "left",
+          lineHeight: 1.08,
+        })
+      : ({
+          width: "*",
+          text: arabicProPdfText(arabicProPlainInline(text), false, 76),
+          alignment: rtl ? "right" : "left",
+          fontSize: 7.35,
+          lineHeight: 1.08,
+        } as Content);
   return {
     columns: rtl ? [body, marker] : [marker, body],
     columnGap: 3,
@@ -2737,17 +2759,12 @@ function arabicProExperience(
   rtl: boolean,
   bulletLimit = 2,
 ): Content {
-  const descriptions = experienceRichDescriptions(experience, (text) =>
-    arabicProSafeText(text, rtl),
-  );
+  const descriptions = experienceRichDescriptions(experience);
   const main = {
     width: "*",
     stack: [
       {
-        text: arabicProSafeText(
-          rtl ? (experience.titre || " ").replaceAll(" ", "\u00a0") : experience.titre || " ",
-          rtl,
-        ),
+        text: arabicProPdfText(experience.titre || " ", rtl, 55),
         bold: true,
         fontSize: 9.1,
         color: ARABIC_PRO_DARK,
@@ -2755,7 +2772,11 @@ function arabicProExperience(
       },
       companyLine(
         experience,
-        arabicProSafeText([experience.employeur, experience.lieu].filter(Boolean).join(", "), rtl),
+        arabicProPdfText(
+          [experience.employeur, experience.lieu].filter(Boolean).join(", "),
+          rtl,
+          68,
+        ),
         8,
         {
           color: ARABIC_PRO_MUTED,
@@ -2772,13 +2793,13 @@ function arabicProExperience(
     width: 92,
     stack: [
       {
-        text: arabicProSafeText(arabicProDate(experience.dates || "", language, rtl), rtl),
+        text: arabicProPdfText(arabicProDate(experience.dates || "", language, rtl), rtl, 28),
         color: ARABIC_PRO_MUTED,
         fontSize: 7.2,
         alignment: rtl ? "left" : "right",
       },
       {
-        text: arabicProSafeText(experience.lieu || "", rtl),
+        text: arabicProPdfText(experience.lieu || "", rtl, 28),
         color: ARABIC_PRO_MUTED,
         fontSize: 7.2,
         alignment: rtl ? "left" : "right",
@@ -2807,24 +2828,21 @@ function arabicProEducation(
     width: "*",
     stack: [
       {
-        text: arabicProSafeText(
-          rtl ? (item.titre || " ").replaceAll(" ", "\u00a0") : item.titre || " ",
-          rtl,
-        ),
+        text: arabicProPdfText(item.titre || " ", rtl, 58),
         bold: true,
         fontSize: 8.6,
         color: ARABIC_PRO_DARK,
         alignment: rtl ? "right" : "left",
       },
       {
-        text: arabicProSafeText([item.institution, item.lieu].filter(Boolean).join(", "), rtl),
+        text: arabicProPdfText([item.institution, item.lieu].filter(Boolean).join(", "), rtl, 68),
         color: ARABIC_PRO_MUTED,
         fontSize: 7.1,
         alignment: rtl ? "right" : "left",
         margin: [0, 0.2, 0, 0.4],
       },
       ...detail.slice(0, 1).map((text) => ({
-        text: arabicProSafeText(text, rtl),
+        text: arabicProPdfText(text, rtl, 72),
         alignment: rtl ? "right" : "left",
         fontSize: 7,
         lineHeight: 1.05,
@@ -2836,13 +2854,13 @@ function arabicProEducation(
     width: 92,
     stack: [
       {
-        text: arabicProSafeText(arabicProDate(item.date || "", language, rtl), rtl),
+        text: arabicProPdfText(arabicProDate(item.date || "", language, rtl), rtl, 28),
         color: ARABIC_PRO_MUTED,
         fontSize: 7.1,
         alignment: rtl ? "left" : "right",
       },
       {
-        text: arabicProSafeText(item.lieu || "", rtl),
+        text: arabicProPdfText(item.lieu || "", rtl, 28),
         color: ARABIC_PRO_MUTED,
         fontSize: 7.1,
         alignment: rtl ? "left" : "right",
@@ -2870,21 +2888,30 @@ function arabicProGrid(
     rows.push({
       columns: [
         ...row.map((item) => {
-          const body = format
-            ? richListText(format, item, 7, {
+          const body = rtl
+            ? ({
                 width: "*",
-                bold: true,
-                alignment: rtl ? "right" : "left",
-                margin: [0, 0, 4, 1],
-              })
-            : ({
-                width: "*",
-                text: arabicProSafeText(String(item), rtl),
+                text: arabicProPdfText(arabicProPlainInline(item), true, columns >= 4 ? 24 : 46),
                 bold: true,
                 fontSize: 7,
-                alignment: rtl ? "right" : "left",
+                alignment: "right",
                 margin: [0, 0, 4, 1],
-              } as Content);
+              } as Content)
+            : format
+              ? richListText(format, item, 7, {
+                  width: "*",
+                  bold: true,
+                  alignment: rtl ? "right" : "left",
+                  margin: [0, 0, 4, 1],
+                })
+              : ({
+                  width: "*",
+                  text: arabicProPdfText(arabicProPlainInline(item), false, 46),
+                  bold: true,
+                  fontSize: 7,
+                  alignment: rtl ? "right" : "left",
+                  margin: [0, 0, 4, 1],
+                } as Content);
           const marker = {
             width: 6,
             text: "•",
@@ -2928,13 +2955,13 @@ function arabicProLanguages(cv: CV, language: DocumentLanguage, rtl: boolean): C
             width: "*",
             stack: [
               {
-                text: arabicProSafeText(name, rtl),
+                text: arabicProPdfText(name, rtl, 22),
                 bold: true,
                 fontSize: 7.1,
                 alignment: rtl ? "right" : "left",
               },
               {
-                text: arabicProSafeText(value as string, rtl),
+                text: arabicProPdfText(value as string, rtl, 24),
                 color: ARABIC_PRO_MUTED,
                 fontSize: 6.8,
                 alignment: rtl ? "right" : "left",
@@ -2970,10 +2997,7 @@ function buildCvPdfArabicProV1(cv: CV, language: DocumentLanguage): TDocumentDef
     {
       stack: [
         {
-          text: arabicProSafeText(
-            rtl ? (cv.nom_complet || " ").replaceAll(" ", "\u00a0") : cv.nom_complet || " ",
-            rtl,
-          ),
+          text: arabicProPdfText(cv.nom_complet || " ", rtl, 44),
           bold: true,
           fontSize: 20,
           color: ARABIC_PRO_DARK,
@@ -2981,10 +3005,7 @@ function buildCvPdfArabicProV1(cv: CV, language: DocumentLanguage): TDocumentDef
           lineHeight: 1.05,
         },
         {
-          text: arabicProSafeText(
-            rtl ? (cv.titre_poste || " ").replaceAll(" ", "\u00a0") : cv.titre_poste || " ",
-            rtl,
-          ),
+          text: arabicProPdfText(cv.titre_poste || " ", rtl, 48),
           bold: true,
           fontSize: 10.2,
           color: ARABIC_PRO_ACCENT,
@@ -3048,12 +3069,12 @@ function buildCvPdfArabicProV1(cv: CV, language: DocumentLanguage): TDocumentDef
     pushSection(labels.objective, [
       objectivePdfContent(
         cv,
-        7.65,
+        8.8,
         {
           alignment: rtl ? "right" : "left",
-          lineHeight: 1.08,
+          lineHeight: rtl ? 1.2 : 1.08,
         },
-        (text) => arabicProSafeText(text, rtl),
+        (text) => arabicProPdfText(text, rtl, 88),
       ),
     ]);
   }
@@ -3074,23 +3095,17 @@ function buildCvPdfArabicProV1(cv: CV, language: DocumentLanguage): TDocumentDef
     education.map((item) => arabicProEducation(item, language, rtl)),
   );
 
-  const skills = richListItems(cv.competences, cv.competences_format, (text) =>
-    arabicProSafeText(text, rtl),
-  ).slice(0, 4);
+  const skills = richListItems(cv.competences, cv.competences_format).slice(0, 4);
   if (skills.length)
     pushSection(labels.skills, [arabicProGrid(skills, rtl, 4, cv.competences_format)]);
 
-  const participations = richListItems(cv.participations, cv.participations_format, (text) =>
-    arabicProSafeText(text, rtl),
-  );
+  const participations = richListItems(cv.participations, cv.participations_format);
   if (participations.length)
     pushSection(labels.participation, [
       arabicProGrid(participations, rtl, 2, cv.participations_format),
     ]);
 
-  const certifications = richListItems(cv.certifications, cv.certifications_format, (text) =>
-    arabicProSafeText(text, rtl),
-  );
+  const certifications = richListItems(cv.certifications, cv.certifications_format);
   if (certifications.length)
     pushSection(labels.certifications, [
       arabicProGrid(certifications, rtl, 2, cv.certifications_format),
@@ -3099,9 +3114,7 @@ function buildCvPdfArabicProV1(cv: CV, language: DocumentLanguage): TDocumentDef
   const languages = cvLanguages(cv, language, false);
   if (languages.length) pushSection(labels.languages, [arabicProLanguages(cv, language, rtl)]);
 
-  const interests = richListItems(cv.interets, cv.interets_format, (text) =>
-    arabicProSafeText(text, rtl),
-  );
+  const interests = richListItems(cv.interets, cv.interets_format);
   if (interests.length)
     pushSection(labels.interests, [arabicProGrid(interests, rtl, 4, cv.interets_format)]);
 

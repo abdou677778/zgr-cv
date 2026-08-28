@@ -17,10 +17,15 @@ import calibriRegularUrl from "@/assets/fonts/Calibri.ttf?inline";
 import calibriItalicUrl from "@/assets/fonts/Calibriitalic.ttf?inline";
 import calibriBoldUrl from "@/assets/fonts/Calibribold.ttf?inline";
 import calibriBoldItalicUrl from "@/assets/fonts/Calibribolditalic.ttf?inline";
+import calibriSuppliedRegularUrl from "@/assets/fonts/CalibriSupplied-Regular.ttf?inline";
+import calibriSuppliedBoldUrl from "@/assets/fonts/CalibriSupplied-Bold.ttf?inline";
+import calibriSuppliedItalicUrl from "@/assets/fonts/CalibriSupplied-Italic.ttf?inline";
+import calibriSuppliedBoldItalicUrl from "@/assets/fonts/CalibriSupplied-BoldItalic.ttf?inline";
 import cambriaRegularUrl from "@/assets/fonts/CambriaRegular.ttf?inline";
 import cambriaBoldUrl from "@/assets/fonts/CambriaBold.ttf?inline";
 import notoSansScUrl from "@/assets/fonts/NotoSansSC-VF.ttf?inline";
-import notoSansArabicUrl from "@/assets/fonts/NotoSansArabic-VF.ttf?inline";
+import notoSansArabicRegularUrl from "@/assets/fonts/NotoSansArabic-Regular.ttf?inline";
+import notoSansArabicBoldUrl from "@/assets/fonts/NotoSansArabic-Bold.ttf?inline";
 import hacenTunisiaUrl from "@/assets/fonts/HacenTunisia.ttf?inline";
 
 const ACCENT = "#111827";
@@ -64,10 +69,15 @@ const FONT_FILES = {
   "Calibriitalic.ttf": calibriItalicUrl,
   "Calibribold.ttf": calibriBoldUrl,
   "Calibribolditalic.ttf": calibriBoldItalicUrl,
+  "CalibriSupplied-Regular.ttf": calibriSuppliedRegularUrl,
+  "CalibriSupplied-Bold.ttf": calibriSuppliedBoldUrl,
+  "CalibriSupplied-Italic.ttf": calibriSuppliedItalicUrl,
+  "CalibriSupplied-BoldItalic.ttf": calibriSuppliedBoldItalicUrl,
   "CambriaRegular.ttf": cambriaRegularUrl,
   "CambriaBold.ttf": cambriaBoldUrl,
   "NotoSansSC-VF.ttf": notoSansScUrl,
-  "NotoSansArabic-VF.ttf": notoSansArabicUrl,
+  "NotoSansArabic-Regular.ttf": notoSansArabicRegularUrl,
+  "NotoSansArabic-Bold.ttf": notoSansArabicBoldUrl,
   "HacenTunisia.ttf": hacenTunisiaUrl,
 } as const;
 
@@ -77,6 +87,12 @@ const CV_FONTS: TFontDictionary = {
     bold: "Calibribold.ttf",
     italics: "Calibriitalic.ttf",
     bolditalics: "Calibribolditalic.ttf",
+  },
+  CalibriSupplied: {
+    normal: "CalibriSupplied-Regular.ttf",
+    bold: "CalibriSupplied-Bold.ttf",
+    italics: "CalibriSupplied-Italic.ttf",
+    bolditalics: "CalibriSupplied-BoldItalic.ttf",
   },
   Cambria: {
     normal: "CambriaRegular.ttf",
@@ -91,10 +107,10 @@ const CV_FONTS: TFontDictionary = {
     bolditalics: "NotoSansSC-VF.ttf",
   },
   NotoSansArabic: {
-    normal: "NotoSansArabic-VF.ttf",
-    bold: "NotoSansArabic-VF.ttf",
-    italics: "NotoSansArabic-VF.ttf",
-    bolditalics: "NotoSansArabic-VF.ttf",
+    normal: "NotoSansArabic-Regular.ttf",
+    bold: "NotoSansArabic-Bold.ttf",
+    italics: "NotoSansArabic-Regular.ttf",
+    bolditalics: "NotoSansArabic-Bold.ttf",
   },
   HacenTunisia: {
     normal: "HacenTunisia.ttf",
@@ -2534,7 +2550,7 @@ function arabicProContact(
   const textNode = {
     width: "auto",
     text: textIsArabic ? arabicProPdfText(text, rtl, 30) : text,
-    font: textIsArabic ? "NotoSansArabic" : "Calibri",
+    font: textIsArabic ? "NotoSansArabic" : "CalibriSupplied",
     fontSize: 7.8,
     bold: true,
     color: ARABIC_PRO_DARK,
@@ -2769,7 +2785,11 @@ function arabicAtsTextLayers(cv: CV): Content[] {
   };
   return [
     { ...common, font: "HacenTunisia", text } as Content,
-    { ...common, font: "Calibri", text: [cv.email, cv.telephone].filter(Boolean).join("\n") } as Content,
+    {
+      ...common,
+      font: "CalibriSupplied",
+      text: [cv.email, cv.telephone].filter(Boolean).join("\n"),
+    } as Content,
   ];
 }
 
@@ -3241,7 +3261,7 @@ function arabicProPlainContactLine(cv: CV): Content {
           const isArabic = /\p{Script=Arabic}/u.test(value);
           return {
             text: isArabic ? arabicProPdfText(value, true, 34) : value,
-            font: isArabic ? "NotoSansArabic" : "Calibri",
+            font: isArabic ? "NotoSansArabic" : "CalibriSupplied",
             fontSize: 7.5,
             alignment: "center",
             color: ARABIC_PRO_DARK,
@@ -3504,8 +3524,8 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         body: [
           [
             {
-              text: [cv.email, cv.telephone, cv.adresse || cv.wilaya].filter(Boolean).join("  |  "),
-              font: "Calibri",
+              text: [cv.email, cv.telephone].filter(Boolean).join("  |  "),
+              font: "CalibriSupplied",
               fontSize: 8.7,
               alignment: "center",
               color: "#222222",
@@ -3752,7 +3772,7 @@ function buildCvPdfArabicProV4(cv: CV, language: DocumentLanguage): TDocumentDef
                     const valueIsArabic = /\p{Script=Arabic}/u.test(value);
                     return {
                       text: valueIsArabic ? arabicProPdfText(value, rtl, 34) : value,
-                      font: valueIsArabic ? "NotoSansArabic" : "Calibri",
+                      font: valueIsArabic ? "NotoSansArabic" : "CalibriSupplied",
                       color: "#ffffff",
                       fillColor: ARABIC_V4_BLUE,
                       fontSize: 7.1,

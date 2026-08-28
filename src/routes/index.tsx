@@ -67,6 +67,10 @@ import {
   type PdfTemplateId,
 } from "@/lib/document-pdf";
 import {
+  isArabicCvTemplate,
+  normalizeCvTemplateForLanguage,
+} from "@/lib/document-templates";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -236,9 +240,9 @@ const UI_COPY = {
     downloadCurrent: "Modèle actuel · 7 langues (.zip)",
     downloadCurrentHint: "FR · EN · ES · DE · IT · 中文 · AR",
     downloadPack: "Télécharger le pack complet (.zip)",
-    downloadPackHint: "84 PDF · 12 modèles × 7 langues",
+    downloadPackHint: "81 PDF · modèles arabes réservés à l’arabe",
     preparingPack: "Création du pack",
-    packReady: "Pack multilingue téléchargé : 84 PDF dans 7 langues.",
+    packReady: "Pack téléchargé : 81 PDF, dont 4 modèles arabes dédiés.",
     currentPackReady: "Modèle actuel téléchargé dans les 7 langues.",
     packError: "Impossible de créer le pack complet.",
     resetConfirm: "Réinitialiser les données françaises ?",
@@ -278,9 +282,9 @@ const UI_COPY = {
     downloadCurrent: "Current template · 7 languages (.zip)",
     downloadCurrentHint: "FR · EN · ES · DE · IT · 中文 · AR",
     downloadPack: "Download complete pack (.zip)",
-    downloadPackHint: "84 PDFs · 12 templates × 7 languages",
+    downloadPackHint: "81 PDFs · Arabic templates are Arabic-only",
     preparingPack: "Building pack",
-    packReady: "Multilingual pack downloaded: 84 PDFs in 7 languages.",
+    packReady: "Pack downloaded: 81 PDFs, including 4 dedicated Arabic templates.",
     currentPackReady: "Current template downloaded in all 7 languages.",
     packError: "Unable to create the complete pack.",
     resetConfirm: "Reset the English data?",
@@ -388,7 +392,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfError, setPdfError] = useState("");
   const [packLoading, setPackLoading] = useState(false);
-  const [packProgress, setPackProgress] = useState({ completed: 0, total: 84 });
+  const [packProgress, setPackProgress] = useState({ completed: 0, total: 81 });
   const [packMessage, setPackMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [importMessage, setImportMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettings>(() => defaultAiSettings());
@@ -403,13 +407,25 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const pdfUrlRef = useRef<string | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const cv = cvByLanguage[language];
-  const templates = getTemplates(documentKind);
-  const themeTemplateId = templateId as ThemeTemplateId;
-  const accentColor = templateColors[themeTemplateId];
+  const templates = getTemplates(documentKind, documentKind === "cv" ? language : undefined);
+  const themeTemplateId = (
+    Object.prototype.hasOwnProperty.call(TEMPLATE_DEFAULT_COLORS, templateId)
+      ? templateId
+      : defaultTemplateFor(documentKind)
+  ) as ThemeTemplateId;
+  const accentColor = templateColors[themeTemplateId] ?? TEMPLATE_DEFAULT_COLORS[themeTemplateId];
   const paletteColors = paletteForTemplate(themeTemplateId);
   // Language buttons translate only the form values and the generated document.
   // The application shell deliberately remains in French for a stable workflow.
   const ui = { ...UI_COPY.fr, ...INTERFACE_COPY.fr };
+  const currentTemplateIsArabicOnly =
+    documentKind === "cv" && isArabicCvTemplate(templateId);
+  const currentArchiveLabel = currentTemplateIsArabicOnly
+    ? "Modèle arabe actuel · AR (.zip)"
+    : ui.downloadCurrent;
+  const currentArchiveHint = currentTemplateIsArabicOnly
+    ? "Export arabe uniquement"
+    : ui.downloadCurrentHint;
   const form = FORM_COPY.fr;
   const outputCv = useMemo(() => applyCvVisibility(cv, hiddenElements), [cv, hiddenElements]);
   const outputCvByLanguage = useMemo(
@@ -435,6 +451,20 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const next = typeof value === "function" ? value(active) : value;
       return { ...current, [language]: next };
     });
+
+  useEffect(() => {
+    const availableTemplates = getTemplates(
+      documentKind,
+      documentKind === "cv" ? language : undefined,
+    );
+    const nextTemplate =
+      documentKind === "cv"
+        ? normalizeCvTemplateForLanguage(templateId, language)
+        : availableTemplates.some((template) => template.id === templateId)
+          ? templateId
+          : defaultTemplateFor(documentKind);
+    if (nextTemplate !== templateId) setTemplateId(nextTemplate);
+  }, [documentKind, language, templateId]);
 
   useEffect(() => {
     try {
@@ -502,7 +532,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           };
           if (settings.documentKind && settings.templateId) {
             setDocumentKind(settings.documentKind);
-            setTemplateId(settings.templateId);
+            setTemplateId(
+              String(settings.templateId) === "arabic-pro-v1"
+                ? "arabic-pro-v2"
+                : settings.templateId,
+            );
           }
         } catch {
           if (getTemplates("cv").some((template) => template.id === savedTemplate)) {
@@ -960,7 +994,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const downloadCompletePack = async () => {
     if (packLoading) return;
     setPackLoading(true);
-    setPackProgress({ completed: 0, total: 84 });
+    setPackProgress({ completed: 0, total: 81 });
     setPackMessage(null);
     try {
       const blob = await createCompletePackZip(
@@ -983,7 +1017,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const downloadCurrentMultilingual = async () => {
     if (packLoading) return;
     setPackLoading(true);
-    setPackProgress({ completed: 0, total: DOCUMENT_LANGUAGES.length });
+    setPackProgress({
+      completed: 0,
+      total: currentTemplateIsArabicOnly ? 1 : DOCUMENT_LANGUAGES.length,
+    });
     setPackMessage(null);
     try {
       const blob = await createCurrentTemplateMultilingualZip(
@@ -994,7 +1031,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         accentColor,
       );
       downloadCurrentMultilingualArchive(blob, cv);
-      setPackMessage({ ok: true, text: ui.currentPackReady });
+      setPackMessage({
+        ok: true,
+        text: currentTemplateIsArabicOnly
+          ? "Modèle arabe téléchargé en version AR."
+          : ui.currentPackReady,
+      });
     } catch (error) {
       console.error(error);
       setPackMessage({ ok: false, text: ui.packError });
@@ -1285,8 +1327,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 >
                   <FileDown className="mt-0.5" />
                   <span className="flex flex-col">
-                    <span className="font-medium">{ui.downloadCurrent}</span>
-                    <span className="text-xs text-muted-foreground">{ui.downloadCurrentHint}</span>
+                    <span className="font-medium">{currentArchiveLabel}</span>
+                    <span className="text-xs text-muted-foreground">{currentArchiveHint}</span>
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem

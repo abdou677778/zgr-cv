@@ -3559,16 +3559,26 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
               columns: [
                 {
                   width: 140,
-                  text: [
+                  columns: [
                     {
+                      width: "*",
+                      text: cv.telephone || " ",
+                      font: "CalibriSupplied",
+                      fontSize: 9,
+                      alignment: "right",
+                      noWrap: true,
+                    },
+                    {
+                      width: "auto",
                       text: arabicProPdfText("الهاتف:", true, 16),
                       font: "NotoSansArabic",
+                      fontSize: 9,
                       bold: true,
+                      alignment: "right",
+                      noWrap: true,
                     },
-                    { text: `\u00a0${cv.telephone}`, font: "CalibriSupplied" },
                   ],
-                  fontSize: 8,
-                  alignment: "center",
+                  columnGap: 3,
                 },
                 {
                   width: 8,
@@ -3579,17 +3589,27 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
                   alignment: "center",
                 },
                 {
-                  width: 175,
-                  text: [
+                  width: 205,
+                  columns: [
                     {
+                      width: "*",
+                      text: cv.email || " ",
+                      font: "CalibriSupplied",
+                      fontSize: 9,
+                      alignment: "right",
+                      noWrap: true,
+                    },
+                    {
+                      width: "auto",
                       text: arabicProPdfText("البريد الإلكتروني:", true, 28),
                       font: "NotoSansArabic",
+                      fontSize: 9,
                       bold: true,
+                      alignment: "right",
+                      noWrap: true,
                     },
-                    { text: `\u00a0${cv.email}`, font: "CalibriSupplied" },
                   ],
-                  fontSize: 8,
-                  alignment: "center",
+                  columnGap: 3,
                 },
                 {
                   width: 8,
@@ -3600,24 +3620,31 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
                   alignment: "center",
                 },
                 {
-                  width: 208,
-                  text: [
+                  width: 178,
+                  columns: [
                     {
+                      width: "*",
+                      text: arabicProPdfText(cv.adresse || cv.wilaya, true, 44),
+                      font: "NotoSansArabic",
+                      fontSize: 8.8,
+                      alignment: "right",
+                      noWrap: true,
+                    },
+                    {
+                      width: "auto",
                       text: arabicProPdfText("العنوان:", true, 16),
                       font: "NotoSansArabic",
+                      fontSize: 9,
                       bold: true,
-                    },
-                    {
-                      text: `\u00a0${arabicProPdfText(cv.adresse || cv.wilaya, true, 44)}`,
-                      font: "NotoSansArabic",
+                      alignment: "right",
+                      noWrap: true,
                     },
                   ],
-                  fontSize: 7.8,
-                  alignment: "center",
+                  columnGap: 3,
                 },
               ],
               columnGap: 0,
-              margin: [0, 2.2, 0, 2.2],
+              margin: [0, 4.2, 0, 4.2],
             },
           ],
         ],

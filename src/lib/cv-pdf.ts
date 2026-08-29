@@ -3523,6 +3523,69 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     } as Content;
   };
 
+  // Build the V5 contact band from data instead of fixed slots. New contact
+  // entries can be appended here and will automatically share the same row.
+  const contactEntries = [
+    { label: "الهاتف:", value: cv.telephone, latin: true },
+    { label: "البريد الإلكتروني:", value: cv.email, latin: true },
+    { label: "العنوان:", value: cv.adresse || cv.wilaya, latin: false },
+  ].filter((entry) => entry.value.trim());
+  const separatorWidth = 10;
+  const contactBandWidth = 539;
+  const usableContactWidth =
+    contactBandWidth - Math.max(0, contactEntries.length - 1) * separatorWidth;
+  const contactWeights = contactEntries.map((entry) =>
+    Math.max(
+      20,
+      Array.from(entry.value).length * 0.55 + Array.from(entry.label).length * 0.75,
+    ),
+  );
+  const totalContactWeight = contactWeights.reduce((sum, weight) => sum + weight, 0) || 1;
+  const contactColumns: Content[] = [];
+  contactEntries.forEach((entry, index) => {
+    const groupWidth = usableContactWidth * (contactWeights[index] / totalContactWeight);
+    const labelWidth = Math.min(groupWidth * 0.43, Array.from(entry.label).length * 4.6 + 4);
+    const valueWidth = Math.max(28, groupWidth - labelWidth - 3);
+    contactColumns.push({
+      width: groupWidth,
+      columns: [
+        {
+          width: valueWidth,
+          text: entry.latin
+            ? entry.value
+            : arabicProPdfText(entry.value, true, Math.max(20, Array.from(entry.value).length)),
+          font: entry.latin ? "CalibriSupplied" : "NotoSansArabic",
+          fontSize: entry.latin ? 9.6 : 9,
+          alignment: "right",
+          noWrap: true,
+          // Calibri sits higher than Noto Sans Arabic at the same nominal size.
+          margin: entry.latin ? [0, 2.35, 0, 0] : [0, 0, 0, 0],
+        },
+        {
+          width: labelWidth,
+          text: arabicProPdfText(entry.label, true, 28),
+          font: "NotoSansArabic",
+          fontSize: 9.2,
+          bold: true,
+          alignment: "left",
+          noWrap: true,
+        },
+      ],
+      columnGap: 3,
+    } as Content);
+    if (index < contactEntries.length - 1) {
+      contactColumns.push({
+        width: separatorWidth,
+        text: "|",
+        font: "CalibriSupplied",
+        fontSize: 10.5,
+        bold: true,
+        alignment: "center",
+        margin: [0, 1.1, 0, 0],
+      } as Content);
+    }
+  });
+
   const nameParts = cv.nom_complet.trim().split(/\s+/).filter(Boolean);
   const firstName = nameParts.shift() || " ";
   const familyName = nameParts.join(" ") || " ";
@@ -3556,100 +3619,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         body: [
           [
             {
-              columns: [
-                {
-                  width: 140,
-                  columns: [
-                    {
-                      width: 86,
-                      text: cv.telephone || " ",
-                      font: "CalibriSupplied",
-                      fontSize: 9.6,
-                      alignment: "right",
-                      noWrap: true,
-                      margin: [0, 1.15, 0, 0],
-                    },
-                    {
-                      width: 44,
-                      text: arabicProPdfText("الهاتف:", true, 16),
-                      font: "NotoSansArabic",
-                      fontSize: 9.2,
-                      bold: true,
-                      alignment: "left",
-                      noWrap: true,
-                    },
-                  ],
-                  columnGap: 3,
-                  margin: [3.5, 0, 3.5, 0],
-                },
-                {
-                  width: 8,
-                  text: "|",
-                  font: "CalibriSupplied",
-                  fontSize: 10.5,
-                  bold: true,
-                  alignment: "center",
-                  margin: [0, 0.3, 0, 0],
-                },
-                {
-                  width: 205,
-                  columns: [
-                    {
-                      width: 125,
-                      text: cv.email || " ",
-                      font: "CalibriSupplied",
-                      fontSize: 9.6,
-                      alignment: "right",
-                      noWrap: true,
-                      margin: [0, 1.15, 0, 0],
-                    },
-                    {
-                      width: 75,
-                      text: arabicProPdfText("البريد الإلكتروني:", true, 28),
-                      font: "NotoSansArabic",
-                      fontSize: 9.2,
-                      bold: true,
-                      alignment: "left",
-                      noWrap: true,
-                    },
-                  ],
-                  columnGap: 3,
-                  margin: [1, 0, 1, 0],
-                },
-                {
-                  width: 8,
-                  text: "|",
-                  font: "CalibriSupplied",
-                  fontSize: 10.5,
-                  bold: true,
-                  alignment: "center",
-                  margin: [0, 0.3, 0, 0],
-                },
-                {
-                  width: 178,
-                  columns: [
-                    {
-                      width: 123,
-                      text: arabicProPdfText(cv.adresse || cv.wilaya, true, 44),
-                      font: "NotoSansArabic",
-                      fontSize: 9,
-                      alignment: "right",
-                      noWrap: true,
-                    },
-                    {
-                      width: 48,
-                      text: arabicProPdfText("العنوان:", true, 16),
-                      font: "NotoSansArabic",
-                      fontSize: 9.2,
-                      bold: true,
-                      alignment: "left",
-                      noWrap: true,
-                    },
-                  ],
-                  columnGap: 3,
-                  margin: [2, 0, 2, 0],
-                },
-              ],
+              columns: contactColumns,
               columnGap: 0,
               margin: [0, 4.2, 0, 4.2],
             },

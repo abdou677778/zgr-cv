@@ -23,7 +23,6 @@ import calibriSuppliedItalicUrl from "@/assets/fonts/CalibriSupplied-Italic.ttf?
 import calibriSuppliedBoldItalicUrl from "@/assets/fonts/CalibriSupplied-BoldItalic.ttf?inline";
 import cambriaRegularUrl from "@/assets/fonts/CambriaRegular.ttf?inline";
 import cambriaBoldUrl from "@/assets/fonts/CambriaBold.ttf?inline";
-import notoSansScUrl from "@/assets/fonts/NotoSansSC-VF.ttf?inline";
 import notoSansArabicRegularUrl from "@/assets/fonts/NotoSansArabic-Regular.ttf?inline";
 import notoSansArabicBoldUrl from "@/assets/fonts/NotoSansArabic-Bold.ttf?inline";
 import hacenTunisiaUrl from "@/assets/fonts/HacenTunisia.ttf?inline";
@@ -60,6 +59,7 @@ const V2_ACCENT = "#953735";
 const V2_MUTED = "#595959";
 const V2_BANNER_BG = "#f2f2f2";
 let fontsRegistered = false;
+let chineseFontRegistered = false;
 
 export { CV_TEMPLATES };
 export type { CvTemplateId };
@@ -75,7 +75,6 @@ const FONT_FILES = {
   "CalibriSupplied-BoldItalic.ttf": calibriSuppliedBoldItalicUrl,
   "CambriaRegular.ttf": cambriaRegularUrl,
   "CambriaBold.ttf": cambriaBoldUrl,
-  "NotoSansSC-VF.ttf": notoSansScUrl,
   "NotoSansArabic-Regular.ttf": notoSansArabicRegularUrl,
   "NotoSansArabic-Bold.ttf": notoSansArabicBoldUrl,
   "HacenTunisia.ttf": hacenTunisiaUrl,
@@ -140,6 +139,17 @@ function ensureFonts() {
   pdfMake.addVirtualFileSystem(vfs);
   pdfMake.addFonts(CV_FONTS);
   fontsRegistered = true;
+}
+
+async function ensureFontsForLanguage(language: DocumentLanguage) {
+  ensureFonts();
+  if (language !== "zh" || chineseFontRegistered) return;
+
+  const { default: notoSansScUrl } = await import("@/assets/fonts/NotoSansSC-VF.ttf?inline");
+  pdfMake.addVirtualFileSystem({
+    "NotoSansSC-VF.ttf": getBase64Data(notoSansScUrl),
+  });
+  chineseFontRegistered = true;
 }
 
 type ObjectiveRun = {
@@ -3893,7 +3903,7 @@ export async function createCvPdfBlob(
   language: DocumentLanguage = "fr",
   accentColor?: string,
 ): Promise<Blob> {
-  ensureFonts();
+  await ensureFontsForLanguage(language);
   const document =
     templateId === "arabic-pro-v4"
       ? buildCvPdfArabicProV4(cv, language)

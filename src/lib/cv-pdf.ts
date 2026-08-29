@@ -3530,22 +3530,29 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     { label: "البريد الإلكتروني:", value: cv.email, latin: true },
     { label: "العنوان:", value: cv.adresse || cv.wilaya, latin: false },
   ].filter((entry) => entry.value.trim());
-  const separatorWidth = 10;
+  const separatorWidth = 16;
   const contactBandWidth = 539;
   const usableContactWidth =
     contactBandWidth - Math.max(0, contactEntries.length - 1) * separatorWidth;
-  const contactWeights = contactEntries.map((entry) =>
-    Math.max(
-      20,
-      Array.from(entry.value).length * 0.55 + Array.from(entry.label).length * 0.75,
-    ),
-  );
+  const contactFontSize = Math.max(7.4, 8.8 - Math.max(0, contactEntries.length - 3) * 0.5);
+  const contactWeights = contactEntries.map((entry) => {
+    const labelMeasure = Array.from(entry.label).length * contactFontSize * 0.52;
+    const valueMeasure =
+      Array.from(entry.value).length * contactFontSize * (entry.latin ? 0.5 : 0.48);
+    return Math.max(20, labelMeasure + valueMeasure + 7);
+  });
   const totalContactWeight = contactWeights.reduce((sum, weight) => sum + weight, 0) || 1;
   const contactColumns: Content[] = [];
   contactEntries.forEach((entry, index) => {
     const groupWidth = usableContactWidth * (contactWeights[index] / totalContactWeight);
-    const labelWidth = Math.min(groupWidth * 0.43, Array.from(entry.label).length * 4.6 + 4);
-    const valueWidth = Math.max(28, groupWidth - labelWidth - 3);
+    const labelWidth = Math.min(
+      groupWidth * 0.43,
+      Array.from(entry.label).length * contactFontSize * 0.52 + 4,
+    );
+    const preferredValueWidth =
+      Array.from(entry.value).length * contactFontSize * (entry.latin ? 0.5 : 0.48) + 4;
+    const valueWidth = Math.max(28, Math.min(preferredValueWidth, groupWidth - labelWidth - 3));
+    const contactInset = Math.max(0, (groupWidth - valueWidth - labelWidth - 3) / 2);
     contactColumns.push({
       width: groupWidth,
       columns: [
@@ -3554,34 +3561,42 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           text: entry.latin
             ? entry.value
             : arabicProPdfText(entry.value, true, Math.max(20, Array.from(entry.value).length)),
-          font: entry.latin ? "CalibriSupplied" : "NotoSansArabic",
-          fontSize: entry.latin ? 9.6 : 9,
+          // A single font family is essential here: mixing Calibri and an
+          // Arabic font produces different baselines at different PDF zooms.
+          font: "NotoSansArabic",
+          fontSize: contactFontSize,
           alignment: "right",
           noWrap: true,
-          // Calibri sits higher than Noto Sans Arabic at the same nominal size.
-          margin: entry.latin ? [0, 2.35, 0, 0] : [0, 0, 0, 0],
+          margin: [0, 0, 0, 0],
         },
         {
           width: labelWidth,
           text: arabicProPdfText(entry.label, true, 28),
           font: "NotoSansArabic",
-          fontSize: 9.2,
+          fontSize: contactFontSize,
           bold: true,
           alignment: "left",
           noWrap: true,
         },
       ],
       columnGap: 3,
+      margin: [contactInset, 0, contactInset, 0],
     } as Content);
     if (index < contactEntries.length - 1) {
       contactColumns.push({
         width: separatorWidth,
-        text: "|",
-        font: "CalibriSupplied",
-        fontSize: 10.5,
-        bold: true,
-        alignment: "center",
-        margin: [0, 1.1, 0, 0],
+        canvas: [
+          {
+            type: "line" as const,
+            x1: separatorWidth / 2,
+            y1: 0.6,
+            x2: separatorWidth / 2,
+            y2: 10.4,
+            lineWidth: 1,
+            lineColor: "#111111",
+          },
+        ],
+        margin: [0, 0, 0, 0],
       } as Content);
     }
   });

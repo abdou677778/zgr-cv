@@ -3558,41 +3558,65 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
             {
               columns: [
                 {
-                  width: "*",
+                  width: 140,
                   text: [
                     {
                       text: arabicProPdfText("الهاتف:", true, 16),
                       font: "NotoSansArabic",
+                      bold: true,
                     },
                     { text: `\u00a0${cv.telephone}`, font: "CalibriSupplied" },
                   ],
                   fontSize: 8,
+                  alignment: "center",
+                },
+                {
+                  width: 8,
+                  text: "|",
+                  font: "CalibriSupplied",
+                  fontSize: 9,
                   bold: true,
                   alignment: "center",
                 },
                 {
-                  width: "*",
+                  width: 175,
                   text: [
                     {
                       text: arabicProPdfText("البريد الإلكتروني:", true, 28),
                       font: "NotoSansArabic",
+                      bold: true,
                     },
                     { text: `\u00a0${cv.email}`, font: "CalibriSupplied" },
                   ],
                   fontSize: 8,
+                  alignment: "center",
+                },
+                {
+                  width: 8,
+                  text: "|",
+                  font: "CalibriSupplied",
+                  fontSize: 9,
                   bold: true,
                   alignment: "center",
                 },
                 {
-                  width: "*",
-                  text: arabicProPdfText(`العنوان: ${cv.adresse || cv.wilaya}`, true, 48),
-                  font: "NotoSansArabic",
-                  fontSize: 7.6,
-                  bold: true,
+                  width: 208,
+                  text: [
+                    {
+                      text: arabicProPdfText("العنوان:", true, 16),
+                      font: "NotoSansArabic",
+                      bold: true,
+                    },
+                    {
+                      text: `\u00a0${arabicProPdfText(cv.adresse || cv.wilaya, true, 44)}`,
+                      font: "NotoSansArabic",
+                    },
+                  ],
+                  fontSize: 7.8,
                   alignment: "center",
                 },
               ],
-              columnGap: 5,
+              columnGap: 0,
               margin: [0, 2.2, 0, 2.2],
             },
           ],
@@ -3616,7 +3640,9 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         cv,
         7.8,
         { alignment: "right", lineHeight: 1, margin: [6, 0, 6, 0.5] },
-        (text) => arabicProPdfText(text, true, 104),
+        // The Canva V5 reference fills the first line through "كندية".
+        // Keep the controlled RTL line wrapping, but match that wider measure.
+        (text) => arabicProPdfText(text, true, 148),
       ),
     );
   const experiences = cv.experiences

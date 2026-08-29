@@ -3530,31 +3530,34 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     { label: "البريد الإلكتروني:", value: cv.email, latin: true },
     { label: "العنوان:", value: cv.adresse || cv.wilaya, latin: false },
   ].filter((entry) => entry.value.trim());
-  const separatorWidth = 16;
   const contactBandWidth = 539;
-  const usableContactWidth =
-    contactBandWidth - Math.max(0, contactEntries.length - 1) * separatorWidth;
-  const contactFontSize = Math.max(7.4, 8.8 - Math.max(0, contactEntries.length - 3) * 0.5);
-  const contactWeights = contactEntries.map((entry) => {
-    const labelMeasure = Array.from(entry.label).length * contactFontSize * 0.52;
-    const valueMeasure =
-      Array.from(entry.value).length * contactFontSize * (entry.latin ? 0.5 : 0.48);
-    return Math.max(20, labelMeasure + valueMeasure + 7);
-  });
-  const totalContactWeight = contactWeights.reduce((sum, weight) => sum + weight, 0) || 1;
+  const contactGroupWidth = contactBandWidth / Math.max(1, contactEntries.length);
+  const widestContactUnit = Math.max(
+    1,
+    ...contactEntries.map(
+      (entry) =>
+        Array.from(entry.label).length * 0.52 +
+        Array.from(entry.value).length * (entry.latin ? 0.5 : 0.48),
+    ),
+  );
+  // Every group uses the same calculated size, so all baselines and spaces
+  // remain identical. Adding another contact shrinks the full row uniformly.
+  const contactFontSize = Math.max(5.5, Math.min(9.2, (contactGroupWidth - 10) / widestContactUnit));
   const contactColumns: Content[] = [];
-  contactEntries.forEach((entry, index) => {
-    const groupWidth = usableContactWidth * (contactWeights[index] / totalContactWeight);
-    const labelWidth = Math.min(
-      groupWidth * 0.43,
-      Array.from(entry.label).length * contactFontSize * 0.52 + 4,
-    );
+  contactEntries.forEach((entry) => {
+    const labelWidth = Array.from(entry.label).length * contactFontSize * 0.52 + 3;
     const preferredValueWidth =
-      Array.from(entry.value).length * contactFontSize * (entry.latin ? 0.5 : 0.48) + 4;
-    const valueWidth = Math.max(28, Math.min(preferredValueWidth, groupWidth - labelWidth - 3));
-    const contactInset = Math.max(0, (groupWidth - valueWidth - labelWidth - 3) / 2);
+      Array.from(entry.value).length * contactFontSize * (entry.latin ? 0.5 : 0.48) + 3;
+    const valueWidth = Math.max(
+      24,
+      Math.min(preferredValueWidth, contactGroupWidth - labelWidth - 3),
+    );
+    const contactInset = Math.max(
+      0,
+      (contactGroupWidth - valueWidth - labelWidth - 3) / 2,
+    );
     contactColumns.push({
-      width: groupWidth,
+      width: contactGroupWidth,
       columns: [
         {
           width: valueWidth,
@@ -3582,23 +3585,6 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       columnGap: 3,
       margin: [contactInset, 0, contactInset, 0],
     } as Content);
-    if (index < contactEntries.length - 1) {
-      contactColumns.push({
-        width: separatorWidth,
-        canvas: [
-          {
-            type: "line" as const,
-            x1: separatorWidth / 2,
-            y1: 0.6,
-            x2: separatorWidth / 2,
-            y2: 10.4,
-            lineWidth: 1,
-            lineColor: "#111111",
-          },
-        ],
-        margin: [0, 0, 0, 0],
-      } as Content);
-    }
   });
 
   const nameParts = cv.nom_complet.trim().split(/\s+/).filter(Boolean);

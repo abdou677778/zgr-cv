@@ -3363,16 +3363,20 @@ function buildCvPdfArabicProV3(cv: CV, language: DocumentLanguage): TDocumentDef
 }
 
 function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
-  const sectionTitle = (title: string): Content => ({
+  const sectionTitle = (
+    title: string,
+    alignment: "left" | "right" = "right",
+    ruleWidth = 539,
+  ): Content => ({
     stack: [
       {
         text: arabicProPdfText(title, true, 34),
         bold: true,
-        fontSize: 14.2,
+        fontSize: 11.8,
         color: ARABIC_PRO_ACCENT,
-        alignment: "center",
+        alignment,
         lineHeight: 1,
-        margin: [0, 1.8, 0, 0.8],
+        margin: [0, 0.8, 4, 0.3],
       },
       {
         canvas: [
@@ -3380,49 +3384,49 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
             type: "line" as const,
             x1: 0,
             y1: 0,
-            x2: 547,
+            x2: ruleWidth,
             y2: 0,
             lineWidth: 0.55,
             lineColor: "#111111",
           },
         ],
-        margin: [0, 0, 0, 2.5],
+        margin: [0, 0, 0, 1.2],
       },
     ],
   });
 
-  const bullet = (value: RichInline, fontSize = 8.2, maxChars = 68): Content => ({
+  const bullet = (value: RichInline, fontSize = 6.8, maxChars = 86): Content => ({
     columns: [
       {
         width: "*",
         text: arabicProPdfText(arabicProPlainInline(value), true, maxChars),
         alignment: "right",
         fontSize,
-        lineHeight: 1,
+        lineHeight: 0.96,
       },
       {
         width: 9,
         text: "•",
         bold: true,
-        fontSize: 10,
+        fontSize: 8,
         color: ARABIC_PRO_ACCENT,
         alignment: "center",
       },
     ],
     columnGap: 4,
-    margin: [4, 0, 0, 0.45],
+    margin: [4, 0, 0, 0.1],
   });
 
   const experience = (item: Experience): Content => {
-    const details = experienceRichDescriptions(item).slice(0, 3);
+    const details = experienceRichDescriptions(item).slice(0, 4);
     return {
       stack: [
         {
           columns: [
             {
-              width: 116,
+              width: 122,
               text: arabicProPdfText(arabicProDate(item.dates || "", language, true), true, 30),
-              fontSize: 8.4,
+              fontSize: 7.7,
               color: "#666666",
               alignment: "left",
               margin: [8, 1, 0, 0],
@@ -3437,16 +3441,16 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
                     62,
                   ),
                   bold: true,
-                  fontSize: 10.2,
+                  fontSize: 9.1,
                   alignment: "right",
                 },
                 {
                   text: arabicProPdfText(item.titre || " ", true, 48),
                   italics: true,
-                  fontSize: 9.2,
+                  fontSize: 8.1,
                   color: "#666666",
                   alignment: "right",
-                  margin: [0, 0.2, 0, 0.8],
+                  margin: [0, 0.1, 0, 0.35],
                 },
               ],
             },
@@ -3455,7 +3459,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         },
         ...details.map((detail) => bullet(detail)),
       ],
-      margin: [8, 0, 0, 1.5],
+      margin: [6, 0, 0, 0.7],
       unbreakable: true,
     } as Content;
   };
@@ -3470,9 +3474,9 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         {
           columns: [
             {
-              width: 116,
+              width: 122,
               text: arabicProPdfText(arabicProDate(item.date || "", language, true), true, 30),
-              fontSize: 8.5,
+              fontSize: 7.6,
               color: "#333333",
               alignment: "left",
             },
@@ -3482,41 +3486,59 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
                 {
                   text: arabicProPdfText(item.institution || " ", true, 62),
                   bold: true,
-                  fontSize: 9.8,
+                  fontSize: 8.8,
                   alignment: "right",
                 },
                 {
                   text: arabicProPdfText(item.titre || " ", true, 62),
-                  fontSize: 9.5,
+                  fontSize: 8.3,
                   alignment: "right",
                 },
                 {
                   text: arabicProPdfText(item.lieu || " ", true, 40),
-                  fontSize: 8.3,
+                  fontSize: 7.4,
                   color: "#555555",
                   alignment: "right",
-                  margin: [0, 0, 0, 0.8],
+                  margin: [0, 0, 0, 0.25],
                 },
               ],
             },
           ],
           columnGap: 10,
         },
-        ...details.slice(0, 2).map((value) => bullet(value)),
+        ...details.slice(0, 1).map((value) => bullet(value, 6.9, 90)),
       ],
-      margin: [8, 0, 0, 1],
+      margin: [6, 0, 0, 0.5],
       unbreakable: true,
     } as Content;
   };
 
+  const nameParts = cv.nom_complet.trim().split(/\s+/).filter(Boolean);
+  const firstName = nameParts.shift() || " ";
+  const familyName = nameParts.join(" ") || " ";
   const content: Content[] = [
     ...arabicAtsTextLayers(cv),
     {
-      text: arabicProPdfText(cv.nom_complet || " ", true, 46),
-      fontSize: 22,
-      alignment: "center",
-      color: "#111111",
-      margin: [0, 1, 0, 4],
+      columns: [
+        { width: "*", text: "" },
+        {
+          width: "auto",
+          text: arabicProPdfText(familyName, true, 28),
+          bold: true,
+          fontSize: 21,
+          color: "#111111",
+        },
+        {
+          width: "auto",
+          text: arabicProPdfText(firstName, true, 20),
+          bold: true,
+          fontSize: 21,
+          color: ARABIC_PRO_ACCENT,
+        },
+        { width: "*", text: "" },
+      ],
+      columnGap: 5,
+      margin: [0, 0, 0, 4],
     },
     {
       table: {
@@ -3524,12 +3546,34 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         body: [
           [
             {
-              text: [cv.email, cv.telephone].filter(Boolean).join("  |  "),
-              font: "CalibriSupplied",
-              fontSize: 8.7,
-              alignment: "center",
-              color: "#222222",
-              margin: [0, 2.5, 0, 2.5],
+              columns: [
+                {
+                  width: "*",
+                  text: cv.telephone,
+                  font: "CalibriSupplied",
+                  fontSize: 8,
+                  bold: true,
+                  alignment: "center",
+                },
+                {
+                  width: "*",
+                  text: cv.email,
+                  font: "CalibriSupplied",
+                  fontSize: 8,
+                  bold: true,
+                  alignment: "center",
+                },
+                {
+                  width: "*",
+                  text: arabicProPdfText(cv.adresse || cv.wilaya, true, 38),
+                  font: "NotoSansArabic",
+                  fontSize: 7.6,
+                  bold: true,
+                  alignment: "center",
+                },
+              ],
+              columnGap: 5,
+              margin: [0, 2.2, 0, 2.2],
             },
           ],
         ],
@@ -3543,16 +3587,16 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         paddingTop: () => 0,
         paddingBottom: () => 0,
       },
-      margin: [0, 0, 0, 7],
+      margin: [0, 0, 0, 5],
     },
   ];
   if (cv.objectif.trim())
     content.push(
       objectivePdfContent(
         cv,
-        8.8,
-        { alignment: "right", lineHeight: 1.08, margin: [5, 0, 5, 1.5] },
-        (text) => arabicProPdfText(text, true, 76),
+        7.8,
+        { alignment: "right", lineHeight: 1, margin: [6, 0, 6, 0.5] },
+        (text) => arabicProPdfText(text, true, 104),
       ),
     );
   const experiences = cv.experiences
@@ -3562,27 +3606,61 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     content.push(sectionTitle("الخبرة المهنية"), ...experiences.map(experience));
   const educationItems = [...cv.educations, ...cv.formations]
     .filter((item) => item.titre || item.institution || item.date)
-    .slice(0, 1);
+    .slice(0, 2);
   if (educationItems.length)
     content.push(sectionTitle("التعليم"), ...educationItems.map(educationBlock));
-  const skills = richListItems(cv.competences, cv.competences_format).slice(0, 8);
+  const skills = richListItems(cv.competences, cv.competences_format).slice(0, 7);
   if (skills.length)
     content.push(
       sectionTitle("المهارات التقنية"),
       {
         columns: [
-          { width: "*", stack: skills.slice(3, 6).map((item) => bullet(item, 7.6, 78)) },
-          { width: "*", stack: skills.slice(0, 3).map((item) => bullet(item, 7.6, 78)) },
+          { width: "*", stack: skills.slice(4, 7).map((item) => bullet(item, 6.5, 92)) },
+          { width: "*", stack: skills.slice(0, 4).map((item) => bullet(item, 6.5, 92)) },
         ],
         columnGap: 24,
-        margin: [8, 0, 8, 1],
+        margin: [6, 0, 6, 0.5],
       },
     );
-  const certifications = richListItems(cv.certifications, cv.certifications_format).slice(0, 3);
-  if (certifications.length)
+  const certifications = richListItems(cv.certifications, cv.certifications_format).slice(0, 4);
+  const participations = richListItems(cv.participations, cv.participations_format).slice(0, 4);
+  if (certifications.length || participations.length)
     content.push(
-      sectionTitle("الشهادات المهنية"),
-      { stack: certifications.map((item) => bullet(item, 8, 84)), margin: [10, 0, 10, 0] },
+      {
+        columns: [
+          {
+            width: "*",
+            stack: [
+              sectionTitle("المشاركات", "right", 250),
+              ...participations.map((item) => bullet(item, 6.2, 84)),
+            ],
+          },
+          {
+            width: "*",
+            stack: [
+              sectionTitle("الشهادات المهنية", "right", 250),
+              ...certifications.map((item) => bullet(item, 6.2, 84)),
+            ],
+          },
+        ],
+        columnGap: 18,
+        margin: [4, 0, 4, 0.4],
+      },
+    );
+  const languages = cvLanguages(cv, language, false).slice(0, 5);
+  if (languages.length)
+    content.push(
+      sectionTitle("اللغات"),
+      {
+        text: arabicProPdfText(
+          languages.map(([name, level]) => `${name}: ${level}`).join("  |  "),
+          true,
+          140,
+        ),
+        fontSize: 6.2,
+        alignment: "center",
+        margin: [4, 0, 4, 0],
+      },
     );
   return {
     info: {
@@ -3590,12 +3668,12 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       author: cv.nom_complet || "",
     },
     pageSize: "A4",
-    pageMargins: [24, 10, 24, 2],
+    pageMargins: [28, 8, 28, 1],
     defaultStyle: {
       font: "NotoSansArabic",
-      fontSize: 8.2,
+      fontSize: 7.7,
       color: "#111111",
-      lineHeight: 1.07,
+      lineHeight: 1.03,
     },
     content,
   };

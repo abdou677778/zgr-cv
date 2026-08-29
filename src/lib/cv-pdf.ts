@@ -3544,7 +3544,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
   // remain identical. Adding another contact shrinks the full row uniformly.
   const contactFontSize = Math.max(5.5, Math.min(9.2, (contactGroupWidth - 10) / widestContactUnit));
   const contactColumns: Content[] = [];
-  contactEntries.forEach((entry) => {
+  contactEntries.forEach((entry, index) => {
     const labelWidth = Array.from(entry.label).length * contactFontSize * 0.52 + 3;
     const preferredValueWidth =
       Array.from(entry.value).length * contactFontSize * (entry.latin ? 0.5 : 0.48) + 3;
@@ -3556,6 +3556,15 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       0,
       (contactGroupWidth - valueWidth - labelWidth - 3) / 2,
     );
+    const lastContactIndex = contactEntries.length - 1;
+    const contactMargins: [number, number, number, number] =
+      contactEntries.length === 1
+        ? [contactInset, 0, contactInset, 0]
+        : index === 0
+          ? [0, 0, contactInset * 2, 0]
+          : index === lastContactIndex
+            ? [contactInset * 2, 0, 0, 0]
+            : [contactInset, 0, contactInset, 0];
     contactColumns.push({
       width: contactGroupWidth,
       columns: [
@@ -3583,7 +3592,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         },
       ],
       columnGap: 3,
-      margin: [contactInset, 0, contactInset, 0],
+      margin: contactMargins,
     } as Content);
   });
 

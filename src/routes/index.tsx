@@ -29,8 +29,6 @@ import {
   UserCog,
   BookOpenText,
 } from "lucide-react";
-import * as pdfjs from "pdfjs-dist";
-import pdfWorkerSource from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
 import {
   type CV,
   type Experience,
@@ -143,11 +141,7 @@ const LANGUAGE_VISUALS: Record<DocumentLanguage, { color: string }> = {
   zh: { color: "from-red-500 to-amber-400" },
   ar: { color: "from-emerald-500 to-emerald-700" },
 };
-const PDF_WORKER_URL = URL.createObjectURL(
-  new Blob([pdfWorkerSource], { type: "text/javascript" }),
-);
-
-pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+let pdfWorkerUrl: string | null = null;
 
 type RichListValueKey = "competences" | "participations" | "certifications" | "interets";
 type RichListFormatKey =
@@ -389,7 +383,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [pdfPreview, setPdfPreview] = useState<{ blob: Blob; url: string; key: string } | null>(
     null,
   );
-  const [pdfLoading, setPdfLoading] = useState(true);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [packLoading, setPackLoading] = useState(false);
   const [packProgress, setPackProgress] = useState({ completed: 0, total: 81 });
@@ -638,6 +633,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   }, [loaded, sectionAppearance]);
 
   useEffect(() => {
+    if (!previewVisible) {
+      setPdfLoading(false);
+      setPdfError("");
+      return;
+    }
+    if (pdfPreview?.key === cvKey) {
+      setPdfLoading(false);
+      setPdfError("");
+      return;
+    }
+
     let cancelled = false;
     setPdfLoading(true);
     setPdfError("");
@@ -671,7 +677,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [accentColor, cvKey, documentKind, language, outputCv, templateId, ui.previewError]);
+  }, [
+    accentColor,
+    cvKey,
+    documentKind,
+    language,
+    outputCv,
+    pdfPreview,
+    previewVisible,
+    templateId,
+    ui.previewError,
+  ]);
 
   useEffect(
     () => () => {
@@ -973,6 +989,34 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       ok: true,
       text: `Profil ouvert : ${profile.name} · ID ${profile.id}`,
     });
+  };
+
+  const downloadCurrentPdf = async () => {
+    if (pdfLoading || packLoading) return;
+    setPdfLoading(true);
+    setPdfError("");
+    try {
+      let blob = pdfPreview?.key === cvKey ? pdfPreview.blob : null;
+      if (!blob) {
+        blob = await createDocumentPdfBlob(
+          outputCv,
+          documentKind,
+          templateId,
+          language,
+          accentColor,
+        );
+        const url = URL.createObjectURL(blob);
+        if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+        pdfUrlRef.current = url;
+        setPdfPreview({ blob, url, key: cvKey });
+      }
+      downloadPdfDocument(blob, outputCv, documentKind, language);
+    } catch (error) {
+      console.error(error);
+      setPdfError(ui.previewError);
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const downloadClientProfilePdf = async (profile: ClientProfile) => {
@@ -1291,6 +1335,20 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               <RotateCcw className="mr-2 h-4 w-4" /> {ui.reset}
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPreviewVisible((visible) => !visible)}
+              aria-pressed={previewVisible}
+              aria-controls="pdf-preview-panel"
+            >
+              {previewVisible ? (
+                <EyeOff className="mr-2 h-4 w-4" />
+              ) : (
+                <Eye className="mr-2 h-4 w-4" />
+              )}
+              {previewVisible ? "Masquer l’aperçu" : "Afficher l’aperçu"}
+            </Button>
+            <Button
               variant="ghost"
               size="icon"
               aria-label="Se déconnecter"
@@ -1303,25 +1361,43 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               <DropdownMenuTrigger asChild>
                 <Button
                   size="sm"
-                  disabled={pdfLoading || packLoading || !pdfPreview || pdfPreview.key !== cvKey}
+                  disabled={packLoading}
                   aria-label={ui.downloadPdf}
                 >
-                  {pdfLoading || packLoading ? (
+                  {packLoading ? (
                     <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Download className="mr-2 h-4 w-4" />
                   )}
                   {packLoading
                     ? `${ui.preparingPack} ${packProgress.completed}/${packProgress.total}`
-                    : pdfLoading
-                      ? ui.preparingPdf
-                      : ui.downloadPdf}
-                  {!pdfLoading && !packLoading && <ChevronDown className="ml-2 h-3.5 w-3.5" />}
+                    : ui.downloadPdf}
+                  {!packLoading && <ChevronDown className="ml-2 h-3.5 w-3.5" />}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
                 <DropdownMenuItem
-                  disabled={!pdfPreview || pdfPreview.key !== cvKey}
+                  disabled={pdfLoading}
+                  onSelect={() => void downloadCurrentPdf()}
+                  className="items-start py-2.5"
+                >
+                  {pdfLoading ? (
+                    <LoaderCircle className="mt-0.5 animate-spin" />
+                  ) : (
+                    <Download className="mt-0.5" />
+                  )}
+                  <span className="flex flex-col">
+                    <span className="font-medium">
+                      {pdfLoading ? ui.preparingPdf : "Télécharger le PDF actuel"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Génération directe du document sélectionné
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={pdfLoading}
                   onSelect={() => void downloadCurrentMultilingual()}
                   className="items-start py-2.5"
                 >
@@ -1369,9 +1445,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         )}
       </header>
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-7 lg:grid-cols-2">
+      <main
+        className={`mx-auto grid max-w-7xl gap-6 px-4 py-7 ${
+          previewVisible ? "lg:grid-cols-2" : "lg:grid-cols-1"
+        }`}
+      >
         {/* Form */}
-        <section className="zgr-editor-panel space-y-3 rounded-3xl border border-slate-200 bg-slate-100/75 p-3 sm:p-4">
+        <section
+          className={`zgr-editor-panel space-y-3 rounded-3xl border border-slate-200 bg-slate-100/75 p-3 sm:p-4 ${
+            previewVisible ? "" : "lg:mx-auto lg:w-full lg:max-w-5xl"
+          }`}
+        >
           <CvSectionPanel
             id="personal"
             fallbackTitle={ui.personal}
@@ -2188,7 +2272,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         </section>
 
         {/* Preview */}
-        <section className="lg:sticky lg:top-20 lg:self-start">
+        {previewVisible && (
+        <section id="pdf-preview-panel" className="lg:sticky lg:top-20 lg:self-start">
           <div className="relative overflow-hidden rounded-md bg-zinc-200 shadow-md ring-1 ring-zinc-300">
             {pdfPreview ? (
               <PdfPreview
@@ -2214,6 +2299,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           </div>
           <p className="mt-2 text-center text-xs text-muted-foreground">{ui.exactPreview}</p>
         </section>
+        )}
       </main>
       <AiSettingsDialog
         open={aiSettingsOpen}
@@ -2282,7 +2368,7 @@ function PdfPreview({
 
   useEffect(() => {
     let cancelled = false;
-    let loadingTask: ReturnType<typeof pdfjs.getDocument> | null = null;
+    let loadingTask: { destroy: () => Promise<void> } | null = null;
     const renderTasks: Array<{ cancel: () => void; promise: Promise<void> }> = [];
 
     const renderPdf = async () => {
@@ -2290,14 +2376,26 @@ function PdfPreview({
       setRenderError("");
 
       try {
+        const [pdfjs, workerModule] = await Promise.all([
+          import("pdfjs-dist"),
+          import("pdfjs-dist/build/pdf.worker.min.mjs?raw"),
+        ]);
+        if (!pdfWorkerUrl) {
+          pdfWorkerUrl = URL.createObjectURL(
+            new Blob([workerModule.default], { type: "text/javascript" }),
+          );
+        }
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
         const buffer = await blob.arrayBuffer();
         const digest = await crypto.subtle.digest("SHA-256", buffer.slice(0));
         const hash = Array.from(new Uint8Array(digest))
           .map((byte) => byte.toString(16).padStart(2, "0"))
           .join("");
 
-        loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
-        const document = await loadingTask.promise;
+        const task = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+        loadingTask = task;
+        const document = await task.promise;
         if (cancelled || !pagesRef.current) return;
 
         setSha256(hash);

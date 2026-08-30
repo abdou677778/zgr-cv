@@ -3382,6 +3382,35 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       maxChars,
     );
 
+  // Keep the institution/employer and its location on one metadata line when
+  // they fit. Sample data may already end with the city (for example
+  // "DigitalDZ Studio، الجزائر العاصمة"), so remove that city from the
+  // following location before joining the remaining province/country.
+  const organizationAndPlace = (organization: string, place: string) => {
+    const cleanOrganization = organization.trim();
+    const placeParts = place
+      .split(/[،,]/u)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const normalizedOrganization = cleanOrganization
+      .normalize("NFC")
+      .replace(/\s+/gu, " ")
+      .toLocaleLowerCase();
+
+    while (
+      placeParts.length &&
+      normalizedOrganization.endsWith(
+        placeParts[0].normalize("NFC").replace(/\s+/gu, " ").toLocaleLowerCase(),
+      )
+    ) {
+      placeParts.shift();
+    }
+
+    const parts = [cleanOrganization, ...placeParts].filter(Boolean);
+    const separator = parts.some((part) => /\p{Script=Arabic}/u.test(part)) ? "، " : ", ";
+    return parts.join(separator);
+  };
+
   const timelineDate = (value: string): Content => {
     const formatted = formatCvDate(value, language);
     const endpoints = formatted.split(/\s+-\s+/u).map((part) => part.trim()).filter(Boolean);
@@ -3486,6 +3515,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
 
   const experience = (item: Experience): Content => {
     const details = experienceRichDescriptions(item);
+    const employerAndPlace = organizationAndPlace(item.employeur || "", item.lieu || "");
     return {
       stack: [
         {
@@ -3505,11 +3535,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
                 },
                 companyLine(
                   item,
-                  arabicProPdfText(
-                    [item.employeur, item.lieu].filter(Boolean).join("، "),
-                    true,
-                    62,
-                  ),
+                  arabicProPdfText(employerAndPlace, true, 96),
                   10,
                   {
                     fontSize: 8.1,
@@ -3538,6 +3564,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     const details = isEducation
       ? [item.option, item.equivalence].filter(Boolean)
       : [item.competences].filter(Boolean);
+    const institutionAndPlace = organizationAndPlace(item.institution || "", item.lieu || "");
     return {
       stack: [
         {
@@ -3556,15 +3583,9 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
                   alignment: "right",
                 },
                 {
-                  text: educationText(item.institution || " ", 96),
+                  text: educationText(institutionAndPlace || " ", 108),
                   fontSize: 8,
                   color: "#666666",
-                  alignment: "right",
-                },
-                {
-                  text: educationText(item.lieu || " ", 96),
-                  fontSize: 7.4,
-                  color: "#555555",
                   alignment: "right",
                   margin: [0, 0, 0, 0.25],
                 },

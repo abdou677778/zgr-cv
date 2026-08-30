@@ -3410,14 +3410,14 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           } as Content);
         }
       });
-      return { columns: dateColumns, columnGap: 3, margin: [-6, 1, 0, 0] } as Content;
+      return { columns: dateColumns, columnGap: 3, margin: [0, 1, 0, 0] } as Content;
     }
     return {
       text: arabicProPdfText(arabicProDate(value, language, true), true, 30),
       fontSize: 7.7,
       color: "#666666",
       alignment: "left",
-      margin: [-6, 1, 0, 0],
+      margin: [0, 1, 0, 0],
     } as Content;
   };
 
@@ -3453,7 +3453,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     ],
   });
 
-  const bullet = (value: RichInline, fontSize = 6.8, maxChars = 86): Content => ({
+  const bullet = (value: RichInline, fontSize = 6.8, maxChars = 140): Content => ({
     columns: [
       {
         width: "*",
@@ -3472,7 +3472,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       },
     ],
     columnGap: 4,
-    margin: [4, 0, 0, 0.1],
+    margin: [0, 0, 0, 0.1],
   });
 
   const experience = (item: Experience): Content => {
@@ -3512,7 +3512,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         },
         ...details.map((detail) => bullet(detail)),
       ],
-      margin: [6, 0, 0, 0.7],
+      margin: [0, 0, 0, 0.7],
       unbreakable: true,
     } as Content;
   };
@@ -3534,19 +3534,19 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
               width: "*",
               stack: [
                 {
-                  text: arabicProPdfText(item.titre || " ", true, 62),
+                  text: arabicProPdfText(item.titre || " ", true, 90),
                   bold: true,
                   fontSize: 8.8,
                   alignment: "right",
                 },
                 {
-                  text: arabicProPdfText(item.institution || " ", true, 62),
+                  text: arabicProPdfText(item.institution || " ", true, 96),
                   fontSize: 8,
                   color: "#666666",
                   alignment: "right",
                 },
                 {
-                  text: arabicProPdfText(item.lieu || " ", true, 40),
+                  text: arabicProPdfText(item.lieu || " ", true, 96),
                   fontSize: 7.4,
                   color: "#555555",
                   alignment: "right",
@@ -3557,9 +3557,9 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           ],
           columnGap: 10,
         },
-        ...details.slice(0, 1).map((value) => bullet(value, 6.9, 90)),
+        ...details.slice(0, 1).map((value) => bullet(value, 6.9, 140)),
       ],
-      margin: [6, 0, 0, 0.5],
+      margin: [0, 0, 0, 0.5],
       unbreakable: true,
     } as Content;
   };
@@ -3694,7 +3694,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       objectivePdfContent(
         cv,
         7.8,
-        { alignment: "right", lineHeight: 1, margin: [6, 0, 6, 0.5] },
+        { alignment: "right", lineHeight: 1, margin: [0, 0, 0, 0.5] },
         // The Canva V5 reference fills the first line through "كندية".
         // Keep the controlled RTL line wrapping, but match that wider measure.
         (text) => arabicProPdfText(text, true, 148),

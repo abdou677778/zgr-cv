@@ -3373,6 +3373,8 @@ function buildCvPdfArabicProV3(cv: CV, language: DocumentLanguage): TDocumentDef
 }
 
 function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
+  const V5_DISPLAY_FONT = "HacenTunisia";
+
   // pdfMake mirrors neutral parentheses in this RTL line; pre-mirroring keeps
   // the opening and closing glyphs around the education qualifier on output.
   const educationText = (value: string, maxChars: number) =>
@@ -3409,6 +3411,17 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     const parts = [cleanOrganization, ...placeParts].filter(Boolean);
     const separator = parts.some((part) => /\p{Script=Arabic}/u.test(part)) ? "، " : ", ";
     return parts.join(separator);
+  };
+
+  // Hacen Tunisia gives the display text a warmer editorial character. A
+  // restrained tatweel is added only to long Arabic name words; the original
+  // value remains unchanged in the ATS layer and PDF metadata.
+  const displayNameWord = (word: string, firstWord: boolean) => {
+    const characters = Array.from(word);
+    if (characters.length < 4 || !/\p{Script=Arabic}/u.test(word)) return word;
+    const insertionIndex = firstWord ? characters.length - 1 : 1;
+    characters.splice(insertionIndex, 0, firstWord ? "ــــ" : "ـ");
+    return characters.join("");
   };
 
   const timelineDate = (value: string): Content => {
@@ -3467,12 +3480,12 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     stack: [
       {
         text: arabicProPdfText(title, true, 34),
-        bold: true,
-        fontSize: 11.8,
+        font: V5_DISPLAY_FONT,
+        fontSize: 12.5,
         color: ARABIC_PRO_ACCENT,
         alignment,
-        lineHeight: 1,
-        margin: [0, 1.4, 4, 1.5],
+        lineHeight: 0.96,
+        margin: [0, 1.8, 4, 1.7],
       },
       {
         canvas: [
@@ -3678,6 +3691,11 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
   const nameParts = cv.nom_complet.trim().split(/\s+/).filter(Boolean);
   const firstName = nameParts.shift() || " ";
   const familyName = nameParts.join(" ") || " ";
+  const displayFirstName = displayNameWord(firstName, true);
+  const displayFamilyName = familyName
+    .split(/\s+/u)
+    .map((word) => displayNameWord(word, false))
+    .join(" ");
   const content: Content[] = [
     ...arabicAtsTextLayers(cv),
     ...(cv.nom_complet.trim()
@@ -3687,16 +3705,16 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
               { width: "*", text: "" },
               {
                 width: "auto",
-                text: arabicProPdfText(familyName, true, 28),
-                bold: true,
-                fontSize: 21,
+                text: arabicProPdfText(displayFamilyName, true, 32),
+                font: V5_DISPLAY_FONT,
+                fontSize: 23,
                 color: "#111111",
               },
               {
                 width: "auto",
-                text: arabicProPdfText(firstName, true, 20),
-                bold: true,
-                fontSize: 21,
+                text: arabicProPdfText(displayFirstName, true, 24),
+                font: V5_DISPLAY_FONT,
+                fontSize: 23,
                 color: ARABIC_PRO_ACCENT,
               },
               { width: "*", text: "" },
@@ -3710,8 +3728,8 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       ? ([
           {
             text: arabicProPdfText(cv.titre_poste, true, 70),
-            bold: true,
-            fontSize: 9.2,
+            font: V5_DISPLAY_FONT,
+            fontSize: 10.2,
             color: ARABIC_PRO_ACCENT,
             alignment: "center",
             margin: [0, 0, 0, 3.2],

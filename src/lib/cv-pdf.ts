@@ -26,6 +26,10 @@ import cambriaBoldUrl from "@/assets/fonts/CambriaBold.ttf?inline";
 import notoSansArabicRegularUrl from "@/assets/fonts/NotoSansArabic-Regular.ttf?inline";
 import notoSansArabicBoldUrl from "@/assets/fonts/NotoSansArabic-Bold.ttf?inline";
 import hacenTunisiaUrl from "@/assets/fonts/HacenTunisia.ttf?inline";
+import arialOfficialRegularUrl from "@/assets/fonts/ArialOfficial-Regular.ttf?inline";
+import arialOfficialBoldUrl from "@/assets/fonts/ArialOfficial-Bold.ttf?inline";
+import arialOfficialItalicUrl from "@/assets/fonts/ArialOfficial-Italic.ttf?inline";
+import arialOfficialBoldItalicUrl from "@/assets/fonts/ArialOfficial-BoldItalic.ttf?inline";
 
 const ACCENT = "#111827";
 const MUTED = "#6b7280";
@@ -78,6 +82,10 @@ const FONT_FILES = {
   "NotoSansArabic-Regular.ttf": notoSansArabicRegularUrl,
   "NotoSansArabic-Bold.ttf": notoSansArabicBoldUrl,
   "HacenTunisia.ttf": hacenTunisiaUrl,
+  "ArialOfficial-Regular.ttf": arialOfficialRegularUrl,
+  "ArialOfficial-Bold.ttf": arialOfficialBoldUrl,
+  "ArialOfficial-Italic.ttf": arialOfficialItalicUrl,
+  "ArialOfficial-BoldItalic.ttf": arialOfficialBoldItalicUrl,
 } as const;
 
 const CV_FONTS: TFontDictionary = {
@@ -116,6 +124,12 @@ const CV_FONTS: TFontDictionary = {
     bold: "HacenTunisia.ttf",
     italics: "HacenTunisia.ttf",
     bolditalics: "HacenTunisia.ttf",
+  },
+  ArialOfficial: {
+    normal: "ArialOfficial-Regular.ttf",
+    bold: "ArialOfficial-Bold.ttf",
+    italics: "ArialOfficial-Italic.ttf",
+    bolditalics: "ArialOfficial-BoldItalic.ttf",
   },
 };
 
@@ -2739,7 +2753,11 @@ function arabicProPdfText(text: string, rtl: boolean, maxLineLength = 82) {
   return rtl ? toPdfRtlVisualText(safeText, maxLineLength) : safeText;
 }
 
-function arabicAtsTextLayers(cv: CV): Content[] {
+function arabicAtsTextLayers(
+  cv: CV,
+  arabicFont = "HacenTunisia",
+  latinFont = "CalibriSupplied",
+): Content[] {
   const text = [
     "نبذة عني",
     "الخبرات المهنية",
@@ -2794,10 +2812,10 @@ function arabicAtsTextLayers(cv: CV): Content[] {
     absolutePosition: { x: 1, y: 1 },
   };
   return [
-    { ...common, font: "HacenTunisia", text } as Content,
+    { ...common, font: arabicFont, text } as Content,
     {
       ...common,
-      font: "CalibriSupplied",
+      font: latinFont,
       text: [cv.email, cv.telephone].filter(Boolean).join("\n"),
     } as Content,
   ];
@@ -3373,12 +3391,10 @@ function buildCvPdfArabicProV3(cv: CV, language: DocumentLanguage): TDocumentDef
 }
 
 function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
-  // Hacen Tunisia is a signature display face, not a small-heading/body face.
-  // Restricting it to the large name keeps its distinctive Arabic forms crisp,
-  // while Noto Sans Arabic carries headings, job title, body copy, dates,
-  // contacts and the selectable ATS layer.
-  const V5_DISPLAY_FONT = "HacenTunisia";
-  const V5_BODY_FONT = "NotoSansArabic";
+  // V5 deliberately uses the official Arial family end to end. The font files
+  // are embedded in pdfMake so preview, export and selectable ATS text do not
+  // depend on a browser or operating-system fallback.
+  const V5_FONT = "ArialOfficial";
 
   // pdfMake mirrors neutral parentheses in this RTL line; pre-mirroring keeps
   // the opening and closing glyphs around the education qualifier on output.
@@ -3441,7 +3457,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           {
             width: "auto",
             text: match[2],
-            font: "NotoSansArabic",
+            font: V5_FONT,
             fontSize: 7.7,
             color: "#666666",
             noWrap: true,
@@ -3449,7 +3465,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           {
             width: "auto",
             text: arabicProPdfText(match[1], true, 20),
-            font: "NotoSansArabic",
+            font: V5_FONT,
             fontSize: 7.7,
             color: "#666666",
             noWrap: true,
@@ -3459,7 +3475,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           dateColumns.push({
             width: "auto",
             text: "-",
-            font: "NotoSansArabic",
+            font: V5_FONT,
             fontSize: 7.7,
             color: "#666666",
             noWrap: true,
@@ -3485,13 +3501,13 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     stack: [
       {
         text: arabicProPdfText(title, true, 34),
-        font: V5_BODY_FONT,
+        font: V5_FONT,
         bold: true,
-        fontSize: 12.2,
+        fontSize: 11.6,
         color: ARABIC_PRO_ACCENT,
         alignment,
-        lineHeight: 0.96,
-        margin: [0, 1.8, 4, 1.7],
+        lineHeight: 0.94,
+        margin: [0, 1.2, 4, 1.1],
       },
       {
         canvas: [
@@ -3505,7 +3521,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
             lineColor: "#111111",
           },
         ],
-        margin: [0, 0, 0, 2.4],
+        margin: [0, 0, 0, 1.8],
       },
     ],
   });
@@ -3673,7 +3689,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
             : arabicProPdfText(entry.value, true, Math.max(20, Array.from(entry.value).length)),
           // A single font family is essential here: mixing Calibri and an
           // Arabic font produces different baselines at different PDF zooms.
-          font: "NotoSansArabic",
+          font: V5_FONT,
           fontSize: contactFontSize,
           alignment: "right",
           noWrap: true,
@@ -3682,7 +3698,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         {
           width: labelWidth,
           text: arabicProPdfText(entry.label, true, 28),
-          font: "NotoSansArabic",
+          font: V5_FONT,
           fontSize: contactFontSize,
           bold: true,
           alignment: "left",
@@ -3703,7 +3719,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     .map((word) => displayNameWord(word, false))
     .join(" ");
   const content: Content[] = [
-    ...arabicAtsTextLayers(cv),
+    ...arabicAtsTextLayers(cv, V5_FONT, V5_FONT),
     ...(cv.nom_complet.trim()
       ? ([
           {
@@ -3712,15 +3728,17 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
               {
                 width: "auto",
                 text: arabicProPdfText(displayFamilyName, true, 32),
-                font: V5_DISPLAY_FONT,
-                fontSize: 25,
+                font: V5_FONT,
+                bold: true,
+                fontSize: 23,
                 color: "#111111",
               },
               {
                 width: "auto",
                 text: arabicProPdfText(displayFirstName, true, 24),
-                font: V5_DISPLAY_FONT,
-                fontSize: 25,
+                font: V5_FONT,
+                bold: true,
+                fontSize: 23,
                 color: ARABIC_PRO_ACCENT,
               },
               { width: "*", text: "" },
@@ -3734,12 +3752,12 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       ? ([
           {
             text: arabicProPdfText(cv.titre_poste, true, 70),
-            font: V5_BODY_FONT,
+            font: V5_FONT,
             bold: true,
             fontSize: 9.8,
             color: ARABIC_PRO_ACCENT,
             alignment: "center",
-            margin: [0, 0, 0, 3.2],
+            margin: [0, 0, 0, 2.5],
           } as Content,
         ] as Content[])
       : []),
@@ -3767,7 +3785,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
               paddingTop: () => 0,
               paddingBottom: () => 0,
             },
-            margin: [0, 0, 0, 5],
+            margin: [0, 0, 0, 4],
           } as Content,
         ] as Content[])
       : []),
@@ -4004,7 +4022,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     pageSize: "A4",
     pageMargins: [28, 8, 28, 1],
     defaultStyle: {
-      font: "NotoSansArabic",
+      font: V5_FONT,
       fontSize: 7.7,
       color: "#111111",
       lineHeight: 1.03,

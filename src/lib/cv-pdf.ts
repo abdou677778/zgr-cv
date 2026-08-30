@@ -3373,11 +3373,12 @@ function buildCvPdfArabicProV3(cv: CV, language: DocumentLanguage): TDocumentDef
 }
 
 function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
-  // Noto Sans Arabic is used for display text as well as body copy because it
-  // preserves joined glyphs and tatweel consistently in pdfMake. Decorative
-  // fonts such as Hacen Tunisia can expose isolated glyph forms in this RTL
-  // pipeline even when the source Arabic is valid.
-  const V5_DISPLAY_FONT = "NotoSansArabic";
+  // Hacen Tunisia is a signature display face, not a small-heading/body face.
+  // Restricting it to the large name keeps its distinctive Arabic forms crisp,
+  // while Noto Sans Arabic carries headings, job title, body copy, dates,
+  // contacts and the selectable ATS layer.
+  const V5_DISPLAY_FONT = "HacenTunisia";
+  const V5_BODY_FONT = "NotoSansArabic";
 
   // pdfMake mirrors neutral parentheses in this RTL line; pre-mirroring keeps
   // the opening and closing glyphs around the education qualifier on output.
@@ -3424,7 +3425,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     const characters = Array.from(word);
     if (characters.length < 4 || !/\p{Script=Arabic}/u.test(word)) return word;
     const insertionIndex = firstWord ? characters.length - 1 : 1;
-    characters.splice(insertionIndex, 0, firstWord ? "ــــ" : "ـ");
+    characters.splice(insertionIndex, 0, firstWord ? "ــ" : "ـ");
     return characters.join("");
   };
 
@@ -3484,7 +3485,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     stack: [
       {
         text: arabicProPdfText(title, true, 34),
-        font: V5_DISPLAY_FONT,
+        font: V5_BODY_FONT,
         bold: true,
         fontSize: 12.2,
         color: ARABIC_PRO_ACCENT,
@@ -3712,16 +3713,14 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
                 width: "auto",
                 text: arabicProPdfText(displayFamilyName, true, 32),
                 font: V5_DISPLAY_FONT,
-                bold: true,
-                fontSize: 22,
+                fontSize: 25,
                 color: "#111111",
               },
               {
                 width: "auto",
                 text: arabicProPdfText(displayFirstName, true, 24),
                 font: V5_DISPLAY_FONT,
-                bold: true,
-                fontSize: 22,
+                fontSize: 25,
                 color: ARABIC_PRO_ACCENT,
               },
               { width: "*", text: "" },
@@ -3735,9 +3734,9 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       ? ([
           {
             text: arabicProPdfText(cv.titre_poste, true, 70),
-            font: V5_DISPLAY_FONT,
+            font: V5_BODY_FONT,
             bold: true,
-            fontSize: 9.6,
+            fontSize: 9.8,
             color: ARABIC_PRO_ACCENT,
             alignment: "center",
             margin: [0, 0, 0, 3.2],

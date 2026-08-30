@@ -3373,7 +3373,7 @@ function buildCvPdfArabicProV3(cv: CV, language: DocumentLanguage): TDocumentDef
 }
 
 function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
-  const experienceDate = (value: string): Content => {
+  const timelineDate = (value: string): Content => {
     const formatted = formatCvDate(value, language);
     const endpoints = formatted.split(/\s+-\s+/u).map((part) => part.trim()).filter(Boolean);
     const parsed = endpoints.map((endpoint) => endpoint.match(/^(.+?)\s+(\d{4})$/u));
@@ -3483,7 +3483,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           columns: [
             {
               width: 122,
-              stack: [experienceDate(item.dates || "")],
+              stack: [timelineDate(item.dates || "")],
             },
             {
               width: "*",
@@ -3528,10 +3528,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           columns: [
             {
               width: 122,
-              text: arabicProPdfText(arabicProDate(item.date || "", language, true), true, 30),
-              fontSize: 7.6,
-              color: "#333333",
-              alignment: "left",
+              stack: [timelineDate(item.date || "")],
             },
             {
               width: "*",

@@ -3410,14 +3410,14 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           } as Content);
         }
       });
-      return { columns: dateColumns, columnGap: 3, margin: [8, 1, 0, 0] } as Content;
+      return { columns: dateColumns, columnGap: 3, margin: [-6, 1, 0, 0] } as Content;
     }
     return {
       text: arabicProPdfText(arabicProDate(value, language, true), true, 30),
       fontSize: 7.7,
       color: "#666666",
       alignment: "left",
-      margin: [8, 1, 0, 0],
+      margin: [-6, 1, 0, 0],
     } as Content;
   };
 

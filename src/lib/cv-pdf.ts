@@ -3763,19 +3763,43 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         margin: [4, 0, 4, 0.4],
       },
     );
-  const languages = cvLanguages(cv, language, false).slice(0, 5);
+  const languages = [
+    ["اللغة العربية", cv.langues.ar],
+    ["اللغة الفرنسية", cv.langues.fr],
+    ["اللغة الإنجليزية", cv.langues.en],
+    ["اللغة الألمانية", cv.langues.de],
+    ["اللغة الإسبانية", cv.langues.es],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]?.trim()));
   if (languages.length)
     content.push(
       sectionTitle("اللغات"),
       {
-        text: arabicProPdfText(
-          languages.map(([name, level]) => `${name}: ${level}`).join("  |  "),
-          true,
-          140,
-        ),
-        fontSize: 6.2,
-        alignment: "center",
-        margin: [4, 0, 4, 0],
+        stack: [
+          {
+            text: arabicProPdfText(
+              languages.map(([name, level]) => `${name}: ${level}`).join("  |  "),
+              true,
+              180,
+            ),
+            fontSize: 7.1,
+            alignment: "center",
+            noWrap: true,
+            margin: [8, 2.2, 8, 2.4],
+          },
+          {
+            canvas: [
+              {
+                type: "line" as const,
+                x1: 0,
+                y1: 0,
+                x2: 539,
+                y2: 0,
+                lineWidth: 0.55,
+                lineColor: "#111111",
+              },
+            ],
+          },
+        ],
       },
     );
   return {

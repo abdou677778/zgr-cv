@@ -3373,6 +3373,15 @@ function buildCvPdfArabicProV3(cv: CV, language: DocumentLanguage): TDocumentDef
 }
 
 function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
+  // pdfMake mirrors neutral parentheses in this RTL line; pre-mirroring keeps
+  // the opening and closing glyphs around the education qualifier on output.
+  const educationText = (value: string, maxChars: number) =>
+    arabicProPdfText(
+      value.replace(/[()]/g, (character) => (character === "(" ? ")" : "(")),
+      true,
+      maxChars,
+    );
+
   const timelineDate = (value: string): Content => {
     const formatted = formatCvDate(value, language);
     const endpoints = formatted.split(/\s+-\s+/u).map((part) => part.trim()).filter(Boolean);
@@ -3534,19 +3543,19 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
               width: "*",
               stack: [
                 {
-                  text: arabicProPdfText(item.titre || " ", true, 90),
+                  text: educationText(item.titre || " ", 90),
                   bold: true,
                   fontSize: 8.8,
                   alignment: "right",
                 },
                 {
-                  text: arabicProPdfText(item.institution || " ", true, 96),
+                  text: educationText(item.institution || " ", 96),
                   fontSize: 8,
                   color: "#666666",
                   alignment: "right",
                 },
                 {
-                  text: arabicProPdfText(item.lieu || " ", true, 96),
+                  text: educationText(item.lieu || " ", 96),
                   fontSize: 7.4,
                   color: "#555555",
                   alignment: "right",

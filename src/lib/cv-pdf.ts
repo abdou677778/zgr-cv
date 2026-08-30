@@ -3729,7 +3729,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           { width: "*", stack: skills.slice(0, 4).map((item) => bullet(item, 6.5, 92)) },
         ],
         columnGap: 24,
-        margin: [6, 0, 6, 0.5],
+        margin: [6, 1.8, 6, 0.5],
       },
     );
   const certifications = richListItems(cv.certifications, cv.certifications_format).slice(0, 4);
@@ -3742,14 +3742,20 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
             width: "*",
             stack: [
               sectionTitle("المشاركات", "right", 250),
-              ...participations.map((item) => bullet(item, 6.2, 84)),
+              {
+                stack: participations.map((item) => bullet(item, 6.2, 84)),
+                margin: [0, 1.8, 0, 0],
+              },
             ],
           },
           {
             width: "*",
             stack: [
               sectionTitle("الشهادات المهنية", "right", 250),
-              ...certifications.map((item) => bullet(item, 6.2, 84)),
+              {
+                stack: certifications.map((item) => bullet(item, 6.2, 84)),
+                margin: [0, 1.8, 0, 0],
+              },
             ],
           },
         ],

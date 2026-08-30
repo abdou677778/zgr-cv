@@ -3770,20 +3770,47 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     ["اللغة الألمانية", cv.langues.de],
     ["اللغة الإسبانية", cv.langues.es],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]?.trim()));
+  const languageColumns: Content[] = [];
+  [...languages].reverse().forEach(([name, level], index) => {
+    languageColumns.push({
+      width: "*",
+      columns: [
+        { width: "*", text: "" },
+        {
+          width: "auto",
+          text: arabicProPdfText(level, true, 36),
+          fontSize: 6.7,
+          noWrap: true,
+        },
+        { width: "auto", text: ":", fontSize: 6.7, noWrap: true },
+        {
+          width: "auto",
+          text: arabicProPdfText(name, true, 36),
+          fontSize: 6.7,
+          bold: true,
+          noWrap: true,
+        },
+        { width: "*", text: "" },
+      ],
+      columnGap: 1,
+    } as Content);
+    if (index < languages.length - 1) {
+      languageColumns.push({
+        width: 5,
+        text: "|",
+        fontSize: 7,
+        alignment: "center",
+      } as Content);
+    }
+  });
   if (languages.length)
     content.push(
       sectionTitle("اللغات"),
       {
         stack: [
           {
-            text: arabicProPdfText(
-              languages.map(([name, level]) => `${name}: ${level}`).join("  |  "),
-              true,
-              180,
-            ),
-            fontSize: 7.1,
-            alignment: "center",
-            noWrap: true,
+            columns: languageColumns,
+            columnGap: 1,
             margin: [8, 2.2, 8, 2.4],
           },
           {

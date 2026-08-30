@@ -3443,7 +3443,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         color: ARABIC_PRO_ACCENT,
         alignment,
         lineHeight: 1,
-        margin: [0, 0.8, 4, 0.3],
+        margin: [0, 1.4, 4, 1.5],
       },
       {
         canvas: [
@@ -3457,7 +3457,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
             lineColor: "#111111",
           },
         ],
-        margin: [0, 0, 0, 1.2],
+        margin: [0, 0, 0, 2.4],
       },
     ],
   });

@@ -3373,6 +3373,54 @@ function buildCvPdfArabicProV3(cv: CV, language: DocumentLanguage): TDocumentDef
 }
 
 function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
+  const experienceDate = (value: string): Content => {
+    const formatted = formatCvDate(value, language);
+    const endpoints = formatted.split(/\s+-\s+/u).map((part) => part.trim()).filter(Boolean);
+    const parsed = endpoints.map((endpoint) => endpoint.match(/^(.+?)\s+(\d{4})$/u));
+    if (endpoints.length === 2 && parsed.every(Boolean)) {
+      const dateColumns: Content[] = [];
+      [...parsed].reverse().forEach((match, index) => {
+        if (!match) return;
+        dateColumns.push(
+          {
+            width: "auto",
+            text: match[2],
+            font: "NotoSansArabic",
+            fontSize: 7.7,
+            color: "#666666",
+            noWrap: true,
+          } as Content,
+          {
+            width: "auto",
+            text: arabicProPdfText(match[1], true, 20),
+            font: "NotoSansArabic",
+            fontSize: 7.7,
+            color: "#666666",
+            noWrap: true,
+          } as Content,
+        );
+        if (index === 0) {
+          dateColumns.push({
+            width: "auto",
+            text: "-",
+            font: "NotoSansArabic",
+            fontSize: 7.7,
+            color: "#666666",
+            noWrap: true,
+          } as Content);
+        }
+      });
+      return { columns: dateColumns, columnGap: 3, margin: [8, 1, 0, 0] } as Content;
+    }
+    return {
+      text: arabicProPdfText(arabicProDate(value, language, true), true, 30),
+      fontSize: 7.7,
+      color: "#666666",
+      alignment: "left",
+      margin: [8, 1, 0, 0],
+    } as Content;
+  };
+
   const sectionTitle = (
     title: string,
     alignment: "left" | "right" = "right",
@@ -3435,11 +3483,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           columns: [
             {
               width: 122,
-              text: arabicProPdfText(arabicProDate(item.dates || "", language, true), true, 30),
-              fontSize: 7.7,
-              color: "#666666",
-              alignment: "left",
-              margin: [8, 1, 0, 0],
+              stack: [experienceDate(item.dates || "")],
             },
             {
               width: "*",

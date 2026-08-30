@@ -3373,7 +3373,11 @@ function buildCvPdfArabicProV3(cv: CV, language: DocumentLanguage): TDocumentDef
 }
 
 function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
-  const V5_DISPLAY_FONT = "HacenTunisia";
+  // Noto Sans Arabic is used for display text as well as body copy because it
+  // preserves joined glyphs and tatweel consistently in pdfMake. Decorative
+  // fonts such as Hacen Tunisia can expose isolated glyph forms in this RTL
+  // pipeline even when the source Arabic is valid.
+  const V5_DISPLAY_FONT = "NotoSansArabic";
 
   // pdfMake mirrors neutral parentheses in this RTL line; pre-mirroring keeps
   // the opening and closing glyphs around the education qualifier on output.
@@ -3481,7 +3485,8 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       {
         text: arabicProPdfText(title, true, 34),
         font: V5_DISPLAY_FONT,
-        fontSize: 12.5,
+        bold: true,
+        fontSize: 12.2,
         color: ARABIC_PRO_ACCENT,
         alignment,
         lineHeight: 0.96,
@@ -3707,14 +3712,16 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
                 width: "auto",
                 text: arabicProPdfText(displayFamilyName, true, 32),
                 font: V5_DISPLAY_FONT,
-                fontSize: 23,
+                bold: true,
+                fontSize: 22,
                 color: "#111111",
               },
               {
                 width: "auto",
                 text: arabicProPdfText(displayFirstName, true, 24),
                 font: V5_DISPLAY_FONT,
-                fontSize: 23,
+                bold: true,
+                fontSize: 22,
                 color: ARABIC_PRO_ACCENT,
               },
               { width: "*", text: "" },
@@ -3729,7 +3736,8 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
           {
             text: arabicProPdfText(cv.titre_poste, true, 70),
             font: V5_DISPLAY_FONT,
-            fontSize: 10.2,
+            bold: true,
+            fontSize: 9.6,
             color: ARABIC_PRO_ACCENT,
             alignment: "center",
             margin: [0, 0, 0, 3.2],

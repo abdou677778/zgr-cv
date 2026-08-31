@@ -3398,6 +3398,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
   const V5_CONTENT_WIDTH = 539.28;
   const V5_TWO_COLUMN_GAP = 18;
   const V5_HALF_RULE_WIDTH = (V5_CONTENT_WIDTH - V5_TWO_COLUMN_GAP) / 2;
+  const V5_RULE_CONTENT_GAP = 8;
 
   // pdfMake mirrors neutral parentheses in this RTL line; pre-mirroring keeps
   // the opening and closing glyphs around the education qualifier on output.
@@ -3524,7 +3525,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
             lineColor: "#111111",
           },
         ],
-        margin: [0, 0, 0, 5],
+        margin: [0, 0, 0, V5_RULE_CONTENT_GAP],
       },
     ],
   });
@@ -3794,7 +3795,9 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
               paddingTop: () => 0,
               paddingBottom: () => 0,
             },
-            margin: [0, 0, 0, 4],
+            // Keep a consistent breathing space after the lower contact rule,
+            // matching the gap below every section rule in this template.
+            margin: [0, 0, 0, V5_RULE_CONTENT_GAP],
           } as Content,
         ] as Content[])
       : []),

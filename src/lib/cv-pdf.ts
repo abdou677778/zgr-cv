@@ -3399,6 +3399,19 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
   const V5_TWO_COLUMN_GAP = 18;
   const V5_HALF_RULE_WIDTH = (V5_CONTENT_WIDTH - V5_TWO_COLUMN_GAP) / 2;
   const V5_RULE_CONTENT_GAP = 8;
+  const V5_JOB_TITLE_COLOR = "#707070";
+  const V5_SECTION_TITLES: Record<string, string> = {
+    "نبذة عني": "نبــــذة عنــــي",
+    "الخبرة المهنية": "الخبــــرة المهنيــــة",
+    التعليم: "التعليــــم",
+    "المهارات التقنية": "المهــــارات التقنيــــة",
+    المشاركات: "المشاركــــات",
+    "الشهادات المهنية": "الشهــــادات المهنيــــة",
+    الاهتمامات: "الاهتمامــــات",
+    المراجع: "المراجــــع",
+    "معلومات إضافية": "معلومــــات إضافيــــة",
+    اللغات: "اللغــــات",
+  };
 
   // pdfMake mirrors neutral parentheses in this RTL line; pre-mirroring keeps
   // the opening and closing glyphs around the education qualifier on output.
@@ -3504,7 +3517,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
   ): Content => ({
     stack: [
       {
-        text: arabicProPdfText(title, true, 34),
+        text: arabicProPdfText(V5_SECTION_TITLES[title] || title, true, 44),
         font: V5_FONT,
         bold: true,
         fontSize: 12,
@@ -3765,7 +3778,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
             font: V5_FONT,
             bold: true,
             fontSize: 9.8,
-            color: ARABIC_PRO_ACCENT,
+            color: V5_JOB_TITLE_COLOR,
             alignment: "center",
             margin: [0, 0, 0, 2.5],
           } as Content,

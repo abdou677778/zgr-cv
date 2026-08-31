@@ -3804,6 +3804,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
   ];
   if (cv.objectif.trim())
     content.push(
+      sectionTitle("نبذة عني"),
       objectivePdfContent(
         cv,
         7.8,

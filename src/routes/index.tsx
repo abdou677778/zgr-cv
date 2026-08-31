@@ -528,14 +528,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           if (settings.documentKind && settings.templateId) {
             setDocumentKind(settings.documentKind);
             setTemplateId(
-              String(settings.templateId) === "arabic-pro-v1"
-                ? "arabic-pro-v2"
+              isArabicCvTemplate(String(settings.templateId))
+                ? "arabic-pro-v1"
                 : settings.templateId,
             );
           }
         } catch {
-          if (getTemplates("cv").some((template) => template.id === savedTemplate)) {
-            setTemplateId(savedTemplate as PdfTemplateId);
+          const migratedTemplate = isArabicCvTemplate(savedTemplate)
+            ? "arabic-pro-v1"
+            : savedTemplate;
+          if (getTemplates("cv").some((template) => template.id === migratedTemplate)) {
+            setTemplateId(migratedTemplate as PdfTemplateId);
           }
         }
       }
@@ -982,8 +985,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setLanguage(profile.language);
     setHiddenElements(structuredClone(profile.hiddenElements));
     setDocumentKind(profile.documentKind);
-    setTemplateId(profile.templateId);
-    setTemplateColors(structuredClone(profile.templateColors));
+    setTemplateId(
+      profile.documentKind === "cv"
+        ? normalizeCvTemplateForLanguage(String(profile.templateId), profile.language)
+        : profile.templateId,
+    );
+    setTemplateColors({ ...DEFAULT_TEMPLATE_COLORS, ...structuredClone(profile.templateColors) });
     setActiveProfileId(profile.id);
     setImportMessage({
       ok: true,
@@ -1024,11 +1031,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       profile.cvByLanguage[profile.language],
       profile.hiddenElements,
     );
-    const color = profile.templateColors[profile.templateId as ThemeTemplateId];
+    const profileTemplateId =
+      profile.documentKind === "cv"
+        ? normalizeCvTemplateForLanguage(String(profile.templateId), profile.language)
+        : profile.templateId;
+    const color = profile.templateColors[profileTemplateId as ThemeTemplateId];
     const blob = await createDocumentPdfBlob(
       profileCv,
       profile.documentKind,
-      profile.templateId,
+      profileTemplateId,
       profile.language,
       color,
     );

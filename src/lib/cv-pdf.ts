@@ -10,7 +10,11 @@ import type { CV, Experience, Formation, Education, ObjectiveFormat } from "./cv
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
-import { CV_TEMPLATES, type CvTemplateId } from "./document-templates";
+import {
+  CV_TEMPLATES,
+  normalizeCvTemplateForLanguage,
+  type CvTemplateId,
+} from "./document-templates";
 import { toPdfRtlVisualText } from "./arabic-pdf-text";
 import pdfMake from "pdfmake/build/pdfmake";
 import calibriRegularUrl from "@/assets/fonts/Calibri.ttf?inline";
@@ -4056,7 +4060,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     );
   return {
     info: {
-      title: `CV PRO Arabe V5 - ${cv.nom_complet || "CV"}`,
+      title: `CV Pro Arabe V1 - ${cv.nom_complet || "CV"}`,
       author: cv.nom_complet || "",
     },
     pageSize: "A4",
@@ -4276,25 +4280,20 @@ export async function createCvPdfBlob(
   accentColor?: string,
 ): Promise<Blob> {
   await ensureFontsForLanguage(language);
+  const normalizedTemplateId = normalizeCvTemplateForLanguage(templateId, language);
   const document =
-    templateId === "arabic-pro-v4"
-      ? buildCvPdfArabicProV4(cv, language)
-      : templateId === "arabic-pro-v2"
-        ? buildCvPdfArabicProClassic(cv, language, "v2")
-        : templateId === "arabic-pro-v3"
-          ? buildCvPdfArabicProV3(cv, language)
-          : templateId === "arabic-pro-v5"
-            ? buildCvPdfArabicProV5(cv, language)
-      : templateId === "ats-a4"
+    normalizedTemplateId === "arabic-pro-v1"
+      ? buildCvPdfArabicProV5(cv, language)
+      : normalizedTemplateId === "ats-a4"
         ? buildCvPdfAtsA4(cv, language)
-        : templateId === "canadian-v4"
+        : normalizedTemplateId === "canadian-v4"
           ? buildCvPdfV4(cv, language)
-          : templateId === "canadian-v3"
+          : normalizedTemplateId === "canadian-v3"
             ? buildCvPdfV3(cv, language)
-            : templateId === "canadian-v2"
+            : normalizedTemplateId === "canadian-v2"
               ? buildCvPdfV2(cv, language)
               : buildCvPdfV1(cv, language);
-  return pdfMake.createPdf(applyPdfTheme(document, templateId, accentColor)).getBlob();
+  return pdfMake.createPdf(applyPdfTheme(document, normalizedTemplateId, accentColor)).getBlob();
 }
 
 export function downloadCvPdf(blob: Blob, cv: CV) {

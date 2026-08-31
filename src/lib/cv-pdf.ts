@@ -3799,9 +3799,9 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         cv,
         7.8,
         { alignment: "right", lineHeight: 1.16, margin: [0, 0, 0, 1.6] },
-        // The Canva V5 reference fills the first line through "كندية".
-        // Keep the controlled RTL line wrapping, but match that wider measure.
-        (text) => arabicProPdfText(text, true, 148),
+        // Arial is more compact than the former Arabic font. Let the objective
+        // use the full content measure before starting its final RTL line.
+        (text) => arabicProPdfText(text, true, 190),
       ),
     );
   const experiences = cv.experiences

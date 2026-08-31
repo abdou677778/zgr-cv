@@ -130,6 +130,8 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
 
   return {
     ...cv,
+    photo:
+      sectionVisible("personal") && visible("personal.photo") ? cv.photo : undefined,
     nom_complet: scalar("nom_complet"),
     titre_poste: scalar("titre_poste"),
     telephone: scalar("telephone"),

@@ -16,6 +16,7 @@ import {
   type CvTemplateId,
 } from "./document-templates";
 import { toPdfRtlVisualText } from "./arabic-pdf-text";
+import { profilePhotoDataUrlForPdf } from "./profile-photo";
 import pdfMake from "pdfmake/build/pdfmake";
 import calibriRegularUrl from "@/assets/fonts/Calibri.ttf?inline";
 import calibriItalicUrl from "@/assets/fonts/Calibriitalic.ttf?inline";
@@ -383,6 +384,46 @@ function companyLine(
     columnGap: 4,
     ...(margin ? { margin } : {}),
   } as Content;
+}
+
+function profilePhotoBlock(cv: CV, size = 68, bottomMargin = 10): Content[] {
+  if (!cv.photo?.dataUrl) return [];
+  return [
+    {
+      columns: [
+        { width: "*", text: "" },
+        {
+          width: size + 6,
+          table: {
+            widths: [size],
+            body: [
+              [
+                {
+                  image: cv.photo.dataUrl,
+                  fit: [size, size],
+                  alignment: "center",
+                  margin: [2, 2, 2, 2],
+                },
+              ],
+            ],
+          },
+          layout: {
+            hLineWidth: () => 0.8,
+            vLineWidth: () => 0.8,
+            hLineColor: () => "#d4d4d8",
+            vLineColor: () => "#d4d4d8",
+            paddingLeft: () => 0,
+            paddingRight: () => 0,
+            paddingTop: () => 0,
+            paddingBottom: () => 0,
+          },
+        },
+        { width: "*", text: "" },
+      ],
+      columnGap: 0,
+      margin: [0, 0, 0, bottomMargin],
+    } as Content,
+  ];
 }
 
 function contactLine(icon: keyof typeof CONTACT_ICONS, text: string): Content {
@@ -989,7 +1030,7 @@ function buildCvPdfV1(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
   const labels = cvCopy(language);
   const langues = cvLanguages(cv, language, false);
 
-  const content: Content[] = [header(cv)];
+  const content: Content[] = [...profilePhotoBlock(cv), header(cv)];
 
   if (cv.objectif) content.push(...section(labels.objective, objectivePdfContent(cv, 12)));
 
@@ -1359,7 +1400,7 @@ function v2Section(title: string, first: Content, rest: Content[] = [], firstSec
 function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
   const labels = cvCopy(language);
   const langues = cvLanguages(cv, language);
-  const content: Content[] = [v2Header(cv)];
+  const content: Content[] = [...profilePhotoBlock(cv), v2Header(cv)];
   let isFirstSection = true;
   const pushSection = (title: string, first: Content, rest: Content[] = []) => {
     content.push(...v2Section(title, first, rest, isFirstSection));
@@ -1747,7 +1788,7 @@ function v3Section(title: string, first: Content, rest: Content[] = [], firstSec
 
 function buildCvPdfV3(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
   const labels = cvCopy(language);
-  const content: Content[] = [v3Header(cv, language)];
+  const content: Content[] = [...profilePhotoBlock(cv), v3Header(cv, language)];
   let isFirstSection = true;
   const pushSection = (title: string, first: Content, rest: Content[] = []) => {
     content.push(...v3Section(title, first, rest, isFirstSection));
@@ -2093,7 +2134,7 @@ function v4EducationBlock(education: Education, language: DocumentLanguage): Con
 
 function buildCvPdfV4(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
   const labels = cvCopy(language);
-  const content: Content[] = [v4Header(cv, language)];
+  const content: Content[] = [...profilePhotoBlock(cv), v4Header(cv, language)];
   const pushSection = (title: Content, blocks: Content[]) => {
     const [first, ...rest] = blocks;
     content.push({ unbreakable: true, stack: [title, first] } as Content, ...rest);
@@ -2438,7 +2479,7 @@ function v5EducationBlock(education: Education, language: DocumentLanguage): Con
 
 function buildCvPdfAtsA4(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
   const labels = cvCopy(language);
-  const content: Content[] = [v5Header(cv)];
+  const content: Content[] = [...profilePhotoBlock(cv), v5Header(cv)];
   let firstSection = true;
   const pushSection = (title: string, first: Content, rest: Content[] = []) => {
     content.push(v5SectionHeading(title, firstSection ? 15 : 12), first, ...rest);
@@ -3748,6 +3789,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     .join(" ");
   const content: Content[] = [
     ...arabicAtsTextLayers(cv, V5_FONT, V5_FONT),
+    ...profilePhotoBlock(cv, 62, 5),
     ...(cv.nom_complet.trim()
       ? ([
           {
@@ -4280,19 +4322,28 @@ export async function createCvPdfBlob(
   accentColor?: string,
 ): Promise<Blob> {
   await ensureFontsForLanguage(language);
+  const pdfCv = cv.photo?.dataUrl
+    ? {
+        ...cv,
+        photo: {
+          ...cv.photo,
+          dataUrl: await profilePhotoDataUrlForPdf(cv.photo),
+        },
+      }
+    : cv;
   const normalizedTemplateId = normalizeCvTemplateForLanguage(templateId, language);
   const document =
     normalizedTemplateId === "arabic-pro-v1"
-      ? buildCvPdfArabicProV5(cv, language)
+      ? buildCvPdfArabicProV5(pdfCv, language)
       : normalizedTemplateId === "ats-a4"
-        ? buildCvPdfAtsA4(cv, language)
+        ? buildCvPdfAtsA4(pdfCv, language)
         : normalizedTemplateId === "canadian-v4"
-          ? buildCvPdfV4(cv, language)
+          ? buildCvPdfV4(pdfCv, language)
           : normalizedTemplateId === "canadian-v3"
-            ? buildCvPdfV3(cv, language)
+            ? buildCvPdfV3(pdfCv, language)
             : normalizedTemplateId === "canadian-v2"
-              ? buildCvPdfV2(cv, language)
-              : buildCvPdfV1(cv, language);
+              ? buildCvPdfV2(pdfCv, language)
+              : buildCvPdfV1(pdfCv, language);
   return pdfMake.createPdf(applyPdfTheme(document, normalizedTemplateId, accentColor)).getBlob();
 }
 

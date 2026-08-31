@@ -1,8 +1,13 @@
-import type { CV } from "./cv-types";
+import type { CV, ProfilePhoto } from "./cv-types";
 import type { DocumentLanguage } from "./document-language";
 import type { HiddenCvElements } from "./cv-visibility";
 import type { DocumentKind, PdfTemplateId } from "./document-pdf";
 import type { TemplateColorMap } from "./pdf-theme";
+import {
+  blobToProfilePhotoDataUrl,
+  normalizeProfilePhoto,
+  profilePhotoBlob,
+} from "./profile-photo";
 
 const DB_NAME = "zgr-cv-clients";
 const DB_VERSION = 1;
@@ -22,12 +27,13 @@ export type ClientProfile = {
   documentKind: DocumentKind;
   templateId: PdfTemplateId;
   templateColors: TemplateColorMap;
+  photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
 
 export type ClientProfileSummary = Pick<
   ClientProfile,
   "id" | "name" | "email" | "phone" | "createdAt" | "updatedAt" | "language"
->;
+> & { hasPhoto?: boolean };
 
 const asPromise = <T>(request: IDBRequest<T>) =>
   new Promise<T>((resolve, reject) => {
@@ -96,8 +102,18 @@ export async function listClientProfiles(): Promise<ClientProfileSummary[]> {
   const profiles = await withStore<ClientProfile[]>("readonly", (store) => store.getAll());
   return profiles
     .map(
-      ({ cvByLanguage: _cv, hiddenElements: _hidden, templateColors: _colors, ...summary }) =>
-        summary,
+      ({
+        cvByLanguage,
+        hiddenElements: _hidden,
+        templateColors: _colors,
+        photoAsset,
+        ...summary
+      }) => ({
+        ...summary,
+        hasPhoto:
+          Boolean(photoAsset?.r2Key) ||
+          Object.values(cvByLanguage).some((document) => Boolean(document.photo)),
+      }),
     )
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
@@ -127,6 +143,35 @@ const cloudUrl = (endpoint: string, id?: string) => {
   return id ? `${base}/${encodeURIComponent(id)}` : base;
 };
 
+const cloudPhotoUrl = (endpoint: string, id: string) => `${cloudUrl(endpoint, id)}/photo`;
+
+function profilePhoto(profile: ClientProfile) {
+  for (const cv of Object.values(profile.cvByLanguage)) {
+    const normalized = normalizeProfilePhoto(cv.photo);
+    if (normalized) return normalized;
+  }
+  return normalizeProfilePhoto(profile.photoAsset);
+}
+
+function profileForCloud(profile: ClientProfile, photo?: ProfilePhoto): ClientProfile {
+  const next = structuredClone(profile);
+  const r2Key = photo ? `clients/${profile.id}/photo.webp` : undefined;
+  for (const cv of Object.values(next.cvByLanguage)) {
+    if (!photo) {
+      cv.photo = undefined;
+      continue;
+    }
+    cv.photo = { ...photo, dataUrl: undefined, r2Key };
+  }
+  if (photo) {
+    const { dataUrl: _dataUrl, ...metadata } = photo;
+    next.photoAsset = { ...metadata, r2Key };
+  } else {
+    next.photoAsset = undefined;
+  }
+  return next;
+}
+
 export async function listCloudProfiles(endpoint: string, token: string) {
   const response = await fetch(cloudUrl(endpoint), { headers: cloudHeaders(token) });
   const body = await cloudResponse<{ profiles: CloudProfileSummary[] }>(response);
@@ -135,16 +180,59 @@ export async function listCloudProfiles(endpoint: string, token: string) {
 
 export async function getCloudProfile(endpoint: string, token: string, id: string) {
   const response = await fetch(cloudUrl(endpoint, id), { headers: cloudHeaders(token) });
-  return cloudResponse<ClientProfile>(response);
+  const profile = await cloudResponse<ClientProfile>(response);
+  const metadata = profilePhoto(profile);
+  if (!metadata) return profile;
+  const photoResponse = await fetch(cloudPhotoUrl(endpoint, id), {
+    headers: cloudHeaders(token),
+    cache: "no-store",
+  });
+  if (photoResponse.status === 404) {
+    profile.photoAsset = undefined;
+    for (const cv of Object.values(profile.cvByLanguage)) cv.photo = undefined;
+    return profile;
+  }
+  if (!photoResponse.ok) {
+    await cloudResponse(photoResponse);
+    return profile;
+  }
+  const photoDataUrl = await blobToProfilePhotoDataUrl(await photoResponse.blob());
+  const hydrated: ProfilePhoto = { ...metadata, dataUrl: photoDataUrl };
+  const { dataUrl: _dataUrl, ...photoAsset } = metadata;
+  profile.photoAsset = photoAsset;
+  for (const cv of Object.values(profile.cvByLanguage)) cv.photo = structuredClone(hydrated);
+  return profile;
 }
 
 export async function putCloudProfile(endpoint: string, token: string, profile: ClientProfile) {
+  const photo = profilePhoto(profile);
+  if (photo?.dataUrl) {
+    const blob = await profilePhotoBlob(photo);
+    const photoResponse = await fetch(cloudPhotoUrl(endpoint, profile.id), {
+      method: "PUT",
+      headers: {
+        ...cloudHeaders(token),
+        "Content-Type": "image/webp",
+      },
+      body: blob,
+    });
+    await cloudResponse<{ ok: true; key: string }>(photoResponse);
+  }
+  const cloudProfile = profileForCloud(profile, photo);
   const response = await fetch(cloudUrl(endpoint, profile.id), {
     method: "PUT",
     headers: cloudHeaders(token, true),
-    body: JSON.stringify(profile),
+    body: JSON.stringify(cloudProfile),
   });
   await cloudResponse<{ ok: true }>(response);
+  if (!photo) {
+    const photoResponse = await fetch(cloudPhotoUrl(endpoint, profile.id), {
+      method: "DELETE",
+      headers: cloudHeaders(token),
+    });
+    if (photoResponse.status !== 404) await cloudResponse<{ ok: true }>(photoResponse);
+  }
+  return cloudProfile.photoAsset;
 }
 
 export async function synchronizeClientProfiles(endpoint: string, token: string) {

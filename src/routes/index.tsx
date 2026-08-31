@@ -46,6 +46,7 @@ import {
   type Formation,
   type Education,
   type CompanyLogo,
+  type ProfilePhoto,
   type ObjectiveFormat,
   emptyCV,
   newId,
@@ -96,6 +97,7 @@ import { AdminLogin } from "@/components/admin-login";
 import { AccountSettingsDialog } from "@/components/account-settings-dialog";
 import { PromptMasterDialog } from "@/components/prompt-master-dialog";
 import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
+import { ProfilePhotoField } from "@/components/profile-photo-field";
 import { ExperienceWorkspace } from "@/components/cv-experience-workspace";
 import { EducationWorkspace, FormationWorkspace } from "@/components/cv-learning-workspaces";
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
@@ -108,6 +110,7 @@ import {
   type SectionAppearanceMap,
 } from "@/components/cv-section-panel";
 import {
+  CLIENTS_API_ENDPOINT,
   clearAdminSession,
   getAdminSession,
   getCurrentUser,
@@ -118,6 +121,7 @@ import {
 import {
   getClientProfile,
   newClientProfileId,
+  putCloudProfile,
   saveClientProfile,
   type ClientProfile,
 } from "@/lib/client-profile-db";
@@ -858,6 +862,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       }
       return next;
     });
+  const updateProfilePhoto = (photo?: ProfilePhoto) =>
+    setCvByLanguage((current) =>
+      Object.fromEntries(
+        DOCUMENT_LANGUAGES.map((item) => [
+          item.id,
+          { ...current[item.id], photo: photo ? structuredClone(photo) : undefined },
+        ]),
+      ) as Record<DocumentLanguage, CV>,
+    );
   const removeExp = (id: string, index: number) => {
     removeIndexedVisibility("experience", index);
     setCv((c) => ({ ...c, experiences: c.experiences.filter((e) => e.id !== id) }));
@@ -921,12 +934,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const reset = () => {
     if (confirm(ui.resetConfirm)) {
       setCv(emptyCV);
+      updateProfilePhoto(undefined);
       setHiddenElements({});
       setActiveProfileId(null);
     }
   };
   const loadSample = () => {
     setCv(sampleCVByLanguage[language]);
+    updateProfilePhoto(undefined);
     setHiddenElements({});
     setActiveProfileId(null);
   };
@@ -947,9 +962,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       
       // Support direct import of Europass XML files (.xml)
       if (file.name.toLowerCase().endsWith(".xml") || fileText.trim().startsWith("<")) {
-        const importedCv = parseEuropassXml(fileText);
+        const importedCv = await parseEuropassXml(fileText);
         const next = { ...cvByLanguage, [language]: importedCv };
         setCvByLanguage(next);
+        updateProfilePhoto(importedCv.photo);
         setHiddenElements({});
         setActiveProfileId(null);
         setImportMessage({
@@ -981,6 +997,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       if (importedLanguages.length === 0) {
         next[language] = importCvJson(parsed, "auto").cv;
         importedLanguages.push(language);
+      }
+      const importedPhoto = importedLanguages
+        .map((importedLanguage) => next[importedLanguage].photo)
+        .find((photo) => photo?.dataUrl);
+      for (const item of DOCUMENT_LANGUAGES) {
+        next[item.id] = {
+          ...next[item.id],
+          photo: importedPhoto ? structuredClone(importedPhoto) : undefined,
+        };
       }
       setCvByLanguage(next);
       setHiddenElements({});
@@ -1026,10 +1051,31 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         templateColors: structuredClone(templateColors),
       };
       await saveClientProfile(profile);
+      let cloudError = "";
+      let cloudSynced = false;
+      const token = getAdminSession();
+      if (token) {
+        try {
+          const photoAsset = await putCloudProfile(CLIENTS_API_ENDPOINT, token, profile);
+          cloudSynced = true;
+          if (photoAsset) {
+            profile.photoAsset = photoAsset;
+            for (const profileCv of Object.values(profile.cvByLanguage)) {
+              if (profileCv.photo) profileCv.photo.r2Key = photoAsset.r2Key;
+            }
+            await saveClientProfile(profile);
+            if (cv.photo) updateProfilePhoto({ ...cv.photo, r2Key: photoAsset.r2Key });
+          }
+        } catch (error) {
+          cloudError = error instanceof Error ? error.message : "synchronisation R2 impossible";
+        }
+      }
       setActiveProfileId(id);
       setImportMessage({
-        ok: true,
-        text: `${existing ? "Profil mis à jour" : "Nouveau profil sauvegardé"} : ${profile.name} · ID ${id}`,
+        ok: !cloudError,
+        text: cloudError
+          ? `${existing ? "Profil mis à jour" : "Nouveau profil sauvegardé"} localement : ${profile.name} · R2 : ${cloudError}`
+          : `${existing ? "Profil mis à jour" : "Nouveau profil sauvegardé"} ${cloudSynced ? "localement et dans R2" : "localement"} : ${profile.name} · ID ${id}`,
       });
     } catch (error) {
       setImportMessage({
@@ -1101,7 +1147,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           ? normalizeCvTemplateForLanguage(String(profile.templateId), profile.language)
           : profile.templateId;
     if (profileTemplateId === EUROPASS_TEMPLATE_ID) {
-      downloadEuropassXml(profileCv, profile.language);
+      await downloadEuropassXml(profileCv, profile.language);
       setImportMessage({
         ok: true,
         text: `XML Europass ${profile.language.toUpperCase()} téléchargé pour ${profile.name}.`,
@@ -1173,11 +1219,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     }
   };
 
-  const exportAndOpenEuropass = () => {
+  const exportAndOpenEuropass = async () => {
     try {
       const editorWindow = window.open(europassEditorUrl(language), "_blank");
       if (editorWindow) editorWindow.opener = null;
-      downloadEuropassXml(outputCv, language);
+      await downloadEuropassXml(outputCv, language);
       setPackMessage({
         ok: true,
         text: editorWindow
@@ -1515,9 +1561,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={() => {
+                  onSelect={async () => {
                     try {
-                      downloadEuropassXml(cv, language);
+                      await downloadEuropassXml(outputCv, language);
                       setPackMessage({
                         ok: true,
                         text: "🇪🇺 XML Europass Candidate téléchargé. Les données disponibles sont préremplies ; complétez les champs signalés dans l’éditeur officiel.",
@@ -1625,6 +1671,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             complete={Boolean(cv.nom_complet.trim() && cv.titre_poste.trim())}
           >
             <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Field label="Photo du profil" {...visibilityProps("personal.photo")}>
+                  <ProfilePhotoField photo={cv.photo} onChange={updateProfilePhoto} />
+                </Field>
+              </div>
               <Field
                 label={form.fullName}
                 {...visibilityProps("personal.nom_complet")}
@@ -2499,7 +2550,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         onSettingsChange={setAiSettings}
         onOpenSettings={() => setAiSettingsOpen(true)}
         onApply={(mappedCv) => {
-          setCv(mappedCv);
+          setCv({ ...mappedCv, photo: cv.photo });
           setHiddenElements({});
           setImportMessage({
             ok: true,
@@ -2556,18 +2607,27 @@ function EuropassPreview({
 
         <div className="space-y-6 p-6 sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Profil actif
-              </p>
-              <p className="mt-1 font-bold text-slate-900" dir="auto">
-                {cv.nom_complet || "Profil sans nom"}
-              </p>
-              {cv.titre_poste && (
-                <p className="mt-0.5 text-xs text-slate-600" dir="auto">
-                  {cv.titre_poste}
-                </p>
+            <div className="flex min-w-0 items-center gap-3">
+              {cv.photo?.dataUrl && (
+                <img
+                  src={cv.photo.dataUrl}
+                  alt="Photo du profil Europass"
+                  className="h-14 w-14 shrink-0 rounded-lg border border-slate-200 bg-white object-cover"
+                />
               )}
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Profil actif
+                </p>
+                <p className="mt-1 truncate font-bold text-slate-900" dir="auto">
+                  {cv.nom_complet || "Profil sans nom"}
+                </p>
+                {cv.titre_poste && (
+                  <p className="mt-0.5 truncate text-xs text-slate-600" dir="auto">
+                    {cv.titre_poste}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#164194]">
               {selectedLanguage?.name || language.toUpperCase()} · {language.toUpperCase()}
@@ -2603,7 +2663,7 @@ function EuropassPreview({
             {[
               [cv.experiences.length, "Expériences"],
               [cv.educations.length + cv.formations.length, "Études"],
-              [cv.langues.length, "Langues"],
+              [Object.values(cv.langues).filter(Boolean).length, "Langues"],
             ].map(([value, label]) => (
               <div key={String(label)} className="rounded-xl border border-slate-200 px-2 py-3">
                 <p className="text-xl font-black text-[#164194]">{value}</p>

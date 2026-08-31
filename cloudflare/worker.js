@@ -2,6 +2,7 @@ const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
 const MAX_ACCOUNT_BYTES = 16_384;
 const MAX_AI_BYTES = 120_000;
+const MAX_PHOTO_BYTES = 150 * 1024;
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 // Cloudflare Workers currently rejects PBKDF2 iteration counts above 100,000.
 const PBKDF2_ITERATIONS = 100_000;
@@ -632,6 +633,61 @@ function profileId(pathname) {
   return ID_PATTERN.test(id) ? id : null;
 }
 
+function profilePhotoId(pathname) {
+  const match = pathname.match(/^\/api\/clients\/([^/]+)\/photo$/);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]).toUpperCase();
+  return ID_PATTERN.test(id) ? id : null;
+}
+
+const profilePhotoKey = (id) => `clients/${id}/photo.webp`;
+
+function isWebp(buffer) {
+  if (buffer.byteLength < 12) return false;
+  const bytes = new Uint8Array(buffer, 0, 12);
+  return (
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+  );
+}
+
+async function getProfilePhoto(env, id, origin) {
+  const object = await env.CLIENTS_BUCKET.get(profilePhotoKey(id));
+  if (!object) return json({ error: "Photo du profil introuvable." }, 404, origin);
+  return new Response(object.body, {
+    headers: {
+      "Content-Type": "image/webp",
+      "Content-Length": String(object.size),
+      "Cache-Control": "private, no-store",
+      ETag: object.httpEtag,
+      "X-Content-Type-Options": "nosniff",
+      ...corsHeaders(origin),
+    },
+  });
+}
+
+async function putProfilePhoto(request, env, id, origin) {
+  if ((request.headers.get("Content-Type") || "").split(";", 1)[0].trim() !== "image/webp") {
+    return json({ error: "La photo doit être envoyée au format WebP." }, 415, origin);
+  }
+  const declaredSize = Number(request.headers.get("Content-Length") || 0);
+  if (declaredSize > MAX_PHOTO_BYTES) {
+    return json({ error: "La photo WebP dépasse 150 Ko." }, 413, origin);
+  }
+  const buffer = await request.arrayBuffer();
+  if (buffer.byteLength > MAX_PHOTO_BYTES) {
+    return json({ error: "La photo WebP dépasse 150 Ko." }, 413, origin);
+  }
+  if (!isWebp(buffer)) return json({ error: "Le fichier WebP est invalide." }, 422, origin);
+  const updatedAt = new Date().toISOString();
+  const key = profilePhotoKey(id);
+  await env.CLIENTS_BUCKET.put(key, buffer, {
+    httpMetadata: { contentType: "image/webp" },
+    customMetadata: { id, updatedAt, size: String(buffer.byteLength) },
+  });
+  return json({ ok: true, id, key, size: buffer.byteLength, updatedAt }, 200, origin);
+}
+
 async function listProfiles(env, origin) {
   const profiles = [];
   let cursor;
@@ -643,6 +699,7 @@ async function listProfiles(env, origin) {
       limit: 500,
     });
     for (const object of page.objects) {
+      if (!object.key.endsWith(".json")) continue;
       const metadata = object.customMetadata || {};
       profiles.push({
         id: metadata.id || object.key.replace(/^clients\//, "").replace(/\.json$/, ""),
@@ -653,6 +710,7 @@ async function listProfiles(env, origin) {
         updatedAt: metadata.updatedAt || object.uploaded.toISOString(),
         language: metadata.language || "fr",
         size: object.size,
+        hasPhoto: metadata.hasPhoto === "true",
       });
     }
     cursor = page.truncated ? page.cursor : undefined;
@@ -710,6 +768,7 @@ async function putProfile(request, env, id, origin) {
       language: String(profile.language || "fr").slice(0, 8),
       createdAt: String(profile.createdAt || profile.updatedAt).slice(0, 40),
       updatedAt: profile.updatedAt.slice(0, 40),
+      hasPhoto: profile.photoAsset?.r2Key ? "true" : "false",
     },
   });
   return json({ ok: true, id }, 200, origin);
@@ -1264,12 +1323,25 @@ async function route(request, env, ctx) {
     return generateAi(request, env, origin);
 
   if (url.pathname === "/api/clients" && request.method === "GET") return listProfiles(env, origin);
+  const photoId = profilePhotoId(url.pathname);
+  if (photoId) {
+    if (request.method === "GET") return getProfilePhoto(env, photoId, origin);
+    if (request.method === "PUT") return putProfilePhoto(request, env, photoId, origin);
+    if (request.method === "DELETE") {
+      await env.CLIENTS_BUCKET.delete(profilePhotoKey(photoId));
+      return json({ ok: true, id: photoId }, 200, origin);
+    }
+    return json({ error: "Méthode non autorisée." }, 405, origin);
+  }
   const id = profileId(url.pathname);
   if (!id) return json({ error: "Route ou ID client invalide." }, 404, origin);
   if (request.method === "GET") return getProfile(env, id, origin);
   if (request.method === "PUT") return putProfile(request, env, id, origin);
   if (request.method === "DELETE") {
-    await env.CLIENTS_BUCKET.delete(`clients/${id}.json`);
+    await Promise.all([
+      env.CLIENTS_BUCKET.delete(`clients/${id}.json`),
+      env.CLIENTS_BUCKET.delete(profilePhotoKey(id)),
+    ]);
     return json({ ok: true, id }, 200, origin);
   }
   return json({ error: "Méthode non autorisée." }, 405, origin);

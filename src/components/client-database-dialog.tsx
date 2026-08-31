@@ -200,6 +200,11 @@ export function ClientDatabaseDialog({
                             Profil ouvert
                           </span>
                         )}
+                        {profile.hasPhoto && (
+                          <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700">
+                            Photo WebP
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -251,8 +256,9 @@ export function ClientDatabaseDialog({
                 <Cloud className="h-4 w-4 text-sky-600" /> Sauvegarde Cloudflare R2
               </h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Synchronisation bidirectionnelle par date de modification. Seuls les JSON sont
-                envoyés ; aucun PDF ni aucune clé IA.
+                Synchronisation bidirectionnelle par date de modification. Les profils JSON et leurs
+                photos WebP privées sont stockés séparément dans R2. Aucun PDF ni aucune clé IA
+                n’est envoyé.
               </p>
             </div>
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">

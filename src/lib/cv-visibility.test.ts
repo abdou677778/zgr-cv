@@ -33,6 +33,15 @@ test("preserves every populated CV item until the user hides it", () => {
   }));
   cv.competences = ["مهارة أولى", "مهارة ثانية", "مهارة ثالثة"];
   cv.interets = ["اهتمام أول", "اهتمام ثان"];
+  cv.photo = {
+    dataUrl: "data:image/webp;base64,UklGRg==",
+    name: "photo-profil.webp",
+    width: 600,
+    height: 600,
+    sizeBytes: 7,
+    mimeType: "image/webp",
+    updatedAt: "2026-08-31T00:00:00.000Z",
+  };
 
   const complete = applyCvVisibility(cv, {});
   assert.equal(complete.experiences.length, 4);
@@ -40,6 +49,7 @@ test("preserves every populated CV item until the user hides it", () => {
   assert.equal(complete.educations.length, 3);
   assert.equal(complete.competences.length, 3);
   assert.equal(complete.interets.length, 2);
+  assert.equal(complete.photo?.name, "photo-profil.webp");
 
   const filtered = applyCvVisibility(cv, {
     "experience.1": true,
@@ -47,6 +57,7 @@ test("preserves every populated CV item until the user hides it", () => {
     "education.2": true,
     "skills.1": true,
     "section.interests": true,
+    "personal.photo": true,
   });
   assert.deepEqual(
     filtered.experiences.map((item) => item.id),
@@ -62,4 +73,6 @@ test("preserves every populated CV item until the user hides it", () => {
   );
   assert.deepEqual(filtered.competences, ["مهارة أولى", "مهارة ثالثة"]);
   assert.deepEqual(filtered.interets, []);
+  assert.equal(filtered.photo, undefined);
+  assert.equal(cv.photo?.name, "photo-profil.webp");
 });

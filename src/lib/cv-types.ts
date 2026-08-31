@@ -17,6 +17,18 @@ export type CompanyLogo = {
   height: number;
 };
 
+export type ProfilePhoto = {
+  /** WebP bytes are kept as a data URL locally and as a private R2 object in the cloud. */
+  dataUrl?: string;
+  name: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  mimeType: "image/webp";
+  updatedAt: string;
+  r2Key?: string;
+};
+
 export type Formation = {
   id: string;
   date: string;
@@ -158,6 +170,7 @@ export type ObjectiveFormat = {
 };
 
 export type CV = {
+  photo?: ProfilePhoto;
   nom_complet: string;
   titre_poste: string;
   telephone: string;

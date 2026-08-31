@@ -11,6 +11,7 @@ import type {
 import { type DocumentLanguage } from "./document-language";
 import { emptyCV, emptyEuropassProfile, newId } from "./cv-types";
 import { strToU8, zipSync } from "fflate";
+import { processProfilePhoto, profilePhotoDataUrlForPdf } from "./profile-photo";
 
 const ISO_639_2: Record<string, string> = {
   fr: "fre",
@@ -206,6 +207,7 @@ export function analyzeEuropassCoverage(cv: CV): EuropassCoverage {
     ["sexe", Boolean(normalizeGender(profile.gender_code))],
     ["nationalité", Boolean(cleanCountryCode(profile.nationality_code))],
     ["lieu de naissance", Boolean(profile.birth_place)],
+    ["photo", Boolean(cv.photo?.dataUrl)],
     ["expériences", cv.experiences.length > 0],
     ["études et formations", cv.educations.length + cv.formations.length > 0],
     ["compétences", cv.competences.length > 0],
@@ -221,7 +223,17 @@ export function analyzeEuropassCoverage(cv: CV): EuropassCoverage {
   return { percent: Math.round((mapped.length / checks.length) * 100), mapped, missing };
 }
 
-export function convertCvToEuropassXml(cv: CV, language: DocumentLanguage = "fr"): string {
+type EuropassXmlPhoto = {
+  dataUrl: string;
+  mimeType: "image/jpeg" | "image/png";
+  filename: string;
+};
+
+export function convertCvToEuropassXml(
+  cv: CV,
+  language: DocumentLanguage = "fr",
+  xmlPhoto?: EuropassXmlPhoto,
+): string {
   const profile = cv.europass || emptyEuropassProfile;
   const parsedName = parseName(cv.nom_complet);
   const firstName = profile.given_name || parsedName.firstName;
@@ -258,6 +270,20 @@ export function convertCvToEuropassXml(cv: CV, language: DocumentLanguage = "fr"
     : Array.from(cv.permis_conduire.matchAll(/(?:cat[eé]gorie|category|classe?)\s*([A-Z][A-Z0-9]*)/gi)).map(
         (match) => match[1].toUpperCase(),
       );
+  const photoPrefix = xmlPhoto ? `data:${xmlPhoto.mimeType};base64,` : "";
+  const photoBase64 = xmlPhoto?.dataUrl.startsWith(photoPrefix)
+    ? xmlPhoto.dataUrl.slice(photoPrefix.length)
+    : "";
+  const photoAttachmentXml = photoBase64
+    ? `<Attachment>
+      <oa:EmbeddedData mimeCode="${xmlPhoto?.mimeType}" encodingCode="base64Binary" filename="${escapeXml(xmlPhoto?.filename || "photo-profil.jpg")}">${photoBase64}</oa:EmbeddedData>
+      <oa:FileName>${escapeXml(xmlPhoto?.filename || "photo-profil.jpg")}</oa:FileName>
+      <oa:Description>Candidate photo</oa:Description>
+      <oa:FileType listName="EURES_FileTypeCode" listVersionID="1.0" name="photo" listURI="https://ec.europa.eu/eures">photo</oa:FileType>
+      <DocumentTitle>photo</DocumentTitle>
+      <AttachmentXPath>/Candidate/CandidatePerson</AttachmentXPath>
+    </Attachment>`
+    : "";
 
   const communications = [
     cv.email
@@ -514,6 +540,7 @@ export function convertCvToEuropassXml(cv: CV, language: DocumentLanguage = "fr"
     <ConferencesAndSeminars />
     <VoluntaryWorks />
     <CourseCertifications>${certificationsXml}</CourseCertifications>
+    ${photoAttachmentXml}
   </CandidateProfile>
   <RenderingInformation><Design><Template>Template3</Template><Color>Default</Color><FontSize>Medium</FontSize><Logo>FirstPage</Logo><PageNumbers>false</PageNumbers><SectionsOrder>${sections
     .map((section) => `<Section><Title>${section}</Title></Section>`)
@@ -521,8 +548,17 @@ export function convertCvToEuropassXml(cv: CV, language: DocumentLanguage = "fr"
 </Candidate>`;
 }
 
-export function downloadEuropassXml(cv: CV, language: DocumentLanguage = "fr") {
-  const xmlContent = convertCvToEuropassXml(cv, language);
+async function europassXmlPhoto(cv: CV): Promise<EuropassXmlPhoto | undefined> {
+  if (!cv.photo?.dataUrl) return undefined;
+  return {
+    dataUrl: await profilePhotoDataUrlForPdf(cv.photo),
+    mimeType: "image/jpeg",
+    filename: "photo-profil.jpg",
+  };
+}
+
+export async function downloadEuropassXml(cv: CV, language: DocumentLanguage = "fr") {
+  const xmlContent = convertCvToEuropassXml(cv, language, await europassXmlPhoto(cv));
   const blob = new Blob([xmlContent], { type: "application/xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -545,13 +581,15 @@ export async function downloadEuropassMultilingualZip(
 
   for (const lang of languages) {
     const cvDoc = documents[lang] || baseCv;
-    const xml = convertCvToEuropassXml(cvDoc, lang);
+    const xml = convertCvToEuropassXml(cvDoc, lang, await europassXmlPhoto(cvDoc));
     const cleanName = (cvDoc.nom_complet || "CV").replace(/[^a-zA-Z0-9_-]/g, "_");
     files[`Europass-CV-${cleanName}-${lang.toUpperCase()}.xml`] = strToU8(xml);
   }
 
   const zipBuffer = zipSync(files, { level: 6 });
-  const blob = new Blob([zipBuffer], { type: "application/zip" });
+  const zipBytes = new Uint8Array(zipBuffer.byteLength);
+  zipBytes.set(zipBuffer);
+  const blob = new Blob([zipBytes.buffer], { type: "application/zip" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   const cleanName = (baseCv.nom_complet || "CV").replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -758,7 +796,6 @@ function parseCandidateEuropassXml(doc: Document): CV {
   const drivingLicences = all("LicenseTypeCode", profileNode)
     .map((item) => (item.textContent || "").trim())
     .filter(Boolean);
-
   const socialProfiles = communications
     .filter((item) => directValue("ChannelCode", item) === "SocialMedia")
     .map((item) => ({
@@ -826,11 +863,59 @@ function parseCandidateEuropassXml(doc: Document): CV {
   };
 }
 
-export function parseEuropassXml(xmlString: string): CV {
+async function importedEuropassPhoto(doc: Document) {
+  const elements = (name: string, context: Element | Document = doc) =>
+    Array.from(context.getElementsByTagNameNS("*", name));
+  const text = (name: string, context: Element) =>
+    (elements(name, context)[0]?.textContent || "").trim();
+
+  let mimeType = "";
+  let base64 = "";
+  let filename = "photo-profil";
+  const attachment = elements("Attachment").find(
+    (item) => text("FileType", item).toLowerCase() === "photo",
+  );
+  if (attachment) {
+    const embedded = elements("EmbeddedData", attachment)[0];
+    mimeType = embedded?.getAttribute("mimeCode") || "";
+    base64 = (embedded?.textContent || "").replace(/\s+/g, "");
+    filename = text("FileName", attachment) || filename;
+  } else {
+    const photo = elements("Photo")[0];
+    if (photo) {
+      mimeType = text("MimeType", photo);
+      base64 = text("Data", photo).replace(/\s+/g, "");
+    }
+  }
+
+  if (!base64 || !["image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/webp"].includes(mimeType)) {
+    return undefined;
+  }
+  if (base64.length > 28_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return undefined;
+
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    const normalizedMime = mimeType.includes("png") ? "image/png" : mimeType === "image/webp" ? "image/webp" : "image/jpeg";
+    const extension = normalizedMime === "image/png" ? ".png" : normalizedMime === "image/webp" ? ".webp" : ".jpg";
+    const source = new File([bytes], filename.includes(".") ? filename : `${filename}${extension}`, {
+      type: normalizedMime,
+    });
+    return await processProfilePhoto(source);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function parseEuropassXml(xmlString: string): Promise<CV> {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlString, "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("Le fichier XML est invalide.");
-  if (doc.documentElement.localName === "Candidate") return parseCandidateEuropassXml(doc);
+  if (doc.documentElement.localName === "Candidate") {
+    const cv = parseCandidateEuropassXml(doc);
+    return { ...cv, photo: await importedEuropassPhoto(doc) };
+  }
 
   const getText = (selector: string, context: Element | Document = doc): string => {
     const el = context.querySelector(selector);
@@ -956,8 +1041,10 @@ export function parseEuropassXml(xmlString: string): CV {
     return `${title ? title + " : " : ""}${desc}`;
   });
 
+  const importedPhoto = await importedEuropassPhoto(doc);
   return {
     ...emptyCV,
+    photo: importedPhoto,
     nom_complet: fullName,
     titre_poste: jobTitle,
     email,

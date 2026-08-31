@@ -11,6 +11,7 @@ import {
 } from "./cv-types";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
+import { normalizeProfilePhoto } from "./profile-photo";
 import { normalizeCompanyLogo } from "./company-logo";
 
 export type JsonImportLanguage = "auto" | "fr" | "en";
@@ -189,6 +190,7 @@ function directCv(source: JsonRecord): CV {
 
   return {
     ...emptyCV,
+    photo: normalizeProfilePhoto(source.photo),
     nom_complet: text(source.nom_complet),
     titre_poste: text(source.titre_poste),
     telephone: text(source.telephone),

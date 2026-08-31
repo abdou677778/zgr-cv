@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Candidate xmlns="http://www.europass.eu/1.0"
+  xmlns:hr="http://www.hr-xml.org/3"
+  xmlns:oa="http://www.openapplications.org/oagis/9"
+  xmlns:eures="http://www.europass_eures.eu/1.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.europass.eu/1.0 Candidate.xsd">
+  <hr:DocumentID schemeID="ZGR-6b150156" schemeName="DocumentIdentifier" schemeAgencyName="EUROPASS" schemeVersionID="4.0" />
+  <CandidateSupplier>
+    <hr:PartyID schemeID="ZGR-6b150156" schemeName="PartyID" schemeAgencyName="EUROPASS" schemeVersionID="1.0" />
+    <hr:PartyName>Owner</hr:PartyName>
+    <PersonContact><PersonName><oa:GivenName>Amine</oa:GivenName><hr:FamilyName>Bensalem</hr:FamilyName></PersonName><Communication><ChannelCode>Email</ChannelCode><oa:URI>amine.bensalem@example.com</oa:URI></Communication></PersonContact>
+    <hr:PrecedenceCode>1</hr:PrecedenceCode>
+  </CandidateSupplier>
+  <CandidatePerson>
+    <PersonName><oa:GivenName>Amine</oa:GivenName><hr:FamilyName>Bensalem</hr:FamilyName></PersonName>
+    <Communication><ChannelCode>Email</ChannelCode><oa:URI>amine.bensalem@example.com</oa:URI></Communication><Communication><ChannelCode>Telephone</ChannelCode><UseCode>mobile</UseCode><CountryDialing>1</CountryDialing><oa:DialNumber>4385551842</oa:DialNumber><CountryCode>ca</CountryCode></Communication><Communication><UseCode>home</UseCode><Address type="home"><oa:AddressLine>Montréal, QC, Canada</oa:AddressLine><oa:CityName>Montréal</oa:CityName><CountryCode>ca</CountryCode></Address></Communication>
+    
+    <hr:BirthDate>1992-03-15</hr:BirthDate>
+    
+    
+    <PrimaryLanguageCode name="NORMAL">ara</PrimaryLanguageCode>
+  </CandidatePerson>
+  <CandidateProfile languageCode="fr">
+    <hr:ID schemeID="ZGR-6b150156" schemeName="CandidateProfileID" schemeAgencyName="EUROPASS" schemeVersionID="1.0" />
+    <hr:ExecutiveSummary>Ingénieur logiciel full-stack motivé, fort de plusieurs années d&apos;expérience en développement web et en intégration d&apos;API, souhaitant contribuer à des projets innovants au sein d&apos;une entreprise canadienne axée sur la qualité, la collaboration et l&apos;amélioration continue</hr:ExecutiveSummary>
+    <EmploymentHistory><EmployerHistory>
+        <hr:OrganizationName>TechNova Solutions, Montréal</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>Montréal</oa:CityName><CountryCode>ca</CountryCode></Address></Communication></OrganizationContact>
+        
+        <PositionHistory>
+          <PositionTitle typeCode="FREETEXT">Développeur logiciel full-stack</PositionTitle>
+          <eures:EmploymentPeriod><eures:StartDate><hr:FormattedDateTime>2022-06-01</hr:FormattedDateTime></eures:StartDate><eures:EndDate><hr:FormattedDateTime>2025-10-01</hr:FormattedDateTime></eures:EndDate><hr:CurrentIndicator>false</hr:CurrentIndicator></eures:EmploymentPeriod>
+          <oa:Description>&lt;ul&gt;&lt;li&gt;Concevoir, développer et maintenir des applications web SaaS en React et Node.js pour des clients nord-américains&lt;/li&gt;&lt;li&gt;Mettre en place des API REST sécurisées et documentées, intégrées à des services tiers et à des bases de données PostgreSQL&lt;/li&gt;&lt;li&gt;Collaborer avec les équipes produit, QA et UX dans un environnement Agile pour livrer des fonctionnalités incrémentales de haute qualité&lt;/li&gt;&lt;li&gt;Contribuer au processus de revue de code, au mentorat des développeurs juniors et à l&apos;amélioration continue des standards de développement&lt;/li&gt;&lt;/ul&gt;</oa:Description>
+          <City>Montréal</City><Country>ca</Country>
+        </PositionHistory>
+        
+      </EmployerHistory><EmployerHistory>
+        <hr:OrganizationName>DigitalDZ Studio, Alger</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>Alger</oa:CityName><CountryCode>dz</CountryCode></Address></Communication></OrganizationContact>
+        
+        <PositionHistory>
+          <PositionTitle typeCode="FREETEXT">Développeur web</PositionTitle>
+          <eures:EmploymentPeriod><eures:StartDate><hr:FormattedDateTime>2019-01-01</hr:FormattedDateTime></eures:StartDate><eures:EndDate><hr:FormattedDateTime>2022-05-01</hr:FormattedDateTime></eures:EndDate><hr:CurrentIndicator>false</hr:CurrentIndicator></eures:EmploymentPeriod>
+          <oa:Description>&lt;ul&gt;&lt;li&gt;Développer des sites et applications web sur mesure en JavaScript, PHP et Laravel pour des PME locales&lt;/li&gt;&lt;li&gt;Participer à l&apos;analyse des besoins des clients et à la rédaction des spécifications fonctionnelles et techniques&lt;/li&gt;&lt;li&gt;Optimiser les performances front-end et back-end afin d&apos;améliorer l&apos;expérience utilisateur et le référencement naturel&lt;/li&gt;&lt;li&gt;Assurer la maintenance applicative, la correction de bugs et l&apos;évolution de fonctionnalités selon les retours clients&lt;/li&gt;&lt;/ul&gt;</oa:Description>
+          <City>Alger</City><Country>dz</Country>
+        </PositionHistory>
+        
+      </EmployerHistory><EmployerHistory>
+        <hr:OrganizationName>Startup InnovIT, Alger</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>Alger</oa:CityName><CountryCode>dz</CountryCode></Address></Communication></OrganizationContact>
+        
+        <PositionHistory>
+          <PositionTitle typeCode="FREETEXT">Stagiaire développeur logiciel</PositionTitle>
+          <eures:EmploymentPeriod><eures:StartDate><hr:FormattedDateTime>2017-09-01</hr:FormattedDateTime></eures:StartDate><eures:EndDate><hr:FormattedDateTime>2018-12-01</hr:FormattedDateTime></eures:EndDate><hr:CurrentIndicator>false</hr:CurrentIndicator></eures:EmploymentPeriod>
+          <oa:Description>&lt;ul&gt;&lt;li&gt;Participer au développement d&apos;un prototype de plateforme web de gestion de projets internes&lt;/li&gt;&lt;li&gt;Contribuer à l&apos;implémentation de modules front-end en HTML, CSS et JavaScript moderne&lt;/li&gt;&lt;li&gt;Rédiger une documentation technique de base pour faciliter la reprise et l&apos;évolution du code par l&apos;équipe&lt;/li&gt;&lt;li&gt;Collaborer avec l&apos;équipe de recherche pour tester différentes approches d&apos;architecture logicielle&lt;/li&gt;&lt;/ul&gt;</oa:Description>
+          <City>Alger</City><Country>dz</Country>
+        </PositionHistory>
+        
+      </EmployerHistory><EmployerHistory>
+        <hr:OrganizationName>Auto-entrepreneur</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>Alger</oa:CityName><CountryCode>dz</CountryCode></Address></Communication></OrganizationContact>
+        
+        <PositionHistory>
+          <PositionTitle typeCode="FREETEXT">Développeur freelance</PositionTitle>
+          <eures:EmploymentPeriod><eures:StartDate><hr:FormattedDateTime>2016-06-01</hr:FormattedDateTime></eures:StartDate><eures:EndDate><hr:FormattedDateTime>2017-08-01</hr:FormattedDateTime></eures:EndDate><hr:CurrentIndicator>false</hr:CurrentIndicator></eures:EmploymentPeriod>
+          <oa:Description>&lt;ul&gt;&lt;li&gt;Réaliser des petits sites vitrines et des applications internes pour des commerçants et associations locales&lt;/li&gt;&lt;li&gt;Gérer l&apos;ensemble du cycle de vie des projets, de la collecte des besoins à la mise en production&lt;/li&gt;&lt;li&gt;Assurer le support technique de base et la formation des utilisateurs finaux&lt;/li&gt;&lt;li&gt;Maintenir une relation client de proximité en proposant des améliorations régulières et adaptées&lt;/li&gt;&lt;/ul&gt;</oa:Description>
+          <City>Alger</City><Country>dz</Country>
+        </PositionHistory>
+        
+      </EmployerHistory></EmploymentHistory>
+    <EducationHistory><EducationOrganizationAttendance>
+        <hr:OrganizationName>Université des Sciences et de la Technologie Houari-Boumediene (USTHB)</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>Alger</oa:CityName><CountryCode>dz</CountryCode></Address></Communication></OrganizationContact>
+        
+        <AttendancePeriod><StartDate><hr:FormattedDateTime>2015-01-01</hr:FormattedDateTime></StartDate><EndDate><hr:FormattedDateTime>2017-01-01</hr:FormattedDateTime></EndDate><Ongoing>false</Ongoing></AttendancePeriod>
+        <EducationDegree><hr:DegreeName>Master en Informatique, spécialité Systèmes d&apos;information</hr:DegreeName><OccupationalSkillsCovered>&lt;ul&gt;&lt;li&gt;Équivalence en cours d&apos;évaluation auprès des autorités compétentes canadiennes&lt;/li&gt;&lt;/ul&gt;</OccupationalSkillsCovered></EducationDegree>
+      </EducationOrganizationAttendance><EducationOrganizationAttendance>
+        <hr:OrganizationName>Université des Sciences et de la Technologie Houari-Boumediene (USTHB)</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>Alger</oa:CityName><CountryCode>dz</CountryCode></Address></Communication></OrganizationContact>
+        
+        <AttendancePeriod><StartDate><hr:FormattedDateTime>2012-01-01</hr:FormattedDateTime></StartDate><EndDate><hr:FormattedDateTime>2015-01-01</hr:FormattedDateTime></EndDate><Ongoing>false</Ongoing></AttendancePeriod>
+        <EducationDegree><hr:DegreeName>Licence en Informatique</hr:DegreeName><OccupationalSkillsCovered>&lt;ul&gt;&lt;li&gt;Diplôme comparable à un baccalauréat canadien en informatique selon les standards généraux&lt;/li&gt;&lt;/ul&gt;</OccupationalSkillsCovered></EducationDegree>
+      </EducationOrganizationAttendance><EducationOrganizationAttendance>
+        <hr:OrganizationName>Institution universitaire publique à Alger</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>Alger</oa:CityName><CountryCode>dz</CountryCode></Address></Communication></OrganizationContact>
+        
+        <AttendancePeriod><StartDate><hr:FormattedDateTime>2011-01-01</hr:FormattedDateTime></StartDate><EndDate><hr:FormattedDateTime>2012-01-01</hr:FormattedDateTime></EndDate><Ongoing>false</Ongoing></AttendancePeriod>
+        <EducationDegree><hr:DegreeName>Première année préparatoire en sciences et technologies</hr:DegreeName><OccupationalSkillsCovered>&lt;ul&gt;&lt;li&gt;Sciences et technologies industrielles&lt;/li&gt;&lt;li&gt;Crédits préuniversitaires en sciences reconnus comme formation préparatoire&lt;/li&gt;&lt;/ul&gt;</OccupationalSkillsCovered></EducationDegree>
+      </EducationOrganizationAttendance><EducationOrganizationAttendance>
+        <hr:OrganizationName>Plateforme de formation en ligne reconnue internationalement</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>En ligne</oa:CityName></Address></Communication></OrganizationContact>
+        
+        <AttendancePeriod><StartDate><hr:FormattedDateTime>2023-01-01</hr:FormattedDateTime></StartDate><EndDate><hr:FormattedDateTime>2023-01-01</hr:FormattedDateTime></EndDate><Ongoing>false</Ongoing></AttendancePeriod>
+        <EducationDegree><hr:DegreeName>Développement avancé en React et TypeScript</hr:DegreeName><OccupationalSkillsCovered>&lt;ul&gt;&lt;li&gt;Maîtrise de la gestion d&apos;état, des hooks avancés, du typage fort et des bonnes pratiques de performance en React&lt;/li&gt;&lt;/ul&gt;</OccupationalSkillsCovered></EducationDegree>
+      </EducationOrganizationAttendance><EducationOrganizationAttendance>
+        <hr:OrganizationName>Fournisseur de cours en ligne spécialisé en technologies DevOps</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>En ligne</oa:CityName></Address></Communication></OrganizationContact>
+        
+        <AttendancePeriod><StartDate><hr:FormattedDateTime>2022-01-01</hr:FormattedDateTime></StartDate><EndDate><hr:FormattedDateTime>2022-01-01</hr:FormattedDateTime></EndDate><Ongoing>false</Ongoing></AttendancePeriod>
+        <EducationDegree><hr:DegreeName>Introduction à Docker et aux pipelines CI/CD</hr:DegreeName><OccupationalSkillsCovered>&lt;ul&gt;&lt;li&gt;Conteneurisation d&apos;applications, création de fichiers Docker et mise en place de pipelines CI/CD de base&lt;/li&gt;&lt;/ul&gt;</OccupationalSkillsCovered></EducationDegree>
+      </EducationOrganizationAttendance><EducationOrganizationAttendance>
+        <hr:OrganizationName>Plateforme d&apos;apprentissage technique</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>En ligne</oa:CityName></Address></Communication></OrganizationContact>
+        
+        <AttendancePeriod><StartDate><hr:FormattedDateTime>2021-01-01</hr:FormattedDateTime></StartDate><EndDate><hr:FormattedDateTime>2021-01-01</hr:FormattedDateTime></EndDate><Ongoing>false</Ongoing></AttendancePeriod>
+        <EducationDegree><hr:DegreeName>Conception d&apos;API REST sécurisées</hr:DegreeName><OccupationalSkillsCovered>&lt;ul&gt;&lt;li&gt;Conception d&apos;API REST, gestion de l&apos;authentification, de l&apos;autorisation et des bonnes pratiques de sécurité&lt;/li&gt;&lt;/ul&gt;</OccupationalSkillsCovered></EducationDegree>
+      </EducationOrganizationAttendance><EducationOrganizationAttendance>
+        <hr:OrganizationName>Centre de formation en management de projets</hr:OrganizationName>
+        <OrganizationContact><Communication><Address><oa:CityName>Alger</oa:CityName><CountryCode>dz</CountryCode></Address></Communication></OrganizationContact>
+        
+        <AttendancePeriod><StartDate><hr:FormattedDateTime>2020-01-01</hr:FormattedDateTime></StartDate><EndDate><hr:FormattedDateTime>2020-01-01</hr:FormattedDateTime></EndDate><Ongoing>false</Ongoing></AttendancePeriod>
+        <EducationDegree><hr:DegreeName>Méthodologies Agile et Scrum</hr:DegreeName><OccupationalSkillsCovered>&lt;ul&gt;&lt;li&gt;Compréhension du cadre Scrum, des rôles, des rituels et de la planification incrémentale&lt;/li&gt;&lt;/ul&gt;</OccupationalSkillsCovered></EducationDegree>
+      </EducationOrganizationAttendance></EducationHistory>
+    <eures:Licenses><eures:License><hr:LicenseTypeCode>B</hr:LicenseTypeCode></eures:License></eures:Licenses>
+    <Certifications />
+    <PublicationHistory />
+    <PersonQualifications></PersonQualifications>
+    <EmploymentReferences />
+    <HobbiesAndInterests><HobbyOrInterest><Title>Veille technologique sur les nouvelles tendances en développement logiciel et en architecture cloud</Title><Description>Veille technologique sur les nouvelles tendances en développement logiciel et en architecture cloud</Description></HobbyOrInterest><HobbyOrInterest><Title>Pratique du sport en salle et de la course à pied pour maintenir un bon équilibre de vie</Title><Description>Pratique du sport en salle et de la course à pied pour maintenir un bon équilibre de vie</Description></HobbyOrInterest><HobbyOrInterest><Title>Lecture d&apos;ouvrages sur le développement personnel, la productivité et le travail en équipe</Title><Description>Lecture d&apos;ouvrages sur le développement personnel, la productivité et le travail en équipe</Description></HobbyOrInterest><HobbyOrInterest><Title>Voyages et découverte de nouvelles cultures, particulièrement en Amérique du Nord et en Europe</Title><Description>Voyages et découverte de nouvelles cultures, particulièrement en Amérique du Nord et en Europe</Description></HobbyOrInterest></HobbiesAndInterests>
+    <CreativeWorks />
+    <Projects><Project><Title>Participation à un hackathon de 48 heures sur l&apos;innovation numérique à Montréal, en tant que développeur full-stack</Title><Description>Participation à un hackathon de 48 heures sur l&apos;innovation numérique à Montréal, en tant que développeur full-stack</Description></Project><Project><Title>Participation régulière à des meetups techniques sur JavaScript, React et Node.js</Title><Description>Participation régulière à des meetups techniques sur JavaScript, React et Node.js</Description></Project><Project><Title>Implication dans des communautés en ligne de développeurs pour l&apos;échange de bonnes pratiques et de retours d&apos;expérience</Title><Description>Implication dans des communautés en ligne de développeurs pour l&apos;échange de bonnes pratiques et de retours d&apos;expérience</Description></Project><Project><Title>Contribution ponctuelle à des projets open source hébergés sur GitHub</Title><Description>Contribution ponctuelle à des projets open source hébergés sur GitHub</Description></Project></Projects>
+    <SocialAndPoliticalActivities />
+    <Skills><SkillsGroup><Title>Compétences</Title><PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>Développement web full-stack avec JavaScript, TypeScript, Node.js et React</hr:CompetencyName></PersonCompetency><PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>Conception, optimisation et maintenance de bases de données SQL et NoSQL</hr:CompetencyName></PersonCompetency><PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>Conception et intégration d&apos;API REST et GraphQL dans des architectures distribuées</hr:CompetencyName></PersonCompetency><PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>Mise en place de pipelines CI/CD et utilisation de Docker dans un contexte DevOps</hr:CompetencyName></PersonCompetency><PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>Pratiques de développement Agile et Scrum au sein d&apos;équipes multidisciplinaires</hr:CompetencyName></PersonCompetency><PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>Analyse des besoins métiers et traduction en solutions techniques robustes</hr:CompetencyName></PersonCompetency><PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>Communication efficace, esprit d&apos;équipe et capacité d&apos;adaptation dans des environnements multiculturels</hr:CompetencyName></PersonCompetency></SkillsGroup></Skills>
+    <NetworksAndMemberships />
+    <ConferencesAndSeminars />
+    <VoluntaryWorks />
+    <CourseCertifications><CourseCertification><Title>Certification en développement web moderne avec JavaScript</Title></CourseCertification><CourseCertification><Title>Certification en bases de données relationnelles et SQL</Title></CourseCertification><CourseCertification><Title>Certification d&apos;introduction au cloud computing</Title></CourseCertification><CourseCertification><Title>Certification sur les fondamentaux de la cybersécurité pour les développeurs</Title></CourseCertification></CourseCertifications>
+  </CandidateProfile>
+  <RenderingInformation><Design><Template>Template3</Template><Color>Default</Color><FontSize>Medium</FontSize><Logo>FirstPage</Logo><PageNumbers>false</PageNumbers><SectionsOrder><Section><Title>work-experience</Title></Section><Section><Title>education-training</Title></Section><Section><Title>language</Title></Section><Section><Title>profile-skills</Title></Section><Section><Title>certifications</Title></Section><Section><Title>driving-licence</Title></Section><Section><Title>hobbies-interests</Title></Section><Section><Title>projects</Title></Section></SectionsOrder></Design></RenderingInformation>
+</Candidate>

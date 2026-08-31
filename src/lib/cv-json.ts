@@ -1,8 +1,11 @@
 import {
   emptyCV,
+  emptyEuropassProfile,
   newId,
   type CV,
   type Education,
+  type EuropassCefrLevel,
+  type EuropassProfile,
   type Experience,
   type Formation,
 } from "./cv-types";
@@ -45,6 +48,84 @@ const firstText = (source: JsonRecord, ...keys: string[]) => {
     if (value) return value;
   }
   return "";
+};
+
+const cefrLevel = (value: unknown): EuropassCefrLevel => {
+  const level = text(value).toUpperCase();
+  return /^(A1|A2|B1|B2|C1|C2)$/.test(level) ? (level as EuropassCefrLevel) : "";
+};
+
+const booleanValue = (value: unknown) =>
+  value === true || (typeof value === "string" && /^(true|oui|yes|1)$/i.test(value.trim()));
+
+const normalizeEuropassProfile = (value: unknown): EuropassProfile => {
+  const source = record(value);
+  const socialProfiles = Array.isArray(source.social_profiles)
+    ? source.social_profiles.map(record)
+    : [];
+  const languages = Array.isArray(source.languages) ? source.languages.map(record) : [];
+  const experienceDetails = Array.isArray(source.experience_details)
+    ? source.experience_details.map(record)
+    : [];
+  const educationDetails = Array.isArray(source.education_details)
+    ? source.education_details.map(record)
+    : [];
+
+  return {
+    ...emptyEuropassProfile,
+    given_name: text(source.given_name),
+    family_name: text(source.family_name),
+    gender_code: text(source.gender_code),
+    nationality_code: text(source.nationality_code),
+    nationality_label: text(source.nationality_label),
+    birth_place: text(source.birth_place),
+    birth_country_code: text(source.birth_country_code),
+    address_line_1: text(source.address_line_1),
+    address_line_2: text(source.address_line_2),
+    postal_code: text(source.postal_code),
+    city: text(source.city),
+    country_code: text(source.country_code),
+    country_label: text(source.country_label),
+    phone_country_code: text(source.phone_country_code),
+    website: text(source.website),
+    instant_messaging: text(source.instant_messaging),
+    work_permit_countries: stringList(source.work_permit_countries),
+    driving_licences: stringList(source.driving_licences),
+    social_profiles: socialProfiles.map((item) => ({
+      platform: text(item.platform),
+      username: text(item.username),
+      url: text(item.url),
+    })),
+    languages: languages.map((item) => ({
+      code: text(item.code).toLowerCase(),
+      label: text(item.label),
+      mother_tongue: booleanValue(item.mother_tongue),
+      listening: cefrLevel(item.listening),
+      reading: cefrLevel(item.reading),
+      spoken_interaction: cefrLevel(item.spoken_interaction),
+      spoken_production: cefrLevel(item.spoken_production),
+      writing: cefrLevel(item.writing),
+    })),
+    experience_details: experienceDetails.map((item) => ({
+      id: text(item.id),
+      city: text(item.city),
+      country_code: text(item.country_code).toLowerCase(),
+      country_label: text(item.country_label),
+      industry_code: text(item.industry_code),
+      department: text(item.department),
+      website: text(item.website),
+    })),
+    education_details: educationDetails.map((item) => ({
+      id: text(item.id),
+      city: text(item.city),
+      country_code: text(item.country_code).toLowerCase(),
+      country_label: text(item.country_label),
+      eqf_level: text(item.eqf_level),
+      field_code: text(item.field_code),
+      specific_field_code: text(item.specific_field_code),
+      website: text(item.website),
+    })),
+  };
 };
 
 const documentLanguage = (value: unknown): DocumentLanguage | null => {
@@ -182,6 +263,7 @@ function directCv(source: JsonRecord): CV {
       formule_politesse: text(lettre.formule_politesse),
     },
     plan_developpement: stringList(source.plan_developpement),
+    europass: normalizeEuropassProfile(source.europass),
   };
 }
 

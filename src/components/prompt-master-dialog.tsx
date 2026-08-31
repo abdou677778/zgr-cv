@@ -100,11 +100,12 @@ export function PromptMasterDialog({
       <DialogContent className="max-h-[94vh] max-w-5xl overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <BookOpenText className="h-5 w-5 text-amber-600" /> Prompte maître CV + JSON
+            <BookOpenText className="h-5 w-5 text-amber-600" /> Prompte maître CV + JSON +
+            Europass
           </DialogTitle>
           <DialogDescription>
-            Copiez le prompt complet dans ChatGPT, Gemini ou un autre assistant, ou téléchargez le
-            fichier texte original en UTF-8.
+            L’IA produit un JSON ZGR enrichi pour Europass. Importez ensuite ce JSON dans ZGR CV,
+            puis générez directement le XML Candidate destiné au site officiel Europass.
           </DialogDescription>
         </DialogHeader>
 
@@ -115,6 +116,12 @@ export function PromptMasterDialog({
           <span>{operationalPrompt.split(/\r?\n/).length} lignes</span>
           <span>·</span>
           <span>{operationalPrompt.length.toLocaleString("fr-FR")} caractères</span>
+        </div>
+
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900">
+          <strong>Flux intégré :</strong> documents sources → ChatGPT/Gemini → JSON ZGR avec bloc
+          Europass → import JSON dans ZGR → export XML Candidate → import sur Europass. Les champs
+          non prouvés restent vides pour être complétés manuellement.
         </div>
 
         <Textarea

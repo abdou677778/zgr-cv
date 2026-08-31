@@ -3,6 +3,7 @@ import {
   ADVISES_TEMPLATE_ID,
   COVER_LETTER_TEMPLATES,
   CV_TEMPLATES,
+  EUROPASS_TEMPLATE_ID,
   type CoverLetterTemplateId,
   type CvTemplateId,
   type PdfTemplateId,
@@ -34,7 +35,7 @@ export function getDocumentKinds(language: DocumentLanguage) {
 export function getTemplates(kind: DocumentKind) {
   if (kind === "cover-letter") return COVER_LETTER_TEMPLATES;
   if (kind === "advises") return [{ id: ADVISES_TEMPLATE_ID, name: "Template Advises" }] as const;
-  return CV_TEMPLATES;
+  return [...CV_TEMPLATES, { id: EUROPASS_TEMPLATE_ID, name: "CV Europass" }] as const;
 }
 
 export function defaultTemplateFor(kind: DocumentKind): PdfTemplateId {
@@ -52,6 +53,9 @@ export async function createDocumentPdfBlob(
   language: DocumentLanguage,
   accentColor?: string,
 ) {
+  if (templateId === EUROPASS_TEMPLATE_ID) {
+    throw new Error("Le modèle Europass produit un fichier XML et non un document PDF.");
+  }
   if (kind === "cover-letter") {
     const { createCoverLetterPdfBlob } = await import("./letter-pdf");
     return createCoverLetterPdfBlob(cv, templateId as CoverLetterTemplateId, language, accentColor);

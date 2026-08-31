@@ -45,6 +45,97 @@ export type Langues = {
   kab: string;
 };
 
+export type EuropassCefrLevel = "" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+
+export type EuropassLanguageProfile = {
+  code: string;
+  label: string;
+  mother_tongue: boolean;
+  listening: EuropassCefrLevel;
+  reading: EuropassCefrLevel;
+  spoken_interaction: EuropassCefrLevel;
+  spoken_production: EuropassCefrLevel;
+  writing: EuropassCefrLevel;
+};
+
+export type EuropassSocialProfile = {
+  platform: string;
+  username: string;
+  url: string;
+};
+
+export type EuropassExperienceDetails = {
+  id: string;
+  city: string;
+  country_code: string;
+  country_label: string;
+  industry_code: string;
+  department: string;
+  website: string;
+};
+
+export type EuropassEducationDetails = {
+  id: string;
+  city: string;
+  country_code: string;
+  country_label: string;
+  eqf_level: string;
+  field_code: string;
+  specific_field_code: string;
+  website: string;
+};
+
+/** Optional factual metadata used by the current Europass Candidate XML format. */
+export type EuropassProfile = {
+  given_name: string;
+  family_name: string;
+  gender_code: string;
+  nationality_code: string;
+  nationality_label: string;
+  birth_place: string;
+  birth_country_code: string;
+  address_line_1: string;
+  address_line_2: string;
+  postal_code: string;
+  city: string;
+  country_code: string;
+  country_label: string;
+  phone_country_code: string;
+  website: string;
+  instant_messaging: string;
+  work_permit_countries: string[];
+  driving_licences: string[];
+  social_profiles: EuropassSocialProfile[];
+  languages: EuropassLanguageProfile[];
+  experience_details: EuropassExperienceDetails[];
+  education_details: EuropassEducationDetails[];
+};
+
+export const emptyEuropassProfile: EuropassProfile = {
+  given_name: "",
+  family_name: "",
+  gender_code: "",
+  nationality_code: "",
+  nationality_label: "",
+  birth_place: "",
+  birth_country_code: "",
+  address_line_1: "",
+  address_line_2: "",
+  postal_code: "",
+  city: "",
+  country_code: "",
+  country_label: "",
+  phone_country_code: "",
+  website: "",
+  instant_messaging: "",
+  work_permit_countries: [],
+  driving_licences: [],
+  social_profiles: [],
+  languages: [],
+  experience_details: [],
+  education_details: [],
+};
+
 export type LettreMotivation = {
   date: string;
   objet: string;
@@ -97,6 +188,7 @@ export type CV = {
   references: string[];
   lettre_motivation: LettreMotivation;
   plan_developpement: string[];
+  europass?: EuropassProfile;
 };
 
 export const newId = () => Math.random().toString(36).slice(2, 9);
@@ -139,4 +231,5 @@ export const emptyCV: CV = {
     formule_politesse: "",
   },
   plan_developpement: [],
+  europass: { ...emptyEuropassProfile },
 };

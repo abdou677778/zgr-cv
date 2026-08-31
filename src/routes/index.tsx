@@ -25,12 +25,23 @@ import {
   Save,
   Check,
   FileText,
+  FileCode,
+  ExternalLink,
+  CircleCheck,
+  Globe2,
   LogOut,
   UserCog,
   BookOpenText,
 } from "lucide-react";
 import * as pdfjs from "pdfjs-dist";
 import pdfWorkerSource from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
+import {
+  analyzeEuropassCoverage,
+  downloadEuropassXml,
+  downloadEuropassMultilingualZip,
+  parseEuropassXml,
+} from "@/lib/europass-xml";
+import { EUROPASS_TEMPLATE_ID } from "@/lib/document-templates";
 import {
   type CV,
   type Experience,
@@ -139,6 +150,19 @@ const LANGUAGE_VISUALS: Record<DocumentLanguage, { color: string }> = {
   zh: { color: "from-red-500 to-amber-400" },
   ar: { color: "from-emerald-500 to-emerald-700" },
 };
+const EUROPASS_EDITOR_LANGUAGE: Record<DocumentLanguage, string> = {
+  fr: "fr",
+  en: "en",
+  es: "es",
+  de: "de",
+  it: "it",
+  zh: "en",
+  ar: "en",
+};
+
+function europassEditorUrl(language: DocumentLanguage) {
+  return `https://europa.eu/europass/eportfolio/screen/cv-editor?lang=${EUROPASS_EDITOR_LANGUAGE[language]}`;
+}
 const PDF_WORKER_URL = URL.createObjectURL(
   new Blob([pdfWorkerSource], { type: "text/javascript" }),
 );
@@ -404,7 +428,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const cv = cvByLanguage[language];
   const templates = getTemplates(documentKind);
-  const themeTemplateId = templateId as ThemeTemplateId;
+  const isEuropassTemplate =
+    documentKind === "cv" && templateId === EUROPASS_TEMPLATE_ID;
+  const themeTemplateId = (
+    isEuropassTemplate ? "canadian-v1" : templateId
+  ) as ThemeTemplateId;
   const accentColor = templateColors[themeTemplateId];
   const paletteColors = paletteForTemplate(themeTemplateId);
   // Language buttons translate only the form values and the generated document.
@@ -604,6 +632,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   }, [loaded, sectionAppearance]);
 
   useEffect(() => {
+    if (isEuropassTemplate) {
+      if (pdfUrlRef.current) {
+        URL.revokeObjectURL(pdfUrlRef.current);
+        pdfUrlRef.current = null;
+      }
+      setPdfPreview(null);
+      setPdfLoading(false);
+      setPdfError("");
+      return;
+    }
+
     let cancelled = false;
     setPdfLoading(true);
     setPdfError("");
@@ -637,7 +676,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [accentColor, cvKey, documentKind, language, outputCv, templateId, ui.previewError]);
+  }, [
+    accentColor,
+    cvKey,
+    documentKind,
+    isEuropassTemplate,
+    language,
+    outputCv,
+    templateId,
+    ui.previewError,
+  ]);
 
   useEffect(
     () => () => {
@@ -844,8 +892,24 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     if (!file) return;
 
     try {
-      if (file.size > 5_000_000) throw new Error("Le fichier JSON dépasse la limite de 5 Mo.");
-      const parsed = JSON.parse(await file.text()) as unknown;
+      if (file.size > 5_000_000) throw new Error("Le fichier dépasse la limite de 5 Mo.");
+      const fileText = await file.text();
+      
+      // Support direct import of Europass XML files (.xml)
+      if (file.name.toLowerCase().endsWith(".xml") || fileText.trim().startsWith("<")) {
+        const importedCv = parseEuropassXml(fileText);
+        const next = { ...cvByLanguage, [language]: importedCv };
+        setCvByLanguage(next);
+        setHiddenElements({});
+        setActiveProfileId(null);
+        setImportMessage({
+          ok: true,
+          text: `🇪🇺 CV Europass XML importé avec succès : ${importedCv.nom_complet || "Candidat"} (${language.toUpperCase()})`,
+        });
+        return;
+      }
+
+      const parsed = JSON.parse(fileText) as unknown;
       const root =
         parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
       const next = { ...cvByLanguage };
@@ -946,6 +1010,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       profile.cvByLanguage[profile.language],
       profile.hiddenElements,
     );
+    if (profile.templateId === EUROPASS_TEMPLATE_ID) {
+      downloadEuropassXml(profileCv, profile.language);
+      setImportMessage({
+        ok: true,
+        text: `XML Europass ${profile.language.toUpperCase()} téléchargé pour ${profile.name}.`,
+      });
+      return;
+    }
     const color = profile.templateColors[profile.templateId as ThemeTemplateId];
     const blob = await createDocumentPdfBlob(
       profileCv,
@@ -1003,6 +1075,26 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     }
   };
 
+  const exportAndOpenEuropass = () => {
+    try {
+      const editorWindow = window.open(europassEditorUrl(language), "_blank");
+      if (editorWindow) editorWindow.opener = null;
+      downloadEuropassXml(outputCv, language);
+      setPackMessage({
+        ok: true,
+        text: editorWindow
+          ? `XML Europass ${language.toUpperCase()} téléchargé. Dans l’éditeur ouvert, sélectionnez ce fichier pour charger le profil.`
+          : `XML Europass ${language.toUpperCase()} téléchargé. Autorisez les fenêtres contextuelles puis ouvrez l’éditeur Europass.`,
+      });
+    } catch (error) {
+      console.error(error);
+      setPackMessage({
+        ok: false,
+        text: "Impossible de générer le XML Europass. Vérifiez les données du profil.",
+      });
+    }
+  };
+
   return (
     <div lang="fr" dir="ltr" className="zgr-app-shell min-h-screen">
       <header className="zgr-app-header sticky top-0 z-20 border-b">
@@ -1025,7 +1117,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             <input
               ref={jsonInputRef}
               type="file"
-              accept=".json,application/json"
+              accept=".json,application/json,.xml,application/xml,text/xml"
               className="hidden"
               onChange={importJson}
             />
@@ -1065,11 +1157,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 ))}
               </select>
             </div>
-            <div
-              className="zgr-control flex items-center gap-1.5 rounded-xl border px-2 py-1.5"
-              aria-label={ui.palette}
-              role="group"
-            >
+            {!isEuropassTemplate && (
+              <div
+                className="zgr-control flex items-center gap-1.5 rounded-xl border px-2 py-1.5"
+                aria-label={ui.palette}
+                role="group"
+              >
               <Palette className="mx-0.5 h-4 w-4 text-muted-foreground" />
               {paletteColors.map((color, index) => {
                 const selected = accentColor.toLowerCase() === color.toLowerCase();
@@ -1119,7 +1212,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   }
                 />
               </label>
-            </div>
+              </div>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -1257,8 +1351,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             >
               <LogOut className="h-4 w-4" />
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            {!isEuropassTemplate && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                 <Button
                   size="sm"
                   disabled={pdfLoading || packLoading || !pdfPreview || pdfPreview.key !== cvKey}
@@ -1290,6 +1385,55 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  onSelect={() => {
+                    try {
+                      downloadEuropassXml(cv, language);
+                      setPackMessage({
+                        ok: true,
+                        text: "🇪🇺 XML Europass Candidate téléchargé. Les données disponibles sont préremplies ; complétez les champs signalés dans l’éditeur officiel.",
+                      });
+                    } catch (e) {
+                      console.error(e);
+                      setPackMessage({ ok: false, text: "Erreur lors de la création du XML Europass." });
+                    }
+                  }}
+                  className="items-start py-2.5"
+                >
+                  <FileCode className="mt-0.5 text-blue-600" />
+                  <span className="flex flex-col">
+                    <span className="font-medium flex items-center gap-1.5">
+                      <span>🇪🇺 Exporter pour Europass (.xml)</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Compatible officiel europa.eu ({language.toUpperCase()})
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={async () => {
+                    try {
+                      await downloadEuropassMultilingualZip(outputCvByLanguage, cv);
+                      setPackMessage({
+                        ok: true,
+                        text: "🇪🇺 Pack Europass 7 langues (.zip) téléchargé avec succès !",
+                      });
+                    } catch (e) {
+                      console.error(e);
+                      setPackMessage({ ok: false, text: "Erreur lors de la création du pack Europass." });
+                    }
+                  }}
+                  className="items-start py-2.5"
+                >
+                  <Archive className="mt-0.5 text-amber-500" />
+                  <span className="flex flex-col">
+                    <span className="font-medium">🇪🇺 Pack Europass XML 7 langues (.zip)</span>
+                    <span className="text-xs text-muted-foreground">
+                      7 fichiers XML officiels · FR, EN, ES, DE, IT, ZH, AR
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   onSelect={() => void downloadCompletePack()}
                   className="items-start py-2.5"
                 >
@@ -1299,8 +1443,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                     <span className="text-xs text-muted-foreground">{ui.downloadPackHint}</span>
                   </span>
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
         {importMessage && (
@@ -2148,7 +2293,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         {/* Preview */}
         <section className="lg:sticky lg:top-20 lg:self-start">
           <div className="relative overflow-hidden rounded-md bg-zinc-200 shadow-md ring-1 ring-zinc-300">
-            {pdfPreview ? (
+            {isEuropassTemplate ? (
+              <EuropassPreview
+                cv={outputCv}
+                language={language}
+                onExportAndOpen={exportAndOpenEuropass}
+              />
+            ) : pdfPreview ? (
               <PdfPreview
                 blob={pdfPreview.blob}
                 templateId={templateId}
@@ -2159,18 +2310,22 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 {ui.previewPreparing}
               </div>
             )}
-            {pdfLoading && pdfPreview && (
+            {!isEuropassTemplate && pdfLoading && pdfPreview && (
               <div className="absolute inset-0 flex items-center justify-center bg-white/85 text-sm font-medium text-zinc-700 backdrop-blur-[1px]">
                 <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> {ui.previewUpdating}
               </div>
             )}
-            {pdfError && (
+            {!isEuropassTemplate && pdfError && (
               <div className="absolute inset-x-4 top-4 rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground shadow">
                 {pdfError}
               </div>
             )}
           </div>
-          <p className="mt-2 text-center text-xs text-muted-foreground">{ui.exactPreview}</p>
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            {isEuropassTemplate
+              ? "Le profil reste modifiable dans l’éditeur officiel après l’import du XML."
+              : ui.exactPreview}
+          </p>
         </section>
       </main>
       <AiSettingsDialog
@@ -2219,6 +2374,150 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         onOpenProfile={openClientProfile}
         onDownloadPdf={downloadClientProfilePdf}
       />
+    </div>
+  );
+}
+
+function EuropassPreview({
+  cv,
+  language,
+  onExportAndOpen,
+}: {
+  cv: CV;
+  language: DocumentLanguage;
+  onExportAndOpen: () => void;
+}) {
+  const coverage = analyzeEuropassCoverage(cv);
+  const selectedLanguage = DOCUMENT_LANGUAGES.find((item) => item.id === language);
+  const editorFallsBackToEnglish = language === "zh" || language === "ar";
+  const visibleMissing = coverage.missing.slice(0, 4);
+
+  return (
+    <div className="min-h-[720px] bg-gradient-to-b from-[#eef3fb] to-white p-5 sm:p-8">
+      <div className="mx-auto max-w-xl overflow-hidden rounded-2xl border border-[#cbd8ee] bg-white shadow-xl shadow-[#173b73]/10">
+        <div className="relative overflow-hidden bg-[#164194] px-6 py-7 text-white sm:px-8">
+          <div className="absolute -right-10 -top-12 h-40 w-40 rounded-full border-[18px] border-[#ffcc00]/20" />
+          <div className="relative flex items-start justify-between gap-5">
+            <div>
+              <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#ffdf54]">
+                <Globe2 className="h-4 w-4" /> Espace Europass
+              </div>
+              <h2 className="text-2xl font-extrabold tracking-tight">CV Europass</h2>
+              <p className="mt-2 max-w-md text-sm leading-6 text-blue-100">
+                Le profil ZGR est préparé au format XML Candidate pour être repris dans l’éditeur
+                officiel.
+              </p>
+            </div>
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 border-[#ffcc00] bg-[#103777] text-sm font-black text-[#ffdf54] shadow-lg">
+              EU
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6 p-6 sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Profil actif
+              </p>
+              <p className="mt-1 font-bold text-slate-900" dir="auto">
+                {cv.nom_complet || "Profil sans nom"}
+              </p>
+              {cv.titre_poste && (
+                <p className="mt-0.5 text-xs text-slate-600" dir="auto">
+                  {cv.titre_poste}
+                </p>
+              )}
+            </div>
+            <div className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#164194]">
+              {selectedLanguage?.name || language.toUpperCase()} · {language.toUpperCase()}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-slate-900">Données prêtes pour Europass</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {coverage.mapped.length} groupes renseignés sur {coverage.mapped.length + coverage.missing.length}
+                </p>
+              </div>
+              <span className="text-2xl font-black text-[#164194]">{coverage.percent}%</span>
+            </div>
+            <div
+              className="h-2.5 overflow-hidden rounded-full bg-slate-200"
+              role="progressbar"
+              aria-label="Couverture des données Europass"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={coverage.percent}
+            >
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#164194] to-[#2d72d9] transition-[width]"
+                style={{ width: `${coverage.percent}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              [cv.experiences.length, "Expériences"],
+              [cv.educations.length + cv.formations.length, "Études"],
+              [cv.langues.length, "Langues"],
+            ].map(([value, label]) => (
+              <div key={String(label)} className="rounded-xl border border-slate-200 px-2 py-3">
+                <p className="text-xl font-black text-[#164194]">{value}</p>
+                <p className="mt-1 text-[11px] font-medium text-slate-500">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          {visibleMissing.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950">
+              <span className="font-bold">À compléter dans Europass :</span>{" "}
+              {visibleMissing.join(", ")}
+              {coverage.missing.length > visibleMissing.length ? "…" : "."}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
+            <div className="flex gap-3">
+              <CircleCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#164194]" />
+              <div className="text-xs leading-5 text-slate-700">
+                <p className="font-bold text-slate-900">Une seule action</p>
+                <p className="mt-1">
+                  Le bouton télécharge le XML {language.toUpperCase()} puis ouvre Europass. Dans la
+                  fenêtre officielle, choisissez le fichier qui vient d’être téléchargé pour
+                  charger le profil.
+                </p>
+                {editorFallsBackToEnglish && (
+                  <p className="mt-2 font-medium text-amber-800">
+                    L’interface Europass s’ouvrira en anglais, car elle n’est pas proposée en
+                    {language === "ar" ? " arabe" : " chinois"}. Les données exportées proviennent
+                    bien du formulaire {language.toUpperCase()}.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            size="lg"
+            className="h-auto w-full bg-[#164194] px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-900/15 hover:bg-[#103777]"
+            onClick={onExportAndOpen}
+          >
+            <FileCode className="mr-2 h-5 w-5" />
+            Télécharger le XML {language.toUpperCase()} et ouvrir Europass
+            <ExternalLink className="ml-2 h-4 w-4" />
+          </Button>
+
+          <p className="text-center text-[11px] leading-4 text-slate-500">
+            Le navigateur protège le téléversement entre deux sites : la sélection du XML dans
+            Europass reste la seule étape manuelle.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

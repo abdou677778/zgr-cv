@@ -1,11 +1,12 @@
 PROMPT MAÎTRE — EXTRACTION DE DOSSIER, RÉDACTION CV/LETTRE ET JSON ZGR EN 7 LANGUES
-Version 1.0 — compatible avec l'importeur actuel de ZGR CV
+Version 1.1 — compatible ZGR CV et export Europass Candidate XML moderne
 
 MODE D’EMPLOI POUR L’UTILISATEUR
 1. Copie l’intégralité de ce prompt dans ChatGPT, Gemini ou un autre assistant capable de lire des pièces jointes.
 2. Joins toutes les sources disponibles : ancien CV, diplômes, certificats, attestations, lettres, captures, photos, PDF et, si disponible, l’offre d’emploi visée.
 3. Ne remplace pas les documents originaux par une description approximative.
 4. Si l’assistant peut créer un fichier, demande-lui de joindre le fichier « CV_GLOBAL_7_LANGUES.json ». Sinon, il doit afficher uniquement le JSON brut.
+5. Importe ensuite ce JSON dans ZGR CV et utilise « Exporter pour Europass (.xml) ». ZGR transforme le bloc europass et les données du CV en XML Candidate compatible avec l’éditeur officiel ; les champs restés vides sont à compléter sur Europass.
 
 ==================== DÉBUT DU PROMPT À COPIER ====================
 
@@ -84,6 +85,11 @@ Europass :
 - présente les expériences et études en ordre chronologique inverse ;
 - sélectionne les informations utiles au projet professionnel, sans retranscrire toute la vie du candidat ;
 - utilise un niveau CECRL uniquement s’il est attesté ou fourni explicitement ; sinon, conserve la formulation factuelle d’origine sans inventer A1, A2, B1, B2, C1 ou C2.
+- prépare le bloc europass pour le format XML moderne Candidate utilisant l’espace de noms http://www.europass.eu/1.0 ; n’utilise jamais l’ancien format SkillsPassport V3.4 ;
+- complète uniquement les métadonnées Europass prouvées par les sources. Une valeur inconnue reste vide et doit pouvoir être complétée manuellement dans l’éditeur officiel ;
+- n’infère jamais le sexe, la nationalité, le lieu de naissance, le code postal, le permis de travail, le niveau CEC/EQF, le domaine ISCED-F, le secteur NACE ou les cinq niveaux CECRL ;
+- un code pays utilise ISO 3166-1 alpha-2 en minuscules uniquement lorsque le pays est explicitement connu ;
+- les détails experience_details et education_details doivent reprendre exactement les id des entrées principales correspondantes.
 
 CNP/NOC Canada :
 - si la navigation Web est disponible et qu’un poste canadien est clairement ciblé, vérifie le code dans la source officielle de la Classification nationale des professions en comparant principalement les fonctions réelles, pas seulement le titre ;
@@ -116,7 +122,31 @@ Localise les dates sans modifier les années ni les périodes. Utilise un tiret 
 
 Les valeurs de langues.fr, langues.en, langues.ar, langues.de, langues.es et langues.kab doivent elles-mêmes être traduites dans la langue du document. Elles décrivent le niveau linguistique du candidat ; elles ne définissent pas la langue du document.
 
-4 — CONTRAT JSON ZGR OBLIGATOIRE
+4 — PRÉPARATION OBLIGATOIRE DU PROFIL EUROPASS
+
+Le livrable reste exclusivement le JSON ZGR : ne génère jamais directement de XML, de fragment XML, de balise Candidate, de schéma XSD ou de contenu PDF. ZGR CV se charge ensuite de convertir le JSON en XML Europass Candidate compatible avec l’éditeur officiel.
+
+Pour chaque documents.<langue>.europass :
+- recherche dans les sources le maximum d’informations factuelles correspondant aux champs Europass ;
+- recopie given_name et family_name uniquement si la séparation du nom est certaine ;
+- structure l’adresse, l’indicatif téléphonique, le site web, la messagerie et les réseaux sociaux lorsqu’ils sont réellement fournis ;
+- relie chaque experience_details à une expérience grâce au même id ;
+- relie chaque education_details au diplôme ou à la formation grâce au même id ;
+- prépare chaque langue avec son code, son statut de langue maternelle et ses cinq dimensions CECRL seulement lorsqu’elles sont connues ;
+- conserve les codes techniques identiques dans les sept documents et traduit uniquement les libellés lisibles ;
+- utilise "" ou [] pour toute information absente ou incertaine, afin que l’utilisateur puisse la compléter dans Europass ;
+- n’insère jamais une valeur estimée seulement pour augmenter le taux de remplissage.
+
+Objectif de couverture : transférer vers Europass toutes les informations réellement disponibles dans le dossier, idéalement 90 % ou davantage lorsque les sources sont complètes. Ce pourcentage n’est jamais une autorisation d’inventer les données manquantes.
+
+Flux attendu après ta réponse :
+1. ton JSON est importé dans ZGR CV ;
+2. ZGR conserve le document CV et son bloc europass ;
+3. le bouton « Exporter pour Europass (.xml) » génère un XML Candidate moderne ;
+4. l’utilisateur importe ce XML dans l’outil standard ou bêta du site Europass ;
+5. l’utilisateur complète manuellement les champs restés vides.
+
+5 — CONTRAT JSON ZGR OBLIGATOIRE
 
 Racine exacte :
 - format = "ZGR_CV_MULTILINGUAL_V1"
@@ -196,7 +226,69 @@ SCHÉMA DOCUMENT — À DUPLIQUER EXACTEMENT POUR CHACUNE DES SEPT LANGUES
     "paragraphes": [],
     "formule_politesse": ""
   },
-  "plan_developpement": []
+  "plan_developpement": [],
+  "europass": {
+    "given_name": "",
+    "family_name": "",
+    "gender_code": "",
+    "nationality_code": "",
+    "nationality_label": "",
+    "birth_place": "",
+    "birth_country_code": "",
+    "address_line_1": "",
+    "address_line_2": "",
+    "postal_code": "",
+    "city": "",
+    "country_code": "",
+    "country_label": "",
+    "phone_country_code": "",
+    "website": "",
+    "instant_messaging": "",
+    "work_permit_countries": [],
+    "driving_licences": [],
+    "social_profiles": [
+      {
+        "platform": "",
+        "username": "",
+        "url": ""
+      }
+    ],
+    "languages": [
+      {
+        "code": "",
+        "label": "",
+        "mother_tongue": false,
+        "listening": "",
+        "reading": "",
+        "spoken_interaction": "",
+        "spoken_production": "",
+        "writing": ""
+      }
+    ],
+    "experience_details": [
+      {
+        "id": "experience-01",
+        "city": "",
+        "country_code": "",
+        "country_label": "",
+        "industry_code": "",
+        "department": "",
+        "website": ""
+      }
+    ],
+    "education_details": [
+      {
+        "id": "education-01",
+        "city": "",
+        "country_code": "",
+        "country_label": "",
+        "eqf_level": "",
+        "field_code": "",
+        "specific_field_code": "",
+        "website": ""
+      }
+    ]
+  }
 }
 
 RÈGLES DE STRUCTURE ET DE VALEURS
@@ -219,17 +311,27 @@ RÈGLES DE STRUCTURE ET DE VALEURS
    }
 2. Les points de suspension ci-dessus sont une notation explicative uniquement. Ils sont interdits dans le JSON final. Chaque DOCUMENT doit être entièrement développé avec toutes ses clés.
 3. Pour une valeur scalaire absente : utilise "". Pour une collection absente : utilise []. N’ajoute jamais un objet vide artificiel dans experiences, formations ou educations. Si aucune entrée réelle n’existe, le tableau correspondant vaut [].
-4. Les tableaux sont dynamiques : conserve toutes les entrées réelles, pas seulement quatre. Ne crée aucun élément vide pour atteindre un nombre fixe.
+4. Les tableaux sont dynamiques : conserve toutes les entrées réelles, pas seulement quatre. Ne crée aucun élément vide pour atteindre un nombre fixe. Les tableaux europass.social_profiles, europass.languages, europass.experience_details et europass.education_details valent [] si aucune entrée factuelle n’est disponible.
 5. Attribue des id stables et uniques : experience-01, experience-02… ; formation-01… ; education-01… Le même fait conserve le même id dans les sept langues.
 6. certifications existe dans les sept langues. Ne la limite jamais à l’anglais.
 7. Ne mets pas un point final après nom_complet, titre_poste, telephone, email, adresse courte, date, lieu, employeur, institution, nom de diplôme, niveau linguistique ou intitulé. Dans les phrases longues, utilise une ponctuation naturelle ; ne force pas un point après chaque valeur.
 8. Ne mets jamais de placeholder, moustache {{...}}, « N/A », « inconnu », « non fourni », « TBD », « lorem ipsum », commentaire JSON ou virgule terminale.
 9. Échappe correctement les guillemets et caractères spéciaux. Le résultat doit être du JSON strict, pas du JavaScript.
-10. Tous les champs doivent être des chaînes, tableaux ou objets conformes au schéma. Aucun null, nombre brut ou booléen.
+10. Tous les champs doivent être des chaînes, tableaux ou objets conformes au schéma. Aucun null ni nombre brut. Le booléen est autorisé uniquement pour europass.languages[].mother_tongue.
 11. Les sept documents doivent être sémantiquement synchronisés : aucune expérience ou compétence ne peut apparaître dans une traduction seulement, sauf une note linguistique strictement nécessaire dans plan_developpement.
 12. Les coordonnées, dates, noms propres, nombres et id doivent être identiques sur le fond dans les sept versions.
+13. europass.given_name et europass.family_name doivent provenir d’une séparation certaine du nom. Si l’ordre ou la segmentation du nom est ambigu, laisse ces deux champs vides : nom_complet reste la source principale.
+14. europass.gender_code accepte uniquement "male", "female", "other" ou "notSpecified" lorsqu’une source explicite existe ; sinon "".
+15. europass.nationality_code, birth_country_code, country_code et les country_code des détails utilisent des codes pays alpha-2 minuscules tels que "dz", "ca" ou "fr". Une résidence ou une adresse ne prouve jamais une nationalité.
+16. europass.phone_country_code contient uniquement l’indicatif sans signe +, par exemple "213" ou "1", lorsqu’il est présent dans le numéro fourni.
+17. europass.driving_licences contient uniquement les catégories explicitement visibles, par exemple ["B"]. Ne reproduis jamais un numéro de permis.
+18. europass.languages[].code utilise le code à trois lettres attendu par Europass/HR-XML lorsque la langue est certaine, par exemple "fre", "eng", "ara", "ger", "spa", "ita", "chi" ou "kab". Les cinq niveaux acceptent uniquement "", "A1", "A2", "B1", "B2", "C1" ou "C2".
+19. N’assimile jamais « courant », « intermédiaire », « notions » ou un nombre d’années à un niveau CECRL. Laisse les cinq dimensions vides si aucun niveau CECRL précis n’est fourni.
+20. europass.experience_details contient au maximum une entrée par expérience réelle. Le code secteur NACE et le service restent vides s’ils ne sont pas explicitement connus.
+21. europass.education_details utilise le même id que l’éducation ou la formation correspondante. Le niveau EQF/CEC et les codes de domaine restent vides sans preuve officielle ; le titre du diplôme ne suffit pas à les déduire.
+22. Les champs Europass textuels localisables, comme country_label et label, sont traduits dans la langue du document. Les codes, URL, id et faits restent identiques dans les sept langues.
 
-5 — PLAN DE DÉVELOPPEMENT ET INFORMATIONS À CLARIFIER
+6 — PLAN DE DÉVELOPPEMENT ET INFORMATIONS À CLARIFIER
 
 plan_developpement sert uniquement à consigner :
 - des actions de carrière concrètes découlant du dossier ;
@@ -240,7 +342,7 @@ plan_developpement sert uniquement à consigner :
 
 N’y mets pas de diagnostic médical, jugement de personnalité, prédiction, emploi fictif, prix de formation non vérifié, délai garanti ou conseil d’immigration présenté comme une décision officielle.
 
-6 — CONTRÔLE QUALITÉ SILENCIEUX AVANT LIVRAISON
+7 — CONTRÔLE QUALITÉ SILENCIEUX AVANT LIVRAISON
 
 Avant d’émettre la réponse, vérifie silencieusement chaque point :
 - toutes les pages et pièces jointes ont été examinées ;
@@ -253,6 +355,9 @@ Avant d’émettre la réponse, vérifie silencieusement chaque point :
 - l’allemand, l’italien, le chinois et l’arabe ne contiennent pas de résidus anglais injustifiés ;
 - le nom arabe est écrit en arabe ou signalé à confirmer ;
 - chaque document possède exactement les clés du schéma ;
+- chaque document contient le bloc europass complet et celui-ci ne contient aucune valeur déduite sans preuve ;
+- chaque id de europass.experience_details et europass.education_details correspond à une entrée principale existante ;
+- les niveaux CECRL incomplets restent vides au lieu d’être estimés ;
 - les id et l’ordre des entrées correspondent dans les sept langues ;
 - les collections réellement vides sont [] et non des listes de chaînes vides ;
 - aucun placeholder, null, commentaire, balise Markdown ou texte hors JSON n’existe ;

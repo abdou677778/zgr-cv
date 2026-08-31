@@ -34,5 +34,10 @@ export const COVER_LETTER_TEMPLATES: ReadonlyArray<{
 ];
 
 export const ADVISES_TEMPLATE_ID = "advises-v1" as const;
+export const EUROPASS_TEMPLATE_ID = "europass" as const;
 
-export type PdfTemplateId = CvTemplateId | CoverLetterTemplateId | typeof ADVISES_TEMPLATE_ID;
+export type PdfTemplateId =
+  | CvTemplateId
+  | CoverLetterTemplateId
+  | typeof ADVISES_TEMPLATE_ID
+  | typeof EUROPASS_TEMPLATE_ID;

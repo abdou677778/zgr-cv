@@ -194,6 +194,74 @@
       "Poursuivre l'apprentissage des bonnes pratiques DevOps et de l'observabilité des applications",
       "Participer régulièrement à des projets open source pour enrichir le portfolio et le réseau professionnel",
       "Adapter le CV et les lettres de motivation aux attentes du marché canadien et des recruteurs locaux"
-    ]
+    ],
+    "europass": {
+      "given_name": "Amine",
+      "family_name": "Bensalem",
+      "gender_code": "",
+      "nationality_code": "",
+      "nationality_label": "",
+      "birth_place": "",
+      "birth_country_code": "",
+      "address_line_1": "Montréal, QC, Canada",
+      "address_line_2": "",
+      "postal_code": "",
+      "city": "Montréal",
+      "country_code": "ca",
+      "country_label": "Canada",
+      "phone_country_code": "1",
+      "website": "",
+      "instant_messaging": "",
+      "work_permit_countries": [],
+      "driving_licences": ["B"],
+      "social_profiles": [],
+      "languages": [
+        {
+          "code": "ara",
+          "label": "Arabe",
+          "mother_tongue": true,
+          "listening": "",
+          "reading": "",
+          "spoken_interaction": "",
+          "spoken_production": "",
+          "writing": ""
+        },
+        {
+          "code": "fre",
+          "label": "Français",
+          "mother_tongue": false,
+          "listening": "",
+          "reading": "",
+          "spoken_interaction": "",
+          "spoken_production": "",
+          "writing": ""
+        },
+        {
+          "code": "eng",
+          "label": "Anglais",
+          "mother_tongue": false,
+          "listening": "",
+          "reading": "",
+          "spoken_interaction": "",
+          "spoken_production": "",
+          "writing": ""
+        }
+      ],
+      "experience_details": [
+        { "id": "experience-01", "city": "Montréal", "country_code": "ca", "country_label": "Canada", "industry_code": "", "department": "", "website": "" },
+        { "id": "experience-02", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "industry_code": "", "department": "", "website": "" },
+        { "id": "experience-03", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "industry_code": "", "department": "", "website": "" },
+        { "id": "experience-04", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "industry_code": "", "department": "", "website": "" }
+      ],
+      "education_details": [
+        { "id": "education-01", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
+        { "id": "education-02", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
+        { "id": "education-03", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
+        { "id": "formation-01", "city": "", "country_code": "", "country_label": "", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
+        { "id": "formation-02", "city": "", "country_code": "", "country_label": "", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
+        { "id": "formation-03", "city": "", "country_code": "", "country_label": "", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
+        { "id": "formation-04", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" }
+      ]
+    }
   }
 }

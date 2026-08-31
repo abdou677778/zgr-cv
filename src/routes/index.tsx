@@ -33,8 +33,6 @@ import {
   UserCog,
   BookOpenText,
 } from "lucide-react";
-import * as pdfjs from "pdfjs-dist";
-import pdfWorkerSource from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
 import {
   analyzeEuropassCoverage,
   downloadEuropassXml,
@@ -77,6 +75,10 @@ import {
   type DocumentKind,
   type PdfTemplateId,
 } from "@/lib/document-pdf";
+import {
+  isArabicCvTemplate,
+  normalizeCvTemplateForLanguage,
+} from "@/lib/document-templates";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -163,11 +165,7 @@ const EUROPASS_EDITOR_LANGUAGE: Record<DocumentLanguage, string> = {
 function europassEditorUrl(language: DocumentLanguage) {
   return `https://europa.eu/europass/eportfolio/screen/cv-editor?lang=${EUROPASS_EDITOR_LANGUAGE[language]}`;
 }
-const PDF_WORKER_URL = URL.createObjectURL(
-  new Blob([pdfWorkerSource], { type: "text/javascript" }),
-);
-
-pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+let pdfWorkerUrl: string | null = null;
 
 type RichListValueKey = "competences" | "participations" | "certifications" | "interets";
 type RichListFormatKey =
@@ -260,9 +258,9 @@ const UI_COPY = {
     downloadCurrent: "Modèle actuel · 7 langues (.zip)",
     downloadCurrentHint: "FR · EN · ES · DE · IT · 中文 · AR",
     downloadPack: "Télécharger le pack complet (.zip)",
-    downloadPackHint: "84 PDF · 12 modèles × 7 langues",
+    downloadPackHint: "81 PDF · modèles arabes réservés à l’arabe",
     preparingPack: "Création du pack",
-    packReady: "Pack multilingue téléchargé : 84 PDF dans 7 langues.",
+    packReady: "Pack téléchargé : 81 PDF, dont 4 modèles arabes dédiés.",
     currentPackReady: "Modèle actuel téléchargé dans les 7 langues.",
     packError: "Impossible de créer le pack complet.",
     resetConfirm: "Réinitialiser les données françaises ?",
@@ -302,9 +300,9 @@ const UI_COPY = {
     downloadCurrent: "Current template · 7 languages (.zip)",
     downloadCurrentHint: "FR · EN · ES · DE · IT · 中文 · AR",
     downloadPack: "Download complete pack (.zip)",
-    downloadPackHint: "84 PDFs · 12 templates × 7 languages",
+    downloadPackHint: "81 PDFs · Arabic templates are Arabic-only",
     preparingPack: "Building pack",
-    packReady: "Multilingual pack downloaded: 84 PDFs in 7 languages.",
+    packReady: "Pack downloaded: 81 PDFs, including 4 dedicated Arabic templates.",
     currentPackReady: "Current template downloaded in all 7 languages.",
     packError: "Unable to create the complete pack.",
     resetConfirm: "Reset the English data?",
@@ -409,10 +407,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [pdfPreview, setPdfPreview] = useState<{ blob: Blob; url: string; key: string } | null>(
     null,
   );
-  const [pdfLoading, setPdfLoading] = useState(true);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [packLoading, setPackLoading] = useState(false);
-  const [packProgress, setPackProgress] = useState({ completed: 0, total: 84 });
+  const [packProgress, setPackProgress] = useState({ completed: 0, total: 81 });
   const [packMessage, setPackMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [importMessage, setImportMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettings>(() => defaultAiSettings());
@@ -427,17 +426,29 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const pdfUrlRef = useRef<string | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const cv = cvByLanguage[language];
-  const templates = getTemplates(documentKind);
+  const templates = getTemplates(documentKind, documentKind === "cv" ? language : undefined);
   const isEuropassTemplate =
     documentKind === "cv" && templateId === EUROPASS_TEMPLATE_ID;
   const themeTemplateId = (
-    isEuropassTemplate ? "canadian-v1" : templateId
+    isEuropassTemplate
+      ? "canadian-v1"
+      : Object.prototype.hasOwnProperty.call(TEMPLATE_DEFAULT_COLORS, templateId)
+        ? templateId
+        : defaultTemplateFor(documentKind)
   ) as ThemeTemplateId;
-  const accentColor = templateColors[themeTemplateId];
+  const accentColor = templateColors[themeTemplateId] ?? TEMPLATE_DEFAULT_COLORS[themeTemplateId];
   const paletteColors = paletteForTemplate(themeTemplateId);
   // Language buttons translate only the form values and the generated document.
   // The application shell deliberately remains in French for a stable workflow.
   const ui = { ...UI_COPY.fr, ...INTERFACE_COPY.fr };
+  const currentTemplateIsArabicOnly =
+    documentKind === "cv" && isArabicCvTemplate(templateId);
+  const currentArchiveLabel = currentTemplateIsArabicOnly
+    ? "Modèle arabe actuel · AR (.zip)"
+    : ui.downloadCurrent;
+  const currentArchiveHint = currentTemplateIsArabicOnly
+    ? "Export arabe uniquement"
+    : ui.downloadCurrentHint;
   const form = FORM_COPY.fr;
   const outputCv = useMemo(() => applyCvVisibility(cv, hiddenElements), [cv, hiddenElements]);
   const outputCvByLanguage = useMemo(
@@ -463,6 +474,26 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const next = typeof value === "function" ? value(active) : value;
       return { ...current, [language]: next };
     });
+
+  useEffect(() => {
+    const availableTemplates = getTemplates(
+      documentKind,
+      documentKind === "cv" ? language : undefined,
+    );
+    const nextTemplate =
+      documentKind === "cv"
+        ? templateId === EUROPASS_TEMPLATE_ID
+          ? EUROPASS_TEMPLATE_ID
+          : normalizeCvTemplateForLanguage(templateId, language)
+        : availableTemplates.some((template) => template.id === templateId)
+          ? templateId
+          : defaultTemplateFor(documentKind);
+    if (nextTemplate !== templateId) setTemplateId(nextTemplate);
+  }, [documentKind, language, templateId]);
+
+  useEffect(() => {
+    if (isEuropassTemplate && !previewVisible) setPreviewVisible(true);
+  }, [isEuropassTemplate, previewVisible]);
 
   useEffect(() => {
     try {
@@ -530,11 +561,18 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           };
           if (settings.documentKind && settings.templateId) {
             setDocumentKind(settings.documentKind);
-            setTemplateId(settings.templateId);
+            setTemplateId(
+              isArabicCvTemplate(String(settings.templateId))
+                ? "arabic-pro-v1"
+                : settings.templateId,
+            );
           }
         } catch {
-          if (getTemplates("cv").some((template) => template.id === savedTemplate)) {
-            setTemplateId(savedTemplate as PdfTemplateId);
+          const migratedTemplate = isArabicCvTemplate(savedTemplate)
+            ? "arabic-pro-v1"
+            : savedTemplate;
+          if (getTemplates("cv").some((template) => template.id === migratedTemplate)) {
+            setTemplateId(migratedTemplate as PdfTemplateId);
           }
         }
       }
@@ -642,6 +680,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setPdfError("");
       return;
     }
+    if (!previewVisible) {
+      setPdfLoading(false);
+      setPdfError("");
+      return;
+    }
+    if (pdfPreview?.key === cvKey) {
+      setPdfLoading(false);
+      setPdfError("");
+      return;
+    }
 
     let cancelled = false;
     setPdfLoading(true);
@@ -683,6 +731,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     isEuropassTemplate,
     language,
     outputCv,
+    pdfPreview,
+    previewVisible,
     templateId,
     ui.previewError,
   ]);
@@ -996,8 +1046,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setLanguage(profile.language);
     setHiddenElements(structuredClone(profile.hiddenElements));
     setDocumentKind(profile.documentKind);
-    setTemplateId(profile.templateId);
-    setTemplateColors(structuredClone(profile.templateColors));
+    setTemplateId(
+      profile.templateId === EUROPASS_TEMPLATE_ID
+        ? EUROPASS_TEMPLATE_ID
+        : profile.documentKind === "cv"
+          ? normalizeCvTemplateForLanguage(String(profile.templateId), profile.language)
+          : profile.templateId,
+    );
+    setTemplateColors({ ...DEFAULT_TEMPLATE_COLORS, ...structuredClone(profile.templateColors) });
     setActiveProfileId(profile.id);
     setImportMessage({
       ok: true,
@@ -1005,12 +1061,46 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     });
   };
 
+  const downloadCurrentPdf = async () => {
+    if (pdfLoading || packLoading) return;
+    setPdfLoading(true);
+    setPdfError("");
+    try {
+      let blob = pdfPreview?.key === cvKey ? pdfPreview.blob : null;
+      if (!blob) {
+        blob = await createDocumentPdfBlob(
+          outputCv,
+          documentKind,
+          templateId,
+          language,
+          accentColor,
+        );
+        const url = URL.createObjectURL(blob);
+        if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+        pdfUrlRef.current = url;
+        setPdfPreview({ blob, url, key: cvKey });
+      }
+      downloadPdfDocument(blob, outputCv, documentKind, language);
+    } catch (error) {
+      console.error(error);
+      setPdfError(ui.previewError);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const downloadClientProfilePdf = async (profile: ClientProfile) => {
     const profileCv = applyCvVisibility(
       profile.cvByLanguage[profile.language],
       profile.hiddenElements,
     );
-    if (profile.templateId === EUROPASS_TEMPLATE_ID) {
+    const profileTemplateId =
+      profile.templateId === EUROPASS_TEMPLATE_ID
+        ? EUROPASS_TEMPLATE_ID
+        : profile.documentKind === "cv"
+          ? normalizeCvTemplateForLanguage(String(profile.templateId), profile.language)
+          : profile.templateId;
+    if (profileTemplateId === EUROPASS_TEMPLATE_ID) {
       downloadEuropassXml(profileCv, profile.language);
       setImportMessage({
         ok: true,
@@ -1018,11 +1108,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       });
       return;
     }
-    const color = profile.templateColors[profile.templateId as ThemeTemplateId];
+    const color = profile.templateColors[profileTemplateId as ThemeTemplateId];
     const blob = await createDocumentPdfBlob(
       profileCv,
       profile.documentKind,
-      profile.templateId,
+      profileTemplateId,
       profile.language,
       color,
     );
@@ -1032,7 +1122,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const downloadCompletePack = async () => {
     if (packLoading) return;
     setPackLoading(true);
-    setPackProgress({ completed: 0, total: 84 });
+    setPackProgress({ completed: 0, total: 81 });
     setPackMessage(null);
     try {
       const blob = await createCompletePackZip(
@@ -1055,7 +1145,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const downloadCurrentMultilingual = async () => {
     if (packLoading) return;
     setPackLoading(true);
-    setPackProgress({ completed: 0, total: DOCUMENT_LANGUAGES.length });
+    setPackProgress({
+      completed: 0,
+      total: currentTemplateIsArabicOnly ? 1 : DOCUMENT_LANGUAGES.length,
+    });
     setPackMessage(null);
     try {
       const blob = await createCurrentTemplateMultilingualZip(
@@ -1066,7 +1159,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         accentColor,
       );
       downloadCurrentMultilingualArchive(blob, cv);
-      setPackMessage({ ok: true, text: ui.currentPackReady });
+      setPackMessage({
+        ok: true,
+        text: currentTemplateIsArabicOnly
+          ? "Modèle arabe téléchargé en version AR."
+          : ui.currentPackReady,
+      });
     } catch (error) {
       console.error(error);
       setPackMessage({ ok: false, text: ui.packError });
@@ -1343,6 +1441,20 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               <RotateCcw className="mr-2 h-4 w-4" /> {ui.reset}
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPreviewVisible((visible) => !visible)}
+              aria-pressed={previewVisible}
+              aria-controls="pdf-preview-panel"
+            >
+              {previewVisible ? (
+                <EyeOff className="mr-2 h-4 w-4" />
+              ) : (
+                <Eye className="mr-2 h-4 w-4" />
+              )}
+              {previewVisible ? "Masquer l’aperçu" : "Afficher l’aperçu"}
+            </Button>
+            <Button
               variant="ghost"
               size="icon"
               aria-label="Se déconnecter"
@@ -1356,32 +1468,50 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 <DropdownMenuTrigger asChild>
                 <Button
                   size="sm"
-                  disabled={pdfLoading || packLoading || !pdfPreview || pdfPreview.key !== cvKey}
+                  disabled={packLoading}
                   aria-label={ui.downloadPdf}
                 >
-                  {pdfLoading || packLoading ? (
+                  {packLoading ? (
                     <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Download className="mr-2 h-4 w-4" />
                   )}
                   {packLoading
                     ? `${ui.preparingPack} ${packProgress.completed}/${packProgress.total}`
-                    : pdfLoading
-                      ? ui.preparingPdf
-                      : ui.downloadPdf}
-                  {!pdfLoading && !packLoading && <ChevronDown className="ml-2 h-3.5 w-3.5" />}
+                    : ui.downloadPdf}
+                  {!packLoading && <ChevronDown className="ml-2 h-3.5 w-3.5" />}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
                 <DropdownMenuItem
-                  disabled={!pdfPreview || pdfPreview.key !== cvKey}
+                  disabled={pdfLoading}
+                  onSelect={() => void downloadCurrentPdf()}
+                  className="items-start py-2.5"
+                >
+                  {pdfLoading ? (
+                    <LoaderCircle className="mt-0.5 animate-spin" />
+                  ) : (
+                    <Download className="mt-0.5" />
+                  )}
+                  <span className="flex flex-col">
+                    <span className="font-medium">
+                      {pdfLoading ? ui.preparingPdf : "Télécharger le PDF actuel"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Génération directe du document sélectionné
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={pdfLoading}
                   onSelect={() => void downloadCurrentMultilingual()}
                   className="items-start py-2.5"
                 >
                   <FileDown className="mt-0.5" />
                   <span className="flex flex-col">
-                    <span className="font-medium">{ui.downloadCurrent}</span>
-                    <span className="text-xs text-muted-foreground">{ui.downloadCurrentHint}</span>
+                    <span className="font-medium">{currentArchiveLabel}</span>
+                    <span className="text-xs text-muted-foreground">{currentArchiveHint}</span>
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -1472,9 +1602,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         )}
       </header>
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-7 lg:grid-cols-2">
+      <main
+        className={`mx-auto grid max-w-7xl gap-6 px-4 py-7 ${
+          previewVisible ? "lg:grid-cols-2" : "lg:grid-cols-1"
+        }`}
+      >
         {/* Form */}
-        <section className="zgr-editor-panel space-y-3 rounded-3xl border border-slate-200 bg-slate-100/75 p-3 sm:p-4">
+        <section
+          className={`zgr-editor-panel space-y-3 rounded-3xl border border-slate-200 bg-slate-100/75 p-3 sm:p-4 ${
+            previewVisible ? "" : "lg:mx-auto lg:w-full lg:max-w-5xl"
+          }`}
+        >
           <CvSectionPanel
             id="personal"
             fallbackTitle={ui.personal}
@@ -2291,7 +2429,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         </section>
 
         {/* Preview */}
-        <section className="lg:sticky lg:top-20 lg:self-start">
+        {previewVisible && (
+        <section id="pdf-preview-panel" className="lg:sticky lg:top-20 lg:self-start">
           <div className="relative overflow-hidden rounded-md bg-zinc-200 shadow-md ring-1 ring-zinc-300">
             {isEuropassTemplate ? (
               <EuropassPreview
@@ -2327,6 +2466,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               : ui.exactPreview}
           </p>
         </section>
+        )}
       </main>
       <AiSettingsDialog
         open={aiSettingsOpen}
@@ -2539,7 +2679,7 @@ function PdfPreview({
 
   useEffect(() => {
     let cancelled = false;
-    let loadingTask: ReturnType<typeof pdfjs.getDocument> | null = null;
+    let loadingTask: { destroy: () => Promise<void> } | null = null;
     const renderTasks: Array<{ cancel: () => void; promise: Promise<void> }> = [];
 
     const renderPdf = async () => {
@@ -2547,14 +2687,26 @@ function PdfPreview({
       setRenderError("");
 
       try {
+        const [pdfjs, workerModule] = await Promise.all([
+          import("pdfjs-dist"),
+          import("pdfjs-dist/build/pdf.worker.min.mjs?raw"),
+        ]);
+        if (!pdfWorkerUrl) {
+          pdfWorkerUrl = URL.createObjectURL(
+            new Blob([workerModule.default], { type: "text/javascript" }),
+          );
+        }
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
         const buffer = await blob.arrayBuffer();
         const digest = await crypto.subtle.digest("SHA-256", buffer.slice(0));
         const hash = Array.from(new Uint8Array(digest))
           .map((byte) => byte.toString(16).padStart(2, "0"))
           .join("");
 
-        loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
-        const document = await loadingTask.promise;
+        const task = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+        loadingTask = task;
+        const document = await task.promise;
         if (cancelled || !pagesRef.current) return;
 
         setSha256(hash);

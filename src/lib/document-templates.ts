@@ -12,8 +12,25 @@ export const CV_TEMPLATES: ReadonlyArray<{ id: CvTemplateId; name: string }> = [
   { id: "canadian-v3", name: "CV Canadien V3" },
   { id: "canadian-v4", name: "CV Canadien V4" },
   { id: "ats-a4", name: "CV ATS Format A4" },
-  { id: "arabic-pro-v1", name: "CV PRO Arabe V1" },
+  { id: "arabic-pro-v1", name: "CV Pro Arabe V1" },
 ];
+
+export const isArabicCvTemplate = (templateId: string) =>
+  /^arabic-pro-v[1-5]$/.test(templateId);
+
+/** Arabic designs are intentionally available only with Arabic source data. */
+export function getCvTemplatesForLanguage(language: string) {
+  return language === "ar"
+    ? CV_TEMPLATES
+    : CV_TEMPLATES.filter((template) => !isArabicCvTemplate(template.id));
+}
+
+/** Routes every former Arabic layout to the single retained V1 design. */
+export function normalizeCvTemplateForLanguage(templateId: string, language: string): CvTemplateId {
+  const migrated = isArabicCvTemplate(templateId) ? "arabic-pro-v1" : templateId;
+  const available = getCvTemplatesForLanguage(language);
+  return (available.some((template) => template.id === migrated) ? migrated : "canadian-v1") as CvTemplateId;
+}
 
 export type CoverLetterTemplateId =
   | "cover-letter-v1"

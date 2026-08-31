@@ -44,7 +44,9 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
   ) as Langues;
 
   const experiences = (sectionVisible("experience") ? cv.experiences : [])
-    .map((item, itemIndex) => {
+    .map((item, itemIndex) => ({ item, itemIndex }))
+    .filter(({ itemIndex }) => visible(`experience.${itemIndex}`))
+    .map(({ item, itemIndex }) => {
       const prefix = `experience.${itemIndex}`;
       const descriptions = item.descriptions.filter((_, index) =>
         visible(`${prefix}.description.${index}`),
@@ -70,7 +72,9 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
     .filter(hasExperienceContent);
 
   const formations = (sectionVisible("training") ? cv.formations : [])
-    .map((item, itemIndex) => {
+    .map((item, itemIndex) => ({ item, itemIndex }))
+    .filter(({ itemIndex }) => visible(`formation.${itemIndex}`))
+    .map(({ item, itemIndex }) => {
       const prefix = `formation.${itemIndex}`;
       const next: Formation = {
         ...item,
@@ -85,7 +89,9 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
     .filter(hasFormationContent);
 
   const educations = (sectionVisible("education") ? cv.educations : [])
-    .map((item, itemIndex) => {
+    .map((item, itemIndex) => ({ item, itemIndex }))
+    .filter(({ itemIndex }) => visible(`education.${itemIndex}`))
+    .map(({ item, itemIndex }) => {
       const prefix = `education.${itemIndex}`;
       const next: Education = {
         ...item,

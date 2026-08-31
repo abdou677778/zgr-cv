@@ -4,6 +4,8 @@ import {
   COVER_LETTER_TEMPLATES,
   CV_TEMPLATES,
   EUROPASS_TEMPLATE_ID,
+  getCvTemplatesForLanguage,
+  isArabicCvTemplate,
   type CoverLetterTemplateId,
   type CvTemplateId,
   type PdfTemplateId,
@@ -32,10 +34,11 @@ export function getDocumentKinds(language: DocumentLanguage) {
   ];
 }
 
-export function getTemplates(kind: DocumentKind) {
+export function getTemplates(kind: DocumentKind, language?: DocumentLanguage) {
   if (kind === "cover-letter") return COVER_LETTER_TEMPLATES;
   if (kind === "advises") return [{ id: ADVISES_TEMPLATE_ID, name: "Template Advises" }] as const;
-  return [...CV_TEMPLATES, { id: EUROPASS_TEMPLATE_ID, name: "CV Europass" }] as const;
+  const cvTemplates = language ? getCvTemplatesForLanguage(language) : CV_TEMPLATES;
+  return [...cvTemplates, { id: EUROPASS_TEMPLATE_ID, name: "CV Europass" }] as const;
 }
 
 export function defaultTemplateFor(kind: DocumentKind): PdfTemplateId {
@@ -79,7 +82,7 @@ type CvByLanguage = Record<DocumentLanguage, CV>;
 function packEntries(language: DocumentLanguage) {
   const languageFolder = `${language.toUpperCase()}_${safeFilename(languageInfo(language).name)}`;
   return [
-    ...CV_TEMPLATES.map((template, index) => ({
+    ...getCvTemplatesForLanguage(language).map((template, index) => ({
       kind: "cv" as const,
       templateId: template.id as PdfTemplateId,
       folder: `${languageFolder}/CV`,
@@ -111,8 +114,11 @@ export async function createCurrentTemplateMultilingualZip(
   accentColor?: string,
 ) {
   const files: Record<string, Uint8Array> = {};
-  const total = DOCUMENT_LANGUAGES.length;
-  for (const [index, language] of DOCUMENT_LANGUAGES.entries()) {
+  const languages = isArabicCvTemplate(templateId)
+    ? DOCUMENT_LANGUAGES.filter((language) => language.id === "ar")
+    : DOCUMENT_LANGUAGES;
+  const total = languages.length;
+  for (const [index, language] of languages.entries()) {
     onProgress?.({ completed: index, total, label: language.name });
     const blob = await createDocumentPdfBlob(
       cvByLanguage[language.id],
@@ -122,11 +128,11 @@ export async function createCurrentTemplateMultilingualZip(
       accentColor,
     );
     const folder = `${language.id.toUpperCase()}_${safeFilename(language.name)}`;
-    const path = `${folder}/${safeFilename(getTemplates(kind).find((item) => item.id === templateId)?.name || "Document")}_${language.id.toUpperCase()}.pdf`;
+    const path = `${folder}/${safeFilename(getTemplates(kind, language.id).find((item) => item.id === templateId)?.name || "Document")}_${language.id.toUpperCase()}.pdf`;
     files[path] = new Uint8Array(await blob.arrayBuffer());
   }
   files["MANIFEST.txt"] = strToU8(
-    `ZGR CV - CURRENT TEMPLATE - 7 LANGUAGES\n${Object.keys(files).join("\n")}\n`,
+    `ZGR CV - CURRENT TEMPLATE - ${isArabicCvTemplate(templateId) ? "ARABIC ONLY" : "7 LANGUAGES"}\n${Object.keys(files).join("\n")}\n`,
   );
   onProgress?.({ completed: total, total, label: "ZIP" });
   const archive = zipSync(files, { level: 6 });
@@ -142,7 +148,7 @@ export async function createCompletePackZip(
     packEntries(language.id).map((entry) => ({ ...entry, language: language.id })),
   );
   const files: Record<string, Uint8Array> = {};
-  const manifestLines = ["ZGR CV COMPLETE MULTILINGUAL PACK", "7 languages - 12 templates", ""];
+  const manifestLines = ["ZGR CV COMPLETE MULTILINGUAL PACK", "Arabic-specific templates included in Arabic only", ""];
 
   for (const [index, entry] of entries.entries()) {
     onProgress?.({ completed: index, total: entries.length, label: entry.label });

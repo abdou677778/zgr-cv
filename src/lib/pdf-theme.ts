@@ -6,7 +6,7 @@ export const TEMPLATE_DEFAULT_COLORS = {
   "canadian-v3": "#0070c0",
   "canadian-v4": "#ef4444",
   "ats-a4": "#101010",
-  "arabic-pro-v1": "#ff4761",
+  "arabic-pro-v1": "#c00000",
   "cover-letter-v1": "#cf1645",
   "cover-letter-v2": "#0d6070",
   "cover-letter-v3": "#4d006f",

@@ -20,4 +20,10 @@
       "bucket_name": "zgr-cv-clients",
     },
   ],
+  "services": [
+    {
+      "binding": "CLIENT_PORTAL_SERVICE",
+      "service": "cv-pro-team-clients",
+    },
+  ],
 }

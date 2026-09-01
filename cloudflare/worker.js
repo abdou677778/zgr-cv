@@ -1294,12 +1294,15 @@ async function proxyClientOrders(request, env, origin, pathname) {
   headers.set("X-Admin-Token", configuration.token);
   const contentType = request.headers.get("Content-Type");
   if (contentType) headers.set("Content-Type", contentType);
-  const response = await fetch(target, {
+  const outbound = new Request(target, {
     method: request.method,
     headers,
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
     redirect: "manual",
   });
+  const response = env.CLIENT_PORTAL_SERVICE?.fetch
+    ? await env.CLIENT_PORTAL_SERVICE.fetch(outbound)
+    : await fetch(outbound);
   const responseHeaders = new Headers(corsHeaders(origin));
   for (const header of [
     "Content-Type",

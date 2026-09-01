@@ -4,6 +4,7 @@ import {
   getJsonVersions,
   getOrder,
   getOrderFiles,
+  type StoredDeliverable,
   type StoredOrder,
 } from '@/lib/order-repository';
 
@@ -384,4 +385,74 @@ export async function syncOrderToDrive(orderId: string) {
     });
     throw error;
   }
+}
+
+export async function publishDeliveryToDrive(input: {
+  orderId: string;
+  versionNumber: number;
+  deliverables: StoredDeliverable[];
+}) {
+  if (!driveConfigured())
+    throw new Error('La connexion Google Drive n’est pas configurée.');
+  if (!input.deliverables.length)
+    throw new Error('Sélectionnez au moins un livrable.');
+
+  let order = await getOrder(input.orderId);
+  if (!order) throw new Error('Commande introuvable.');
+  if (!order.driveFolderId) {
+    const synced = await syncOrderToDrive(input.orderId);
+    if (!synced.configured) throw new Error('Google Drive est indisponible.');
+    order = await getOrder(input.orderId);
+  }
+  if (!order?.driveFolderId)
+    throw new Error('Le dossier Drive interne de la commande est introuvable.');
+
+  const cache: DriveDirectoryCache = new Map();
+  const deliverablesRoot = await ensureFolder(
+    cache,
+    order.driveFolderId,
+    '04_LIVRABLES',
+  );
+  const label = `LIVRAISON_CLIENT__v${String(input.versionNumber).padStart(3, '0')}__${new Date()
+    .toISOString()
+    .slice(0, 10)}`;
+  const deliveryFolderId = await ensureFolder(cache, deliverablesRoot, label);
+  const usedNames = new Map<string, number>();
+
+  for (const deliverable of input.deliverables) {
+    const object = await runtimeEnv().FILES.get(deliverable.storageKey);
+    if (!object)
+      throw new Error(`Livrable R2 introuvable : ${deliverable.originalName}`);
+    const baseName = safeFileName(deliverable.originalName);
+    const occurrence = usedNames.get(baseName) ?? 0;
+    usedNames.set(baseName, occurrence + 1);
+    const name = occurrence
+      ? baseName.replace(/(\.[^.]+)?$/, `_${occurrence + 1}$1`)
+      : baseName;
+    await uploadToFolder({
+      cache,
+      parentId: deliveryFolderId,
+      name,
+      contentType: deliverable.mimeType || 'application/octet-stream',
+      size: object.size,
+      body: object.body,
+      sourceKey: deliverable.storageKey,
+      overwrite: true,
+    });
+  }
+
+  await driveFetch(`/files/${deliveryFolderId}/permissions?supportsAllDrives=true`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({
+      type: 'anyone',
+      role: 'reader',
+      allowFileDiscovery: false,
+    }),
+  });
+
+  return {
+    driveFolderId: deliveryFolderId,
+    shareUrl: `https://drive.google.com/drive/folders/${deliveryFolderId}?usp=sharing`,
+  };
 }

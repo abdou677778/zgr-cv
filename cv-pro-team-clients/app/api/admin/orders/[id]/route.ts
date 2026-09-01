@@ -2,6 +2,8 @@ import { requireAdmin } from '@/lib/admin-auth';
 import { jsonResponse } from '@/lib/order-model';
 import {
   getJsonVersions,
+  getDeliverables,
+  getDeliveries,
   getOrder,
   getOrderEvents,
   getOrderFiles,
@@ -18,9 +20,11 @@ export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
   const order = await getOrder(id);
   if (!order) return jsonResponse({ error: 'Commande introuvable.' }, 404);
-  const [files, jsonVersions, events] = await Promise.all([
+  const [files, jsonVersions, deliverables, deliveries, events] = await Promise.all([
     getOrderFiles(id),
     getJsonVersions(id),
+    getDeliverables(id),
+    getDeliveries(id),
     getOrderEvents(id),
   ]);
 
@@ -30,6 +34,10 @@ export async function GET(request: Request, context: RouteContext) {
     jsonVersions: jsonVersions.map(
       ({ storageKey: _storageKey, ...version }) => version,
     ),
+    deliverables: deliverables.map(
+      ({ storageKey: _storageKey, ...deliverable }) => deliverable,
+    ),
+    deliveries,
     events,
   });
 }

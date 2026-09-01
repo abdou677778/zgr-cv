@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import {
   analyzeEuropassCoverage,
+  convertCvToEuropassXml,
   downloadEuropassXml,
   downloadEuropassMultilingualZip,
   parseEuropassXml,
@@ -124,7 +125,7 @@ import {
   saveClientProfile,
   type ClientProfile,
 } from "@/lib/client-profile-db";
-import type { ClientOrderSummary } from "@/lib/client-orders";
+import { importClientOrderJson, type ClientOrderSummary } from "@/lib/client-orders";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -427,6 +428,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [clientDatabaseOpen, setClientDatabaseOpen] = useState(false);
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [activeClientOrder, setActiveClientOrder] = useState<ClientOrderSummary | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const pdfUrlRef = useRef<string | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
@@ -937,6 +939,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       updateProfilePhoto(undefined);
       setHiddenElements({});
       setActiveProfileId(null);
+      setActiveClientOrder(null);
     }
   };
   const loadSample = () => {
@@ -944,6 +947,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     updateProfilePhoto(undefined);
     setHiddenElements({});
     setActiveProfileId(null);
+    setActiveClientOrder(null);
   };
 
   const changeDocumentKind = (kind: DocumentKind) => {
@@ -968,6 +972,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         updateProfilePhoto(importedCv.photo);
         setHiddenElements({});
         setActiveProfileId(null);
+        setActiveClientOrder(null);
         setImportMessage({
           ok: true,
           text: `🇪🇺 CV Europass XML importé avec succès : ${importedCv.nom_complet || "Candidat"} (${language.toUpperCase()})`,
@@ -1010,6 +1015,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setCvByLanguage(next);
       setHiddenElements({});
       setActiveProfileId(null);
+      setActiveClientOrder(null);
       const nextLanguage = importedSet?.defaultLanguage ?? importedLanguages[0];
       if (!importedLanguages.includes(language)) setLanguage(nextLanguage);
       const result =
@@ -1071,11 +1077,37 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         }
       }
       setActiveProfileId(id);
+      let orderVersion = "";
+      if (activeClientOrder) {
+        const orderPayload = {
+          version: "1.0",
+          default_language: language,
+          documents: cvByLanguage,
+          _zgr: {
+            order_id: activeClientOrder.id,
+            hidden_elements: hiddenElements,
+            document_kind: documentKind,
+            template_id: templateId,
+            template_colors: templateColors,
+            section_appearance: sectionAppearance,
+            saved_at: now,
+          },
+        };
+        const orderJson = new File(
+          [JSON.stringify(orderPayload, null, 2)],
+          `${activeClientOrder.id}_CV_GLOBAL_7_LANGUES.json`,
+          { type: "application/json" },
+        );
+        const imported = await importClientOrderJson(activeClientOrder.id, orderJson);
+        orderVersion = ` · commande ${activeClientOrder.id} JSON v${String(
+          imported.versionNumber,
+        ).padStart(3, "0")}`;
+      }
       setImportMessage({
         ok: !cloudError,
         text: cloudError
           ? `${existing ? "Profil mis à jour" : "Nouveau profil sauvegardé"} localement : ${profile.name} · R2 : ${cloudError}`
-          : `${existing ? "Profil mis à jour" : "Nouveau profil sauvegardé"} ${cloudSynced ? "localement et dans R2" : "localement"} : ${profile.name} · ID ${id}`,
+          : `${existing ? "Profil mis à jour" : "Nouveau profil sauvegardé"} ${cloudSynced ? "localement et dans R2" : "localement"} : ${profile.name} · ID ${id}${orderVersion}`,
       });
     } catch (error) {
       setImportMessage({
@@ -1101,6 +1133,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     );
     setTemplateColors({ ...DEFAULT_TEMPLATE_COLORS, ...structuredClone(profile.templateColors) });
     setActiveProfileId(profile.id);
+    setActiveClientOrder(null);
     setImportMessage({
       ok: true,
       text: `Profil ouvert : ${profile.name} · ID ${profile.id}`,
@@ -1109,6 +1142,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
 
   const openClientOrderJson = (value: unknown, order: ClientOrderSummary) => {
     try {
+      const root =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : {};
+      const zgr =
+        root._zgr && typeof root._zgr === "object" && !Array.isArray(root._zgr)
+          ? (root._zgr as Record<string, unknown>)
+          : null;
       const next = { ...cvByLanguage };
       const importedSet = importCvJsonSet(value);
       const importedLanguages: DocumentLanguage[] = [];
@@ -1132,8 +1173,38 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       }
       setCvByLanguage(next);
       setLanguage(importedSet?.defaultLanguage ?? importedLanguages[0]);
-      setHiddenElements({});
+      const restoredVisibility =
+        zgr?.hidden_elements &&
+        typeof zgr.hidden_elements === "object" &&
+        !Array.isArray(zgr.hidden_elements)
+          ? (Object.fromEntries(
+              Object.entries(zgr.hidden_elements as Record<string, unknown>).filter(
+                ([path, hidden]) => path.length > 0 && path.length <= 180 && hidden === true,
+              ),
+            ) as HiddenCvElements)
+          : {};
+      setHiddenElements(restoredVisibility);
+      if (
+        zgr?.document_kind === "cv" ||
+        zgr?.document_kind === "cover-letter" ||
+        zgr?.document_kind === "advises"
+      ) {
+        setDocumentKind(zgr.document_kind);
+      }
+      if (typeof zgr?.template_id === "string") {
+        setTemplateId(zgr.template_id as PdfTemplateId);
+      }
+      if (zgr?.template_colors && typeof zgr.template_colors === "object") {
+        setTemplateColors({
+          ...DEFAULT_TEMPLATE_COLORS,
+          ...(zgr.template_colors as Partial<TemplateColorMap>),
+        });
+      }
+      if (zgr?.section_appearance) {
+        setSectionAppearance(normalizeSectionAppearance(zgr.section_appearance));
+      }
       setActiveProfileId(null);
+      setActiveClientOrder(order);
       setImportMessage({
         ok: true,
         text: `Commande ${order.id} ouverte dans ZGR CV · ${importedLanguages
@@ -1146,6 +1217,64 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         text: error instanceof Error ? error.message : "JSON de commande incompatible.",
       });
     }
+  };
+
+  const createCurrentOrderDeliverable = async (order: ClientOrderSummary) => {
+    if (activeClientOrder?.id !== order.id) {
+      throw new Error(
+        `Ouvrez d’abord le JSON de la commande ${order.id} dans ZGR afin d’éviter une livraison au mauvais client.`,
+      );
+    }
+    const normalizedName = (outputCv.nom_complet || order.clientName || "document")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[<>:"/\\|?*]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+    if (isEuropassTemplate) {
+      const xml = convertCvToEuropassXml(outputCv, language);
+      return {
+        file: new File([xml], `${normalizedName}_CV_Europass_${language.toUpperCase()}.xml`, {
+          type: "application/xml",
+        }),
+        service: "CV_EUROPASS",
+      };
+    }
+    const blob = await createDocumentPdfBlob(
+      outputCv,
+      documentKind,
+      templateId,
+      language,
+      accentColor,
+    );
+    const suffix =
+      documentKind === "cover-letter"
+        ? language === "fr"
+          ? "Lettre_FR"
+          : "Lettre_ENG"
+        : documentKind === "advises"
+          ? "Conseils"
+          : "CV";
+    const service =
+      documentKind === "cover-letter"
+        ? language === "fr"
+          ? "LETTRE_FR"
+          : "LETTRE_ENG"
+        : documentKind === "advises"
+          ? "CONSEILS"
+          : language === "ar"
+            ? "CV_ARABE"
+            : String(templateId).toLowerCase().includes("ats")
+              ? "CV_ATS"
+              : "CV_CANADIEN";
+    return {
+      file: new File(
+        [blob],
+        `${normalizedName}_${suffix}_${language.toUpperCase()}.pdf`,
+        { type: "application/pdf" },
+      ),
+      service,
+    };
   };
 
   const downloadCurrentPdf = async () => {
@@ -2620,6 +2749,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         open={clientOrdersOpen}
         onOpenChange={setClientOrdersOpen}
         onOpenJson={openClientOrderJson}
+        activeOrderId={activeClientOrder?.id}
+        onCreateCurrentDeliverable={createCurrentOrderDeliverable}
       />
     </div>
   );

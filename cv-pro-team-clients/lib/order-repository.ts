@@ -42,6 +42,28 @@ export interface StoredJsonVersion {
   createdAt: string;
 }
 
+export interface StoredDeliverable {
+  id: string;
+  orderId: string;
+  service: string;
+  originalName: string;
+  storageKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  createdAt: string;
+}
+
+export interface StoredDelivery {
+  id: string;
+  orderId: string;
+  versionNumber: number;
+  driveFolderId: string;
+  shareUrl: string;
+  fileIds: string[];
+  createdAt: string;
+}
+
 type D1Row = Record<string, unknown>;
 
 function textValue(value: unknown, fallback = '') {
@@ -99,6 +121,32 @@ function mapJsonVersion(row: D1Row): StoredJsonVersion {
   };
 }
 
+function mapDeliverable(row: D1Row): StoredDeliverable {
+  return {
+    id: String(row.id),
+    orderId: String(row.order_id),
+    service: textValue(row.service, 'AUTRE'),
+    originalName: String(row.original_name),
+    storageKey: String(row.storage_key),
+    mimeType: String(row.mime_type),
+    sizeBytes: Number(row.size_bytes),
+    sha256: String(row.sha256),
+    createdAt: String(row.created_at),
+  };
+}
+
+function mapDelivery(row: D1Row): StoredDelivery {
+  return {
+    id: String(row.id),
+    orderId: String(row.order_id),
+    versionNumber: Number(row.version_number),
+    driveFolderId: String(row.drive_folder_id),
+    shareUrl: String(row.share_url),
+    fileIds: JSON.parse(textValue(row.file_ids_json, '[]')),
+    createdAt: String(row.created_at),
+  };
+}
+
 export async function getOrder(id: string) {
   await ensureSchema();
   const row = await runtimeEnv()
@@ -144,6 +192,24 @@ export async function getOrderEvents(orderId: string) {
     details: JSON.parse(textValue(row.details_json, '{}')),
     createdAt: String(row.created_at),
   }));
+}
+
+export async function getDeliverables(orderId: string) {
+  await ensureSchema();
+  const result = await runtimeEnv()
+    .DB.prepare('SELECT * FROM deliverables WHERE order_id = ? ORDER BY created_at DESC')
+    .bind(orderId)
+    .all();
+  return (result.results as D1Row[]).map(mapDeliverable);
+}
+
+export async function getDeliveries(orderId: string) {
+  await ensureSchema();
+  const result = await runtimeEnv()
+    .DB.prepare('SELECT * FROM deliveries WHERE order_id = ? ORDER BY version_number DESC')
+    .bind(orderId)
+    .all();
+  return (result.results as D1Row[]).map(mapDelivery);
 }
 
 export async function validateUploadToken(

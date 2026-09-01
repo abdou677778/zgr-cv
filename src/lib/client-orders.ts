@@ -63,10 +63,33 @@ export interface ClientOrderEvent {
   createdAt: string;
 }
 
+export interface ClientOrderDeliverable {
+  id: string;
+  orderId: string;
+  service: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  createdAt: string;
+}
+
+export interface ClientOrderDelivery {
+  id: string;
+  orderId: string;
+  versionNumber: number;
+  driveFolderId: string;
+  shareUrl: string;
+  fileIds: string[];
+  createdAt: string;
+}
+
 export interface ClientOrderDetail {
   order: ClientOrderSummary;
   files: ClientOrderFile[];
   jsonVersions: ClientOrderJsonVersion[];
+  deliverables: ClientOrderDeliverable[];
+  deliveries: ClientOrderDelivery[];
   events: ClientOrderEvent[];
 }
 
@@ -170,4 +193,46 @@ export async function syncClientOrderDrive(orderId: string) {
     { method: "POST" },
   );
   return responseJson<{ configured: true; driveFolderId: string }>(response);
+}
+
+export async function addClientOrderDeliverable(
+  orderId: string,
+  file: File,
+  service = "AUTRE",
+) {
+  const data = new FormData();
+  data.append("file", file);
+  data.append("service", service);
+  const response = await authenticatedFetch(
+    `/api/admin/client-orders/${encodeURIComponent(orderId)}/deliverables`,
+    { method: "POST", body: data },
+  );
+  return responseJson<{ deliverable: ClientOrderDeliverable }>(response).then(
+    (body) => body.deliverable,
+  );
+}
+
+export async function downloadClientOrderDeliverable(
+  orderId: string,
+  deliverable: ClientOrderDeliverable,
+) {
+  const response = await authenticatedFetch(
+    `/api/admin/client-orders/${encodeURIComponent(orderId)}/deliverables/${encodeURIComponent(deliverable.id)}`,
+  );
+  if (!response.ok) await responseJson(response);
+  await saveResponseBlob(response, deliverable.originalName);
+}
+
+export async function publishClientOrderDelivery(orderId: string, fileIds: string[]) {
+  const response = await authenticatedFetch(
+    `/api/admin/client-orders/${encodeURIComponent(orderId)}/deliveries`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileIds }),
+    },
+  );
+  return responseJson<{ delivery: ClientOrderDelivery }>(response).then(
+    (body) => body.delivery,
+  );
 }

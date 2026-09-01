@@ -109,3 +109,43 @@ export const invitations = sqliteTable(
     index('idx_invitations_order_id').on(table.orderId),
   ],
 );
+
+export const deliverables = sqliteTable(
+  'deliverables',
+  {
+    id: text('id').primaryKey(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    service: text('service').notNull().default('AUTRE'),
+    originalName: text('original_name').notNull(),
+    storageKey: text('storage_key').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    sha256: text('sha256').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_deliverables_storage_key').on(table.storageKey),
+    index('idx_deliverables_order_created').on(table.orderId, table.createdAt),
+  ],
+);
+
+export const deliveries = sqliteTable(
+  'deliveries',
+  {
+    id: text('id').primaryKey(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    versionNumber: integer('version_number').notNull(),
+    driveFolderId: text('drive_folder_id').notNull(),
+    shareUrl: text('share_url').notNull(),
+    fileIdsJson: text('file_ids_json').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_deliveries_order_version').on(table.orderId, table.versionNumber),
+    index('idx_deliveries_order_created').on(table.orderId, table.createdAt),
+  ],
+);

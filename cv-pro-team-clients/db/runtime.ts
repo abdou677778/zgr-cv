@@ -55,6 +55,26 @@ const statements = [
     used_at TEXT,
     created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS deliverables (
+    id TEXT PRIMARY KEY NOT NULL,
+    order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    service TEXT NOT NULL DEFAULT 'AUTRE',
+    original_name TEXT NOT NULL,
+    storage_key TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS deliveries (
+    id TEXT PRIMARY KEY NOT NULL,
+    order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    version_number INTEGER NOT NULL,
+    drive_folder_id TEXT NOT NULL,
+    share_url TEXT NOT NULL,
+    file_ids_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
   'CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)',
   'CREATE INDEX IF NOT EXISTS idx_orders_status_created_at ON orders(status, created_at)',
   'CREATE INDEX IF NOT EXISTS idx_orders_email_created_at ON orders(email, created_at)',
@@ -66,6 +86,10 @@ const statements = [
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_invitations_token_hash ON invitations(token_hash)',
   'CREATE INDEX IF NOT EXISTS idx_invitations_expires_at ON invitations(expires_at)',
   'CREATE INDEX IF NOT EXISTS idx_invitations_order_id ON invitations(order_id)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_deliverables_storage_key ON deliverables(storage_key)',
+  'CREATE INDEX IF NOT EXISTS idx_deliverables_order_created ON deliverables(order_id, created_at)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_order_version ON deliveries(order_id, version_number)',
+  'CREATE INDEX IF NOT EXISTS idx_deliveries_order_created ON deliveries(order_id, created_at)',
 ];
 
 let schemaPromise: Promise<void> | undefined;

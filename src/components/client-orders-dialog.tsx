@@ -14,6 +14,8 @@ import {
   PackageOpen,
   RefreshCw,
   Search,
+  Send,
+  Share2,
   Upload,
 } from "lucide-react";
 
@@ -28,15 +30,19 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   createClientInvitation,
+  addClientOrderDeliverable,
   downloadClientOrderFile,
+  downloadClientOrderDeliverable,
   downloadClientOrderJson,
   downloadClientOrderPack,
   getClientOrder,
   importClientOrderJson,
   listClientOrders,
+  publishClientOrderDelivery,
   readClientOrderJson,
   syncClientOrderDrive,
   type ClientOrderDetail,
+  type ClientOrderDeliverable,
   type ClientOrderFile,
   type ClientOrderJsonVersion,
   type ClientOrderSummary,
@@ -80,6 +86,8 @@ const EVENT_LABELS: Record<string, string> = {
   JSON_IMPORTED: "JSON ZGR importé",
   DRIVE_SYNCED: "Google Drive synchronisé",
   DRIVE_SYNC_FAILED: "Échec de la synchronisation Drive",
+  DELIVERABLE_ADDED: "Livrable final ajouté",
+  DELIVERY_PUBLISHED: "Livraison client publiée",
 };
 
 function formatBytes(value: number) {
@@ -108,12 +116,19 @@ export function ClientOrdersDialog({
   open,
   onOpenChange,
   onOpenJson,
+  activeOrderId,
+  onCreateCurrentDeliverable,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenJson: (value: unknown, order: ClientOrderSummary) => void;
+  activeOrderId?: string | null;
+  onCreateCurrentDeliverable?: (
+    order: ClientOrderSummary,
+  ) => Promise<{ file: File; service: string }>;
 }) {
   const jsonInputRef = useRef<HTMLInputElement>(null);
+  const deliverableInputRef = useRef<HTMLInputElement>(null);
   const [orders, setOrders] = useState<ClientOrderSummary[]>([]);
   const [detail, setDetail] = useState<ClientOrderDetail | null>(null);
   const [search, setSearch] = useState("");
@@ -121,6 +136,8 @@ export function ClientOrdersDialog({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
+  const [selectedDeliverables, setSelectedDeliverables] = useState<string[]>([]);
+  const [deliverableService, setDeliverableService] = useState("AUTRE");
 
   const createInvitation = async () => {
     setBusy("invite");
@@ -167,6 +184,11 @@ export function ClientOrdersDialog({
   useEffect(() => {
     if (open) void refresh(false);
   }, [open]);
+
+  useEffect(() => {
+    setSelectedDeliverables([]);
+    setDeliverableService(detail?.order.services[0] || "AUTRE");
+  }, [detail?.order.id]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
@@ -276,6 +298,93 @@ export function ClientOrdersDialog({
     }
   };
 
+  const addDeliverables = async (files: File[]) => {
+    if (!detail || !files.length) return;
+    setBusy("deliverable-upload");
+    setMessage("");
+    try {
+      const added: ClientOrderDeliverable[] = [];
+      for (const file of files) {
+        added.push(
+          await addClientOrderDeliverable(detail.order.id, file, deliverableService),
+        );
+      }
+      setSelectedDeliverables((current) => [
+        ...new Set([...current, ...added.map((item) => item.id)]),
+      ]);
+      await refresh();
+      setMessage(
+        `${added.length} livrable${added.length > 1 ? "s" : ""} ajouté${
+          added.length > 1 ? "s" : ""
+        } à la production de ${detail.order.clientName}.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Ajout des livrables impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const addCurrentDocument = async () => {
+    if (!detail || !onCreateCurrentDeliverable) return;
+    setBusy("deliverable-current");
+    setMessage("");
+    try {
+      const result = await onCreateCurrentDeliverable(detail.order);
+      const added = await addClientOrderDeliverable(
+        detail.order.id,
+        result.file,
+        result.service,
+      );
+      setSelectedDeliverables((current) => [...new Set([...current, added.id])]);
+      await refresh();
+      setMessage(`Document actuel ajouté aux livrables : ${result.file.name}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Génération du document impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const downloadDeliverable = async (deliverable: ClientOrderDeliverable) => {
+    if (!detail) return;
+    setBusy(`deliverable:${deliverable.id}`);
+    try {
+      await downloadClientOrderDeliverable(detail.order.id, deliverable);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Téléchargement impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const publishDelivery = async () => {
+    if (!detail) return;
+    setBusy("delivery-publish");
+    setMessage("");
+    try {
+      const delivery = await publishClientOrderDelivery(
+        detail.order.id,
+        selectedDeliverables,
+      );
+      const copied = await navigator.clipboard
+        .writeText(delivery.shareUrl)
+        .then(() => true)
+        .catch(() => false);
+      setSelectedDeliverables([]);
+      await refresh();
+      setMessage(
+        `Livraison v${String(delivery.versionNumber).padStart(3, "0")} créée sur Google Drive.${
+          copied ? " Le lien client a été copié." : " Utilisez le bouton Copier pour partager le lien."
+        }`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Publication impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[94vh] max-w-7xl overflow-y-auto">
@@ -315,6 +424,18 @@ export function ClientOrdersDialog({
             const file = event.target.files?.[0];
             event.target.value = "";
             if (file) void importJson(file);
+          }}
+        />
+        <input
+          ref={deliverableInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx,.xml,.json,.zip,.png,.jpg,.jpeg,.webp,application/pdf,application/json,text/xml,application/xml"
+          className="hidden"
+          onChange={(event) => {
+            const files = [...(event.target.files ?? [])];
+            event.target.value = "";
+            if (files.length) void addDeliverables(files);
           }}
         />
 
@@ -618,6 +739,204 @@ export function ClientOrdersDialog({
                     </div>
                   </section>
                 </div>
+
+                <section className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="flex items-center gap-2 font-bold">
+                        <Share2 className="h-4 w-4 text-emerald-700" /> Livrables et partage client
+                      </h3>
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                        Le dossier interne reste privé. Seuls les fichiers cochés seront copiés dans
+                        une nouvelle livraison Drive propre et partageable.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <select
+                        value={deliverableService}
+                        onChange={(event) => setDeliverableService(event.target.value)}
+                        className="h-9 rounded-md border bg-white px-3 text-xs"
+                        aria-label="Service du livrable"
+                      >
+                        {detail.order.services.map((service) => (
+                          <option key={service} value={service}>
+                            {SERVICE_LABELS[service] || service}
+                          </option>
+                        ))}
+                        <option value="AUTRE">Autre document</option>
+                      </select>
+                      {activeOrderId === detail.order.id && onCreateCurrentDeliverable && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void addCurrentDocument()}
+                          disabled={Boolean(busy)}
+                        >
+                          {busy === "deliverable-current" ? (
+                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileText className="mr-2 h-4 w-4" />
+                          )}
+                          Ajouter le document actuel
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => deliverableInputRef.current?.click()}
+                        disabled={Boolean(busy)}
+                      >
+                        {busy === "deliverable-upload" ? (
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="mr-2 h-4 w-4" />
+                        )}
+                        Ajouter des fichiers
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+                    <div className="space-y-2">
+                      {detail.deliverables.length === 0 ? (
+                        <div className="rounded-lg border border-dashed bg-white p-6 text-center text-xs text-muted-foreground">
+                          Aucun livrable final. Ouvrez le JSON dans ZGR, corrigez le CV, puis ajoutez
+                          le document actuel ou vos fichiers terminés.
+                        </div>
+                      ) : (
+                        detail.deliverables.map((deliverable) => {
+                          const selected = selectedDeliverables.includes(deliverable.id);
+                          return (
+                            <label
+                              key={deliverable.id}
+                              className={`flex cursor-pointer items-center gap-3 rounded-lg border bg-white p-3 transition ${
+                                selected ? "border-emerald-400 ring-1 ring-emerald-200" : ""
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={(event) =>
+                                  setSelectedDeliverables((current) =>
+                                    event.target.checked
+                                      ? [...new Set([...current, deliverable.id])]
+                                      : current.filter((id) => id !== deliverable.id),
+                                  )
+                                }
+                                className="h-4 w-4 accent-emerald-700"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-semibold">
+                                  {deliverable.originalName}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                  {SERVICE_LABELS[deliverable.service] || deliverable.service} ·{" "}
+                                  {formatBytes(deliverable.sizeBytes)} ·{" "}
+                                  {new Date(deliverable.createdAt).toLocaleString("fr-DZ")}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                aria-label={`Télécharger ${deliverable.originalName}`}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  void downloadDeliverable(deliverable);
+                                }}
+                              >
+                                {busy === `deliverable:${deliverable.id}` ? (
+                                  <LoaderCircle className="animate-spin" />
+                                ) : (
+                                  <Download />
+                                )}
+                              </Button>
+                            </label>
+                          );
+                        })
+                      )}
+                      {detail.deliverables.length > 0 && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-emerald-800 hover:underline"
+                            onClick={() =>
+                              setSelectedDeliverables(
+                                selectedDeliverables.length === detail.deliverables.length
+                                  ? []
+                                  : detail.deliverables.map((item) => item.id),
+                              )
+                            }
+                          >
+                            {selectedDeliverables.length === detail.deliverables.length
+                              ? "Tout désélectionner"
+                              : "Tout sélectionner"}
+                          </button>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-700 hover:bg-emerald-800"
+                            onClick={() => void publishDelivery()}
+                            disabled={Boolean(busy) || selectedDeliverables.length === 0}
+                          >
+                            {busy === "delivery-publish" ? (
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Send className="mr-2 h-4 w-4" />
+                            )}
+                            Créer le lien client ({selectedDeliverables.length})
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Livraisons publiées
+                      </p>
+                      {detail.deliveries.length === 0 ? (
+                        <div className="rounded-lg border border-dashed bg-white p-4 text-center text-xs text-muted-foreground">
+                          Aucun lien client créé.
+                        </div>
+                      ) : (
+                        detail.deliveries.map((delivery) => (
+                          <div key={delivery.id} className="rounded-lg border bg-white p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-bold">
+                                  Livraison v{String(delivery.versionNumber).padStart(3, "0")}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                  {delivery.fileIds.length} fichier
+                                  {delivery.fileIds.length > 1 ? "s" : ""} ·{" "}
+                                  {new Date(delivery.createdAt).toLocaleString("fr-DZ")}
+                                </p>
+                              </div>
+                              <CircleCheck className="h-4 w-4 text-emerald-600" />
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigator.clipboard.writeText(delivery.shareUrl)}
+                              >
+                                <Copy className="mr-2 h-3.5 w-3.5" /> Copier
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  window.open(delivery.shareUrl, "_blank", "noopener,noreferrer")
+                                }
+                              >
+                                <ExternalLink className="mr-2 h-3.5 w-3.5" /> Ouvrir
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </section>
 
                 <section className="rounded-xl border bg-white p-4">
                   <h3 className="font-bold">Historique</h3>

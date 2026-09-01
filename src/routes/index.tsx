@@ -32,6 +32,7 @@ import {
   LogOut,
   UserCog,
   BookOpenText,
+  ClipboardList,
 } from "lucide-react";
 import {
   analyzeEuropassCoverage,
@@ -76,10 +77,7 @@ import {
   type DocumentKind,
   type PdfTemplateId,
 } from "@/lib/document-pdf";
-import {
-  isArabicCvTemplate,
-  normalizeCvTemplateForLanguage,
-} from "@/lib/document-templates";
+import { isArabicCvTemplate, normalizeCvTemplateForLanguage } from "@/lib/document-templates";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,6 +91,7 @@ import { AiFieldDialog, type AiFieldRequest } from "@/components/ai-field-dialog
 import { AiImportAssistant } from "@/components/ai-import-assistant";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "@/lib/ai-types";
 import { ClientDatabaseDialog } from "@/components/client-database-dialog";
+import { ClientOrdersDialog } from "@/components/client-orders-dialog";
 import { AdminLogin } from "@/components/admin-login";
 import { AccountSettingsDialog } from "@/components/account-settings-dialog";
 import { PromptMasterDialog } from "@/components/prompt-master-dialog";
@@ -125,6 +124,7 @@ import {
   saveClientProfile,
   type ClientProfile,
 } from "@/lib/client-profile-db";
+import type { ClientOrderSummary } from "@/lib/client-orders";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -425,14 +425,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [promptMasterOpen, setPromptMasterOpen] = useState(false);
   const [aiFieldRequest, setAiFieldRequest] = useState<AiFieldRequest | null>(null);
   const [clientDatabaseOpen, setClientDatabaseOpen] = useState(false);
+  const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const pdfUrlRef = useRef<string | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const cv = cvByLanguage[language];
   const templates = getTemplates(documentKind, documentKind === "cv" ? language : undefined);
-  const isEuropassTemplate =
-    documentKind === "cv" && templateId === EUROPASS_TEMPLATE_ID;
+  const isEuropassTemplate = documentKind === "cv" && templateId === EUROPASS_TEMPLATE_ID;
   const themeTemplateId = (
     isEuropassTemplate
       ? "canadian-v1"
@@ -445,8 +445,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   // Language buttons translate only the form values and the generated document.
   // The application shell deliberately remains in French for a stable workflow.
   const ui = { ...UI_COPY.fr, ...INTERFACE_COPY.fr };
-  const currentTemplateIsArabicOnly =
-    documentKind === "cv" && isArabicCvTemplate(templateId);
+  const currentTemplateIsArabicOnly = documentKind === "cv" && isArabicCvTemplate(templateId);
   const currentArchiveLabel = currentTemplateIsArabicOnly
     ? "Modèle arabe actuel · AR (.zip)"
     : ui.downloadCurrent;
@@ -863,13 +862,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       return next;
     });
   const updateProfilePhoto = (photo?: ProfilePhoto) =>
-    setCvByLanguage((current) =>
-      Object.fromEntries(
-        DOCUMENT_LANGUAGES.map((item) => [
-          item.id,
-          { ...current[item.id], photo: photo ? structuredClone(photo) : undefined },
-        ]),
-      ) as Record<DocumentLanguage, CV>,
+    setCvByLanguage(
+      (current) =>
+        Object.fromEntries(
+          DOCUMENT_LANGUAGES.map((item) => [
+            item.id,
+            { ...current[item.id], photo: photo ? structuredClone(photo) : undefined },
+          ]),
+        ) as Record<DocumentLanguage, CV>,
     );
   const removeExp = (id: string, index: number) => {
     removeIndexedVisibility("experience", index);
@@ -959,7 +959,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try {
       if (file.size > 5_000_000) throw new Error("Le fichier dépasse la limite de 5 Mo.");
       const fileText = await file.text();
-      
+
       // Support direct import of Europass XML files (.xml)
       if (file.name.toLowerCase().endsWith(".xml") || fileText.trim().startsWith("<")) {
         const importedCv = await parseEuropassXml(fileText);
@@ -1105,6 +1105,47 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       ok: true,
       text: `Profil ouvert : ${profile.name} · ID ${profile.id}`,
     });
+  };
+
+  const openClientOrderJson = (value: unknown, order: ClientOrderSummary) => {
+    try {
+      const next = { ...cvByLanguage };
+      const importedSet = importCvJsonSet(value);
+      const importedLanguages: DocumentLanguage[] = [];
+      if (importedSet) {
+        for (const importedLanguage of importedSet.languages) {
+          next[importedLanguage] = importedSet.documents[importedLanguage]!;
+          importedLanguages.push(importedLanguage);
+        }
+      } else {
+        next[language] = importCvJson(value, "auto").cv;
+        importedLanguages.push(language);
+      }
+      const importedPhoto = importedLanguages
+        .map((importedLanguage) => next[importedLanguage].photo)
+        .find((photo) => photo?.dataUrl);
+      for (const item of DOCUMENT_LANGUAGES) {
+        next[item.id] = {
+          ...next[item.id],
+          photo: importedPhoto ? structuredClone(importedPhoto) : undefined,
+        };
+      }
+      setCvByLanguage(next);
+      setLanguage(importedSet?.defaultLanguage ?? importedLanguages[0]);
+      setHiddenElements({});
+      setActiveProfileId(null);
+      setImportMessage({
+        ok: true,
+        text: `Commande ${order.id} ouverte dans ZGR CV · ${importedLanguages
+          .map((item) => item.toUpperCase())
+          .join(" + ")}. Vérifiez puis sauvegardez le profil client.`,
+      });
+    } catch (error) {
+      setImportMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "JSON de commande incompatible.",
+      });
+    }
   };
 
   const downloadCurrentPdf = async () => {
@@ -1307,55 +1348,55 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 aria-label={ui.palette}
                 role="group"
               >
-              <Palette className="mx-0.5 h-4 w-4 text-muted-foreground" />
-              {paletteColors.map((color, index) => {
-                const selected = accentColor.toLowerCase() === color.toLowerCase();
-                const original = color.toLowerCase() === TEMPLATE_DEFAULT_COLORS[themeTemplateId];
-                return (
-                  <button
-                    key={color}
-                    type="button"
-                    className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                      selected ? "scale-110 border-white ring-2 ring-zinc-400" : "border-white/90"
-                    }`}
-                    style={{ backgroundColor: color }}
-                    aria-label={`${ui.palette} — ${original ? ui.originalColor : color}`}
-                    aria-pressed={selected}
-                    title={original ? ui.originalColor : color}
-                    onClick={() =>
+                <Palette className="mx-0.5 h-4 w-4 text-muted-foreground" />
+                {paletteColors.map((color, index) => {
+                  const selected = accentColor.toLowerCase() === color.toLowerCase();
+                  const original = color.toLowerCase() === TEMPLATE_DEFAULT_COLORS[themeTemplateId];
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                        selected ? "scale-110 border-white ring-2 ring-zinc-400" : "border-white/90"
+                      }`}
+                      style={{ backgroundColor: color }}
+                      aria-label={`${ui.palette} — ${original ? ui.originalColor : color}`}
+                      aria-pressed={selected}
+                      title={original ? ui.originalColor : color}
+                      onClick={() =>
+                        setTemplateColors((current) => ({
+                          ...current,
+                          [themeTemplateId]: color,
+                        }))
+                      }
+                    >
+                      {index === 0 && <span className="sr-only">{ui.originalColor}</span>}
+                    </button>
+                  );
+                })}
+                <label
+                  className="relative ml-0.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-dashed border-zinc-400 bg-white"
+                  title={ui.customColor}
+                >
+                  <span
+                    className="h-4 w-4 rounded-full"
+                    style={{
+                      background: `conic-gradient(from 90deg, #ef4444, #f97316, #059669, #0891b2, #8b5cf6, #ef4444)`,
+                    }}
+                  />
+                  <input
+                    type="color"
+                    value={accentColor}
+                    aria-label={ui.customColor}
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                    onChange={(event) =>
                       setTemplateColors((current) => ({
                         ...current,
-                        [themeTemplateId]: color,
+                        [themeTemplateId]: event.target.value.toLowerCase(),
                       }))
                     }
-                  >
-                    {index === 0 && <span className="sr-only">{ui.originalColor}</span>}
-                  </button>
-                );
-              })}
-              <label
-                className="relative ml-0.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-dashed border-zinc-400 bg-white"
-                title={ui.customColor}
-              >
-                <span
-                  className="h-4 w-4 rounded-full"
-                  style={{
-                    background: `conic-gradient(from 90deg, #ef4444, #f97316, #059669, #0891b2, #8b5cf6, #ef4444)`,
-                  }}
-                />
-                <input
-                  type="color"
-                  value={accentColor}
-                  aria-label={ui.customColor}
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  onChange={(event) =>
-                    setTemplateColors((current) => ({
-                      ...current,
-                      [themeTemplateId]: event.target.value.toLowerCase(),
-                    }))
-                  }
-                />
-              </label>
+                  />
+                </label>
               </div>
             )}
             <DropdownMenu>
@@ -1449,6 +1490,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             <Button
               variant="outline"
               size="sm"
+              className="border-cyan-200 bg-cyan-50/80 text-cyan-900 hover:bg-cyan-100"
+              onClick={() => setClientOrdersOpen(true)}
+            >
+              <ClipboardList className="mr-2 h-4 w-4" /> Commandes
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               className="border-violet-200 bg-violet-50/80 text-violet-800 hover:bg-violet-100"
               onClick={() => setAiAssistantOpen(true)}
             >
@@ -1512,113 +1561,115 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             {!isEuropassTemplate && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  disabled={packLoading}
-                  aria-label={ui.downloadPdf}
-                >
-                  {packLoading ? (
-                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  {packLoading
-                    ? `${ui.preparingPack} ${packProgress.completed}/${packProgress.total}`
-                    : ui.downloadPdf}
-                  {!packLoading && <ChevronDown className="ml-2 h-3.5 w-3.5" />}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72">
-                <DropdownMenuItem
-                  disabled={pdfLoading}
-                  onSelect={() => void downloadCurrentPdf()}
-                  className="items-start py-2.5"
-                >
-                  {pdfLoading ? (
-                    <LoaderCircle className="mt-0.5 animate-spin" />
-                  ) : (
-                    <Download className="mt-0.5" />
-                  )}
-                  <span className="flex flex-col">
-                    <span className="font-medium">
-                      {pdfLoading ? ui.preparingPdf : "Télécharger le PDF actuel"}
+                  <Button size="sm" disabled={packLoading} aria-label={ui.downloadPdf}>
+                    {packLoading ? (
+                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    {packLoading
+                      ? `${ui.preparingPack} ${packProgress.completed}/${packProgress.total}`
+                      : ui.downloadPdf}
+                    {!packLoading && <ChevronDown className="ml-2 h-3.5 w-3.5" />}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuItem
+                    disabled={pdfLoading}
+                    onSelect={() => void downloadCurrentPdf()}
+                    className="items-start py-2.5"
+                  >
+                    {pdfLoading ? (
+                      <LoaderCircle className="mt-0.5 animate-spin" />
+                    ) : (
+                      <Download className="mt-0.5" />
+                    )}
+                    <span className="flex flex-col">
+                      <span className="font-medium">
+                        {pdfLoading ? ui.preparingPdf : "Télécharger le PDF actuel"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Génération directe du document sélectionné
+                      </span>
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      Génération directe du document sélectionné
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={pdfLoading}
+                    onSelect={() => void downloadCurrentMultilingual()}
+                    className="items-start py-2.5"
+                  >
+                    <FileDown className="mt-0.5" />
+                    <span className="flex flex-col">
+                      <span className="font-medium">{currentArchiveLabel}</span>
+                      <span className="text-xs text-muted-foreground">{currentArchiveHint}</span>
                     </span>
-                  </span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={pdfLoading}
-                  onSelect={() => void downloadCurrentMultilingual()}
-                  className="items-start py-2.5"
-                >
-                  <FileDown className="mt-0.5" />
-                  <span className="flex flex-col">
-                    <span className="font-medium">{currentArchiveLabel}</span>
-                    <span className="text-xs text-muted-foreground">{currentArchiveHint}</span>
-                  </span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={async () => {
-                    try {
-                      await downloadEuropassXml(outputCv, language);
-                      setPackMessage({
-                        ok: true,
-                        text: "🇪🇺 XML Europass Candidate téléchargé. Les données disponibles sont préremplies ; complétez les champs signalés dans l’éditeur officiel.",
-                      });
-                    } catch (e) {
-                      console.error(e);
-                      setPackMessage({ ok: false, text: "Erreur lors de la création du XML Europass." });
-                    }
-                  }}
-                  className="items-start py-2.5"
-                >
-                  <FileCode className="mt-0.5 text-blue-600" />
-                  <span className="flex flex-col">
-                    <span className="font-medium flex items-center gap-1.5">
-                      <span>🇪🇺 Exporter pour Europass (.xml)</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={async () => {
+                      try {
+                        await downloadEuropassXml(outputCv, language);
+                        setPackMessage({
+                          ok: true,
+                          text: "🇪🇺 XML Europass Candidate téléchargé. Les données disponibles sont préremplies ; complétez les champs signalés dans l’éditeur officiel.",
+                        });
+                      } catch (e) {
+                        console.error(e);
+                        setPackMessage({
+                          ok: false,
+                          text: "Erreur lors de la création du XML Europass.",
+                        });
+                      }
+                    }}
+                    className="items-start py-2.5"
+                  >
+                    <FileCode className="mt-0.5 text-blue-600" />
+                    <span className="flex flex-col">
+                      <span className="font-medium flex items-center gap-1.5">
+                        <span>🇪🇺 Exporter pour Europass (.xml)</span>
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Compatible officiel europa.eu ({language.toUpperCase()})
+                      </span>
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      Compatible officiel europa.eu ({language.toUpperCase()})
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={async () => {
+                      try {
+                        await downloadEuropassMultilingualZip(outputCvByLanguage, cv);
+                        setPackMessage({
+                          ok: true,
+                          text: "🇪🇺 Pack Europass 7 langues (.zip) téléchargé avec succès !",
+                        });
+                      } catch (e) {
+                        console.error(e);
+                        setPackMessage({
+                          ok: false,
+                          text: "Erreur lors de la création du pack Europass.",
+                        });
+                      }
+                    }}
+                    className="items-start py-2.5"
+                  >
+                    <Archive className="mt-0.5 text-amber-500" />
+                    <span className="flex flex-col">
+                      <span className="font-medium">🇪🇺 Pack Europass XML 7 langues (.zip)</span>
+                      <span className="text-xs text-muted-foreground">
+                        7 fichiers XML officiels · FR, EN, ES, DE, IT, ZH, AR
+                      </span>
                     </span>
-                  </span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={async () => {
-                    try {
-                      await downloadEuropassMultilingualZip(outputCvByLanguage, cv);
-                      setPackMessage({
-                        ok: true,
-                        text: "🇪🇺 Pack Europass 7 langues (.zip) téléchargé avec succès !",
-                      });
-                    } catch (e) {
-                      console.error(e);
-                      setPackMessage({ ok: false, text: "Erreur lors de la création du pack Europass." });
-                    }
-                  }}
-                  className="items-start py-2.5"
-                >
-                  <Archive className="mt-0.5 text-amber-500" />
-                  <span className="flex flex-col">
-                    <span className="font-medium">🇪🇺 Pack Europass XML 7 langues (.zip)</span>
-                    <span className="text-xs text-muted-foreground">
-                      7 fichiers XML officiels · FR, EN, ES, DE, IT, ZH, AR
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => void downloadCompletePack()}
+                    className="items-start py-2.5"
+                  >
+                    <Archive className="mt-0.5" />
+                    <span className="flex flex-col">
+                      <span className="font-medium">{ui.downloadPack}</span>
+                      <span className="text-xs text-muted-foreground">{ui.downloadPackHint}</span>
                     </span>
-                  </span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => void downloadCompletePack()}
-                  className="items-start py-2.5"
-                >
-                  <Archive className="mt-0.5" />
-                  <span className="flex flex-col">
-                    <span className="font-medium">{ui.downloadPack}</span>
-                    <span className="text-xs text-muted-foreground">{ui.downloadPackHint}</span>
-                  </span>
-                </DropdownMenuItem>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -2481,42 +2532,42 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
 
         {/* Preview */}
         {previewVisible && (
-        <section id="pdf-preview-panel" className="lg:sticky lg:top-20 lg:self-start">
-          <div className="relative overflow-hidden rounded-md bg-zinc-200 shadow-md ring-1 ring-zinc-300">
-            {isEuropassTemplate ? (
-              <EuropassPreview
-                cv={outputCv}
-                language={language}
-                onExportAndOpen={exportAndOpenEuropass}
-              />
-            ) : pdfPreview ? (
-              <PdfPreview
-                blob={pdfPreview.blob}
-                templateId={templateId}
-                documentKind={documentKind}
-              />
-            ) : (
-              <div className="flex min-h-[720px] items-center justify-center bg-white text-sm text-muted-foreground">
-                {ui.previewPreparing}
-              </div>
-            )}
-            {!isEuropassTemplate && pdfLoading && pdfPreview && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/85 text-sm font-medium text-zinc-700 backdrop-blur-[1px]">
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> {ui.previewUpdating}
-              </div>
-            )}
-            {!isEuropassTemplate && pdfError && (
-              <div className="absolute inset-x-4 top-4 rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground shadow">
-                {pdfError}
-              </div>
-            )}
-          </div>
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            {isEuropassTemplate
-              ? "Le profil reste modifiable dans l’éditeur officiel après l’import du XML."
-              : ui.exactPreview}
-          </p>
-        </section>
+          <section id="pdf-preview-panel" className="lg:sticky lg:top-20 lg:self-start">
+            <div className="relative overflow-hidden rounded-md bg-zinc-200 shadow-md ring-1 ring-zinc-300">
+              {isEuropassTemplate ? (
+                <EuropassPreview
+                  cv={outputCv}
+                  language={language}
+                  onExportAndOpen={exportAndOpenEuropass}
+                />
+              ) : pdfPreview ? (
+                <PdfPreview
+                  blob={pdfPreview.blob}
+                  templateId={templateId}
+                  documentKind={documentKind}
+                />
+              ) : (
+                <div className="flex min-h-[720px] items-center justify-center bg-white text-sm text-muted-foreground">
+                  {ui.previewPreparing}
+                </div>
+              )}
+              {!isEuropassTemplate && pdfLoading && pdfPreview && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/85 text-sm font-medium text-zinc-700 backdrop-blur-[1px]">
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> {ui.previewUpdating}
+                </div>
+              )}
+              {!isEuropassTemplate && pdfError && (
+                <div className="absolute inset-x-4 top-4 rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground shadow">
+                  {pdfError}
+                </div>
+              )}
+            </div>
+            <p className="mt-2 text-center text-xs text-muted-foreground">
+              {isEuropassTemplate
+                ? "Le profil reste modifiable dans l’éditeur officiel après l’import du XML."
+                : ui.exactPreview}
+            </p>
+          </section>
         )}
       </main>
       <AiSettingsDialog
@@ -2564,6 +2615,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         activeProfileId={activeProfileId}
         onOpenProfile={openClientProfile}
         onDownloadPdf={downloadClientProfilePdf}
+      />
+      <ClientOrdersDialog
+        open={clientOrdersOpen}
+        onOpenChange={setClientOrdersOpen}
+        onOpenJson={openClientOrderJson}
       />
     </div>
   );
@@ -2639,7 +2695,8 @@ function EuropassPreview({
               <div>
                 <p className="text-sm font-bold text-slate-900">Données prêtes pour Europass</p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {coverage.mapped.length} groupes renseignés sur {coverage.mapped.length + coverage.missing.length}
+                  {coverage.mapped.length} groupes renseignés sur{" "}
+                  {coverage.mapped.length + coverage.missing.length}
                 </p>
               </div>
               <span className="text-2xl font-black text-[#164194]">{coverage.percent}%</span>
@@ -2687,8 +2744,8 @@ function EuropassPreview({
                 <p className="font-bold text-slate-900">Une seule action</p>
                 <p className="mt-1">
                   Le bouton télécharge le XML {language.toUpperCase()} puis ouvre Europass. Dans la
-                  fenêtre officielle, choisissez le fichier qui vient d’être téléchargé pour
-                  charger le profil.
+                  fenêtre officielle, choisissez le fichier qui vient d’être téléchargé pour charger
+                  le profil.
                 </p>
                 {editorFallsBackToEnglish && (
                   <p className="mt-2 font-medium text-amber-800">

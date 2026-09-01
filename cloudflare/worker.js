@@ -1262,6 +1262,60 @@ async function generateAi(request, env, origin) {
   );
 }
 
+function portalConfiguration(env) {
+  const baseUrl = String(env.CLIENT_PORTAL_API_URL || "")
+    .trim()
+    .replace(/\/$/, "");
+  const token = String(env.CLIENT_PORTAL_ADMIN_TOKEN || "").trim();
+  return baseUrl && token ? { baseUrl, token } : null;
+}
+
+function clientOrderPortalPath(pathname) {
+  const root = "/api/admin/client-orders";
+  if (pathname === root) return "/api/admin/orders";
+  if (!pathname.startsWith(`${root}/`)) return null;
+  return `/api/admin/orders/${pathname.slice(root.length + 1)}`;
+}
+
+async function proxyClientOrders(request, env, origin, pathname) {
+  const configuration = portalConfiguration(env);
+  if (!configuration)
+    return json(
+      { error: "Le portail CV PRO TEAM Clients n’est pas encore connecté à ZGR CV." },
+      503,
+      origin,
+    );
+  const portalPath = clientOrderPortalPath(pathname);
+  if (!portalPath) return json({ error: "Route de commande invalide." }, 404, origin);
+  const incomingUrl = new URL(request.url);
+  const target = new URL(`${configuration.baseUrl}${portalPath}`);
+  target.search = incomingUrl.search;
+  const headers = new Headers();
+  headers.set("X-Admin-Token", configuration.token);
+  const contentType = request.headers.get("Content-Type");
+  if (contentType) headers.set("Content-Type", contentType);
+  const response = await fetch(target, {
+    method: request.method,
+    headers,
+    body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
+    redirect: "manual",
+  });
+  const responseHeaders = new Headers(corsHeaders(origin));
+  for (const header of [
+    "Content-Type",
+    "Content-Length",
+    "Content-Disposition",
+    "ETag",
+    "Last-Modified",
+  ]) {
+    const value = response.headers.get(header);
+    if (value) responseHeaders.set(header, value);
+  }
+  responseHeaders.set("Cache-Control", "no-store");
+  responseHeaders.set("X-Content-Type-Options", "nosniff");
+  return new Response(response.body, { status: response.status, headers: responseHeaders });
+}
+
 async function route(request, env, ctx) {
   const url = new URL(request.url);
   const origin = allowedOrigin(request, env);
@@ -1289,6 +1343,8 @@ async function route(request, env, ctx) {
   if (url.pathname.startsWith("/api/admin/")) {
     if (actor.role !== "admin")
       return json({ error: "Droits administrateur requis." }, 403, origin);
+    if (clientOrderPortalPath(url.pathname))
+      return proxyClientOrders(request, env, origin, url.pathname);
     if (url.pathname === "/api/admin/users" && request.method === "GET")
       return listUsers(env, origin);
     if (url.pathname === "/api/admin/users" && request.method === "POST")

@@ -12,6 +12,7 @@
   "vars": {
     "ALLOWED_ORIGINS": "https://abdou677778.github.io,http://localhost:4173,http://localhost:5173,null",
     "ADMIN_USERNAME": "admin",
+    "CLIENT_PORTAL_API_URL": "https://cv-pro-team-clients.zgrcv-wizi.workers.dev",
   },
   "r2_buckets": [
     {

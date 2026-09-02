@@ -1223,11 +1223,11 @@ function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = 
     margin: rtl ? [1, 1, 0, 0] : [1, 1, 1, 0],
   } as Content;
   const textNode = {
-    width: rtl ? "auto" : "*",
+    width: rtl ? 190 : "*",
     text: v2RtlText(text, rtl, 52),
-    fontSize: rtl ? 9.6 : 10,
+    fontSize: rtl ? 9.2 : 10,
     lineHeight: 1.25,
-    alignment: rtl ? "right" : "left",
+    alignment: "left",
   } as Content;
   return {
     columns: rtl ? [textNode, iconNode] : [iconNode, textNode],
@@ -1283,9 +1283,9 @@ function v2Header(cv: CV, rtl = false): Content {
     canvas: [{ type: "rect", x: 0, y: 0, w: 3, h: 60, color: V2_MUTED }],
   } as Content;
   const contactStack = {
-    width: "*",
+    width: rtl ? "auto" : "*",
     stack: contacts,
-    margin: rtl ? [0, -1, 8, 0] : [8, -1, 0, 0],
+    margin: rtl ? [0, -1, 5, 0] : [8, -1, 0, 0],
   } as Content;
   const contactPanel = {
     width: 228,

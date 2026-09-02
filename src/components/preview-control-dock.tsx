@@ -6,16 +6,28 @@ import {
   EyeOff,
   LayoutTemplate,
   ListTree,
+  PenTool,
   Palette,
   PanelRight,
+  Plus,
+  RotateCcw,
   Scan,
+  Save,
+  Trash2,
+  Type,
   X,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  newDesignerElement,
+  type DesignerFontFamily,
+  type DesignerPreset,
+  type TemplateDesignerSettings,
+} from "@/lib/template-designer";
 
-export type PreviewDockTool = "templates" | "layout" | "organize" | "sections";
+export type PreviewDockTool = "templates" | "layout" | "organize" | "sections" | "designer";
 export type PreviewPageLayout = "continuous" | "grid";
 export type PreviewSurface = "classic" | "pearl" | "cream" | "blue-mist";
 
@@ -55,6 +67,16 @@ type PreviewControlDockProps = {
   zoom: number;
   onZoomChange: (zoom: number) => void;
   zoomDisabled?: boolean;
+  designerSettings: TemplateDesignerSettings;
+  designerFonts: ReadonlyArray<{ id: DesignerFontFamily; label: string }>;
+  designerPresets: DesignerPreset[];
+  activeDesignerPresetId: string | null;
+  onDesignerSettingsChange: (settings: TemplateDesignerSettings) => void;
+  onDesignerReset: () => void;
+  onCreateDesignerPreset: (name: string) => void;
+  onApplyDesignerPreset: (presetId: string) => void;
+  onDeleteDesignerPreset: (presetId: string) => void;
+  designerDisabled?: boolean;
 };
 
 const MIN_ZOOM = 40;
@@ -70,7 +92,47 @@ const dockButtons: Array<{
   { id: "layout", label: "Mise en page", icon: Columns3 },
   { id: "organize", label: "Organiser", icon: ListTree },
   { id: "sections", label: "Sections et couleurs", icon: Palette },
+  { id: "designer", label: "Designer professionnel", icon: PenTool },
 ];
+
+function DesignerRange({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  unit,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  unit: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+      <span className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold text-slate-600">
+        {label}
+        <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-700">
+          {value}
+          {unit}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-2 w-full cursor-pointer accent-blue-600"
+      />
+    </label>
+  );
+}
 
 export function PreviewControlDock({
   templates,
@@ -96,14 +158,40 @@ export function PreviewControlDock({
   zoom,
   onZoomChange,
   zoomDisabled = false,
+  designerSettings,
+  designerFonts,
+  designerPresets,
+  activeDesignerPresetId,
+  onDesignerSettingsChange,
+  onDesignerReset,
+  onCreateDesignerPreset,
+  onApplyDesignerPreset,
+  onDeleteDesignerPreset,
+  designerDisabled = false,
 }: PreviewControlDockProps) {
   const [activeTool, setActiveTool] = useState<PreviewDockTool | null>(null);
+  const [newPresetName, setNewPresetName] = useState("");
   const selectedTemplate = templates.find((template) => template.id === templateId);
   const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 
   const changeZoom = (nextZoom: number) => {
     onZoomChange(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom)));
   };
+  const updateDesigner = <K extends keyof TemplateDesignerSettings>(
+    key: K,
+    value: TemplateDesignerSettings[K],
+  ) => onDesignerSettingsChange({ ...designerSettings, [key]: value });
+
+  const updateExtraElement = (
+    elementId: string,
+    patch: Partial<TemplateDesignerSettings["extraElements"][number]>,
+  ) =>
+    updateDesigner(
+      "extraElements",
+      designerSettings.extraElements.map((element) =>
+        element.id === elementId ? { ...element, ...patch } : element,
+      ),
+    );
 
   return (
     <div className="relative z-10 flex justify-center px-3 py-3">
@@ -111,7 +199,12 @@ export function PreviewControlDock({
         <div
           role="region"
           aria-label={dockButtons.find((button) => button.id === activeTool)?.label}
-          className="absolute bottom-full left-1/2 mb-2 max-h-[min(420px,55vh)] w-[min(440px,calc(100vw-2rem))] -translate-x-1/2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-2xl shadow-slate-900/15"
+          className={cn(
+            "absolute bottom-full left-1/2 mb-2 max-h-[min(620px,70vh)] -translate-x-1/2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-2xl shadow-slate-900/15",
+            activeTool === "designer"
+              ? "w-[min(780px,calc(100vw-2rem))]"
+              : "w-[min(440px,calc(100vw-2rem))]",
+          )}
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
@@ -126,6 +219,395 @@ export function PreviewControlDock({
               <X className="h-4 w-4" />
             </button>
           </div>
+
+          {activeTool === "designer" && (
+            <div className="space-y-4">
+              {designerDisabled ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+                  Le Designer agit sur les modèles PDF internes. Sélectionnez un modèle de CV autre
+                  que Europass pour modifier réellement l’aperçu et le fichier exporté.
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-white">
+                    <div>
+                      <p className="flex items-center gap-2 text-sm font-bold">
+                        <PenTool className="h-4 w-4 text-sky-300" /> Mode Designer
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-300">
+                        Chaque changement met à jour le PDF réel et se sauvegarde automatiquement.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onDesignerReset}
+                      className="flex items-center gap-2 rounded-xl border border-white/20 px-3 py-2 text-xs font-semibold transition hover:bg-white/10"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> Réinitialiser le modèle
+                    </button>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <section className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                        <Type className="h-4 w-4" /> Texte et typographie
+                      </h3>
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+                          Police du document
+                        </span>
+                        <select
+                          value={designerSettings.fontFamily}
+                          onChange={(event) =>
+                            updateDesigner("fontFamily", event.target.value as DesignerFontFamily)
+                          }
+                          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        >
+                          {designerFonts.map((font) => (
+                            <option key={font.id} value={font.id}>
+                              {font.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <DesignerRange
+                        label="Taille globale du texte"
+                        value={designerSettings.fontScale}
+                        min={70}
+                        max={160}
+                        unit="%"
+                        onChange={(value) => updateDesigner("fontScale", value)}
+                      />
+                      <DesignerRange
+                        label="Interligne"
+                        value={designerSettings.lineHeightScale}
+                        min={75}
+                        max={180}
+                        unit="%"
+                        onChange={(value) => updateDesigner("lineHeightScale", value)}
+                      />
+                      <DesignerRange
+                        label="Espacement vertical"
+                        value={designerSettings.spacingScale}
+                        min={60}
+                        max={180}
+                        unit="%"
+                        onChange={(value) => updateDesigner("spacingScale", value)}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <label>
+                          <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+                            Alignement
+                          </span>
+                          <select
+                            value={designerSettings.alignment}
+                            onChange={(event) =>
+                              updateDesigner(
+                                "alignment",
+                                event.target.value as TemplateDesignerSettings["alignment"],
+                              )
+                            }
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+                          >
+                            <option value="template">Selon le modèle</option>
+                            <option value="left">Gauche</option>
+                            <option value="center">Centré</option>
+                            <option value="right">Droite</option>
+                            <option value="justify">Justifié</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+                            Sens du texte
+                          </span>
+                          <select
+                            value={designerSettings.direction}
+                            onChange={(event) =>
+                              updateDesigner(
+                                "direction",
+                                event.target.value as TemplateDesignerSettings["direction"],
+                              )
+                            }
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+                          >
+                            <option value="auto">Automatique</option>
+                            <option value="ltr">LTR · gauche vers droite</option>
+                            <option value="rtl">RTL · droite vers gauche</option>
+                          </select>
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                      <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                        Page, marges et position
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label>
+                          <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+                            Format
+                          </span>
+                          <select
+                            value={designerSettings.pageSize}
+                            onChange={(event) =>
+                              updateDesigner(
+                                "pageSize",
+                                event.target.value as TemplateDesignerSettings["pageSize"],
+                              )
+                            }
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+                          >
+                            <option value="template">Selon le modèle</option>
+                            <option value="A4">A4</option>
+                            <option value="LETTER">Letter</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+                            Orientation
+                          </span>
+                          <select
+                            value={designerSettings.orientation}
+                            onChange={(event) =>
+                              updateDesigner(
+                                "orientation",
+                                event.target.value as TemplateDesignerSettings["orientation"],
+                              )
+                            }
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+                          >
+                            <option value="template">Selon le modèle</option>
+                            <option value="portrait">Portrait</option>
+                            <option value="landscape">Paysage</option>
+                          </select>
+                        </label>
+                      </div>
+                      <DesignerRange
+                        label="Marges horizontales"
+                        value={designerSettings.marginXDelta}
+                        min={-24}
+                        max={90}
+                        unit=" pt"
+                        onChange={(value) => updateDesigner("marginXDelta", value)}
+                      />
+                      <DesignerRange
+                        label="Marges verticales"
+                        value={designerSettings.marginYDelta}
+                        min={-24}
+                        max={90}
+                        unit=" pt"
+                        onChange={(value) => updateDesigner("marginYDelta", value)}
+                      />
+                      <DesignerRange
+                        label="Déplacer horizontalement"
+                        value={designerSettings.offsetX}
+                        min={-60}
+                        max={60}
+                        unit=" pt"
+                        onChange={(value) => updateDesigner("offsetX", value)}
+                      />
+                      <DesignerRange
+                        label="Déplacer verticalement"
+                        value={designerSettings.offsetY}
+                        min={-60}
+                        max={60}
+                        unit=" pt"
+                        onChange={(value) => updateDesigner("offsetY", value)}
+                      />
+                      <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600">
+                        Numérotation des pages
+                        <input
+                          type="checkbox"
+                          checked={designerSettings.showPageNumbers}
+                          onChange={(event) =>
+                            updateDesigner("showPageNumbers", event.target.checked)
+                          }
+                          className="h-4 w-4 accent-blue-600"
+                        />
+                      </label>
+                    </section>
+                  </div>
+
+                  <section className="space-y-3 rounded-2xl border border-slate-200 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                          Éléments insérés
+                        </h3>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Ajoutez un bloc de texte ou une ligne avant/après le contenu du modèle.
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateDesigner("extraElements", [
+                              ...designerSettings.extraElements,
+                              newDesignerElement("text"),
+                            ])
+                          }
+                          className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Texte
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateDesigner("extraElements", [
+                              ...designerSettings.extraElements,
+                              newDesignerElement("separator"),
+                            ])
+                          }
+                          className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Ligne
+                        </button>
+                      </div>
+                    </div>
+                    {designerSettings.extraElements.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate-300 py-5 text-center text-xs text-slate-400">
+                        Aucun élément personnalisé.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {designerSettings.extraElements.map((element) => (
+                          <div
+                            key={element.id}
+                            className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 sm:grid-cols-[110px_1fr_105px_40px]"
+                          >
+                            <select
+                              value={element.placement}
+                              onChange={(event) =>
+                                updateExtraElement(element.id, {
+                                  placement: event.target.value as "start" | "end",
+                                })
+                              }
+                              className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold"
+                            >
+                              <option value="start">Au début</option>
+                              <option value="end">À la fin</option>
+                            </select>
+                            {element.type === "text" ? (
+                              <input
+                                value={element.text}
+                                onChange={(event) =>
+                                  updateExtraElement(element.id, { text: event.target.value })
+                                }
+                                aria-label="Texte de l’élément"
+                                className="h-9 min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                              />
+                            ) : (
+                              <div className="flex h-9 items-center px-2 text-xs font-semibold text-slate-500">
+                                Séparateur horizontal
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2">
+                              <input
+                                type="color"
+                                value={element.color}
+                                onChange={(event) =>
+                                  updateExtraElement(element.id, { color: event.target.value })
+                                }
+                                aria-label="Couleur de l’élément"
+                                className="h-6 w-7 cursor-pointer border-0 bg-transparent p-0"
+                              />
+                              {element.type === "text" && (
+                                <input
+                                  type="number"
+                                  min={6}
+                                  max={42}
+                                  value={element.fontSize}
+                                  onChange={(event) =>
+                                    updateExtraElement(element.id, {
+                                      fontSize: Number(event.target.value),
+                                    })
+                                  }
+                                  aria-label="Taille du texte inséré"
+                                  className="w-10 bg-transparent text-xs font-semibold outline-none"
+                                />
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateDesigner(
+                                  "extraElements",
+                                  designerSettings.extraElements.filter(
+                                    (current) => current.id !== element.id,
+                                  ),
+                                )
+                              }
+                              aria-label="Supprimer l’élément"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-3">
+                    <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-blue-800">
+                      <Save className="h-4 w-4" /> Modèles personnalisés
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        value={newPresetName}
+                        onChange={(event) => setNewPresetName(event.target.value)}
+                        placeholder="Nom du nouveau modèle"
+                        className="h-10 min-w-0 flex-1 rounded-xl border border-blue-200 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={!newPresetName.trim()}
+                        onClick={() => {
+                          onCreateDesignerPreset(newPresetName.trim());
+                          setNewPresetName("");
+                        }}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 text-xs font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Save className="h-3.5 w-3.5" /> Enregistrer comme nouveau modèle
+                      </button>
+                    </div>
+                    {designerPresets.length > 0 && (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {designerPresets.map((preset) => (
+                          <div
+                            key={preset.id}
+                            className={cn(
+                              "flex items-center gap-2 rounded-xl border bg-white p-2",
+                              activeDesignerPresetId === preset.id
+                                ? "border-blue-400 ring-2 ring-blue-100"
+                                : "border-blue-100",
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => onApplyDesignerPreset(preset.id)}
+                              className="min-w-0 flex-1 truncate px-1 text-left text-xs font-semibold text-slate-700"
+                            >
+                              {preset.name}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteDesignerPreset(preset.id)}
+                              aria-label={`Supprimer ${preset.name}`}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </>
+              )}
+            </div>
+          )}
 
           {activeTool === "templates" && (
             <div className="grid gap-2 sm:grid-cols-2">

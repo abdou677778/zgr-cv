@@ -108,6 +108,16 @@ import { ExperienceWorkspace } from "@/components/cv-experience-workspace";
 import { EducationWorkspace, FormationWorkspace } from "@/components/cv-learning-workspaces";
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
 import {
+  DEFAULT_TEMPLATE_DESIGNER_SETTINGS,
+  designerFontsForLanguage,
+  effectiveDesignerSettings,
+  normalizeDesignerPresets,
+  normalizeTemplateDesignerSettings,
+  type DesignerPreset,
+  type TemplateDesignerSettings,
+  type TemplateDesignerSettingsMap,
+} from "@/lib/template-designer";
+import {
   CvSectionPanel,
   DEFAULT_SECTION_APPEARANCE,
   HiddenSectionTray,
@@ -154,6 +164,8 @@ const COLOR_STORAGE_KEY = "zgr-cv-template-colors-v1";
 const VISIBILITY_STORAGE_KEY = "zgr-cv-hidden-elements-v1";
 const AI_STORAGE_KEY = "zgr-cv-ai-settings-v1";
 const SECTION_APPEARANCE_STORAGE_KEY = "zgr-cv-section-appearance-v1";
+const TEMPLATE_DESIGNER_STORAGE_KEY = "zgr-cv-template-designer-v1";
+const TEMPLATE_DESIGNER_PRESETS_STORAGE_KEY = "zgr-cv-template-designer-presets-v1";
 const PDF_GENERATION_TIMEOUT_MS = 90_000;
 
 async function pdfWithDeadline<T>(operation: Promise<T>) {
@@ -446,6 +458,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [previewZoom, setPreviewZoom] = useState(65);
   const [previewPageLayout, setPreviewPageLayout] = useState<PreviewPageLayout>("continuous");
   const [previewSurface, setPreviewSurface] = useState<PreviewSurface>("classic");
+  const [templateDesignerSettings, setTemplateDesignerSettings] =
+    useState<TemplateDesignerSettingsMap>({});
+  const [designerPresets, setDesignerPresets] = useState<DesignerPreset[]>([]);
+  const [activeDesignerPresetId, setActiveDesignerPresetId] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [pdfRetryNonce, setPdfRetryNonce] = useState(0);
@@ -467,7 +483,27 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const pdfUrlRef = useRef<string | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const cv = cvByLanguage[language];
-  const templates = getTemplates(documentKind, documentKind === "cv" ? language : undefined);
+  const baseTemplates = getTemplates(documentKind, documentKind === "cv" ? language : undefined);
+  const availableBaseTemplateIds = new Set(baseTemplates.map((template) => String(template.id)));
+  const visibleDesignerPresets =
+    documentKind === "cv"
+      ? designerPresets.filter((preset) => availableBaseTemplateIds.has(preset.baseTemplateId))
+      : [];
+  const templates = [
+    ...baseTemplates,
+    ...visibleDesignerPresets.map((preset) => ({ id: preset.id, name: `★ ${preset.name}` })),
+  ];
+  const activeDesignerPreset =
+    designerPresets.find((preset) => preset.id === activeDesignerPresetId) ?? null;
+  const selectedTemplateOptionId = activeDesignerPreset?.id ?? templateId;
+  const rawDesignerSettings =
+    activeDesignerPreset?.settings ?? templateDesignerSettings[templateId];
+  const designerSettings = useMemo(
+    () =>
+      effectiveDesignerSettings(normalizeTemplateDesignerSettings(rawDesignerSettings), language),
+    [language, rawDesignerSettings],
+  );
+  const designerFonts = designerFontsForLanguage(language);
   const isEuropassTemplate = documentKind === "cv" && templateId === EUROPASS_TEMPLATE_ID;
   const themeTemplateId = (
     isEuropassTemplate
@@ -506,6 +542,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     documentKind,
     language,
     accentColor,
+    designerSettings,
   });
   const setCv: Dispatch<SetStateAction<CV>> = (value) =>
     setCvByLanguage((current) => {
@@ -529,6 +566,18 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           : defaultTemplateFor(documentKind);
     if (nextTemplate !== templateId) setTemplateId(nextTemplate);
   }, [documentKind, language, templateId]);
+
+  useEffect(() => {
+    if (!activeDesignerPresetId) return;
+    const preset = designerPresets.find((item) => item.id === activeDesignerPresetId);
+    if (
+      !preset ||
+      documentKind !== "cv" ||
+      !getTemplates("cv", language).some((item) => item.id === preset.baseTemplateId)
+    ) {
+      setActiveDesignerPresetId(null);
+    }
+  }, [activeDesignerPresetId, designerPresets, documentKind, language]);
 
   useEffect(() => {
     if (isEuropassTemplate && !previewVisible) setPreviewVisible(true);
@@ -597,6 +646,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           const settings = JSON.parse(savedTemplate) as {
             documentKind?: DocumentKind;
             templateId?: PdfTemplateId;
+            designerPresetId?: string;
           };
           if (settings.documentKind && settings.templateId) {
             setDocumentKind(settings.documentKind);
@@ -605,6 +655,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 ? normalizeCvTemplateForLanguage(String(settings.templateId), "ar")
                 : settings.templateId,
             );
+            if (typeof settings.designerPresetId === "string") {
+              setActiveDesignerPresetId(settings.designerPresetId);
+            }
           }
         } catch {
           const migratedTemplate = isArabicCvTemplate(savedTemplate)
@@ -645,6 +698,24 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const savedSectionAppearance = localStorage.getItem(SECTION_APPEARANCE_STORAGE_KEY);
       if (savedSectionAppearance)
         setSectionAppearance(normalizeSectionAppearance(JSON.parse(savedSectionAppearance)));
+
+      const savedDesignerSettings = localStorage.getItem(TEMPLATE_DESIGNER_STORAGE_KEY);
+      if (savedDesignerSettings) {
+        const parsed = JSON.parse(savedDesignerSettings) as Record<string, unknown>;
+        setTemplateDesignerSettings(
+          Object.fromEntries(
+            Object.entries(parsed).map(([id, settings]) => [
+              id,
+              normalizeTemplateDesignerSettings(settings),
+            ]),
+          ) as TemplateDesignerSettingsMap,
+        );
+      }
+
+      const savedDesignerPresets = localStorage.getItem(TEMPLATE_DESIGNER_PRESETS_STORAGE_KEY);
+      if (savedDesignerPresets) {
+        setDesignerPresets(normalizeDesignerPresets(JSON.parse(savedDesignerPresets)));
+      }
     } catch (error) {
       console.warn("Les données locales du CV n’ont pas pu être chargées.", error);
     }
@@ -666,11 +737,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify({ documentKind, templateId }));
+      localStorage.setItem(
+        TEMPLATE_STORAGE_KEY,
+        JSON.stringify({ documentKind, templateId, designerPresetId: activeDesignerPresetId }),
+      );
     } catch (error) {
       console.warn("Le modèle sélectionné n’a pas pu être sauvegardé localement.", error);
     }
-  }, [documentKind, loaded, templateId]);
+  }, [activeDesignerPresetId, documentKind, loaded, templateId]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -709,6 +783,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   }, [loaded, sectionAppearance]);
 
   useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(TEMPLATE_DESIGNER_STORAGE_KEY, JSON.stringify(templateDesignerSettings));
+      localStorage.setItem(TEMPLATE_DESIGNER_PRESETS_STORAGE_KEY, JSON.stringify(designerPresets));
+    } catch (error) {
+      console.warn("Les réglages Designer n’ont pas pu être sauvegardés localement.", error);
+    }
+  }, [designerPresets, loaded, templateDesignerSettings]);
+
+  useEffect(() => {
     if (isEuropassTemplate) {
       if (pdfUrlRef.current) {
         URL.revokeObjectURL(pdfUrlRef.current);
@@ -737,7 +821,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     const timeout = window.setTimeout(async () => {
       try {
         const blob = await pdfWithDeadline(
-          createDocumentPdfBlob(outputCv, documentKind, templateId, language, accentColor),
+          createDocumentPdfBlob(
+            outputCv,
+            documentKind,
+            templateId,
+            language,
+            accentColor,
+            designerSettings,
+          ),
         );
         if (cancelled) return;
 
@@ -763,6 +854,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     accentColor,
     cvKey,
     documentKind,
+    designerSettings,
     isEuropassTemplate,
     language,
     outputCv,
@@ -984,6 +1076,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const changeDocumentKind = (kind: DocumentKind) => {
     setDocumentKind(kind);
     setTemplateId(defaultTemplateFor(kind));
+    setActiveDesignerPresetId(null);
   };
 
   const importJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1086,6 +1179,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         documentKind,
         templateId,
         templateColors: structuredClone(templateColors),
+        templateDesign: structuredClone(designerSettings),
       };
       await saveClientProfile(profile);
       let cloudError = "";
@@ -1120,6 +1214,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             document_kind: documentKind,
             template_id: templateId,
             template_colors: templateColors,
+            template_design: designerSettings,
             section_appearance: sectionAppearance,
             saved_at: now,
           },
@@ -1163,6 +1258,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           : profile.templateId,
     );
     setTemplateColors({ ...DEFAULT_TEMPLATE_COLORS, ...structuredClone(profile.templateColors) });
+    setTemplateDesignerSettings((current) => ({
+      ...current,
+      [profile.templateId]: normalizeTemplateDesignerSettings(profile.templateDesign),
+    }));
+    setActiveDesignerPresetId(null);
     setActiveProfileId(profile.id);
     setActiveClientOrder(null);
     setImportMessage({
@@ -1231,6 +1331,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           ...(zgr.template_colors as Partial<TemplateColorMap>),
         });
       }
+      if (zgr?.template_design) {
+        const restoredTemplateId =
+          typeof zgr.template_id === "string" ? (zgr.template_id as PdfTemplateId) : templateId;
+        setTemplateDesignerSettings((current) => ({
+          ...current,
+          [restoredTemplateId]: normalizeTemplateDesignerSettings(zgr.template_design),
+        }));
+        setActiveDesignerPresetId(null);
+      }
       if (zgr?.section_appearance) {
         setSectionAppearance(normalizeSectionAppearance(zgr.section_appearance));
       }
@@ -1277,6 +1386,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       templateId,
       language,
       accentColor,
+      designerSettings,
     );
     const suffix =
       documentKind === "cover-letter"
@@ -1314,7 +1424,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       let blob = pdfPreview?.key === cvKey ? pdfPreview.blob : null;
       if (!blob) {
         blob = await pdfWithDeadline(
-          createDocumentPdfBlob(outputCv, documentKind, templateId, language, accentColor),
+          createDocumentPdfBlob(
+            outputCv,
+            documentKind,
+            templateId,
+            language,
+            accentColor,
+            designerSettings,
+          ),
         );
         const url = URL.createObjectURL(blob);
         if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
@@ -1356,6 +1473,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       profileTemplateId,
       profile.language,
       color,
+      normalizeTemplateDesignerSettings(profile.templateDesign),
     );
     downloadPdfDocument(blob, profileCv, profile.documentKind, profile.language);
   };
@@ -1372,6 +1490,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           setPackProgress({ completed, total });
         },
         templateColors,
+        templateDesignerSettings,
       );
       downloadCompletePackArchive(blob, cv);
       setPackMessage({ ok: true, text: ui.packReady });
@@ -1398,6 +1517,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         templateId,
         ({ completed, total }) => setPackProgress({ completed, total }),
         accentColor,
+        designerSettings,
       );
       downloadCurrentMultilingualArchive(blob, cv);
       setPackMessage({
@@ -1546,6 +1666,70 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     });
   };
 
+  const selectTemplateOption = (optionId: string) => {
+    const preset = designerPresets.find((item) => item.id === optionId);
+    if (preset) {
+      setDocumentKind("cv");
+      setTemplateId(preset.baseTemplateId);
+      setActiveDesignerPresetId(preset.id);
+      return;
+    }
+    setActiveDesignerPresetId(null);
+    setTemplateId(optionId as PdfTemplateId);
+  };
+
+  const updateDesignerSettings = (settings: TemplateDesignerSettings) => {
+    const normalized = normalizeTemplateDesignerSettings(settings);
+    if (activeDesignerPresetId) {
+      setDesignerPresets((current) =>
+        current.map((preset) =>
+          preset.id === activeDesignerPresetId
+            ? { ...preset, settings: normalized, updatedAt: new Date().toISOString() }
+            : preset,
+        ),
+      );
+      return;
+    }
+    setTemplateDesignerSettings((current) => ({ ...current, [templateId]: normalized }));
+  };
+
+  const resetDesignerSettings = () => {
+    updateDesignerSettings(DEFAULT_TEMPLATE_DESIGNER_SETTINGS);
+    setImportMessage({ ok: true, text: "Réglages Designer réinitialisés pour ce modèle." });
+  };
+
+  const createDesignerPreset = (name: string) => {
+    const now = new Date().toISOString();
+    const preset: DesignerPreset = {
+      id: `designer-${crypto.randomUUID()}`,
+      name: name.trim().slice(0, 80) || "Modèle personnalisé",
+      baseTemplateId: templateId,
+      settings: normalizeTemplateDesignerSettings(designerSettings),
+      createdAt: now,
+      updatedAt: now,
+    };
+    setDesignerPresets((current) => [...current, preset]);
+    setActiveDesignerPresetId(preset.id);
+    setImportMessage({ ok: true, text: `Nouveau modèle personnalisé créé : ${preset.name}.` });
+  };
+
+  const applyDesignerPreset = (presetId: string) => {
+    const preset = designerPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    setDocumentKind("cv");
+    setTemplateId(preset.baseTemplateId);
+    setActiveDesignerPresetId(preset.id);
+  };
+
+  const deleteDesignerPreset = (presetId: string) => {
+    const preset = designerPresets.find((item) => item.id === presetId);
+    setDesignerPresets((current) => current.filter((item) => item.id !== presetId));
+    if (activeDesignerPresetId === presetId) setActiveDesignerPresetId(null);
+    if (preset) {
+      setImportMessage({ ok: true, text: `Modèle personnalisé supprimé : ${preset.name}.` });
+    }
+  };
+
   return (
     <div lang="fr" dir="ltr" className="zgr-app-shell min-h-screen">
       <header className="zgr-app-header sticky top-0 z-20 border-b">
@@ -1597,8 +1781,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               <select
                 id="pdf-template"
                 aria-label={ui.template}
-                value={templateId}
-                onChange={(event) => setTemplateId(event.target.value as PdfTemplateId)}
+                value={selectedTemplateOptionId}
+                onChange={(event) => selectTemplateOption(event.target.value)}
                 className="h-7 min-w-40 cursor-pointer bg-transparent text-sm font-semibold outline-none"
               >
                 {templates.map((template) => (
@@ -2856,10 +3040,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               )}
               <PreviewControlDock
                 templates={templates}
-                templateId={templateId}
-                onTemplateChange={(nextTemplateId) =>
-                  setTemplateId(nextTemplateId as PdfTemplateId)
-                }
+                templateId={selectedTemplateOptionId}
+                onTemplateChange={selectTemplateOption}
                 focusMode={previewFocusMode}
                 onFocusModeChange={setPreviewFocusMode}
                 pageLayout={previewPageLayout}
@@ -2885,6 +3067,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 zoom={previewZoom}
                 onZoomChange={setPreviewZoom}
                 zoomDisabled={isEuropassTemplate}
+                designerSettings={designerSettings}
+                designerFonts={designerFonts}
+                designerPresets={visibleDesignerPresets}
+                activeDesignerPresetId={activeDesignerPresetId}
+                onDesignerSettingsChange={updateDesignerSettings}
+                onDesignerReset={resetDesignerSettings}
+                onCreateDesignerPreset={createDesignerPreset}
+                onApplyDesignerPreset={applyDesignerPreset}
+                onDeleteDesignerPreset={deleteDesignerPreset}
+                designerDisabled={documentKind !== "cv" || isEuropassTemplate}
               />
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">

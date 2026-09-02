@@ -3,6 +3,7 @@ import type { DocumentLanguage } from "./document-language";
 import type { HiddenCvElements } from "./cv-visibility";
 import type { DocumentKind, PdfTemplateId } from "./document-pdf";
 import type { TemplateColorMap } from "./pdf-theme";
+import type { TemplateDesignerSettings } from "./template-designer";
 import {
   blobToProfilePhotoDataUrl,
   normalizeProfilePhoto,
@@ -27,6 +28,7 @@ export type ClientProfile = {
   documentKind: DocumentKind;
   templateId: PdfTemplateId;
   templateColors: TemplateColorMap;
+  templateDesign?: TemplateDesignerSettings;
   photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
 
@@ -106,6 +108,7 @@ export async function listClientProfiles(): Promise<ClientProfileSummary[]> {
         cvByLanguage,
         hiddenElements: _hidden,
         templateColors: _colors,
+        templateDesign: _design,
         photoAsset,
         ...summary
       }) => ({

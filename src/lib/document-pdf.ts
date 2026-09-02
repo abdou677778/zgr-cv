@@ -12,6 +12,7 @@ import {
 } from "./document-templates";
 import { DOCUMENT_LANGUAGES, languageInfo, type DocumentLanguage } from "./document-language";
 import { DEFAULT_TEMPLATE_COLORS, type TemplateColorMap, type ThemeTemplateId } from "./pdf-theme";
+import type { TemplateDesignerSettings, TemplateDesignerSettingsMap } from "./template-designer";
 import { strToU8, zipSync } from "fflate";
 
 export type DocumentKind = "cv" | "cover-letter" | "advises";
@@ -55,6 +56,7 @@ export async function createDocumentPdfBlob(
   templateId: PdfTemplateId,
   language: DocumentLanguage,
   accentColor?: string,
+  designerSettings?: TemplateDesignerSettings,
 ) {
   if (templateId === EUROPASS_TEMPLATE_ID) {
     throw new Error("Le modèle Europass produit un fichier XML et non un document PDF.");
@@ -68,7 +70,7 @@ export async function createDocumentPdfBlob(
     return createAdvisesPdfBlob(cv, language, accentColor);
   }
   const { createCvPdfBlob } = await import("./cv-pdf");
-  return createCvPdfBlob(cv, templateId as CvTemplateId, language, accentColor);
+  return createCvPdfBlob(cv, templateId as CvTemplateId, language, accentColor, designerSettings);
 }
 
 export interface CompletePackProgress {
@@ -112,6 +114,7 @@ export async function createCurrentTemplateMultilingualZip(
   templateId: PdfTemplateId,
   onProgress?: (progress: CompletePackProgress) => void,
   accentColor?: string,
+  designerSettings?: TemplateDesignerSettings,
 ) {
   const files: Record<string, Uint8Array> = {};
   const languages = isArabicCvTemplate(templateId)
@@ -126,6 +129,7 @@ export async function createCurrentTemplateMultilingualZip(
       templateId,
       language.id,
       accentColor,
+      designerSettings,
     );
     const folder = `${language.id.toUpperCase()}_${safeFilename(language.name)}`;
     const path = `${folder}/${safeFilename(getTemplates(kind, language.id).find((item) => item.id === templateId)?.name || "Document")}_${language.id.toUpperCase()}.pdf`;
@@ -143,12 +147,17 @@ export async function createCompletePackZip(
   cvByLanguage: CvByLanguage,
   onProgress?: (progress: CompletePackProgress) => void,
   templateColors: TemplateColorMap = DEFAULT_TEMPLATE_COLORS,
+  designerSettings: TemplateDesignerSettingsMap = {},
 ) {
   const entries = DOCUMENT_LANGUAGES.flatMap((language) =>
     packEntries(language.id).map((entry) => ({ ...entry, language: language.id })),
   );
   const files: Record<string, Uint8Array> = {};
-  const manifestLines = ["ZGR CV COMPLETE MULTILINGUAL PACK", "Arabic-specific templates included in Arabic only", ""];
+  const manifestLines = [
+    "ZGR CV COMPLETE MULTILINGUAL PACK",
+    "Arabic-specific templates included in Arabic only",
+    "",
+  ];
 
   for (const [index, entry] of entries.entries()) {
     onProgress?.({ completed: index, total: entries.length, label: entry.label });
@@ -158,6 +167,7 @@ export async function createCompletePackZip(
       entry.templateId,
       entry.language,
       templateColors[entry.templateId as ThemeTemplateId],
+      designerSettings[entry.templateId],
     );
     const path = `${entry.folder}/${entry.filename}_${entry.language.toUpperCase()}.pdf`;
     files[path] = new Uint8Array(await blob.arrayBuffer());

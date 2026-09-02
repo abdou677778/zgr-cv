@@ -11,6 +11,11 @@ import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
 import {
+  applyTemplateDesigner,
+  effectiveDesignerSettings,
+  type TemplateDesignerSettings,
+} from "./template-designer";
+import {
   CV_TEMPLATES,
   isArabicCvTemplate,
   normalizeCvTemplateForLanguage,
@@ -4511,9 +4516,16 @@ export async function createCvPdfBlob(
   templateId: CvTemplateId = "canadian-v1",
   language: DocumentLanguage = "fr",
   accentColor?: string,
+  designerSettings?: TemplateDesignerSettings,
 ): Promise<Blob> {
   const normalizedTemplateId = normalizeCvTemplateForLanguage(templateId, language);
   await ensureFontsForDocument(normalizedTemplateId, language);
+  const effectiveDesign = designerSettings
+    ? effectiveDesignerSettings(designerSettings, language)
+    : undefined;
+  if (effectiveDesign?.fontFamily && effectiveDesign.fontFamily !== "template") {
+    await ensureFontFamily(effectiveDesign.fontFamily);
+  }
   const pdfCv = cv.photo?.dataUrl
     ? {
         ...cv,
@@ -4537,7 +4549,14 @@ export async function createCvPdfBlob(
               : normalizedTemplateId === "canadian-v2"
                 ? buildCvPdfV2(pdfCv, language)
                 : buildCvPdfV1(pdfCv, language);
-  return pdfMake.createPdf(applyPdfTheme(document, normalizedTemplateId, accentColor)).getBlob();
+  return pdfMake
+    .createPdf(
+      applyTemplateDesigner(
+        applyPdfTheme(document, normalizedTemplateId, accentColor),
+        effectiveDesign,
+      ),
+    )
+    .getBlob();
 }
 
 export function downloadCvPdf(blob: Blob, cv: CV) {

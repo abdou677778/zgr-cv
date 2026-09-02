@@ -18,23 +18,16 @@ import {
 import { toPdfRtlVisualText } from "./arabic-pdf-text";
 import { profilePhotoDataUrlForPdf } from "./profile-photo";
 import pdfMake from "pdfmake/build/pdfmake";
-import calibriRegularUrl from "@/assets/fonts/Calibri.ttf?inline";
-import calibriItalicUrl from "@/assets/fonts/Calibriitalic.ttf?inline";
-import calibriBoldUrl from "@/assets/fonts/Calibribold.ttf?inline";
-import calibriBoldItalicUrl from "@/assets/fonts/Calibribolditalic.ttf?inline";
-import calibriSuppliedRegularUrl from "@/assets/fonts/CalibriSupplied-Regular.ttf?inline";
-import calibriSuppliedBoldUrl from "@/assets/fonts/CalibriSupplied-Bold.ttf?inline";
-import calibriSuppliedItalicUrl from "@/assets/fonts/CalibriSupplied-Italic.ttf?inline";
-import calibriSuppliedBoldItalicUrl from "@/assets/fonts/CalibriSupplied-BoldItalic.ttf?inline";
-import cambriaRegularUrl from "@/assets/fonts/CambriaRegular.ttf?inline";
-import cambriaBoldUrl from "@/assets/fonts/CambriaBold.ttf?inline";
-import notoSansArabicRegularUrl from "@/assets/fonts/NotoSansArabic-Regular.ttf?inline";
-import notoSansArabicBoldUrl from "@/assets/fonts/NotoSansArabic-Bold.ttf?inline";
-import hacenTunisiaUrl from "@/assets/fonts/HacenTunisia.ttf?inline";
-import arialOfficialRegularUrl from "@/assets/fonts/ArialOfficial-Regular.ttf?inline";
-import arialOfficialBoldUrl from "@/assets/fonts/ArialOfficial-Bold.ttf?inline";
-import arialOfficialItalicUrl from "@/assets/fonts/ArialOfficial-Italic.ttf?inline";
-import arialOfficialBoldItalicUrl from "@/assets/fonts/ArialOfficial-BoldItalic.ttf?inline";
+import calibriRegularUrl from "@/assets/fonts/CalibriLatin-Regular.ttf?url";
+import calibriItalicUrl from "@/assets/fonts/CalibriLatin-Italic.ttf?url";
+import calibriBoldUrl from "@/assets/fonts/CalibriLatin-Bold.ttf?url";
+import calibriBoldItalicUrl from "@/assets/fonts/CalibriLatin-BoldItalic.ttf?url";
+import cambriaRegularUrl from "@/assets/fonts/CambriaLatin-Regular.ttf?url";
+import cambriaBoldUrl from "@/assets/fonts/CambriaLatin-Bold.ttf?url";
+import arialOfficialRegularUrl from "@/assets/fonts/ArialArabic-Regular.ttf?url";
+import arialOfficialBoldUrl from "@/assets/fonts/ArialArabic-Bold.ttf?url";
+import arialOfficialItalicUrl from "@/assets/fonts/ArialArabic-Italic.ttf?url";
+import arialOfficialBoldItalicUrl from "@/assets/fonts/ArialArabic-BoldItalic.ttf?url";
 
 const ACCENT = "#111827";
 const MUTED = "#6b7280";
@@ -67,50 +60,43 @@ const V2_CONTENT_W = V2_PAGE_W - V2_MARGIN_X * 2;
 const V2_ACCENT = "#953735";
 const V2_MUTED = "#595959";
 const V2_BANNER_BG = "#f2f2f2";
-let fontsRegistered = false;
-let chineseFontRegistered = false;
+let fontsConfigured = false;
+const fontFilePromises = new Map<string, Promise<void>>();
 
 export { CV_TEMPLATES };
 export type { CvTemplateId };
 
 const FONT_FILES = {
-  "Calibri.ttf": calibriRegularUrl,
-  "Calibriitalic.ttf": calibriItalicUrl,
-  "Calibribold.ttf": calibriBoldUrl,
-  "Calibribolditalic.ttf": calibriBoldItalicUrl,
-  "CalibriSupplied-Regular.ttf": calibriSuppliedRegularUrl,
-  "CalibriSupplied-Bold.ttf": calibriSuppliedBoldUrl,
-  "CalibriSupplied-Italic.ttf": calibriSuppliedItalicUrl,
-  "CalibriSupplied-BoldItalic.ttf": calibriSuppliedBoldItalicUrl,
-  "CambriaRegular.ttf": cambriaRegularUrl,
-  "CambriaBold.ttf": cambriaBoldUrl,
-  "NotoSansArabic-Regular.ttf": notoSansArabicRegularUrl,
-  "NotoSansArabic-Bold.ttf": notoSansArabicBoldUrl,
-  "HacenTunisia.ttf": hacenTunisiaUrl,
-  "ArialOfficial-Regular.ttf": arialOfficialRegularUrl,
-  "ArialOfficial-Bold.ttf": arialOfficialBoldUrl,
-  "ArialOfficial-Italic.ttf": arialOfficialItalicUrl,
-  "ArialOfficial-BoldItalic.ttf": arialOfficialBoldItalicUrl,
+  "CalibriLatin-Regular.ttf": calibriRegularUrl,
+  "CalibriLatin-Italic.ttf": calibriItalicUrl,
+  "CalibriLatin-Bold.ttf": calibriBoldUrl,
+  "CalibriLatin-BoldItalic.ttf": calibriBoldItalicUrl,
+  "CambriaLatin-Regular.ttf": cambriaRegularUrl,
+  "CambriaLatin-Bold.ttf": cambriaBoldUrl,
+  "ArialArabic-Regular.ttf": arialOfficialRegularUrl,
+  "ArialArabic-Bold.ttf": arialOfficialBoldUrl,
+  "ArialArabic-Italic.ttf": arialOfficialItalicUrl,
+  "ArialArabic-BoldItalic.ttf": arialOfficialBoldItalicUrl,
 } as const;
 
 const CV_FONTS: TFontDictionary = {
   Calibri: {
-    normal: "Calibri.ttf",
-    bold: "Calibribold.ttf",
-    italics: "Calibriitalic.ttf",
-    bolditalics: "Calibribolditalic.ttf",
+    normal: "CalibriLatin-Regular.ttf",
+    bold: "CalibriLatin-Bold.ttf",
+    italics: "CalibriLatin-Italic.ttf",
+    bolditalics: "CalibriLatin-BoldItalic.ttf",
   },
   CalibriSupplied: {
-    normal: "CalibriSupplied-Regular.ttf",
-    bold: "CalibriSupplied-Bold.ttf",
-    italics: "CalibriSupplied-Italic.ttf",
-    bolditalics: "CalibriSupplied-BoldItalic.ttf",
+    normal: "CalibriLatin-Regular.ttf",
+    bold: "CalibriLatin-Bold.ttf",
+    italics: "CalibriLatin-Italic.ttf",
+    bolditalics: "CalibriLatin-BoldItalic.ttf",
   },
   Cambria: {
-    normal: "CambriaRegular.ttf",
-    bold: "CambriaBold.ttf",
-    italics: "CambriaRegular.ttf",
-    bolditalics: "CambriaBold.ttf",
+    normal: "CambriaLatin-Regular.ttf",
+    bold: "CambriaLatin-Bold.ttf",
+    italics: "CambriaLatin-Regular.ttf",
+    bolditalics: "CambriaLatin-Bold.ttf",
   },
   NotoSansSC: {
     normal: "NotoSansSC-VF.ttf",
@@ -119,56 +105,82 @@ const CV_FONTS: TFontDictionary = {
     bolditalics: "NotoSansSC-VF.ttf",
   },
   NotoSansArabic: {
-    normal: "NotoSansArabic-Regular.ttf",
-    bold: "NotoSansArabic-Bold.ttf",
-    italics: "NotoSansArabic-Regular.ttf",
-    bolditalics: "NotoSansArabic-Bold.ttf",
+    normal: "ArialArabic-Regular.ttf",
+    bold: "ArialArabic-Bold.ttf",
+    italics: "ArialArabic-Italic.ttf",
+    bolditalics: "ArialArabic-BoldItalic.ttf",
   },
   HacenTunisia: {
-    normal: "HacenTunisia.ttf",
-    bold: "HacenTunisia.ttf",
-    italics: "HacenTunisia.ttf",
-    bolditalics: "HacenTunisia.ttf",
+    normal: "ArialArabic-Regular.ttf",
+    bold: "ArialArabic-Bold.ttf",
+    italics: "ArialArabic-Italic.ttf",
+    bolditalics: "ArialArabic-BoldItalic.ttf",
   },
   ArialOfficial: {
-    normal: "ArialOfficial-Regular.ttf",
-    bold: "ArialOfficial-Bold.ttf",
-    italics: "ArialOfficial-Italic.ttf",
-    bolditalics: "ArialOfficial-BoldItalic.ttf",
+    normal: "ArialArabic-Regular.ttf",
+    bold: "ArialArabic-Bold.ttf",
+    italics: "ArialArabic-Italic.ttf",
+    bolditalics: "ArialArabic-BoldItalic.ttf",
   },
 };
 
-function getBase64Data(dataUrl: string) {
-  const marker = "base64,";
-  const markerIndex = dataUrl.indexOf(marker);
-
-  if (markerIndex === -1) {
-    throw new Error("Les polices du CV n'ont pas été intégrées correctement au document autonome.");
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = "";
+  const chunkSize = 32_768;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
-
-  return dataUrl.slice(markerIndex + marker.length);
+  return btoa(binary);
 }
 
-function ensureFonts() {
-  if (fontsRegistered) return;
-
-  const vfs: TVirtualFileSystem = Object.fromEntries(
-    Object.entries(FONT_FILES).map(([filename, dataUrl]) => [filename, getBase64Data(dataUrl)]),
-  );
-  pdfMake.addVirtualFileSystem(vfs);
+function ensureFontConfiguration() {
+  if (fontsConfigured) return;
   pdfMake.addFonts(CV_FONTS);
-  fontsRegistered = true;
+  fontsConfigured = true;
 }
 
-async function ensureFontsForLanguage(language: DocumentLanguage) {
-  ensureFonts();
-  if (language !== "zh" || chineseFontRegistered) return;
+async function registerFontFile(filename: string, url: string) {
+  const existing = fontFilePromises.get(filename);
+  if (existing) return existing;
+  const registration = (async () => {
+    const response = await fetch(url, { cache: "force-cache" });
+    if (!response.ok) throw new Error(`Police PDF indisponible (${response.status}) : ${filename}`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    pdfMake.addVirtualFileSystem({ [filename]: bytesToBase64(bytes) } as TVirtualFileSystem);
+  })();
+  fontFilePromises.set(filename, registration);
+  try {
+    await registration;
+  } catch (error) {
+    fontFilePromises.delete(filename);
+    throw error;
+  }
+}
 
-  const { default: notoSansScUrl } = await import("@/assets/fonts/NotoSansSC-VF.ttf?inline");
-  pdfMake.addVirtualFileSystem({
-    "NotoSansSC-VF.ttf": getBase64Data(notoSansScUrl),
-  });
-  chineseFontRegistered = true;
+async function ensureFontFamily(family: keyof typeof CV_FONTS) {
+  ensureFontConfiguration();
+  const filenames = [...new Set(Object.values(CV_FONTS[family]))];
+  await Promise.all(
+    filenames.map(async (filename) => {
+      if (filename === "NotoSansSC-VF.ttf") {
+        const { default: notoSansScUrl } = await import("@/assets/fonts/NotoSansSC-VF.ttf?url");
+        return registerFontFile(filename, notoSansScUrl);
+      }
+      const url = FONT_FILES[filename as keyof typeof FONT_FILES];
+      if (!url) throw new Error(`Fichier de police PDF non configuré : ${filename}`);
+      return registerFontFile(filename, url);
+    }),
+  );
+}
+
+async function ensureFontsForDocument(templateId: CvTemplateId, language: DocumentLanguage) {
+  const family =
+    templateId === "arabic-pro-v1"
+      ? "ArialOfficial"
+      : templateId === "canadian-v4" && language !== "zh" && language !== "ar"
+        ? "Cambria"
+        : documentFont(language);
+  await ensureFontFamily(family as keyof typeof CV_FONTS);
 }
 
 type ObjectiveRun = {
@@ -3270,12 +3282,13 @@ function buildCvPdfArabicProClassic(
   if (languages.length) pushSection(labels.languages, [arabicProLanguages(cv, language, rtl)]);
 
   const references = cv.references.filter(Boolean).slice(0, 2);
-  if (references.length)
-    pushSection(["المراجع", ""], [arabicProGrid(references, rtl, 2)]);
+  if (references.length) pushSection(["المراجع", ""], [arabicProGrid(references, rtl, 2)]);
 
   return {
     info: {
-      title: cv.nom_complet ? `CV PRO Arabe ${variant.toUpperCase()} - ${cv.nom_complet}` : `CV PRO Arabe ${variant.toUpperCase()}`,
+      title: cv.nom_complet
+        ? `CV PRO Arabe ${variant.toUpperCase()} - ${cv.nom_complet}`
+        : `CV PRO Arabe ${variant.toUpperCase()}`,
       author: cv.nom_complet || "",
       subject: cv.titre_poste || "Curriculum Vitae",
     },
@@ -3509,7 +3522,10 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
 
   const timelineDate = (value: string): Content => {
     const formatted = formatCvDate(value, language);
-    const endpoints = formatted.split(/\s+-\s+/u).map((part) => part.trim()).filter(Boolean);
+    const endpoints = formatted
+      .split(/\s+-\s+/u)
+      .map((part) => part.trim())
+      .filter(Boolean);
     const parsed = endpoints.map((endpoint) => endpoint.match(/^(.+?)\s+(\d{4})$/u));
     if (endpoints.length === 2 && parsed.every(Boolean)) {
       const dateColumns: Content[] = [];
@@ -3724,7 +3740,10 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
   );
   // Every group uses the same calculated size, so all baselines and spaces
   // remain identical. Adding another contact shrinks the full row uniformly.
-  const contactFontSize = Math.max(5.5, Math.min(9.2, (contactGroupWidth - 10) / widestContactUnit));
+  const contactFontSize = Math.max(
+    5.5,
+    Math.min(9.2, (contactGroupWidth - 10) / widestContactUnit),
+  );
   const contactColumns: Content[] = [];
   contactEntries.forEach((entry, index) => {
     const labelWidth = Array.from(entry.label).length * contactFontSize * 0.52 + 3;
@@ -3734,10 +3753,7 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
       24,
       Math.min(preferredValueWidth, contactGroupWidth - labelWidth - 3),
     );
-    const contactInset = Math.max(
-      0,
-      (contactGroupWidth - valueWidth - labelWidth - 3) / 2,
-    );
+    const contactInset = Math.max(0, (contactGroupWidth - valueWidth - labelWidth - 3) / 2);
     const lastContactIndex = contactEntries.length - 1;
     const contactMargins: [number, number, number, number] =
       contactEntries.length === 1
@@ -3877,55 +3893,50 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
         (text) => arabicProPdfText(text, true, 190),
       ),
     );
-  const experiences = cv.experiences
-    .filter(
-      (item) =>
-        item.titre || item.employeur || item.dates || item.lieu || item.descriptions.length,
-    );
+  const experiences = cv.experiences.filter(
+    (item) => item.titre || item.employeur || item.dates || item.lieu || item.descriptions.length,
+  );
   if (experiences.length)
     content.push(sectionTitle("الخبرة المهنية"), ...experiences.map(experience));
-  const educationItems = [...cv.educations, ...cv.formations]
-    .filter((item) =>
-      Boolean(
-        item.titre ||
-          item.institution ||
-          item.date ||
-          item.lieu ||
-          ("equivalence" in item ? item.option || item.equivalence : item.competences),
-      ),
-    );
+  const educationItems = [...cv.educations, ...cv.formations].filter((item) =>
+    Boolean(
+      item.titre ||
+      item.institution ||
+      item.date ||
+      item.lieu ||
+      ("equivalence" in item ? item.option || item.equivalence : item.competences),
+    ),
+  );
   if (educationItems.length)
     content.push(sectionTitle("التعليم"), ...educationItems.map(educationBlock));
   const skills = richListItems(cv.competences, cv.competences_format);
   const skillsMidpoint = Math.ceil(skills.length / 2);
   if (skills.length)
-    content.push(
-      {
-        stack: [
-          sectionTitle("المهارات التقنية"),
-          skills.length <= 14
-            ? {
-                columns: [
-                  {
-                    width: "*",
-                    stack: skills.slice(skillsMidpoint).map((item) => bullet(item, 6.5, 92)),
-                  },
-                  {
-                    width: "*",
-                    stack: skills.slice(0, skillsMidpoint).map((item) => bullet(item, 6.5, 92)),
-                  },
-                ],
-                columnGap: 24,
-                margin: [6, 4.2, 6, 3],
-              }
-            : {
-                stack: skills.map((item) => bullet(item, 6.5, 140)),
-                margin: [0, 4.2, 0, 3],
-              },
-        ],
-        unbreakable: skills.length <= 14,
-      },
-    );
+    content.push({
+      stack: [
+        sectionTitle("المهارات التقنية"),
+        skills.length <= 14
+          ? {
+              columns: [
+                {
+                  width: "*",
+                  stack: skills.slice(skillsMidpoint).map((item) => bullet(item, 6.5, 92)),
+                },
+                {
+                  width: "*",
+                  stack: skills.slice(0, skillsMidpoint).map((item) => bullet(item, 6.5, 92)),
+                },
+              ],
+              columnGap: 24,
+              margin: [6, 4.2, 6, 3],
+            }
+          : {
+              stack: skills.map((item) => bullet(item, 6.5, 140)),
+              margin: [0, 4.2, 0, 3],
+            },
+      ],
+      unbreakable: skills.length <= 14,
+    });
   const certifications = richListItems(cv.certifications, cv.certifications_format);
   const participations = richListItems(cv.participations, cv.participations_format);
   if (
@@ -3934,77 +3945,64 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     certifications.length <= 6 &&
     participations.length <= 6
   ) {
-    content.push(
-      {
-        columns: [
-          {
-            width: "*",
-            stack: [
-              sectionTitle("المشاركات", "right", V5_HALF_RULE_WIDTH),
-              {
-                stack: participations.map((item) => bullet(item, 6.2, 84)),
-                margin: [0, 4, 0, 2.2],
-              },
-            ],
-          },
-          {
-            width: "*",
-            stack: [
-              sectionTitle("الشهادات المهنية", "right", V5_HALF_RULE_WIDTH),
-              {
-                stack: certifications.map((item) => bullet(item, 6.2, 84)),
-                margin: [0, 4, 0, 2.2],
-              },
-            ],
-          },
-        ],
-        columnGap: V5_TWO_COLUMN_GAP,
-        margin: [0, 0, 0, 3.5],
-      },
-    );
+    content.push({
+      columns: [
+        {
+          width: "*",
+          stack: [
+            sectionTitle("المشاركات", "right", V5_HALF_RULE_WIDTH),
+            {
+              stack: participations.map((item) => bullet(item, 6.2, 84)),
+              margin: [0, 4, 0, 2.2],
+            },
+          ],
+        },
+        {
+          width: "*",
+          stack: [
+            sectionTitle("الشهادات المهنية", "right", V5_HALF_RULE_WIDTH),
+            {
+              stack: certifications.map((item) => bullet(item, 6.2, 84)),
+              margin: [0, 4, 0, 2.2],
+            },
+          ],
+        },
+      ],
+      columnGap: V5_TWO_COLUMN_GAP,
+      margin: [0, 0, 0, 3.5],
+    });
   } else {
     if (participations.length) {
-      content.push(
-        sectionTitle("المشاركات"),
-        {
-          stack: participations.map((item) => bullet(item, 6.2, 140)),
-          margin: [0, 4, 0, 2.5],
-        },
-      );
+      content.push(sectionTitle("المشاركات"), {
+        stack: participations.map((item) => bullet(item, 6.2, 140)),
+        margin: [0, 4, 0, 2.5],
+      });
     }
     if (certifications.length) {
-      content.push(
-        sectionTitle("الشهادات المهنية"),
-        {
-          stack: certifications.map((item) => bullet(item, 6.2, 140)),
-          margin: [0, 4, 0, 2.5],
-        },
-      );
+      content.push(sectionTitle("الشهادات المهنية"), {
+        stack: certifications.map((item) => bullet(item, 6.2, 140)),
+        margin: [0, 4, 0, 2.5],
+      });
     }
   }
   const interests = richListItems(cv.interets, cv.interets_format);
   if (interests.length)
-    content.push(
-      {
-        stack: [
-          sectionTitle("الاهتمامات"),
-          {
-            stack: interests.map((item) => bullet(item, 6.5, 140)),
-            margin: [0, 4, 0, 2.5],
-          },
-        ],
-        unbreakable: true,
-      },
-    );
+    content.push({
+      stack: [
+        sectionTitle("الاهتمامات"),
+        {
+          stack: interests.map((item) => bullet(item, 6.5, 140)),
+          margin: [0, 4, 0, 2.5],
+        },
+      ],
+      unbreakable: true,
+    });
   const references = cv.references.filter((item) => item.trim());
   if (references.length)
-    content.push(
-      sectionTitle("المراجع"),
-      {
-        stack: references.map((item) => bullet(item, 6.5, 140)),
-        margin: [0, 4, 0, 2.5],
-      },
-    );
+    content.push(sectionTitle("المراجع"), {
+      stack: references.map((item) => bullet(item, 6.5, 140)),
+      margin: [0, 4, 0, 2.5],
+    });
   const additionalPersonal = [
     ["الاستعداد للانتقال", cv.statut_relocation],
     ["تاريخ الميلاد", cv.date_naissance],
@@ -4019,23 +4017,20 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     const midpoint = Math.ceil(additionalPersonal.length / 2);
     const personalBullet = ([label, value]: [string, string]) =>
       bullet(`${label}: ${value}`, 6.5, 90);
-    content.push(
-      sectionTitle("معلومات إضافية"),
-      {
-        columns: [
-          {
-            width: "*",
-            stack: additionalPersonal.slice(midpoint).map(personalBullet),
-          },
-          {
-            width: "*",
-            stack: additionalPersonal.slice(0, midpoint).map(personalBullet),
-          },
-        ],
-        columnGap: 24,
-        margin: [0, 4, 0, 2.5],
-      },
-    );
+    content.push(sectionTitle("معلومات إضافية"), {
+      columns: [
+        {
+          width: "*",
+          stack: additionalPersonal.slice(midpoint).map(personalBullet),
+        },
+        {
+          width: "*",
+          stack: additionalPersonal.slice(0, midpoint).map(personalBullet),
+        },
+      ],
+      columnGap: 24,
+      margin: [0, 4, 0, 2.5],
+    });
   }
   const languages = [
     ["اللغة العربية", cv.langues.ar],
@@ -4074,32 +4069,30 @@ function buildCvPdfArabicProV5(cv: CV, language: DocumentLanguage): TDocumentDef
     } as Content);
   });
   if (languages.length)
-    content.push(
-      {
-        stack: [
-          sectionTitle("اللغات"),
-          {
-            columns: languageColumns,
-            columnGap: 0,
-            margin: [0, 4.2, 0, 4.2],
-          },
-          {
-            canvas: [
-              {
-                type: "line" as const,
-                x1: 0,
-                y1: 0,
-                x2: V5_CONTENT_WIDTH,
-                y2: 0,
-                lineWidth: 0.55,
-                lineColor: "#111111",
-              },
-            ],
-          },
-        ],
-        unbreakable: true,
-      },
-    );
+    content.push({
+      stack: [
+        sectionTitle("اللغات"),
+        {
+          columns: languageColumns,
+          columnGap: 0,
+          margin: [0, 4.2, 0, 4.2],
+        },
+        {
+          canvas: [
+            {
+              type: "line" as const,
+              x1: 0,
+              y1: 0,
+              x2: V5_CONTENT_WIDTH,
+              y2: 0,
+              lineWidth: 0.55,
+              lineColor: "#111111",
+            },
+          ],
+        },
+      ],
+      unbreakable: true,
+    });
   return {
     info: {
       title: `CV Pro Arabe V1 - ${cv.nom_complet || "CV"}`,
@@ -4160,7 +4153,9 @@ function arabicV4SideSection(title: string, blocks: Content[]): Content[] {
       margin: [0, 7, 0, 2],
     } as Content,
     {
-      canvas: [{ type: "line", x1: 0, y1: 1, x2: 130, y2: 1, lineWidth: 0.55, lineColor: "#9dbed7" }],
+      canvas: [
+        { type: "line", x1: 0, y1: 1, x2: 130, y2: 1, lineWidth: 0.55, lineColor: "#9dbed7" },
+      ],
       margin: [0, 0, 0, 1.8],
     } as Content,
     ...blocks,
@@ -4194,11 +4189,14 @@ function buildCvPdfArabicProV4(cv: CV, language: DocumentLanguage): TDocumentDef
       ),
     ]);
   }
-  if (skillItems.length) pushMainSection(labels.skills, [arabicProGrid(skillItems, true, 2, cv.competences_format)]);
+  if (skillItems.length)
+    pushMainSection(labels.skills, [arabicProGrid(skillItems, true, 2, cv.competences_format)]);
   if (experienceBlocks.length) pushMainSection(labels.experience, experienceBlocks);
   const participations = richListItems(cv.participations, cv.participations_format).slice(0, 4);
   if (participations.length)
-    pushMainSection(labels.participation, [arabicProGrid(participations, true, 1, cv.participations_format)]);
+    pushMainSection(labels.participation, [
+      arabicProGrid(participations, true, 1, cv.participations_format),
+    ]);
 
   const education = [...cv.educations, ...cv.formations]
     .filter((item) => item.titre || item.institution || item.date)
@@ -4210,18 +4208,22 @@ function buildCvPdfArabicProV4(cv: CV, language: DocumentLanguage): TDocumentDef
     alignment: "right",
     margin: [0, 0, 0, 1.2],
   })) as Content[];
-  const certifications = richListItems(cv.certifications, cv.certifications_format).slice(0, 3).map((item) => ({
-    text: arabicProPdfText(`• ${arabicProPlainInline(item)}`, true, 30),
-    fontSize: 6.7,
-    alignment: "right",
-    margin: [0, 0, 0, 1.2],
-  })) as Content[];
-  const interests = richListItems(cv.interets, cv.interets_format).slice(0, 3).map((item) => ({
-    text: arabicProPdfText(`• ${arabicProPlainInline(item)}`, true, 30),
-    fontSize: 6.7,
-    alignment: "right",
-    margin: [0, 0, 0, 1.2],
-  })) as Content[];
+  const certifications = richListItems(cv.certifications, cv.certifications_format)
+    .slice(0, 3)
+    .map((item) => ({
+      text: arabicProPdfText(`• ${arabicProPlainInline(item)}`, true, 30),
+      fontSize: 6.7,
+      alignment: "right",
+      margin: [0, 0, 0, 1.2],
+    })) as Content[];
+  const interests = richListItems(cv.interets, cv.interets_format)
+    .slice(0, 3)
+    .map((item) => ({
+      text: arabicProPdfText(`• ${arabicProPlainInline(item)}`, true, 30),
+      fontSize: 6.7,
+      alignment: "right",
+      margin: [0, 0, 0, 1.2],
+    })) as Content[];
   const right: Content[] = [
     ...arabicV4SideSection(labels.education.filter(Boolean).join(" "), education),
     ...arabicV4SideSection(labels.languages.filter(Boolean).join(" "), languageItems),
@@ -4321,7 +4323,8 @@ export async function createCvPdfBlob(
   language: DocumentLanguage = "fr",
   accentColor?: string,
 ): Promise<Blob> {
-  await ensureFontsForLanguage(language);
+  const normalizedTemplateId = normalizeCvTemplateForLanguage(templateId, language);
+  await ensureFontsForDocument(normalizedTemplateId, language);
   const pdfCv = cv.photo?.dataUrl
     ? {
         ...cv,
@@ -4331,7 +4334,6 @@ export async function createCvPdfBlob(
         },
       }
     : cv;
-  const normalizedTemplateId = normalizeCvTemplateForLanguage(templateId, language);
   const document =
     normalizedTemplateId === "arabic-pro-v1"
       ? buildCvPdfArabicProV5(pdfCv, language)

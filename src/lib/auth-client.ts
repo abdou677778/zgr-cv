@@ -1,8 +1,9 @@
 const SESSION_KEY = "zgr-cv-admin-session";
 const SESSION_USER_KEY = "zgr-cv-session-user";
 const SESSION_CHANGED_EVENT = "zgr-cv-session-changed";
-const SESSION_VERIFY_TIMEOUT_MS = 6_000;
-const SESSION_LOGIN_TIMEOUT_MS = 12_000;
+const SESSION_VERIFY_TIMEOUT_MS = 12_000;
+const SESSION_LOGIN_TIMEOUT_MS = 25_000;
+const AUTH_NETWORK_ATTEMPTS = 2;
 const FILE_CLIENTS_API_ENDPOINT = "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/api/clients";
 const defaultClientsEndpoint =
   typeof window !== "undefined" && window.location.protocol === "file:"
@@ -68,18 +69,39 @@ function isSessionUser(value: unknown): value is SessionUser {
 }
 
 async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: number) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(apiUrl(path), {
-      ...init,
-      cache: "no-store",
-      credentials: "omit",
-      signal: controller.signal,
-    });
-  } finally {
-    window.clearTimeout(timeout);
+  const roots = [
+    ...new Set([API_ROOT, FILE_CLIENTS_API_ENDPOINT.replace(/\/api\/clients\/?$/, "")]),
+  ];
+  let lastFailure: unknown;
+  for (let attempt = 0; attempt < AUTH_NETWORK_ATTEMPTS; attempt += 1) {
+    for (const root of roots) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const target = new URL(`${root}${path.startsWith("/") ? path : `/${path}`}`);
+        if (attempt) target.searchParams.set("retry", String(attempt + 1));
+        return await fetch(target, {
+          ...init,
+          cache: "no-store",
+          credentials: "omit",
+          mode: "cors",
+          redirect: "error",
+          referrerPolicy: "strict-origin-when-cross-origin",
+          signal: controller.signal,
+        });
+      } catch (failure) {
+        lastFailure = failure;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+    if (attempt + 1 < AUTH_NETWORK_ATTEMPTS) {
+      await new Promise((resolve) => window.setTimeout(resolve, 650));
+    }
   }
+  throw lastFailure instanceof Error
+    ? lastFailure
+    : new Error("Le service d’authentification n’est pas joignable.");
 }
 
 function notifySessionChange() {

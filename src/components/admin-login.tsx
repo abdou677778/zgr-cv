@@ -106,9 +106,15 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
               id="admin-username"
               value={username}
               autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
               onChange={(event) => setUsername(event.target.value)}
               required
             />
+            <p className="text-xs leading-5 text-muted-foreground">
+              Saisissez l’identifiant exact du profil, sans espace. Le nom affiché peut être
+              différent.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="admin-password">Mot de passe</Label>
@@ -151,6 +157,10 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             )}
             Se connecter
           </Button>
+          <p className="text-center text-[11px] leading-5 text-muted-foreground">
+            Le même profil peut être utilisé sur plusieurs ordinateurs. Chaque navigateur crée sa
+            propre session sécurisée.
+          </p>
           {fileMode && (
             <Button
               type="button"

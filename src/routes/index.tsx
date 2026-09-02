@@ -148,6 +148,29 @@ const COLOR_STORAGE_KEY = "zgr-cv-template-colors-v1";
 const VISIBILITY_STORAGE_KEY = "zgr-cv-hidden-elements-v1";
 const AI_STORAGE_KEY = "zgr-cv-ai-settings-v1";
 const SECTION_APPEARANCE_STORAGE_KEY = "zgr-cv-section-appearance-v1";
+const PDF_GENERATION_TIMEOUT_MS = 90_000;
+
+async function pdfWithDeadline<T>(operation: Promise<T>) {
+  let timeoutId = 0;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Le chargement PDF a dépassé 90 secondes. Vérifiez la connexion puis utilisez Réessayer.",
+              ),
+            ),
+          PDF_GENERATION_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 const LANGUAGE_VISUALS: Record<DocumentLanguage, { color: string }> = {
   fr: { color: "from-blue-500 to-indigo-600" },
   en: { color: "from-sky-500 to-blue-600" },
@@ -415,6 +438,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [previewVisible, setPreviewVisible] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
+  const [pdfRetryNonce, setPdfRetryNonce] = useState(0);
   const [packLoading, setPackLoading] = useState(false);
   const [packProgress, setPackProgress] = useState({ completed: 0, total: 81 });
   const [packMessage, setPackMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -702,12 +726,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
 
     const timeout = window.setTimeout(async () => {
       try {
-        const blob = await createDocumentPdfBlob(
-          outputCv,
-          documentKind,
-          templateId,
-          language,
-          accentColor,
+        const blob = await pdfWithDeadline(
+          createDocumentPdfBlob(outputCv, documentKind, templateId, language, accentColor),
         );
         if (cancelled) return;
 
@@ -718,7 +738,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       } catch (error) {
         if (!cancelled) {
           console.error(error);
-          setPdfError(ui.previewError);
+          setPdfError(error instanceof Error ? error.message : ui.previewError);
         }
       } finally {
         if (!cancelled) setPdfLoading(false);
@@ -737,6 +757,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     language,
     outputCv,
     pdfPreview,
+    pdfRetryNonce,
     previewVisible,
     templateId,
     ui.previewError,
@@ -1268,11 +1289,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               ? "CV_ATS"
               : "CV_CANADIEN";
     return {
-      file: new File(
-        [blob],
-        `${normalizedName}_${suffix}_${language.toUpperCase()}.pdf`,
-        { type: "application/pdf" },
-      ),
+      file: new File([blob], `${normalizedName}_${suffix}_${language.toUpperCase()}.pdf`, {
+        type: "application/pdf",
+      }),
       service,
     };
   };
@@ -1284,12 +1303,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try {
       let blob = pdfPreview?.key === cvKey ? pdfPreview.blob : null;
       if (!blob) {
-        blob = await createDocumentPdfBlob(
-          outputCv,
-          documentKind,
-          templateId,
-          language,
-          accentColor,
+        blob = await pdfWithDeadline(
+          createDocumentPdfBlob(outputCv, documentKind, templateId, language, accentColor),
         );
         const url = URL.createObjectURL(blob);
         if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
@@ -1299,7 +1314,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       downloadPdfDocument(blob, outputCv, documentKind, language);
     } catch (error) {
       console.error(error);
-      setPdfError(ui.previewError);
+      setPdfError(error instanceof Error ? error.message : ui.previewError);
     } finally {
       setPdfLoading(false);
     }
@@ -2686,8 +2701,19 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 </div>
               )}
               {!isEuropassTemplate && pdfError && (
-                <div className="absolute inset-x-4 top-4 rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground shadow">
-                  {pdfError}
+                <div className="absolute inset-x-4 top-4 flex flex-wrap items-center justify-between gap-2 rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground shadow">
+                  <span>{pdfError}</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setPdfError("");
+                      setPdfRetryNonce((value) => value + 1);
+                    }}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" /> Réessayer
+                  </Button>
                 </div>
               )}
             </div>

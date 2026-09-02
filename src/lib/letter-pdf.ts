@@ -5,30 +5,31 @@ import type {
   TVirtualFileSystem,
 } from "pdfmake/interfaces";
 import pdfMake from "pdfmake/build/pdfmake";
-import calibriRegularUrl from "@/assets/fonts/Calibri.ttf?inline";
-import calibriItalicUrl from "@/assets/fonts/Calibriitalic.ttf?inline";
-import calibriBoldUrl from "@/assets/fonts/Calibribold.ttf?inline";
-import calibriBoldItalicUrl from "@/assets/fonts/Calibribolditalic.ttf?inline";
+import calibriRegularUrl from "@/assets/fonts/CalibriLatin-Regular.ttf?url";
+import calibriItalicUrl from "@/assets/fonts/CalibriLatin-Italic.ttf?url";
+import calibriBoldUrl from "@/assets/fonts/CalibriLatin-Bold.ttf?url";
+import calibriBoldItalicUrl from "@/assets/fonts/CalibriLatin-BoldItalic.ttf?url";
+import arabicRegularUrl from "@/assets/fonts/ArialArabic-Regular.ttf?url";
+import arabicBoldUrl from "@/assets/fonts/ArialArabic-Bold.ttf?url";
 import type { CV } from "./cv-types";
 import { documentFont, languageInfo, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
 import { COVER_LETTER_TEMPLATES, type CoverLetterTemplateId } from "./document-templates";
-import notoSansScUrl from "@/assets/fonts/NotoSansSC-VF.ttf?inline";
-import notoSansArabicUrl from "@/assets/fonts/NotoSansArabic-VF.ttf?inline";
 
 export { COVER_LETTER_TEMPLATES };
 export type { CoverLetterTemplateId };
 
 const A4_W = 595.28;
 const A4_H = 841.89;
-let fontsRegistered = false;
+let fontsConfigured = false;
+const fontPromises = new Map<string, Promise<void>>();
 
 const fonts: TFontDictionary = {
   Calibri: {
-    normal: "Calibri.ttf",
-    bold: "Calibribold.ttf",
-    italics: "Calibriitalic.ttf",
-    bolditalics: "Calibribolditalic.ttf",
+    normal: "CalibriLatin-Regular.ttf",
+    bold: "CalibriLatin-Bold.ttf",
+    italics: "CalibriLatin-Italic.ttf",
+    bolditalics: "CalibriLatin-BoldItalic.ttf",
   },
   NotoSansSC: {
     normal: "NotoSansSC-VF.ttf",
@@ -37,27 +38,61 @@ const fonts: TFontDictionary = {
     bolditalics: "NotoSansSC-VF.ttf",
   },
   NotoSansArabic: {
-    normal: "NotoSansArabic-VF.ttf",
-    bold: "NotoSansArabic-VF.ttf",
-    italics: "NotoSansArabic-VF.ttf",
-    bolditalics: "NotoSansArabic-VF.ttf",
+    normal: "ArialArabic-Regular.ttf",
+    bold: "ArialArabic-Bold.ttf",
+    italics: "ArialArabic-Regular.ttf",
+    bolditalics: "ArialArabic-Bold.ttf",
   },
 };
 
-function registerFonts() {
-  if (fontsRegistered) return;
-  const base64 = (url: string) => url.slice(url.indexOf("base64,") + 7);
-  const vfs: TVirtualFileSystem = {
-    "Calibri.ttf": base64(calibriRegularUrl),
-    "Calibriitalic.ttf": base64(calibriItalicUrl),
-    "Calibribold.ttf": base64(calibriBoldUrl),
-    "Calibribolditalic.ttf": base64(calibriBoldItalicUrl),
-    "NotoSansSC-VF.ttf": base64(notoSansScUrl),
-    "NotoSansArabic-VF.ttf": base64(notoSansArabicUrl),
-  };
-  pdfMake.addVirtualFileSystem(vfs);
-  pdfMake.addFonts(fonts);
-  fontsRegistered = true;
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 32_768) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+  }
+  return btoa(binary);
+}
+
+async function loadFont(filename: string, url: string) {
+  const existing = fontPromises.get(filename);
+  if (existing) return existing;
+  const promise = fetch(url, { cache: "force-cache" }).then(async (response) => {
+    if (!response.ok) throw new Error(`Police PDF indisponible (${response.status}).`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    pdfMake.addVirtualFileSystem({ [filename]: bytesToBase64(bytes) } as TVirtualFileSystem);
+  });
+  fontPromises.set(filename, promise);
+  try {
+    await promise;
+  } catch (error) {
+    fontPromises.delete(filename);
+    throw error;
+  }
+}
+
+async function registerFonts(language: DocumentLanguage) {
+  if (!fontsConfigured) {
+    pdfMake.addFonts(fonts);
+    fontsConfigured = true;
+  }
+  if (language === "zh") {
+    const { default: notoSansScUrl } = await import("@/assets/fonts/NotoSansSC-VF.ttf?url");
+    await loadFont("NotoSansSC-VF.ttf", notoSansScUrl);
+    return;
+  }
+  if (language === "ar") {
+    await Promise.all([
+      loadFont("ArialArabic-Regular.ttf", arabicRegularUrl),
+      loadFont("ArialArabic-Bold.ttf", arabicBoldUrl),
+    ]);
+    return;
+  }
+  await Promise.all([
+    loadFont("CalibriLatin-Regular.ttf", calibriRegularUrl),
+    loadFont("CalibriLatin-Bold.ttf", calibriBoldUrl),
+    loadFont("CalibriLatin-Italic.ttf", calibriItalicUrl),
+    loadFont("CalibriLatin-BoldItalic.ttf", calibriBoldItalicUrl),
+  ]);
 }
 
 const LETTER_COPY = {
@@ -663,7 +698,7 @@ export async function createCoverLetterPdfBlob(
   language: DocumentLanguage,
   accentColor?: string,
 ) {
-  registerFonts();
+  await registerFonts(language);
   const definition =
     templateId === "cover-letter-v1"
       ? buildV1(cv, language)

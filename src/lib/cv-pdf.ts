@@ -1190,7 +1190,10 @@ function v2RtlText(text: string, rtl: boolean, maxLineLength = 82) {
   const containsArabic = /\p{Script=Arabic}/u.test(text);
   if (!containsArabic) return text;
   const startsWithArabic = /^\s*\p{Script=Arabic}/u.test(text);
-  const protectedLatin = text.replace(
+  const numericCompensated = text.replace(/\d+(?:[.,:/+-]\d+)*/gu, (token) =>
+    Array.from(token).reverse().join(""),
+  );
+  const protectedLatin = numericCompensated.replace(
     /[A-Za-z][A-Za-z0-9.+/#@_-]*/g,
     (token) => `\u200e${startsWithArabic ? Array.from(token).reverse().join("") : token}\u200e`,
   );

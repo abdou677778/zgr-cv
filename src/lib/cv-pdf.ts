@@ -1159,7 +1159,17 @@ const CONTACT_ICONS_V2 = {
 function v2RtlText(text: string, rtl: boolean, maxLineLength = 82) {
   if (!rtl) return text;
   const containsArabic = /\p{Script=Arabic}/u.test(text);
-  const protectedLatin = text.replace(
+  const containsLatin = /[A-Za-z]/.test(text);
+  let bidiSource =
+    !containsArabic && containsLatin && /\s/u.test(text)
+      ? Array.from(text).reverse().join("")
+      : text;
+  if (containsArabic) {
+    bidiSource = bidiSource.replace(/\d+(?:[.,:/+-]\d+)*/gu, (token) =>
+      Array.from(token).reverse().join(""),
+    );
+  }
+  const protectedLatin = bidiSource.replace(
     /[A-Za-z][A-Za-z0-9.+/#@_-]*/g,
     (token) => `\u200e${containsArabic ? Array.from(token).reverse().join("") : token}\u200e`,
   );

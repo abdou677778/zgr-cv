@@ -1210,6 +1210,11 @@ function v2RtlRichInline(item: RichInline, rtl: boolean, maxLineLength = 72): Ri
       }));
 }
 
+function v2DateText(value: string, language: DocumentLanguage, rtl: boolean) {
+  const formatted = formatCvDate(value, language).toLocaleUpperCase(language);
+  return v2RtlText(rtl ? formatted.replace(/\s+-\s+/g, "\n") : formatted, rtl, 24);
+}
+
 function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = false): Content {
   const iconNode = {
     width: 13,
@@ -1376,11 +1381,7 @@ function v2ExperienceBlock(
     width: 100,
     stack: [
       {
-        text: v2RtlText(
-          formatCvDate(experience.dates || "", language).toLocaleUpperCase(language),
-          rtl,
-          18,
-        ),
+        text: v2DateText(experience.dates || "", language, rtl),
         bold: true,
         color: V2_ACCENT,
         fontSize: 9,
@@ -1431,7 +1432,7 @@ function v2FormationBlock(formation: Formation, language: DocumentLanguage, rtl 
     width: 100,
     stack: [
       {
-        text: v2RtlText(formatCvDate(formation.date || "", language), rtl, 18),
+        text: v2DateText(formation.date || "", language, rtl),
         bold: true,
         color: V2_ACCENT,
         fontSize: 9,
@@ -1480,7 +1481,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
     width: 100,
     stack: [
       {
-        text: v2RtlText(formatCvDate(education.date || "", language), rtl, 18),
+        text: v2DateText(education.date || "", language, rtl),
         bold: true,
         color: V2_ACCENT,
         fontSize: 9,

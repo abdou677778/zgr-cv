@@ -98,6 +98,7 @@ import { AccountSettingsDialog } from "@/components/account-settings-dialog";
 import { PromptMasterDialog } from "@/components/prompt-master-dialog";
 import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
 import { ProfilePhotoField } from "@/components/profile-photo-field";
+import { PreviewControlDock, type PreviewDockSection } from "@/components/preview-control-dock";
 import { ExperienceWorkspace } from "@/components/cv-experience-workspace";
 import { EducationWorkspace, FormationWorkspace } from "@/components/cv-learning-workspaces";
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
@@ -436,6 +437,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     null,
   );
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewFocusMode, setPreviewFocusMode] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(65);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [pdfRetryNonce, setPdfRetryNonce] = useState(0);
@@ -1424,6 +1427,102 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     }
   };
 
+  const previewSections: PreviewDockSection[] = [
+    { id: "personal", title: ui.personal, visible: sectionIsVisible("personal") },
+    {
+      id: "objective",
+      title: form.objective,
+      count: cv.objectif.trim() ? 1 : 0,
+      visible: sectionIsVisible("objective"),
+    },
+    {
+      id: "experience",
+      title: form.experience,
+      count: cv.experiences.length,
+      visible: sectionIsVisible("experience"),
+    },
+    {
+      id: "training",
+      title: form.training,
+      count: cv.formations.length,
+      visible: sectionIsVisible("training"),
+    },
+    {
+      id: "education",
+      title: form.education,
+      count: cv.educations.length,
+      visible: sectionIsVisible("education"),
+    },
+    {
+      id: "skills",
+      title: form.skills,
+      count: cv.competences.length,
+      visible: sectionIsVisible("skills"),
+    },
+    {
+      id: "languages",
+      title: form.languages,
+      count: Object.values(cv.langues).filter((value) => value.trim()).length,
+      visible: sectionIsVisible("languages"),
+    },
+    {
+      id: "volunteering",
+      title: form.volunteering,
+      count: cv.participations.length,
+      visible: sectionIsVisible("volunteering"),
+    },
+    {
+      id: "certifications",
+      title: form.certifications,
+      count: cv.certifications.length,
+      visible: sectionIsVisible("certifications"),
+    },
+    {
+      id: "interests",
+      title: form.interests,
+      count: cv.interets.length,
+      visible: sectionIsVisible("interests"),
+    },
+    {
+      id: "references",
+      title: form.references,
+      count: cv.references.length,
+      visible: sectionIsVisible("references"),
+    },
+    {
+      id: "letter",
+      title: ui.letterTitle,
+      count: cv.lettre_motivation.paragraphes.length,
+      visible: sectionIsVisible("letter"),
+    },
+    {
+      id: "development",
+      title: ui.planTitle,
+      count: cv.plan_developpement.length,
+      visible: sectionIsVisible("development"),
+    },
+  ];
+  const previewSectionIds = previewSections.map((section) => section.id);
+  const navigateToEditorSection = (sectionId: string) => {
+    setPreviewFocusMode(false);
+    setSectionVisible(sectionId, true);
+    setSectionOpen(sectionId, true);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document
+          .getElementById(`cv-editor-section-${sectionId}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  };
+  const setAllEditorSectionsOpen = (open: boolean) => {
+    setPreviewFocusMode(false);
+    setOpenSections((current) => ({
+      ...current,
+      ...Object.fromEntries(previewSectionIds.map((id) => [id, open])),
+    }));
+  };
+
   return (
     <div lang="fr" dir="ltr" className="zgr-app-shell min-h-screen">
       <header className="zgr-app-header sticky top-0 z-20 border-b">
@@ -1844,14 +1943,22 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       </header>
 
       <main
-        className={`mx-auto grid max-w-7xl gap-6 px-4 py-7 ${
-          previewVisible ? "lg:grid-cols-2" : "lg:grid-cols-1"
+        className={`mx-auto grid gap-6 px-4 py-7 ${
+          previewVisible && !previewFocusMode
+            ? "max-w-7xl lg:grid-cols-2"
+            : previewVisible
+              ? "max-w-[1500px] lg:grid-cols-1"
+              : "max-w-7xl lg:grid-cols-1"
         }`}
       >
         {/* Form */}
         <section
           className={`zgr-editor-panel space-y-3 rounded-3xl border border-slate-200 bg-slate-100/75 p-3 sm:p-4 ${
-            previewVisible ? "" : "lg:mx-auto lg:w-full lg:max-w-5xl"
+            previewVisible && previewFocusMode
+              ? "lg:hidden"
+              : previewVisible
+                ? ""
+                : "lg:mx-auto lg:w-full lg:max-w-5xl"
           }`}
         >
           <CvSectionPanel
@@ -2676,8 +2783,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
 
         {/* Preview */}
         {previewVisible && (
-          <section id="pdf-preview-panel" className="lg:sticky lg:top-20 lg:self-start">
-            <div className="relative overflow-hidden rounded-md bg-zinc-200 shadow-md ring-1 ring-zinc-300">
+          <section
+            id="pdf-preview-panel"
+            className={`lg:sticky lg:top-20 lg:self-start ${
+              previewFocusMode ? "lg:mx-auto lg:w-full lg:max-w-6xl" : ""
+            }`}
+          >
+            <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-md shadow-slate-900/10">
               {isEuropassTemplate ? (
                 <EuropassPreview
                   cv={outputCv}
@@ -2689,6 +2801,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   blob={pdfPreview.blob}
                   templateId={templateId}
                   documentKind={documentKind}
+                  zoom={previewZoom}
                 />
               ) : (
                 <div className="flex min-h-[720px] items-center justify-center bg-white text-sm text-muted-foreground">
@@ -2716,6 +2829,32 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   </Button>
                 </div>
               )}
+              <PreviewControlDock
+                templates={templates}
+                templateId={templateId}
+                onTemplateChange={(nextTemplateId) =>
+                  setTemplateId(nextTemplateId as PdfTemplateId)
+                }
+                focusMode={previewFocusMode}
+                onFocusModeChange={setPreviewFocusMode}
+                sections={previewSections}
+                onNavigateSection={navigateToEditorSection}
+                onSectionVisibilityChange={setSectionVisible}
+                onExpandAllSections={() => setAllEditorSectionsOpen(true)}
+                onCollapseAllSections={() => setAllEditorSectionsOpen(false)}
+                paletteColors={paletteColors}
+                accentColor={accentColor}
+                onAccentColorChange={(color) =>
+                  setTemplateColors((current) => ({
+                    ...current,
+                    [themeTemplateId]: color,
+                  }))
+                }
+                paletteDisabled={isEuropassTemplate}
+                zoom={previewZoom}
+                onZoomChange={setPreviewZoom}
+                zoomDisabled={isEuropassTemplate}
+              />
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">
               {isEuropassTemplate
@@ -2940,16 +3079,31 @@ function PdfPreview({
   blob,
   templateId,
   documentKind,
+  zoom,
 }: {
   blob: Blob;
   templateId: PdfTemplateId;
   documentKind: DocumentKind;
+  zoom: number;
 }) {
   const pagesRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(zoom);
   const [rendering, setRendering] = useState(true);
   const [renderError, setRenderError] = useState("");
   const [pageCount, setPageCount] = useState(0);
   const [sha256, setSha256] = useState("");
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+    const pages = pagesRef.current?.querySelectorAll<HTMLCanvasElement>("canvas[data-base-width]");
+    pages?.forEach((canvas) => {
+      const baseWidth = Number(canvas.dataset.baseWidth);
+      const baseHeight = Number(canvas.dataset.baseHeight);
+      if (!Number.isFinite(baseWidth) || !Number.isFinite(baseHeight)) return;
+      canvas.style.width = `${((baseWidth * zoom) / 100).toFixed(2)}px`;
+      canvas.style.height = `${((baseHeight * zoom) / 100).toFixed(2)}px`;
+    });
+  }, [zoom]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2992,7 +3146,7 @@ function PdfPreview({
           if (cancelled || !pagesRef.current) return;
 
           const baseViewport = page.getViewport({ scale: 1 });
-          const cssWidth = Math.max(280, Math.min(pagesRef.current.clientWidth, 794));
+          const cssWidth = 794;
           const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
           const viewport = page.getViewport({
             scale: (cssWidth / baseViewport.width) * pixelRatio,
@@ -3003,9 +3157,12 @@ function PdfPreview({
 
           canvas.width = Math.ceil(viewport.width);
           canvas.height = Math.ceil(viewport.height);
-          canvas.style.width = `${cssWidth}px`;
-          canvas.style.height = `${(viewport.height / pixelRatio).toFixed(2)}px`;
-          canvas.className = "block max-w-full bg-white shadow-sm ring-1 ring-black/10";
+          const cssHeight = viewport.height / pixelRatio;
+          canvas.dataset.baseWidth = String(cssWidth);
+          canvas.dataset.baseHeight = String(cssHeight);
+          canvas.style.width = `${((cssWidth * zoomRef.current) / 100).toFixed(2)}px`;
+          canvas.style.height = `${((cssHeight * zoomRef.current) / 100).toFixed(2)}px`;
+          canvas.className = "block rounded-md bg-white shadow-lg ring-1 ring-black/10";
           canvas.setAttribute("aria-label", `Page ${pageNumber} sur ${document.numPages}`);
           pagesRef.current.appendChild(canvas);
 
@@ -3040,9 +3197,14 @@ function PdfPreview({
       data-pdf-sha256={sha256 || undefined}
       data-template-id={templateId}
       data-document-kind={documentKind}
-      className="relative h-[calc(100vh-7rem)] min-h-[720px] overflow-auto bg-zinc-300 p-3"
+      data-preview-zoom={zoom}
+      className="relative h-[calc(100vh-12.5rem)] min-h-[560px] overflow-auto bg-slate-50 p-4"
+      style={{
+        backgroundImage: "radial-gradient(#d9e2ec 0.7px, transparent 0.7px)",
+        backgroundSize: "18px 18px",
+      }}
     >
-      <div ref={pagesRef} className="mx-auto flex w-full flex-col items-center gap-3" />
+      <div ref={pagesRef} className="mx-auto flex w-max min-w-full flex-col items-center gap-4" />
       {rendering && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/85 text-sm font-medium text-zinc-700 backdrop-blur-[1px]">
           <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Rendu du PDF réel…

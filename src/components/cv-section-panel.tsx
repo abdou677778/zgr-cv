@@ -530,6 +530,7 @@ export function CvSectionPanel({
 
   return (
     <section
+      id={`cv-editor-section-${id}`}
       className={cn(
         "overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5 transition",
         open && "shadow-md shadow-slate-900/7",

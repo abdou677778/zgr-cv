@@ -767,7 +767,7 @@ export function PreviewControlDock({
                           Éléments insérés
                         </h3>
                         <p className="mt-1 text-[11px] text-slate-400">
-                          Ajoutez un bloc de texte ou une ligne avant/après le contenu du modèle.
+                          Ajoutez un texte, une ligne ou une icône vectorielle au PDF.
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -794,6 +794,18 @@ export function PreviewControlDock({
                           className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
                         >
                           <Plus className="h-3.5 w-3.5" /> Ligne
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateDesigner("extraElements", [
+                              ...designerSettings.extraElements,
+                              newDesignerElement("icon"),
+                            ])
+                          }
+                          className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Icône
                         </button>
                       </div>
                     </div>
@@ -829,6 +841,22 @@ export function PreviewControlDock({
                                 aria-label="Texte de l’élément"
                                 className="h-9 min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs"
                               />
+                            ) : element.type === "icon" ? (
+                              <select
+                                value={element.text}
+                                onChange={(event) =>
+                                  updateExtraElement(element.id, { text: event.target.value })
+                                }
+                                aria-label="Icône vectorielle"
+                                className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold"
+                              >
+                                <option value="star">Étoile</option>
+                                <option value="check">Validation</option>
+                                <option value="mail">E-mail</option>
+                                <option value="phone">Téléphone</option>
+                                <option value="home">Adresse</option>
+                                <option value="location">Localisation</option>
+                              </select>
                             ) : (
                               <div className="flex h-9 items-center px-2 text-xs font-semibold text-slate-500">
                                 Séparateur horizontal
@@ -844,7 +872,7 @@ export function PreviewControlDock({
                                 aria-label="Couleur de l’élément"
                                 className="h-6 w-7 cursor-pointer border-0 bg-transparent p-0"
                               />
-                              {element.type === "text" && (
+                              {element.type !== "separator" && (
                                 <input
                                   type="number"
                                   min={6}
@@ -855,7 +883,11 @@ export function PreviewControlDock({
                                       fontSize: Number(event.target.value),
                                     })
                                   }
-                                  aria-label="Taille du texte inséré"
+                                  aria-label={
+                                    element.type === "icon"
+                                      ? "Taille de l’icône"
+                                      : "Taille du texte inséré"
+                                  }
                                   className="w-10 bg-transparent text-xs font-semibold outline-none"
                                 />
                               )}

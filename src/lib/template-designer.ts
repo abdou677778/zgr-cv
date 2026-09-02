@@ -40,7 +40,7 @@ export type DesignerTextOverride = {
 
 export type DesignerExtraElement = {
   id: string;
-  type: "text" | "separator";
+  type: "text" | "separator" | "icon";
   placement: "start" | "end";
   text: string;
   fontSize: number;
@@ -129,7 +129,7 @@ export function newDesignerElement(type: DesignerExtraElement["type"]): Designer
     id: crypto.randomUUID(),
     type,
     placement: "end",
-    text: type === "text" ? "Nouveau bloc de texte" : "",
+    text: type === "text" ? "Nouveau bloc de texte" : type === "icon" ? "star" : "",
     fontSize: 10,
     color: "#111827",
     bold: false,
@@ -145,7 +145,8 @@ export function normalizeTemplateDesignerSettings(value: unknown): TemplateDesig
     ? input.extraElements.slice(0, 20).flatMap((item, index) => {
         if (!item || typeof item !== "object") return [];
         const element = item as Record<string, unknown>;
-        const type = element.type === "separator" ? "separator" : "text";
+        const type =
+          element.type === "separator" ? "separator" : element.type === "icon" ? "icon" : "text";
         const alignment = ALIGNMENTS.has(element.alignment as DesignerAlignment)
           ? (element.alignment as DesignerAlignment)
           : "left";
@@ -430,6 +431,28 @@ function extraElementContent(element: DesignerExtraElement, font?: string): Cont
       canvas: [
         { type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: element.color },
       ],
+      margin: [0, element.marginBefore, 0, element.marginAfter],
+    };
+  }
+  if (element.type === "icon") {
+    const paths: Record<string, string> = {
+      star: '<polygon points="12 2 15.1 8.3 22 9.3 17 14.2 18.2 21 12 17.8 5.8 21 7 14.2 2 9.3 8.9 8.3 12 2"/>',
+      check:
+        '<circle cx="12" cy="12" r="9"/><path d="M8 12l2.7 2.7L16.5 9" fill="none" stroke="white" stroke-width="2"/>',
+      mail: '<path d="M3 5h18v14H3z"/><path d="M3 6l9 7 9-7" fill="none" stroke="white" stroke-width="2"/>',
+      phone:
+        '<path d="M6.6 2.8l3 4.2-2.2 2.2c1.4 3 3.7 5.3 6.7 6.7l2.2-2.2 4.2 3c.5.4.7 1 .4 1.6-.7 1.5-2.2 2.7-4 2.7C9.3 21 3 14.7 3 7.1c0-1.8 1.2-3.3 2.7-4 .3-.2.7-.3.9-.3z"/>',
+      home: '<path d="M2 11L12 3l10 8v10h-7v-6H9v6H2z"/>',
+      location:
+        '<path d="M12 2a7 7 0 00-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z"/>',
+    };
+    const path = paths[element.text] ?? paths.star;
+    const size = Math.max(8, element.fontSize * 1.5);
+    return {
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${element.color}">${path}</svg>`,
+      width: size,
+      height: size,
+      alignment: element.alignment,
       margin: [0, element.marginBefore, 0, element.marginAfter],
     };
   }

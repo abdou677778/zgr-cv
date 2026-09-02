@@ -1156,6 +1156,25 @@ const CONTACT_ICONS_V2 = {
   plane: `<svg viewBox="0 0 24 24" fill="none" stroke="${V2_ACCENT}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 19h20"/><path d="M4 15h4l3-4 9 3 2-2-10-6-3-4-2 1 2 5-3 3-3-1-1 1Z"/></svg>`,
 } as const;
 
+function v2RtlText(text: string, rtl: boolean, maxLineLength = 82) {
+  if (!rtl) return text;
+  const protectedLatin = text.replace(
+    /[A-Za-z][A-Za-z0-9.+/#@_-]*/g,
+    (token) => `\u200e${token}\u200e`,
+  );
+  return toPdfRtlVisualText(protectedLatin, maxLineLength);
+}
+
+function v2RtlRichInline(item: RichInline, rtl: boolean, maxLineLength = 72): RichInline {
+  if (!rtl) return item;
+  return typeof item === "string"
+    ? v2RtlText(item, true, maxLineLength)
+    : item.map((run) => ({
+        ...run,
+        text: v2RtlText(run.text, true, maxLineLength),
+      }));
+}
+
 function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = false): Content {
   const iconNode = {
     width: 13,
@@ -1165,7 +1184,7 @@ function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = 
   } as Content;
   const textNode = {
     width: "*",
-    text,
+    text: v2RtlText(text, rtl, 32),
     fontSize: 10,
     lineHeight: 1.25,
     alignment: rtl ? "right" : "left",
@@ -1192,19 +1211,25 @@ function v2Header(cv: CV, rtl = false): Content {
     width: "*",
     stack: [
       {
-        text: [
-          { text: firstName.toLocaleUpperCase("fr"), color: "#000000" },
-          remainingName
-            ? { text: ` ${remainingName.toLocaleUpperCase("fr")}`, color: V2_ACCENT }
-            : { text: "" },
-        ],
+        text: rtl
+          ? [
+              { text: v2RtlText(remainingName, true, 32), color: V2_ACCENT },
+              { text: remainingName ? "\u00a0" : "" },
+              { text: v2RtlText(firstName, true, 16), color: "#000000" },
+            ]
+          : [
+              { text: firstName.toLocaleUpperCase("fr"), color: "#000000" },
+              remainingName
+                ? { text: ` ${remainingName.toLocaleUpperCase("fr")}`, color: V2_ACCENT }
+                : { text: "" },
+            ],
         fontSize: 24,
         bold: true,
         lineHeight: 1,
         alignment: rtl ? "right" : "left",
       },
       {
-        text: (cv.titre_poste || " ").toLocaleUpperCase("fr"),
+        text: v2RtlText((cv.titre_poste || " ").toLocaleUpperCase("fr"), rtl, 38),
         fontSize: 14,
         bold: true,
         color: V2_MUTED,
@@ -1239,7 +1264,7 @@ function v2SectionTitle(label: string, topMargin = 10, rtl = false): Content {
     headlineLevel: 1,
     stack: [
       {
-        text: label,
+        text: v2RtlText(label, rtl, 52),
         fontSize: 14.2,
         bold: true,
         color: V2_ACCENT,
@@ -1285,9 +1310,17 @@ function v2List(
         fit: [7, 7],
         margin: rtl ? [3, V2_LIST_MARKER_TOP, 0, 0] : [0, V2_LIST_MARKER_TOP, 3, 0],
       } as Content;
+      const visualItem = v2RtlRichInline(item, rtl, 70);
       const textNode = format
-        ? richListText(format, item, 10, { width: "*", alignment: rtl ? "right" : "left" })
-        : ({ width: "*", text: item, alignment: rtl ? "right" : "left" } as Content);
+        ? richListText(format, visualItem, 10, {
+            width: "*",
+            alignment: rtl ? "right" : "left",
+          })
+        : ({
+            width: "*",
+            text: visualItem,
+            alignment: rtl ? "right" : "left",
+          } as Content);
       return {
         unbreakable: true,
         columns: rtl ? [textNode, markerNode] : [markerNode, textNode],
@@ -1308,14 +1341,18 @@ function v2ExperienceBlock(
     width: 100,
     stack: [
       {
-        text: formatCvDate(experience.dates || "", language).toLocaleUpperCase(language),
+        text: v2RtlText(
+          formatCvDate(experience.dates || "", language).toLocaleUpperCase(language),
+          rtl,
+          18,
+        ),
         bold: true,
         color: V2_ACCENT,
         fontSize: 9,
         alignment: rtl ? "right" : "left",
       },
       {
-        text: experience.lieu || "",
+        text: v2RtlText(experience.lieu || "", rtl, 18),
         fontSize: 9,
         alignment: rtl ? "right" : "left",
         margin: [0, 2, 0, 0],
@@ -1326,14 +1363,14 @@ function v2ExperienceBlock(
     width: "*",
     stack: [
       {
-        text: (experience.titre || "").toLocaleUpperCase("fr"),
+        text: v2RtlText((experience.titre || "").toLocaleUpperCase("fr"), rtl, 66),
         bold: true,
         fontSize: 11,
         alignment: rtl ? "right" : "left",
       },
       companyLine(
         experience,
-        (experience.employeur || "").toLocaleUpperCase("fr"),
+        v2RtlText((experience.employeur || "").toLocaleUpperCase("fr"), rtl, 66),
         11,
         {
           bold: true,
@@ -1359,14 +1396,14 @@ function v2FormationBlock(formation: Formation, language: DocumentLanguage, rtl 
     width: 100,
     stack: [
       {
-        text: formatCvDate(formation.date || "", language),
+        text: v2RtlText(formatCvDate(formation.date || "", language), rtl, 18),
         bold: true,
         color: V2_ACCENT,
         fontSize: 9,
         alignment: rtl ? "right" : "left",
       },
       {
-        text: formation.lieu || "",
+        text: v2RtlText(formation.lieu || "", rtl, 18),
         fontSize: 9,
         alignment: rtl ? "right" : "left",
         margin: [0, 2, 0, 0],
@@ -1377,13 +1414,13 @@ function v2FormationBlock(formation: Formation, language: DocumentLanguage, rtl 
     width: "*",
     stack: [
       {
-        text: (formation.titre || "").toLocaleUpperCase("fr"),
+        text: v2RtlText((formation.titre || "").toLocaleUpperCase("fr"), rtl, 66),
         bold: true,
         fontSize: 11,
         alignment: rtl ? "right" : "left",
       },
       {
-        text: (formation.institution || "").toLocaleUpperCase("fr"),
+        text: v2RtlText((formation.institution || "").toLocaleUpperCase("fr"), rtl, 66),
         bold: true,
         fontSize: 11,
         color: V2_MUTED,
@@ -1408,14 +1445,14 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
     width: 100,
     stack: [
       {
-        text: formatCvDate(education.date || "", language),
+        text: v2RtlText(formatCvDate(education.date || "", language), rtl, 18),
         bold: true,
         color: V2_ACCENT,
         fontSize: 9,
         alignment: rtl ? "right" : "left",
       },
       {
-        text: education.lieu || "",
+        text: v2RtlText(education.lieu || "", rtl, 18),
         fontSize: 9,
         alignment: rtl ? "right" : "left",
         margin: [0, 2, 0, 0],
@@ -1426,7 +1463,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
     width: "*",
     stack: [
       {
-        text: (education.titre || "").toLocaleUpperCase("fr"),
+        text: v2RtlText((education.titre || "").toLocaleUpperCase("fr"), rtl, 66),
         bold: true,
         fontSize: 11,
         alignment: rtl ? "right" : "left",
@@ -1434,7 +1471,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
       ...(education.institution
         ? [
             {
-              text: education.institution.toLocaleUpperCase(language),
+              text: v2RtlText(education.institution.toLocaleUpperCase(language), rtl, 66),
               bold: true,
               fontSize: 11,
               color: V2_MUTED,
@@ -1446,7 +1483,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
       ...(education.option
         ? [
             {
-              text: education.option,
+              text: v2RtlText(education.option, rtl, 66),
               alignment: rtl ? "right" : "left",
               margin: [0, 2, 0, 0],
             } as Content,
@@ -1455,7 +1492,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
       ...(education.equivalence
         ? [
             {
-              text: education.equivalence,
+              text: v2RtlText(education.equivalence, rtl, 66),
               alignment: rtl ? "right" : "left",
               margin: [0, 2, 0, 0],
             } as Content,
@@ -1526,7 +1563,15 @@ function buildCvPdfV2(
   };
 
   if (cv.objectif)
-    pushSection(labels.objective, objectivePdfContent(cv, 10.6, rtl ? { alignment: "right" } : {}));
+    pushSection(
+      labels.objective,
+      objectivePdfContent(
+        cv,
+        10.6,
+        rtl ? { alignment: "right" } : {},
+        rtl ? (text) => v2RtlText(text, true, 88) : undefined,
+      ),
+    );
 
   const competences = cv.competences.filter(Boolean);
   if (competences.length)
@@ -1539,7 +1584,13 @@ function buildCvPdfV2(
         stack: langues
           .filter((_, index) => index % 3 === column)
           .map(([label, value]) => ({
-            text: [{ text: `${label} : `, bold: true }, { text: value as string }],
+            text: rtl
+              ? [
+                  { text: v2RtlText(value as string, true, 24) },
+                  { text: "\u00a0:\u00a0" },
+                  { text: v2RtlText(label, true, 20), bold: true },
+                ]
+              : [{ text: `${label} : `, bold: true }, { text: value as string }],
             alignment: rtl ? "right" : "left",
             margin: [0, 0, 0, 4],
           })),

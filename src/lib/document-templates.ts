@@ -4,7 +4,8 @@ export type CvTemplateId =
   | "canadian-v3"
   | "canadian-v4"
   | "ats-a4"
-  | "arabic-pro-v1";
+  | "arabic-pro-v1"
+  | "arabic-pro-v2";
 
 export const CV_TEMPLATES: ReadonlyArray<{ id: CvTemplateId; name: string }> = [
   { id: "canadian-v1", name: "CV Canadien V1" },
@@ -13,10 +14,10 @@ export const CV_TEMPLATES: ReadonlyArray<{ id: CvTemplateId; name: string }> = [
   { id: "canadian-v4", name: "CV Canadien V4" },
   { id: "ats-a4", name: "CV ATS Format A4" },
   { id: "arabic-pro-v1", name: "CV Pro Arabe V1" },
+  { id: "arabic-pro-v2", name: "CV PRO Arabe V2" },
 ];
 
-export const isArabicCvTemplate = (templateId: string) =>
-  /^arabic-pro-v[1-5]$/.test(templateId);
+export const isArabicCvTemplate = (templateId: string) => /^arabic-pro-v[1-5]$/.test(templateId);
 
 /** Arabic designs are intentionally available only with Arabic source data. */
 export function getCvTemplatesForLanguage(language: string) {
@@ -25,11 +26,18 @@ export function getCvTemplatesForLanguage(language: string) {
     : CV_TEMPLATES.filter((template) => !isArabicCvTemplate(template.id));
 }
 
-/** Routes every former Arabic layout to the single retained V1 design. */
+/** Keeps the active Arabic designs and routes removed legacy variants to V1. */
 export function normalizeCvTemplateForLanguage(templateId: string, language: string): CvTemplateId {
-  const migrated = isArabicCvTemplate(templateId) ? "arabic-pro-v1" : templateId;
+  const migrated =
+    templateId === "arabic-pro-v1" || templateId === "arabic-pro-v2"
+      ? templateId
+      : isArabicCvTemplate(templateId)
+        ? "arabic-pro-v1"
+        : templateId;
   const available = getCvTemplatesForLanguage(language);
-  return (available.some((template) => template.id === migrated) ? migrated : "canadian-v1") as CvTemplateId;
+  return (
+    available.some((template) => template.id === migrated) ? migrated : "canadian-v1"
+  ) as CvTemplateId;
 }
 
 export type CoverLetterTemplateId =

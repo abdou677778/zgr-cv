@@ -602,13 +602,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             setDocumentKind(settings.documentKind);
             setTemplateId(
               isArabicCvTemplate(String(settings.templateId))
-                ? "arabic-pro-v1"
+                ? normalizeCvTemplateForLanguage(String(settings.templateId), "ar")
                 : settings.templateId,
             );
           }
         } catch {
           const migratedTemplate = isArabicCvTemplate(savedTemplate)
-            ? "arabic-pro-v1"
+            ? normalizeCvTemplateForLanguage(savedTemplate, "ar")
             : savedTemplate;
           if (getTemplates("cv").some((template) => template.id === migratedTemplate)) {
             setTemplateId(migratedTemplate as PdfTemplateId);

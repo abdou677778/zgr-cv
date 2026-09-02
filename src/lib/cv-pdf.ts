@@ -12,6 +12,7 @@ import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
 import {
   CV_TEMPLATES,
+  isArabicCvTemplate,
   normalizeCvTemplateForLanguage,
   type CvTemplateId,
 } from "./document-templates";
@@ -174,12 +175,11 @@ async function ensureFontFamily(family: keyof typeof CV_FONTS) {
 }
 
 async function ensureFontsForDocument(templateId: CvTemplateId, language: DocumentLanguage) {
-  const family =
-    templateId === "arabic-pro-v1"
-      ? "ArialOfficial"
-      : templateId === "canadian-v4" && language !== "zh" && language !== "ar"
-        ? "Cambria"
-        : documentFont(language);
+  const family = isArabicCvTemplate(templateId)
+    ? "ArialOfficial"
+    : templateId === "canadian-v4" && language !== "zh" && language !== "ar"
+      ? "Cambria"
+      : documentFont(language);
   await ensureFontFamily(family as keyof typeof CV_FONTS);
 }
 
@@ -1156,75 +1156,85 @@ const CONTACT_ICONS_V2 = {
   plane: `<svg viewBox="0 0 24 24" fill="none" stroke="${V2_ACCENT}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 19h20"/><path d="M4 15h4l3-4 9 3 2-2-10-6-3-4-2 1 2 5-3 3-3-1-1 1Z"/></svg>`,
 } as const;
 
-function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string): Content {
+function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = false): Content {
+  const iconNode = {
+    width: 13,
+    svg: CONTACT_ICONS_V2[icon],
+    fit: [11, 11],
+    margin: rtl ? [1, 1, 0, 0] : [1, 1, 1, 0],
+  } as Content;
+  const textNode = {
+    width: "*",
+    text,
+    fontSize: 10,
+    lineHeight: 1.25,
+    alignment: rtl ? "right" : "left",
+  } as Content;
   return {
-    columns: [
-      {
-        width: 13,
-        svg: CONTACT_ICONS_V2[icon],
-        fit: [11, 11],
-        margin: [1, 1, 1, 0],
-      },
-      { width: "*", text, fontSize: 10, lineHeight: 1.25 },
-    ],
+    columns: rtl ? [textNode, iconNode] : [iconNode, textNode],
     columnGap: 6,
     margin: [0, 0, 0, 3],
   } as Content;
 }
 
-function v2Header(cv: CV): Content {
+function v2Header(cv: CV, rtl = false): Content {
   const nameParts = cv.nom_complet.trim().split(/\s+/).filter(Boolean);
   const firstName = nameParts.shift() || " ";
   const remainingName = nameParts.join(" ");
   const contacts: Content[] = [];
 
-  if (cv.telephone) contacts.push(v2ContactLine("phone", cv.telephone));
-  if (cv.email) contacts.push(v2ContactLine("mail", cv.email));
-  if (cv.adresse) contacts.push(v2ContactLine("home", cv.adresse));
-  if (cv.statut_relocation) contacts.push(v2ContactLine("plane", cv.statut_relocation));
+  if (cv.telephone) contacts.push(v2ContactLine("phone", cv.telephone, rtl));
+  if (cv.email) contacts.push(v2ContactLine("mail", cv.email, rtl));
+  if (cv.adresse) contacts.push(v2ContactLine("home", cv.adresse, rtl));
+  if (cv.statut_relocation) contacts.push(v2ContactLine("plane", cv.statut_relocation, rtl));
 
-  return {
-    columns: [
+  const identity = {
+    width: "*",
+    stack: [
       {
-        width: "*",
-        stack: [
-          {
-            text: [
-              { text: firstName.toLocaleUpperCase("fr"), color: "#000000" },
-              remainingName
-                ? { text: ` ${remainingName.toLocaleUpperCase("fr")}`, color: V2_ACCENT }
-                : { text: "" },
-            ],
-            fontSize: 24,
-            bold: true,
-            lineHeight: 1,
-          },
-          {
-            text: (cv.titre_poste || " ").toLocaleUpperCase("fr"),
-            fontSize: 14,
-            bold: true,
-            color: V2_MUTED,
-            margin: [0, 11, 0, 0],
-          },
+        text: [
+          { text: firstName.toLocaleUpperCase("fr"), color: "#000000" },
+          remainingName
+            ? { text: ` ${remainingName.toLocaleUpperCase("fr")}`, color: V2_ACCENT }
+            : { text: "" },
         ],
+        fontSize: 24,
+        bold: true,
+        lineHeight: 1,
+        alignment: rtl ? "right" : "left",
       },
       {
-        width: 228,
-        columns: [
-          {
-            width: 3,
-            canvas: [{ type: "rect", x: 0, y: 0, w: 3, h: 60, color: V2_MUTED }],
-          },
-          { width: "*", stack: contacts, margin: [8, -1, 0, 0] },
-        ],
+        text: (cv.titre_poste || " ").toLocaleUpperCase("fr"),
+        fontSize: 14,
+        bold: true,
+        color: V2_MUTED,
+        alignment: rtl ? "right" : "left",
+        margin: [0, 11, 0, 0],
       },
     ],
+  } as Content;
+  const divider = {
+    width: 3,
+    canvas: [{ type: "rect", x: 0, y: 0, w: 3, h: 60, color: V2_MUTED }],
+  } as Content;
+  const contactStack = {
+    width: "*",
+    stack: contacts,
+    margin: rtl ? [0, -1, 8, 0] : [8, -1, 0, 0],
+  } as Content;
+  const contactPanel = {
+    width: 228,
+    columns: rtl ? [contactStack, divider] : [divider, contactStack],
+  } as Content;
+
+  return {
+    columns: rtl ? [contactPanel, identity] : [identity, contactPanel],
     columnGap: 18,
     margin: [0, 0, 0, 44],
   } as Content;
 }
 
-function v2SectionTitle(label: string, topMargin = 10): Content {
+function v2SectionTitle(label: string, topMargin = 10, rtl = false): Content {
   return {
     headlineLevel: 1,
     stack: [
@@ -1233,6 +1243,7 @@ function v2SectionTitle(label: string, topMargin = 10): Content {
         fontSize: 14.2,
         bold: true,
         color: V2_ACCENT,
+        alignment: rtl ? "right" : "left",
         lineHeight: 1,
         margin: [0, 0, 0, 3],
       },
@@ -1264,158 +1275,238 @@ function v2List(
   items: RichInline[],
   marker: "diamond" | "check" = "diamond",
   format?: ObjectiveFormat,
+  rtl = false,
 ): Content {
   return {
-    stack: items.filter(Boolean).map((item) => ({
-      unbreakable: true,
-      columns: [
-        {
-          width: 10,
-          svg: marker === "check" ? V2_CHECK_MARKER : V2_DIAMOND_MARKER,
-          fit: [7, 7],
-          margin: [0, V2_LIST_MARKER_TOP, 3, 0],
-        },
-        format ? richListText(format, item, 10, { width: "*" }) : { width: "*", text: item },
-      ],
-      columnGap: 4,
-      margin: [0, 0, 0, 2],
-    })),
+    stack: items.filter(Boolean).map((item) => {
+      const markerNode = {
+        width: 10,
+        svg: marker === "check" ? V2_CHECK_MARKER : V2_DIAMOND_MARKER,
+        fit: [7, 7],
+        margin: rtl ? [3, V2_LIST_MARKER_TOP, 0, 0] : [0, V2_LIST_MARKER_TOP, 3, 0],
+      } as Content;
+      const textNode = format
+        ? richListText(format, item, 10, { width: "*", alignment: rtl ? "right" : "left" })
+        : ({ width: "*", text: item, alignment: rtl ? "right" : "left" } as Content);
+      return {
+        unbreakable: true,
+        columns: rtl ? [textNode, markerNode] : [markerNode, textNode],
+        columnGap: 4,
+        margin: [0, 0, 0, 2],
+      } as Content;
+    }),
   } as Content;
 }
 
-function v2ExperienceBlock(experience: Experience, language: DocumentLanguage): Content {
+function v2ExperienceBlock(
+  experience: Experience,
+  language: DocumentLanguage,
+  rtl = false,
+): Content {
   const descriptions = experienceRichDescriptions(experience);
-  return {
-    columns: [
+  const dateColumn = {
+    width: 100,
+    stack: [
       {
-        width: 100,
-        stack: [
-          {
-            text: formatCvDate(experience.dates || "", language).toLocaleUpperCase(language),
-            bold: true,
-            color: V2_ACCENT,
-            fontSize: 9,
-          },
-          { text: experience.lieu || "", fontSize: 9, margin: [0, 2, 0, 0] },
-        ],
+        text: formatCvDate(experience.dates || "", language).toLocaleUpperCase(language),
+        bold: true,
+        color: V2_ACCENT,
+        fontSize: 9,
+        alignment: rtl ? "right" : "left",
       },
       {
-        width: "*",
-        stack: [
-          { text: (experience.titre || "").toLocaleUpperCase("fr"), bold: true, fontSize: 11 },
-          companyLine(experience, (experience.employeur || "").toLocaleUpperCase("fr"), 11, {
-            bold: true,
-            fontSize: 11,
-            color: V2_MUTED,
-            margin: [0, 2, 0, 3],
-          }),
-          v2List(descriptions, "diamond", experience.descriptions_format),
-        ],
+        text: experience.lieu || "",
+        fontSize: 9,
+        alignment: rtl ? "right" : "left",
+        margin: [0, 2, 0, 0],
       },
     ],
+  } as Content;
+  const detailsColumn = {
+    width: "*",
+    stack: [
+      {
+        text: (experience.titre || "").toLocaleUpperCase("fr"),
+        bold: true,
+        fontSize: 11,
+        alignment: rtl ? "right" : "left",
+      },
+      companyLine(
+        experience,
+        (experience.employeur || "").toLocaleUpperCase("fr"),
+        11,
+        {
+          bold: true,
+          fontSize: 11,
+          color: V2_MUTED,
+          alignment: rtl ? "right" : "left",
+          margin: [0, 2, 0, 3],
+        },
+        rtl,
+      ),
+      v2List(descriptions, "diamond", experience.descriptions_format, rtl),
+    ],
+  } as Content;
+  return {
+    columns: rtl ? [detailsColumn, dateColumn] : [dateColumn, detailsColumn],
     columnGap: 13,
     margin: [0, 0, 0, 14],
   } as Content;
 }
 
-function v2FormationBlock(formation: Formation, language: DocumentLanguage): Content {
+function v2FormationBlock(formation: Formation, language: DocumentLanguage, rtl = false): Content {
+  const dateColumn = {
+    width: 100,
+    stack: [
+      {
+        text: formatCvDate(formation.date || "", language),
+        bold: true,
+        color: V2_ACCENT,
+        fontSize: 9,
+        alignment: rtl ? "right" : "left",
+      },
+      {
+        text: formation.lieu || "",
+        fontSize: 9,
+        alignment: rtl ? "right" : "left",
+        margin: [0, 2, 0, 0],
+      },
+    ],
+  } as Content;
+  const detailsColumn = {
+    width: "*",
+    stack: [
+      {
+        text: (formation.titre || "").toLocaleUpperCase("fr"),
+        bold: true,
+        fontSize: 11,
+        alignment: rtl ? "right" : "left",
+      },
+      {
+        text: (formation.institution || "").toLocaleUpperCase("fr"),
+        bold: true,
+        fontSize: 11,
+        color: V2_MUTED,
+        alignment: rtl ? "right" : "left",
+        margin: [0, 2, 0, 3],
+      },
+      ...(formation.competences
+        ? [v2List([formation.competences], "diamond", undefined, rtl)]
+        : []),
+    ],
+  } as Content;
   return {
     unbreakable: true,
-    columns: [
-      {
-        width: 100,
-        stack: [
-          {
-            text: formatCvDate(formation.date || "", language),
-            bold: true,
-            color: V2_ACCENT,
-            fontSize: 9,
-          },
-          { text: formation.lieu || "", fontSize: 9, margin: [0, 2, 0, 0] },
-        ],
-      },
-      {
-        width: "*",
-        stack: [
-          { text: (formation.titre || "").toLocaleUpperCase("fr"), bold: true, fontSize: 11 },
-          {
-            text: (formation.institution || "").toLocaleUpperCase("fr"),
-            bold: true,
-            fontSize: 11,
-            color: V2_MUTED,
-            margin: [0, 2, 0, 3],
-          },
-          ...(formation.competences ? [v2List([formation.competences])] : []),
-        ],
-      },
-    ],
+    columns: rtl ? [detailsColumn, dateColumn] : [dateColumn, detailsColumn],
     columnGap: 13,
     margin: [0, 0, 0, 14],
   } as Content;
 }
 
-function v2EducationBlock(education: Education, language: DocumentLanguage): Content {
+function v2EducationBlock(education: Education, language: DocumentLanguage, rtl = false): Content {
+  const dateColumn = {
+    width: 100,
+    stack: [
+      {
+        text: formatCvDate(education.date || "", language),
+        bold: true,
+        color: V2_ACCENT,
+        fontSize: 9,
+        alignment: rtl ? "right" : "left",
+      },
+      {
+        text: education.lieu || "",
+        fontSize: 9,
+        alignment: rtl ? "right" : "left",
+        margin: [0, 2, 0, 0],
+      },
+    ],
+  } as Content;
+  const detailsColumn = {
+    width: "*",
+    stack: [
+      {
+        text: (education.titre || "").toLocaleUpperCase("fr"),
+        bold: true,
+        fontSize: 11,
+        alignment: rtl ? "right" : "left",
+      },
+      ...(education.institution
+        ? [
+            {
+              text: education.institution.toLocaleUpperCase(language),
+              bold: true,
+              fontSize: 11,
+              color: V2_MUTED,
+              alignment: rtl ? "right" : "left",
+              margin: [0, 2, 0, 0],
+            } as Content,
+          ]
+        : []),
+      ...(education.option
+        ? [
+            {
+              text: education.option,
+              alignment: rtl ? "right" : "left",
+              margin: [0, 2, 0, 0],
+            } as Content,
+          ]
+        : []),
+      ...(education.equivalence
+        ? [
+            {
+              text: education.equivalence,
+              alignment: rtl ? "right" : "left",
+              margin: [0, 2, 0, 0],
+            } as Content,
+          ]
+        : []),
+    ],
+  } as Content;
   return {
     unbreakable: true,
-    columns: [
-      {
-        width: 100,
-        stack: [
-          {
-            text: formatCvDate(education.date || "", language),
-            bold: true,
-            color: V2_ACCENT,
-            fontSize: 9,
-          },
-          { text: education.lieu || "", fontSize: 9, margin: [0, 2, 0, 0] },
-        ],
-      },
-      {
-        width: "*",
-        stack: [
-          { text: (education.titre || "").toLocaleUpperCase("fr"), bold: true, fontSize: 11 },
-          ...(education.institution
-            ? [
-                {
-                  text: education.institution.toLocaleUpperCase(language),
-                  bold: true,
-                  fontSize: 11,
-                  color: V2_MUTED,
-                  margin: [0, 2, 0, 0],
-                } as Content,
-              ]
-            : []),
-          ...(education.option
-            ? [{ text: education.option, margin: [0, 2, 0, 0] } as Content]
-            : []),
-          ...(education.equivalence
-            ? [{ text: education.equivalence, margin: [0, 2, 0, 0] } as Content]
-            : []),
-        ],
-      },
-    ],
+    columns: rtl ? [detailsColumn, dateColumn] : [dateColumn, detailsColumn],
     columnGap: 13,
     margin: [0, 0, 0, 14],
   } as Content;
 }
 
-function v2Section(title: string, first: Content, rest: Content[] = [], firstSection = false) {
+function v2Section(
+  title: string,
+  first: Content,
+  rest: Content[] = [],
+  firstSection = false,
+  rtl = false,
+) {
   return [
     {
       unbreakable: true,
-      stack: [v2SectionTitle(title, firstSection ? 0 : 10), first],
+      stack: [v2SectionTitle(title, firstSection ? 0 : 10, rtl), first],
     } as Content,
     ...rest,
   ];
 }
 
-function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
+type CvV2BuildOptions = {
+  rtlLayout?: boolean;
+  templateName?: string;
+  font?: string;
+  subjectFallback?: string;
+};
+
+function buildCvPdfV2(
+  cv: CV,
+  language: DocumentLanguage,
+  options: CvV2BuildOptions = {},
+): TDocumentDefinitions {
+  const rtl = options.rtlLayout ?? false;
+  const templateName = options.templateName ?? "CV Canadien V2";
   const labels = cvCopy(language);
   const langues = cvLanguages(cv, language);
-  const content: Content[] = [...profilePhotoBlock(cv), v2Header(cv)];
+  const content: Content[] = [...profilePhotoBlock(cv), v2Header(cv, rtl)];
   let isFirstSection = true;
   const pushSection = (title: string, first: Content, rest: Content[] = []) => {
-    content.push(...v2Section(title, first, rest, isFirstSection));
+    content.push(...v2Section(title, first, rest, isFirstSection, rtl));
     isFirstSection = false;
   };
   const pushListSection = (
@@ -1429,12 +1520,13 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     const [first, ...rest] = filtered;
     pushSection(
       title,
-      v2List([first], marker, format),
-      rest.length ? [v2List(rest, marker, format)] : [],
+      v2List([first], marker, format, rtl),
+      rest.length ? [v2List(rest, marker, format, rtl)] : [],
     );
   };
 
-  if (cv.objectif) pushSection(labels.objective, objectivePdfContent(cv, 10.6));
+  if (cv.objectif)
+    pushSection(labels.objective, objectivePdfContent(cv, 10.6, rtl ? { alignment: "right" } : {}));
 
   const competences = cv.competences.filter(Boolean);
   if (competences.length)
@@ -1442,12 +1534,13 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
 
   if (langues.length) {
     pushSection(labels.languages, {
-      columns: [0, 1, 2].map((column) => ({
+      columns: (rtl ? [2, 1, 0] : [0, 1, 2]).map((column) => ({
         width: "*",
         stack: langues
           .filter((_, index) => index % 3 === column)
           .map(([label, value]) => ({
             text: [{ text: `${label} : `, bold: true }, { text: value as string }],
+            alignment: rtl ? "right" : "left",
             margin: [0, 0, 0, 4],
           })),
       })),
@@ -1462,8 +1555,8 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     const [first, ...rest] = experiences;
     pushSection(
       labels.experience,
-      v2ExperienceBlock(first, language),
-      rest.map((experience) => v2ExperienceBlock(experience, language)),
+      v2ExperienceBlock(first, language, rtl),
+      rest.map((experience) => v2ExperienceBlock(experience, language, rtl)),
     );
   }
 
@@ -1472,8 +1565,8 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     const [first, ...rest] = formations;
     pushSection(
       labels.training,
-      v2FormationBlock(first, language),
-      rest.map((formation) => v2FormationBlock(formation, language)),
+      v2FormationBlock(first, language, rtl),
+      rest.map((formation) => v2FormationBlock(formation, language, rtl)),
     );
   }
 
@@ -1482,8 +1575,8 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
     const [first, ...rest] = educations;
     pushSection(
       labels.education,
-      v2EducationBlock(first, language),
-      rest.map((education) => v2EducationBlock(education, language)),
+      v2EducationBlock(first, language, rtl),
+      rest.map((education) => v2EducationBlock(education, language, rtl)),
     );
   }
 
@@ -1506,9 +1599,9 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
 
   return {
     info: {
-      title: cv.nom_complet ? `CV Canadien V2 - ${cv.nom_complet}` : "CV Canadien V2",
+      title: cv.nom_complet ? `${templateName} - ${cv.nom_complet}` : templateName,
       author: cv.nom_complet || "",
-      subject: cv.titre_poste || "Curriculum Vitae",
+      subject: cv.titre_poste || options.subjectFallback || "Curriculum Vitae",
     },
     pageSize: "LETTER",
     pageMargins: [V2_MARGIN_X, 28, V2_MARGIN_X, 42],
@@ -1519,14 +1612,23 @@ function buildCvPdfV2(cv: CV, language: DocumentLanguage): TDocumentDefinitions 
           }
         : null,
     defaultStyle: {
-      font: documentFont(language),
+      font: options.font || documentFont(language),
       fontSize: 10.6,
       color: "#000000",
       lineHeight: 1.42,
-      alignment: language === "ar" ? "right" : undefined,
+      alignment: rtl || language === "ar" ? "right" : undefined,
     },
     content,
   };
+}
+
+function buildCvPdfArabicProV2(cv: CV): TDocumentDefinitions {
+  return buildCvPdfV2(cv, "ar", {
+    rtlLayout: true,
+    templateName: "CV PRO Arabe V2",
+    font: "ArialOfficial",
+    subjectFallback: "السيرة الذاتية",
+  });
 }
 
 const V3_ACCENT = "#0070c0";
@@ -4337,15 +4439,17 @@ export async function createCvPdfBlob(
   const document =
     normalizedTemplateId === "arabic-pro-v1"
       ? buildCvPdfArabicProV5(pdfCv, language)
-      : normalizedTemplateId === "ats-a4"
-        ? buildCvPdfAtsA4(pdfCv, language)
-        : normalizedTemplateId === "canadian-v4"
-          ? buildCvPdfV4(pdfCv, language)
-          : normalizedTemplateId === "canadian-v3"
-            ? buildCvPdfV3(pdfCv, language)
-            : normalizedTemplateId === "canadian-v2"
-              ? buildCvPdfV2(pdfCv, language)
-              : buildCvPdfV1(pdfCv, language);
+      : normalizedTemplateId === "arabic-pro-v2"
+        ? buildCvPdfArabicProV2(pdfCv)
+        : normalizedTemplateId === "ats-a4"
+          ? buildCvPdfAtsA4(pdfCv, language)
+          : normalizedTemplateId === "canadian-v4"
+            ? buildCvPdfV4(pdfCv, language)
+            : normalizedTemplateId === "canadian-v3"
+              ? buildCvPdfV3(pdfCv, language)
+              : normalizedTemplateId === "canadian-v2"
+                ? buildCvPdfV2(pdfCv, language)
+                : buildCvPdfV1(pdfCv, language);
   return pdfMake.createPdf(applyPdfTheme(document, normalizedTemplateId, accentColor)).getBlob();
 }
 

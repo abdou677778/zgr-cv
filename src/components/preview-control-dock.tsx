@@ -16,6 +16,8 @@ import {
 import { cn } from "@/lib/utils";
 
 export type PreviewDockTool = "templates" | "layout" | "organize" | "sections";
+export type PreviewPageLayout = "continuous" | "grid";
+export type PreviewSurface = "classic" | "pearl" | "cream" | "blue-mist";
 
 export type PreviewDockTemplate = {
   id: string;
@@ -35,15 +37,21 @@ type PreviewControlDockProps = {
   onTemplateChange: (templateId: string) => void;
   focusMode: boolean;
   onFocusModeChange: (focusMode: boolean) => void;
+  pageLayout: PreviewPageLayout;
+  onPageLayoutChange: (layout: PreviewPageLayout) => void;
   sections: PreviewDockSection[];
   onNavigateSection: (sectionId: string) => void;
   onSectionVisibilityChange: (sectionId: string, visible: boolean) => void;
   onExpandAllSections: () => void;
   onCollapseAllSections: () => void;
+  onShowAllSections: () => void;
+  onHideEmptySections: () => void;
   paletteColors: string[];
   accentColor: string;
   onAccentColorChange: (color: string) => void;
   paletteDisabled?: boolean;
+  surface: PreviewSurface;
+  onSurfaceChange: (surface: PreviewSurface) => void;
   zoom: number;
   onZoomChange: (zoom: number) => void;
   zoomDisabled?: boolean;
@@ -70,15 +78,21 @@ export function PreviewControlDock({
   onTemplateChange,
   focusMode,
   onFocusModeChange,
+  pageLayout,
+  onPageLayoutChange,
   sections,
   onNavigateSection,
   onSectionVisibilityChange,
   onExpandAllSections,
   onCollapseAllSections,
+  onShowAllSections,
+  onHideEmptySections,
   paletteColors,
   accentColor,
   onAccentColorChange,
   paletteDisabled = false,
+  surface,
+  onSurfaceChange,
   zoom,
   onZoomChange,
   zoomDisabled = false,
@@ -127,14 +141,25 @@ export function PreviewControlDock({
                     }}
                     aria-pressed={selected}
                     className={cn(
-                      "flex min-h-14 items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      "group relative min-h-24 overflow-hidden rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                       selected
                         ? "border-blue-300 bg-blue-50 text-blue-800"
                         : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-slate-50",
                     )}
                   >
-                    <span>{template.name}</span>
-                    {selected && <Check className="h-4 w-4 shrink-0" />}
+                    <span className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold">
+                      {template.name}
+                      {selected && <Check className="h-4 w-4 shrink-0" />}
+                    </span>
+                    <span className="block rounded-md border border-slate-200 bg-white p-2 shadow-sm">
+                      <span
+                        className="mb-1.5 block h-1.5 w-1/3 rounded-full"
+                        style={{ backgroundColor: accentColor }}
+                      />
+                      <span className="mb-1 block h-1 w-full rounded-full bg-slate-200" />
+                      <span className="mb-1 block h-1 w-4/5 rounded-full bg-slate-200" />
+                      <span className="block h-1 w-2/3 rounded-full bg-slate-100" />
+                    </span>
                   </button>
                 );
               })}
@@ -177,6 +202,40 @@ export function PreviewControlDock({
                   Aperçu large
                 </button>
               </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold text-slate-600">Affichage des pages</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onPageLayoutChange("continuous")}
+                    aria-pressed={pageLayout === "continuous"}
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-xs font-semibold transition",
+                      pageLayout === "continuous"
+                        ? "border-blue-300 bg-blue-50 text-blue-800"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    Vue continue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onPageLayoutChange("grid");
+                      onFocusModeChange(true);
+                    }}
+                    aria-pressed={pageLayout === "grid"}
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-xs font-semibold transition",
+                      pageLayout === "grid"
+                        ? "border-blue-300 bg-blue-50 text-blue-800"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    Grille de pages
+                  </button>
+                </div>
+              </div>
               <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
                 Modèle actif :{" "}
                 <span className="font-semibold text-slate-700">{selectedTemplate?.name}</span>
@@ -186,6 +245,9 @@ export function PreviewControlDock({
 
           {activeTool === "organize" && (
             <div className="space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                Actions rapides
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -200,6 +262,20 @@ export function PreviewControlDock({
                   className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
                 >
                   Tout replier
+                </button>
+                <button
+                  type="button"
+                  onClick={onShowAllSections}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Tout afficher
+                </button>
+                <button
+                  type="button"
+                  onClick={onHideEmptySections}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Masquer les sections vides
                 </button>
               </div>
               <div className="space-y-1.5">
@@ -295,6 +371,43 @@ export function PreviewControlDock({
                     </label>
                   </div>
                 )}
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold text-slate-600">
+                  Arrière-plan de l’aperçu
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      ["classic", "Blanc classique", "#f8fafc"],
+                      ["pearl", "Gris perle", "#eef1f5"],
+                      ["cream", "Papier crème", "#f6f0e4"],
+                      ["blue-mist", "Brume bleue", "#eaf1f7"],
+                    ] as const
+                  ).map(([value, label, color]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => onSurfaceChange(value)}
+                      aria-pressed={surface === value}
+                      className={cn(
+                        "flex min-h-11 items-center gap-2 rounded-xl border px-3 text-left text-xs font-semibold transition",
+                        surface === value
+                          ? "border-blue-300 bg-blue-50 text-blue-800"
+                          : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                      )}
+                    >
+                      <span
+                        className="h-5 w-5 shrink-0 rounded-md border border-slate-300"
+                        style={{ backgroundColor: color }}
+                      />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] leading-4 text-slate-400">
+                  Ce fond facilite la lecture à l’écran sans modifier la couleur du papier PDF.
+                </p>
               </div>
               <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
                 Les polices, marges et règles ATS restent celles du modèle sélectionné afin de

@@ -98,7 +98,12 @@ import { AccountSettingsDialog } from "@/components/account-settings-dialog";
 import { PromptMasterDialog } from "@/components/prompt-master-dialog";
 import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
 import { ProfilePhotoField } from "@/components/profile-photo-field";
-import { PreviewControlDock, type PreviewDockSection } from "@/components/preview-control-dock";
+import {
+  PreviewControlDock,
+  type PreviewDockSection,
+  type PreviewPageLayout,
+  type PreviewSurface,
+} from "@/components/preview-control-dock";
 import { ExperienceWorkspace } from "@/components/cv-experience-workspace";
 import { EducationWorkspace, FormationWorkspace } from "@/components/cv-learning-workspaces";
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
@@ -439,6 +444,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewFocusMode, setPreviewFocusMode] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(65);
+  const [previewPageLayout, setPreviewPageLayout] = useState<PreviewPageLayout>("continuous");
+  const [previewSurface, setPreviewSurface] = useState<PreviewSurface>("classic");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [pdfRetryNonce, setPdfRetryNonce] = useState(0);
@@ -1521,6 +1528,22 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       ...current,
       ...Object.fromEntries(previewSectionIds.map((id) => [id, open])),
     }));
+  };
+  const showAllPreviewSections = () => {
+    setHiddenElements((current) => {
+      const next = { ...current };
+      previewSectionIds.forEach((id) => delete next[`section.${id}`]);
+      return next;
+    });
+  };
+  const hideEmptyPreviewSections = () => {
+    setHiddenElements((current) => {
+      const next = { ...current };
+      previewSections.forEach((section) => {
+        if (section.count === 0) next[`section.${section.id}`] = true;
+      });
+      return next;
+    });
   };
 
   return (
@@ -2802,6 +2825,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   templateId={templateId}
                   documentKind={documentKind}
                   zoom={previewZoom}
+                  pageLayout={previewPageLayout}
+                  surface={previewSurface}
                 />
               ) : (
                 <div className="flex min-h-[720px] items-center justify-center bg-white text-sm text-muted-foreground">
@@ -2837,11 +2862,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 }
                 focusMode={previewFocusMode}
                 onFocusModeChange={setPreviewFocusMode}
+                pageLayout={previewPageLayout}
+                onPageLayoutChange={setPreviewPageLayout}
                 sections={previewSections}
                 onNavigateSection={navigateToEditorSection}
                 onSectionVisibilityChange={setSectionVisible}
                 onExpandAllSections={() => setAllEditorSectionsOpen(true)}
                 onCollapseAllSections={() => setAllEditorSectionsOpen(false)}
+                onShowAllSections={showAllPreviewSections}
+                onHideEmptySections={hideEmptyPreviewSections}
                 paletteColors={paletteColors}
                 accentColor={accentColor}
                 onAccentColorChange={(color) =>
@@ -2851,6 +2880,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   }))
                 }
                 paletteDisabled={isEuropassTemplate}
+                surface={previewSurface}
+                onSurfaceChange={setPreviewSurface}
                 zoom={previewZoom}
                 onZoomChange={setPreviewZoom}
                 zoomDisabled={isEuropassTemplate}
@@ -3080,11 +3111,15 @@ function PdfPreview({
   templateId,
   documentKind,
   zoom,
+  pageLayout,
+  surface,
 }: {
   blob: Blob;
   templateId: PdfTemplateId;
   documentKind: DocumentKind;
   zoom: number;
+  pageLayout: PreviewPageLayout;
+  surface: PreviewSurface;
 }) {
   const pagesRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(zoom);
@@ -3198,13 +3233,35 @@ function PdfPreview({
       data-template-id={templateId}
       data-document-kind={documentKind}
       data-preview-zoom={zoom}
-      className="relative h-[calc(100vh-12.5rem)] min-h-[560px] w-full min-w-0 max-w-full overflow-auto bg-slate-50 p-4"
+      data-page-layout={pageLayout}
+      data-preview-surface={surface}
+      className="relative h-[calc(100vh-12.5rem)] min-h-[560px] w-full min-w-0 max-w-full overflow-auto p-4"
       style={{
-        backgroundImage: "radial-gradient(#d9e2ec 0.7px, transparent 0.7px)",
+        backgroundColor:
+          surface === "cream"
+            ? "#f6f0e4"
+            : surface === "pearl"
+              ? "#eef1f5"
+              : surface === "blue-mist"
+                ? "#eaf1f7"
+                : "#f8fafc",
+        backgroundImage:
+          surface === "cream"
+            ? "radial-gradient(#ded4c2 0.7px, transparent 0.7px)"
+            : surface === "blue-mist"
+              ? "radial-gradient(#cfdeea 0.7px, transparent 0.7px)"
+              : "radial-gradient(#d9e2ec 0.7px, transparent 0.7px)",
         backgroundSize: "18px 18px",
       }}
     >
-      <div ref={pagesRef} className="mx-auto flex w-max min-w-full flex-col items-center gap-4" />
+      <div
+        ref={pagesRef}
+        className={
+          pageLayout === "grid"
+            ? "mx-auto grid w-max min-w-full grid-cols-1 items-start justify-center gap-4 lg:grid-cols-2"
+            : "mx-auto flex w-max min-w-full flex-col items-center gap-4"
+        }
+      />
       {rendering && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/85 text-sm font-medium text-zinc-700 backdrop-blur-[1px]">
           <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Rendu du PDF réel…

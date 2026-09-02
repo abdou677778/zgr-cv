@@ -1943,7 +1943,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       </header>
 
       <main
-        className={`mx-auto grid gap-6 px-4 py-7 ${
+        className={`mx-auto grid min-w-0 gap-6 px-4 py-7 ${
           previewVisible && !previewFocusMode
             ? "max-w-7xl lg:grid-cols-2"
             : previewVisible
@@ -1953,7 +1953,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       >
         {/* Form */}
         <section
-          className={`zgr-editor-panel space-y-3 rounded-3xl border border-slate-200 bg-slate-100/75 p-3 sm:p-4 ${
+          className={`zgr-editor-panel min-w-0 space-y-3 rounded-3xl border border-slate-200 bg-slate-100/75 p-3 sm:p-4 ${
             previewVisible && previewFocusMode
               ? "lg:hidden"
               : previewVisible
@@ -2785,11 +2785,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         {previewVisible && (
           <section
             id="pdf-preview-panel"
-            className={`lg:sticky lg:top-20 lg:self-start ${
+            className={`min-w-0 lg:sticky lg:top-20 lg:self-start ${
               previewFocusMode ? "lg:mx-auto lg:w-full lg:max-w-6xl" : ""
             }`}
           >
-            <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-md shadow-slate-900/10">
+            <div className="relative min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-md shadow-slate-900/10">
               {isEuropassTemplate ? (
                 <EuropassPreview
                   cv={outputCv}
@@ -3198,7 +3198,7 @@ function PdfPreview({
       data-template-id={templateId}
       data-document-kind={documentKind}
       data-preview-zoom={zoom}
-      className="relative h-[calc(100vh-12.5rem)] min-h-[560px] overflow-auto bg-slate-50 p-4"
+      className="relative h-[calc(100vh-12.5rem)] min-h-[560px] w-full min-w-0 max-w-full overflow-auto bg-slate-50 p-4"
       style={{
         backgroundImage: "radial-gradient(#d9e2ec 0.7px, transparent 0.7px)",
         backgroundSize: "18px 18px",

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   ExternalLink,
   FileText,
@@ -15,18 +15,27 @@ import { clearAdminSession, loginAdmin, type SessionUser } from "@/lib/auth-clie
 
 const ONLINE_APP_URL = "https://abdou677778.github.io/zgr-cv/";
 
-function initialUsername() {
-  if (typeof window === "undefined") return "admin";
-  return new URLSearchParams(window.location.search).get("login")?.trim() || "admin";
-}
-
 export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
-  const [username, setUsername] = useState(initialUsername);
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [networkFailure, setNetworkFailure] = useState(false);
-  const fileMode = typeof window !== "undefined" && window.location.protocol === "file:";
+  const [runtimeMode, setRuntimeMode] = useState<"online" | "local" | "file">("online");
+  const fileMode = runtimeMode === "file";
+  const localMode = runtimeMode === "local";
+
+  useEffect(() => {
+    const requestedUsername = new URLSearchParams(window.location.search).get("login")?.trim();
+    if (requestedUsername) setUsername(requestedUsername);
+    setRuntimeMode(
+      window.location.protocol === "file:"
+        ? "file"
+        : window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+          ? "local"
+          : "online",
+    );
+  }, []);
 
   const openOnlineVersion = () => {
     const target = new URL(ONLINE_APP_URL);
@@ -37,7 +46,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
 
   const repairSession = () => {
     clearAdminSession();
-    const target = fileMode ? new URL(ONLINE_APP_URL) : new URL(window.location.href);
+    const target = fileMode || localMode ? new URL(ONLINE_APP_URL) : new URL(window.location.href);
     if (username.trim()) target.searchParams.set("login", username.trim());
     target.searchParams.set("refresh", Date.now().toString());
     window.location.replace(target.toString());
@@ -59,9 +68,9 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
       setNetworkFailure(isNetworkFailure);
       setError(
         isNetworkFailure
-          ? fileMode
-            ? "Ce navigateur bloque la connexion Cloudflare depuis le fichier local. Ouvrez la version en ligne ci-dessous."
-            : "Le navigateur n’a pas joint le service. Une ancienne session, le cache ou une extension peut bloquer la connexion."
+          ? fileMode || localMode
+            ? "Cette adresse locale fonctionne uniquement lorsque le serveur de développement est actif. Utilisez la version officielle pour une connexion permanente."
+            : "Le service sécurisé n’a pas répondu. Vérifiez brièvement la connexion Internet, le VPN ou une extension de filtrage, puis réessayez."
           : message,
       );
     } finally {
@@ -91,12 +100,12 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
             <p>Accès privé. Seul l’administrateur peut créer, modifier ou désactiver un profil.</p>
           </div>
-          {fileMode && (
+          {(fileMode || localMode) && (
             <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
               <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
               <p>
-                Mode fichier local détecté. Pour une connexion fiable sur plusieurs navigateurs, PC
-                ou téléphones, utilisez la version HTTPS en ligne.
+                Mode local de développement détecté. Pour le travail quotidien et l’accès depuis
+                plusieurs PC ou téléphones, utilisez toujours la version HTTPS officielle.
               </p>
             </div>
           )}
@@ -140,7 +149,14 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
                   className="h-10 w-full rounded-xl border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"
                   onClick={repairSession}
                 >
-                  <RefreshCcw className="mr-2 h-4 w-4" /> Réparer la session et actualiser
+                  {fileMode || localMode ? (
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                  ) : (
+                    <RefreshCcw className="mr-2 h-4 w-4" />
+                  )}
+                  {fileMode || localMode
+                    ? "Ouvrir la version officielle"
+                    : "Réparer la session et actualiser"}
                 </Button>
               )}
             </div>
@@ -161,7 +177,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             Le même profil peut être utilisé sur plusieurs ordinateurs. Chaque navigateur crée sa
             propre session sécurisée.
           </p>
-          {fileMode && (
+          {(fileMode || localMode) && !networkFailure && (
             <Button
               type="button"
               variant="outline"

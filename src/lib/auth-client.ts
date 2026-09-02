@@ -4,11 +4,12 @@ const SESSION_CHANGED_EVENT = "zgr-cv-session-changed";
 const SESSION_VERIFY_TIMEOUT_MS = 12_000;
 const SESSION_LOGIN_TIMEOUT_MS = 25_000;
 const AUTH_NETWORK_ATTEMPTS = 2;
-const FILE_CLIENTS_API_ENDPOINT = "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/api/clients";
-const defaultClientsEndpoint =
-  typeof window !== "undefined" && window.location.protocol === "file:"
-    ? FILE_CLIENTS_API_ENDPOINT
-    : "/api/clients";
+const CLOUD_API_ROOT = "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev";
+const FILE_CLIENTS_API_ENDPOINT = `${CLOUD_API_ROOT}/api/clients`;
+// GitHub Pages and the local Vite preview are static frontends: neither owns
+// an /api route. Pointing them at a relative URL first caused an avoidable
+// failed request (or an HTML response) before the Cloudflare fallback.
+const defaultClientsEndpoint = FILE_CLIENTS_API_ENDPOINT;
 const configuredClientsEndpoint =
   (import.meta.env.VITE_ZGR_API_URL as string | undefined)?.trim() || defaultClientsEndpoint;
 
@@ -69,9 +70,7 @@ function isSessionUser(value: unknown): value is SessionUser {
 }
 
 async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: number) {
-  const roots = [
-    ...new Set([API_ROOT, FILE_CLIENTS_API_ENDPOINT.replace(/\/api\/clients\/?$/, "")]),
-  ];
+  const roots = [...new Set([API_ROOT, CLOUD_API_ROOT].filter(Boolean))];
   let lastFailure: unknown;
   for (let attempt = 0; attempt < AUTH_NETWORK_ATTEMPTS; attempt += 1) {
     for (const root of roots) {
@@ -80,7 +79,7 @@ async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: n
       try {
         const target = new URL(`${root}${path.startsWith("/") ? path : `/${path}`}`);
         if (attempt) target.searchParams.set("retry", String(attempt + 1));
-        return await fetch(target, {
+        const response = await fetch(target, {
           ...init,
           cache: "no-store",
           credentials: "omit",
@@ -89,6 +88,10 @@ async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: n
           referrerPolicy: "strict-origin-when-cross-origin",
           signal: controller.signal,
         });
+        // Authentication errors are definitive and must be shown immediately.
+        // Only transient server failures should move to the next attempt/root.
+        if (response.status < 500) return response;
+        lastFailure = new Error(`Service temporairement indisponible (${response.status}).`);
       } catch (failure) {
         lastFailure = failure;
       } finally {

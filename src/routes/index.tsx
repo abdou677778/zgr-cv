@@ -109,11 +109,14 @@ import { EducationWorkspace, FormationWorkspace } from "@/components/cv-learning
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
 import {
   DEFAULT_TEMPLATE_DESIGNER_SETTINGS,
+  createDesignerTextOverride,
   designerFontsForLanguage,
   effectiveDesignerSettings,
   normalizeDesignerPresets,
   normalizeTemplateDesignerSettings,
   type DesignerPreset,
+  type DesignerTextOverride,
+  type DesignerTextTarget,
   type TemplateDesignerSettings,
   type TemplateDesignerSettingsMap,
 } from "@/lib/template-designer";
@@ -462,6 +465,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     useState<TemplateDesignerSettingsMap>({});
   const [designerPresets, setDesignerPresets] = useState<DesignerPreset[]>([]);
   const [activeDesignerPresetId, setActiveDesignerPresetId] = useState<string | null>(null);
+  const [designerModeActive, setDesignerModeActive] = useState(false);
+  const [designerSelection, setDesignerSelection] = useState<DesignerTextTarget | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [pdfRetryNonce, setPdfRetryNonce] = useState(0);
@@ -504,6 +509,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     [language, rawDesignerSettings],
   );
   const designerFonts = designerFontsForLanguage(language);
+  const selectedTextOverride = designerSelection
+    ? (designerSettings.textOverrides.find(
+        (override) =>
+          (override.replacementText ?? override.text).replace(/\s+/g, " ").trim() ===
+            designerSelection.text.replace(/\s+/g, " ").trim() &&
+          override.occurrence === designerSelection.occurrence,
+      ) ?? null)
+    : null;
   const isEuropassTemplate = documentKind === "cv" && templateId === EUROPASS_TEMPLATE_ID;
   const themeTemplateId = (
     isEuropassTemplate
@@ -1695,7 +1708,74 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
 
   const resetDesignerSettings = () => {
     updateDesignerSettings(DEFAULT_TEMPLATE_DESIGNER_SETTINGS);
+    setDesignerSelection(null);
     setImportMessage({ ok: true, text: "Réglages Designer réinitialisés pour ce modèle." });
+  };
+
+  const sameDesignerTextTarget = (override: DesignerTextOverride, target: DesignerTextTarget) =>
+    (override.replacementText ?? override.text).replace(/\s+/g, " ").trim() ===
+      target.text.replace(/\s+/g, " ").trim() && override.occurrence === target.occurrence;
+
+  const updateSelectedTextOverride = (patch: Partial<DesignerTextOverride>) => {
+    if (!designerSelection) return;
+    const existing =
+      designerSettings.textOverrides.find((override) =>
+        sameDesignerTextTarget(override, designerSelection),
+      ) ?? createDesignerTextOverride(designerSelection);
+    if (Object.prototype.hasOwnProperty.call(patch, "replacementText")) {
+      setDesignerSelection({
+        ...designerSelection,
+        text: patch.replacementText ?? existing.text,
+      });
+    }
+    updateDesignerSettings({
+      ...designerSettings,
+      textOverrides: [
+        ...designerSettings.textOverrides.filter(
+          (override) => !sameDesignerTextTarget(override, designerSelection),
+        ),
+        {
+          ...existing,
+          ...patch,
+          id: designerSelection.id,
+          text: existing.text,
+          occurrence: designerSelection.occurrence,
+        },
+      ],
+    });
+  };
+
+  const resetSelectedTextOverride = () => {
+    if (!designerSelection) return;
+    updateDesignerSettings({
+      ...designerSettings,
+      textOverrides: designerSettings.textOverrides.filter(
+        (override) => !sameDesignerTextTarget(override, designerSelection),
+      ),
+    });
+  };
+
+  const moveDesignerText = (target: DesignerTextTarget, deltaX: number, deltaY: number) => {
+    const existing =
+      designerSettings.textOverrides.find((override) => sameDesignerTextTarget(override, target)) ??
+      createDesignerTextOverride(target);
+    setDesignerSelection(target);
+    updateDesignerSettings({
+      ...designerSettings,
+      textOverrides: [
+        ...designerSettings.textOverrides.filter(
+          (override) => !sameDesignerTextTarget(override, target),
+        ),
+        {
+          ...existing,
+          id: target.id,
+          text: existing.text,
+          occurrence: target.occurrence,
+          offsetX: Math.round((existing.offsetX + deltaX) * 2) / 2,
+          offsetY: Math.round((existing.offsetY + deltaY) * 2) / 2,
+        },
+      ],
+    });
   };
 
   const createDesignerPreset = (name: string) => {
@@ -3011,6 +3091,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   zoom={previewZoom}
                   pageLayout={previewPageLayout}
                   surface={previewSurface}
+                  designerMode={designerModeActive}
+                  designerSelectionId={designerSelection?.id ?? null}
+                  onDesignerTextSelect={setDesignerSelection}
+                  onDesignerTextMove={moveDesignerText}
                 />
               ) : (
                 <div className="flex min-h-[720px] items-center justify-center bg-white text-sm text-muted-foreground">
@@ -3077,6 +3161,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 onApplyDesignerPreset={applyDesignerPreset}
                 onDeleteDesignerPreset={deleteDesignerPreset}
                 designerDisabled={documentKind !== "cv" || isEuropassTemplate}
+                designerSelection={designerSelection}
+                selectedTextOverride={selectedTextOverride}
+                onDesignerModeChange={setDesignerModeActive}
+                onSelectedTextOverrideChange={updateSelectedTextOverride}
+                onSelectedTextReset={resetSelectedTextOverride}
+                onDesignerSelectionClear={() => setDesignerSelection(null)}
               />
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">
@@ -3305,6 +3395,10 @@ function PdfPreview({
   zoom,
   pageLayout,
   surface,
+  designerMode,
+  designerSelectionId,
+  onDesignerTextSelect,
+  onDesignerTextMove,
 }: {
   blob: Blob;
   templateId: PdfTemplateId;
@@ -3312,9 +3406,19 @@ function PdfPreview({
   zoom: number;
   pageLayout: PreviewPageLayout;
   surface: PreviewSurface;
+  designerMode: boolean;
+  designerSelectionId: string | null;
+  onDesignerTextSelect: (target: DesignerTextTarget) => void;
+  onDesignerTextMove: (target: DesignerTextTarget, deltaX: number, deltaY: number) => void;
 }) {
   const pagesRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(zoom);
+  const designerRef = useRef({
+    active: designerMode,
+    selectedId: designerSelectionId,
+    onSelect: onDesignerTextSelect,
+    onMove: onDesignerTextMove,
+  });
   const [rendering, setRendering] = useState(true);
   const [renderError, setRenderError] = useState("");
   const [pageCount, setPageCount] = useState(0);
@@ -3322,15 +3426,36 @@ function PdfPreview({
 
   useEffect(() => {
     zoomRef.current = zoom;
-    const pages = pagesRef.current?.querySelectorAll<HTMLCanvasElement>("canvas[data-base-width]");
-    pages?.forEach((canvas) => {
-      const baseWidth = Number(canvas.dataset.baseWidth);
-      const baseHeight = Number(canvas.dataset.baseHeight);
+    const pages = pagesRef.current?.querySelectorAll<HTMLElement>("[data-pdf-page-shell]");
+    pages?.forEach((page) => {
+      const baseWidth = Number(page.dataset.baseWidth);
+      const baseHeight = Number(page.dataset.baseHeight);
       if (!Number.isFinite(baseWidth) || !Number.isFinite(baseHeight)) return;
-      canvas.style.width = `${((baseWidth * zoom) / 100).toFixed(2)}px`;
-      canvas.style.height = `${((baseHeight * zoom) / 100).toFixed(2)}px`;
+      page.style.width = `${((baseWidth * zoom) / 100).toFixed(2)}px`;
+      page.style.height = `${((baseHeight * zoom) / 100).toFixed(2)}px`;
     });
   }, [zoom]);
+
+  useEffect(() => {
+    designerRef.current = {
+      active: designerMode,
+      selectedId: designerSelectionId,
+      onSelect: onDesignerTextSelect,
+      onMove: onDesignerTextMove,
+    };
+    const layers = pagesRef.current?.querySelectorAll<HTMLElement>("[data-designer-layer]");
+    layers?.forEach((layer) => {
+      layer.style.pointerEvents = designerMode ? "auto" : "none";
+      layer.style.display = designerMode ? "block" : "none";
+    });
+    const targets = pagesRef.current?.querySelectorAll<HTMLButtonElement>("[data-designer-text]");
+    targets?.forEach((target) => {
+      const selected = target.dataset.designerId === designerSelectionId;
+      target.dataset.selected = selected ? "true" : "false";
+      target.style.borderColor = selected ? "#2563eb" : "transparent";
+      target.style.background = selected ? "rgba(37, 99, 235, 0.12)" : "transparent";
+    });
+  }, [designerMode, designerSelectionId, onDesignerTextMove, onDesignerTextSelect]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3367,6 +3492,7 @@ function PdfPreview({
         setSha256(hash);
         setPageCount(document.numPages);
         pagesRef.current.replaceChildren();
+        const occurrences = new Map<string, number>();
 
         for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
           const page = await document.getPage(pageNumber);
@@ -3385,17 +3511,115 @@ function PdfPreview({
           canvas.width = Math.ceil(viewport.width);
           canvas.height = Math.ceil(viewport.height);
           const cssHeight = viewport.height / pixelRatio;
-          canvas.dataset.baseWidth = String(cssWidth);
-          canvas.dataset.baseHeight = String(cssHeight);
-          canvas.style.width = `${((cssWidth * zoomRef.current) / 100).toFixed(2)}px`;
-          canvas.style.height = `${((cssHeight * zoomRef.current) / 100).toFixed(2)}px`;
-          canvas.className = "block rounded-md bg-white shadow-lg ring-1 ring-black/10";
+          const pageShell = window.document.createElement("div");
+          pageShell.dataset.pdfPageShell = "true";
+          pageShell.dataset.baseWidth = String(cssWidth);
+          pageShell.dataset.baseHeight = String(cssHeight);
+          pageShell.style.width = `${((cssWidth * zoomRef.current) / 100).toFixed(2)}px`;
+          pageShell.style.height = `${((cssHeight * zoomRef.current) / 100).toFixed(2)}px`;
+          pageShell.className =
+            "relative shrink-0 overflow-hidden rounded-md bg-white shadow-lg ring-1 ring-black/10";
+          canvas.style.width = "100%";
+          canvas.style.height = "100%";
+          canvas.className = "block h-full w-full bg-white";
           canvas.setAttribute("aria-label", `Page ${pageNumber} sur ${document.numPages}`);
-          pagesRef.current.appendChild(canvas);
+          pageShell.appendChild(canvas);
+          pagesRef.current.appendChild(pageShell);
 
           const renderTask = page.render({ canvas, canvasContext: context, viewport });
           renderTasks.push(renderTask);
           await renderTask.promise;
+
+          const textContent = await page.getTextContent();
+          if (cancelled) return;
+          const designerLayer = window.document.createElement("div");
+          designerLayer.dataset.designerLayer = "true";
+          designerLayer.className = "absolute inset-0 z-10";
+          designerLayer.style.display = designerRef.current.active ? "block" : "none";
+          designerLayer.style.pointerEvents = designerRef.current.active ? "auto" : "none";
+          const cssScale = cssWidth / baseViewport.width;
+          const cssViewport = page.getViewport({ scale: cssScale });
+
+          textContent.items.forEach((rawItem, itemIndex) => {
+            if (!("str" in rawItem)) return;
+            const text = rawItem.str.replace(/\s+/g, " ").trim();
+            if (!text) return;
+            const occurrence = occurrences.get(text) ?? 0;
+            occurrences.set(text, occurrence + 1);
+            const transform = pdfjs.Util.transform(cssViewport.transform, rawItem.transform);
+            const fontHeight = Math.max(5, Math.hypot(transform[2], transform[3]));
+            const x = transform[4];
+            const y = transform[5] - fontHeight;
+            const width = Math.max(6, rawItem.width * cssScale);
+            const id = `page-${pageNumber}-text-${itemIndex}-${occurrence}`;
+            const target: DesignerTextTarget = {
+              id,
+              text,
+              occurrence,
+              page: pageNumber,
+              fontSize: Number((fontHeight / cssScale).toFixed(1)),
+              x: Number((x / cssScale).toFixed(1)),
+              y: Number((y / cssScale).toFixed(1)),
+              width: Number((width / cssScale).toFixed(1)),
+              height: Number((fontHeight / cssScale).toFixed(1)),
+            };
+            const hitTarget = window.document.createElement("button");
+            hitTarget.type = "button";
+            hitTarget.dataset.designerText = "true";
+            hitTarget.dataset.designerId = id;
+            hitTarget.title = `Modifier : ${text.slice(0, 90)}`;
+            hitTarget.setAttribute("aria-label", `Modifier le texte : ${text.slice(0, 90)}`);
+            hitTarget.className =
+              "absolute cursor-move rounded-sm border border-transparent bg-transparent p-0 transition-colors hover:border-blue-400 hover:bg-blue-400/10 focus:outline-none focus:ring-2 focus:ring-blue-500";
+            hitTarget.style.left = `${(x / cssWidth) * 100}%`;
+            hitTarget.style.top = `${(y / cssHeight) * 100}%`;
+            hitTarget.style.width = `${(width / cssWidth) * 100}%`;
+            hitTarget.style.height = `${(fontHeight / cssHeight) * 100}%`;
+            if (designerRef.current.selectedId === id) {
+              hitTarget.dataset.selected = "true";
+              hitTarget.style.borderColor = "#2563eb";
+              hitTarget.style.background = "rgba(37, 99, 235, 0.12)";
+            }
+
+            hitTarget.addEventListener("click", () => designerRef.current.onSelect(target));
+            hitTarget.addEventListener("pointerdown", (event) => {
+              if (!designerRef.current.active) return;
+              event.preventDefault();
+              designerRef.current.onSelect(target);
+              const startX = event.clientX;
+              const startY = event.clientY;
+              let deltaX = 0;
+              let deltaY = 0;
+              hitTarget.setPointerCapture(event.pointerId);
+              hitTarget.style.transition = "none";
+              const onPointerMove = (moveEvent: PointerEvent) => {
+                deltaX = moveEvent.clientX - startX;
+                deltaY = moveEvent.clientY - startY;
+                hitTarget.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+              };
+              const finish = () => {
+                hitTarget.removeEventListener("pointermove", onPointerMove);
+                hitTarget.removeEventListener("pointerup", finish);
+                hitTarget.removeEventListener("pointercancel", finish);
+                hitTarget.style.transition = "";
+                if (Math.abs(deltaX) + Math.abs(deltaY) < 2) {
+                  hitTarget.style.transform = "";
+                  return;
+                }
+                const displayedScale = cssScale * (zoomRef.current / 100);
+                designerRef.current.onMove(
+                  target,
+                  deltaX / displayedScale,
+                  deltaY / displayedScale,
+                );
+              };
+              hitTarget.addEventListener("pointermove", onPointerMove);
+              hitTarget.addEventListener("pointerup", finish);
+              hitTarget.addEventListener("pointercancel", finish);
+            });
+            designerLayer.appendChild(hitTarget);
+          });
+          pageShell.appendChild(designerLayer);
         }
       } catch (error) {
         if (!cancelled) {

@@ -8,6 +8,36 @@ export type DesignerDirection = "auto" | "ltr" | "rtl";
 export type DesignerPageSize = "template" | "A4" | "LETTER";
 export type DesignerOrientation = "template" | "portrait" | "landscape";
 
+export type DesignerTextTarget = {
+  id: string;
+  text: string;
+  occurrence: number;
+  page: number;
+  fontSize: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type DesignerTextOverride = {
+  id: string;
+  text: string;
+  occurrence: number;
+  replacementText: string | null;
+  fontFamily: DesignerFontFamily;
+  fontSize: number | null;
+  color: string;
+  background: string;
+  bold: "template" | "on" | "off";
+  italics: "template" | "on" | "off";
+  underline: "template" | "on" | "off";
+  alignment: DesignerAlignment;
+  offsetX: number;
+  offsetY: number;
+  hidden: boolean;
+};
+
 export type DesignerExtraElement = {
   id: string;
   type: "text" | "separator";
@@ -35,6 +65,9 @@ export type TemplateDesignerSettings = {
   offsetX: number;
   offsetY: number;
   showPageNumbers: boolean;
+  pageBackgroundEnabled: boolean;
+  pageBackground: string;
+  textOverrides: DesignerTextOverride[];
   extraElements: DesignerExtraElement[];
 };
 
@@ -63,6 +96,9 @@ export const DEFAULT_TEMPLATE_DESIGNER_SETTINGS: TemplateDesignerSettings = {
   offsetX: 0,
   offsetY: 0,
   showPageNumbers: false,
+  pageBackgroundEnabled: false,
+  pageBackground: "#ffffff",
+  textOverrides: [],
   extraElements: [],
 };
 
@@ -76,6 +112,7 @@ const ALIGNMENTS = new Set<DesignerAlignment>(["template", "left", "center", "ri
 const DIRECTIONS = new Set<DesignerDirection>(["auto", "ltr", "rtl"]);
 const PAGE_SIZES = new Set<DesignerPageSize>(["template", "A4", "LETTER"]);
 const ORIENTATIONS = new Set<DesignerOrientation>(["template", "portrait", "landscape"]);
+const TEXT_TOGGLES = new Set<DesignerTextOverride["bold"]>(["template", "on", "off"]);
 
 const clamp = (value: unknown, min: number, max: number, fallback: number) => {
   const number = Number(value);
@@ -131,6 +168,58 @@ export function normalizeTemplateDesignerSettings(value: unknown): TemplateDesig
         ];
       })
     : [];
+  const textOverrides = Array.isArray(input.textOverrides)
+    ? input.textOverrides.slice(0, 300).flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const override = item as Record<string, unknown>;
+        if (
+          typeof override.id !== "string" ||
+          typeof override.text !== "string" ||
+          !override.text.trim()
+        ) {
+          return [];
+        }
+        const fontSize = Number(override.fontSize);
+        return [
+          {
+            id: override.id.slice(0, 300),
+            text: override.text.slice(0, 1_000),
+            occurrence: Math.max(0, Math.floor(Number(override.occurrence) || 0)),
+            replacementText:
+              typeof override.replacementText === "string"
+                ? override.replacementText.slice(0, 2_000)
+                : null,
+            fontFamily: FONT_FAMILIES.has(override.fontFamily as DesignerFontFamily)
+              ? (override.fontFamily as DesignerFontFamily)
+              : "template",
+            fontSize: Number.isFinite(fontSize) ? clamp(fontSize, 5, 96, 10) : null,
+            color:
+              typeof override.color === "string" && override.color
+                ? normalizeColor(override.color)
+                : "",
+            background:
+              typeof override.background === "string" && override.background
+                ? normalizeColor(override.background, "#ffffff")
+                : "",
+            bold: TEXT_TOGGLES.has(override.bold as DesignerTextOverride["bold"])
+              ? (override.bold as DesignerTextOverride["bold"])
+              : "template",
+            italics: TEXT_TOGGLES.has(override.italics as DesignerTextOverride["italics"])
+              ? (override.italics as DesignerTextOverride["italics"])
+              : "template",
+            underline: TEXT_TOGGLES.has(override.underline as DesignerTextOverride["underline"])
+              ? (override.underline as DesignerTextOverride["underline"])
+              : "template",
+            alignment: ALIGNMENTS.has(override.alignment as DesignerAlignment)
+              ? (override.alignment as DesignerAlignment)
+              : "template",
+            offsetX: clamp(override.offsetX, -240, 240, 0),
+            offsetY: clamp(override.offsetY, -240, 240, 0),
+            hidden: override.hidden === true,
+          } satisfies DesignerTextOverride,
+        ];
+      })
+    : [];
 
   return {
     fontFamily: FONT_FAMILIES.has(input.fontFamily as DesignerFontFamily)
@@ -156,6 +245,9 @@ export function normalizeTemplateDesignerSettings(value: unknown): TemplateDesig
     offsetX: clamp(input.offsetX, -60, 60, 0),
     offsetY: clamp(input.offsetY, -60, 60, 0),
     showPageNumbers: input.showPageNumbers === true,
+    pageBackgroundEnabled: input.pageBackgroundEnabled === true,
+    pageBackground: normalizeColor(input.pageBackground, "#ffffff"),
+    textOverrides,
     extraElements,
   };
 }
@@ -225,6 +317,104 @@ function transformNode(value: unknown, settings: TemplateDesignerSettings): void
   Object.values(node).forEach((item) => transformNode(item, settings));
 }
 
+const normalizedText = (value: string) => value.replace(/\s+/g, " ").trim();
+
+function textValue(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map((item) => textValue(item)).join("");
+  if (value && typeof value === "object" && "text" in value) {
+    return textValue((value as Record<string, unknown>).text);
+  }
+  return "";
+}
+
+function applyTextOverrides(
+  value: unknown,
+  settings: TemplateDesignerSettings,
+  occurrences = new Map<string, number>(),
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((item) => applyTextOverrides(item, settings, occurrences));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+
+  const node = value as Record<string, unknown>;
+  if ("text" in node) {
+    if (Array.isArray(node.text)) {
+      // pdfMake renders rich-text spans as distinct selectable PDF text items.
+      // Walking each span keeps the WYSIWYG target aligned with what PDF.js exposes
+      // and makes individually coloured name fragments editable.
+      node.text.forEach((item) => applyTextOverrides(item, settings, occurrences));
+      Object.entries(node).forEach(([key, item]) => {
+        if (key !== "text") applyTextOverrides(item, settings, occurrences);
+      });
+      return;
+    }
+    const text = normalizedText(textValue(node.text));
+    if (text) {
+      const occurrence = occurrences.get(text) || 0;
+      occurrences.set(text, occurrence + 1);
+      const override = settings.textOverrides.find(
+        (candidate) =>
+          normalizedText(candidate.text) === text && candidate.occurrence === occurrence,
+      );
+      if (override) {
+        if (override.hidden) {
+          node.text = "";
+        } else {
+          if (override.replacementText !== null) node.text = override.replacementText;
+          if (override.fontFamily !== "template") node.font = override.fontFamily;
+          if (override.fontSize !== null) node.fontSize = override.fontSize;
+          if (override.color) node.color = override.color;
+          if (override.background) node.background = override.background;
+          if (override.bold !== "template") node.bold = override.bold === "on";
+          if (override.italics !== "template") node.italics = override.italics === "on";
+          if (override.underline !== "template") {
+            node.decoration = override.underline === "on" ? "underline" : undefined;
+          }
+          if (override.alignment !== "template") node.alignment = override.alignment;
+          if (override.offsetX || override.offsetY) {
+            const current =
+              node.relativePosition && typeof node.relativePosition === "object"
+                ? (node.relativePosition as { x?: number; y?: number })
+                : {};
+            node.relativePosition = {
+              x: (Number(current.x) || 0) + override.offsetX,
+              y: (Number(current.y) || 0) + override.offsetY,
+            };
+          }
+        }
+      }
+    }
+    Object.entries(node).forEach(([key, item]) => {
+      if (key !== "text") applyTextOverrides(item, settings, occurrences);
+    });
+    return;
+  }
+  Object.values(node).forEach((item) => applyTextOverrides(item, settings, occurrences));
+}
+
+export function createDesignerTextOverride(target: DesignerTextTarget): DesignerTextOverride {
+  return {
+    id: target.id,
+    text: target.text,
+    occurrence: target.occurrence,
+    replacementText: null,
+    fontFamily: "template",
+    fontSize: null,
+    color: "",
+    background: "",
+    bold: "template",
+    italics: "template",
+    underline: "template",
+    alignment: "template",
+    offsetX: 0,
+    offsetY: 0,
+    hidden: false,
+  };
+}
+
 const marginTuple = (value: TDocumentDefinitions["pageMargins"]) => {
   if (typeof value === "number") return [value, value, value, value];
   if (Array.isArray(value)) {
@@ -268,6 +458,7 @@ export function applyTemplateDesigner(
   transformNode(designed.content, settings);
   transformNode(designed.styles, settings);
   transformNode(designed.defaultStyle, settings);
+  applyTextOverrides(designed.content, settings);
 
   designed.defaultStyle = {
     ...(designed.defaultStyle || {}),
@@ -289,6 +480,32 @@ export function applyTemplateDesigner(
   ];
   if (settings.pageSize !== "template") designed.pageSize = settings.pageSize;
   if (settings.orientation !== "template") designed.pageOrientation = settings.orientation;
+
+  if (settings.pageBackgroundEnabled) {
+    const originalBackground = designed.background;
+    designed.background = (currentPage, pageSize) => {
+      const original =
+        typeof originalBackground === "function"
+          ? originalBackground(currentPage, pageSize)
+          : originalBackground;
+      return [
+        {
+          canvas: [
+            {
+              type: "rect",
+              x: 0,
+              y: 0,
+              w: pageSize.width,
+              h: pageSize.height,
+              color: settings.pageBackground,
+            },
+          ],
+          absolutePosition: { x: 0, y: 0 },
+        },
+        ...(original ? (Array.isArray(original) ? original : [original]) : []),
+      ] as Content;
+    };
+  }
 
   const font = settings.fontFamily === "template" ? undefined : settings.fontFamily;
   const start = settings.extraElements

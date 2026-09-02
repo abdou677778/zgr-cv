@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Check,
   Columns3,
@@ -24,6 +24,8 @@ import {
   newDesignerElement,
   type DesignerFontFamily,
   type DesignerPreset,
+  type DesignerTextOverride,
+  type DesignerTextTarget,
   type TemplateDesignerSettings,
 } from "@/lib/template-designer";
 
@@ -76,6 +78,12 @@ type PreviewControlDockProps = {
   onCreateDesignerPreset: (name: string) => void;
   onApplyDesignerPreset: (presetId: string) => void;
   onDeleteDesignerPreset: (presetId: string) => void;
+  designerSelection: DesignerTextTarget | null;
+  selectedTextOverride: DesignerTextOverride | null;
+  onDesignerModeChange: (active: boolean) => void;
+  onSelectedTextOverrideChange: (patch: Partial<DesignerTextOverride>) => void;
+  onSelectedTextReset: () => void;
+  onDesignerSelectionClear: () => void;
   designerDisabled?: boolean;
 };
 
@@ -167,12 +175,22 @@ export function PreviewControlDock({
   onCreateDesignerPreset,
   onApplyDesignerPreset,
   onDeleteDesignerPreset,
+  designerSelection,
+  selectedTextOverride,
+  onDesignerModeChange,
+  onSelectedTextOverrideChange,
+  onSelectedTextReset,
+  onDesignerSelectionClear,
   designerDisabled = false,
 }: PreviewControlDockProps) {
   const [activeTool, setActiveTool] = useState<PreviewDockTool | null>(null);
   const [newPresetName, setNewPresetName] = useState("");
   const selectedTemplate = templates.find((template) => template.id === templateId);
   const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+
+  useEffect(() => {
+    onDesignerModeChange(activeTool === "designer" && !designerDisabled);
+  }, [activeTool, designerDisabled, onDesignerModeChange]);
 
   const changeZoom = (nextZoom: number) => {
     onZoomChange(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom)));
@@ -200,10 +218,10 @@ export function PreviewControlDock({
           role="region"
           aria-label={dockButtons.find((button) => button.id === activeTool)?.label}
           className={cn(
-            "absolute bottom-full left-1/2 mb-2 max-h-[min(620px,70vh)] -translate-x-1/2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-2xl shadow-slate-900/15",
+            "overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-2xl shadow-slate-900/15",
             activeTool === "designer"
-              ? "w-[min(780px,calc(100vw-2rem))]"
-              : "w-[min(440px,calc(100vw-2rem))]",
+              ? "fixed inset-x-3 bottom-3 top-24 z-50 max-h-none w-auto sm:left-4 sm:right-auto sm:w-[390px]"
+              : "absolute bottom-full left-1/2 mb-2 max-h-[min(420px,55vh)] w-[min(440px,calc(100vw-2rem))] -translate-x-1/2",
           )}
         >
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -246,6 +264,320 @@ export function PreviewControlDock({
                       <RotateCcw className="h-3.5 w-3.5" /> Réinitialiser le modèle
                     </button>
                   </div>
+
+                  <section className="space-y-3 rounded-2xl border-2 border-blue-200 bg-blue-50/60 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-blue-800">
+                          Élément sélectionné dans le PDF
+                        </h3>
+                        <p className="mt-1 text-[11px] leading-4 text-blue-700/75">
+                          Cliquez directement sur un texte encadré en bleu, puis glissez-le pour le
+                          déplacer.
+                        </p>
+                      </div>
+                      {designerSelection && (
+                        <button
+                          type="button"
+                          onClick={onDesignerSelectionClear}
+                          aria-label="Désélectionner l’élément"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-500 hover:bg-blue-100"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {!designerSelection ? (
+                      <div className="rounded-xl border border-dashed border-blue-300 bg-white/80 px-3 py-5 text-center text-xs font-medium text-blue-700">
+                        Aucun élément sélectionné. Le PDF est maintenant cliquable.
+                      </div>
+                    ) : (
+                      <div className="space-y-3 rounded-xl border border-blue-200 bg-white p-3">
+                        <div className="rounded-lg bg-slate-950 px-3 py-2 text-xs text-white">
+                          <span className="mr-2 text-[10px] font-bold uppercase tracking-wider text-sky-300">
+                            Page {designerSelection.page}
+                          </span>
+                          <span className="break-words">{designerSelection.text}</span>
+                        </div>
+
+                        <label className="block">
+                          <span className="mb-1 block text-[11px] font-semibold text-slate-500">
+                            Contenu du texte
+                          </span>
+                          <textarea
+                            value={selectedTextOverride?.replacementText ?? designerSelection.text}
+                            onChange={(event) =>
+                              onSelectedTextOverrideChange({ replacementText: event.target.value })
+                            }
+                            rows={2}
+                            className="w-full resize-y rounded-lg border border-slate-200 px-2 py-2 text-xs leading-5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                          />
+                          {selectedTextOverride?.replacementText !== null &&
+                            selectedTextOverride?.replacementText !== undefined && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onSelectedTextOverrideChange({ replacementText: null })
+                                }
+                                className="mt-1 text-[10px] font-semibold text-slate-500 hover:text-slate-900"
+                              >
+                                Restaurer le contenu original
+                              </button>
+                            )}
+                        </label>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <label>
+                            <span className="mb-1 block text-[11px] font-semibold text-slate-500">
+                              Police
+                            </span>
+                            <select
+                              value={selectedTextOverride?.fontFamily ?? "template"}
+                              onChange={(event) =>
+                                onSelectedTextOverrideChange({
+                                  fontFamily: event.target.value as DesignerFontFamily,
+                                })
+                              }
+                              className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs font-semibold"
+                            >
+                              {designerFonts.map((font) => (
+                                <option key={font.id} value={font.id}>
+                                  {font.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span className="mb-1 block text-[11px] font-semibold text-slate-500">
+                              Taille
+                            </span>
+                            <input
+                              type="number"
+                              min={5}
+                              max={96}
+                              step={0.5}
+                              value={
+                                selectedTextOverride?.fontSize ??
+                                Number(designerSelection.fontSize.toFixed(1))
+                              }
+                              onChange={(event) =>
+                                onSelectedTextOverrideChange({
+                                  fontSize: Number(event.target.value),
+                                })
+                              }
+                              className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs font-semibold"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-lg border border-slate-200 p-2">
+                            <span className="mb-1.5 block text-[11px] font-semibold text-slate-500">
+                              Couleur du texte
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={selectedTextOverride?.color || "#111827"}
+                                onChange={(event) =>
+                                  onSelectedTextOverrideChange({ color: event.target.value })
+                                }
+                                className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+                                aria-label="Couleur du texte sélectionné"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => onSelectedTextOverrideChange({ color: "" })}
+                                className="text-[10px] font-semibold text-slate-500 hover:text-slate-900"
+                              >
+                                Originale
+                              </button>
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-slate-200 p-2">
+                            <span className="mb-1.5 block text-[11px] font-semibold text-slate-500">
+                              Fond du texte
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={selectedTextOverride?.background || "#ffffff"}
+                                onChange={(event) =>
+                                  onSelectedTextOverrideChange({ background: event.target.value })
+                                }
+                                className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+                                aria-label="Fond du texte sélectionné"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => onSelectedTextOverrideChange({ background: "" })}
+                                className="text-[10px] font-semibold text-slate-500 hover:text-slate-900"
+                              >
+                                Aucun
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          className="grid grid-cols-3 gap-2"
+                          role="group"
+                          aria-label="Style du texte sélectionné"
+                        >
+                          {(
+                            [
+                              ["bold", "Gras", "B"],
+                              ["italics", "Italique", "I"],
+                              ["underline", "Souligné", "U"],
+                            ] as const
+                          ).map(([key, label, glyph]) => {
+                            const active = selectedTextOverride?.[key] === "on";
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                aria-label={label}
+                                aria-pressed={active}
+                                onClick={() =>
+                                  onSelectedTextOverrideChange({
+                                    [key]: active ? "off" : "on",
+                                  })
+                                }
+                                className={cn(
+                                  "h-9 rounded-lg border text-xs font-bold transition",
+                                  active
+                                    ? "border-blue-500 bg-blue-600 text-white"
+                                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                                  key === "italics" && "italic",
+                                  key === "underline" && "underline",
+                                )}
+                              >
+                                {glyph} · {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <label className="block">
+                          <span className="mb-1 block text-[11px] font-semibold text-slate-500">
+                            Alignement de cet élément
+                          </span>
+                          <select
+                            value={selectedTextOverride?.alignment ?? "template"}
+                            onChange={(event) =>
+                              onSelectedTextOverrideChange({
+                                alignment: event.target
+                                  .value as TemplateDesignerSettings["alignment"],
+                              })
+                            }
+                            className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs font-semibold"
+                          >
+                            <option value="template">Selon le modèle</option>
+                            <option value="left">Gauche</option>
+                            <option value="center">Centré</option>
+                            <option value="right">Droite</option>
+                            <option value="justify">Justifié</option>
+                          </select>
+                        </label>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <label>
+                            <span className="mb-1 block text-[11px] font-semibold text-slate-500">
+                              Position X
+                            </span>
+                            <input
+                              type="number"
+                              min={-240}
+                              max={240}
+                              value={selectedTextOverride?.offsetX ?? 0}
+                              onChange={(event) =>
+                                onSelectedTextOverrideChange({
+                                  offsetX: Number(event.target.value),
+                                })
+                              }
+                              className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs font-semibold"
+                            />
+                          </label>
+                          <label>
+                            <span className="mb-1 block text-[11px] font-semibold text-slate-500">
+                              Position Y
+                            </span>
+                            <input
+                              type="number"
+                              min={-240}
+                              max={240}
+                              value={selectedTextOverride?.offsetY ?? 0}
+                              onChange={(event) =>
+                                onSelectedTextOverrideChange({
+                                  offsetY: Number(event.target.value),
+                                })
+                              }
+                              className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs font-semibold"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSelectedTextOverrideChange({
+                                hidden: !(selectedTextOverride?.hidden ?? false),
+                              })
+                            }
+                            className={cn(
+                              "h-9 rounded-lg border text-xs font-bold",
+                              selectedTextOverride?.hidden
+                                ? "border-rose-300 bg-rose-50 text-rose-700"
+                                : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                            )}
+                          >
+                            {selectedTextOverride?.hidden ? "Réafficher" : "Masquer l’élément"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onSelectedTextReset}
+                            className="h-9 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                          >
+                            Style original
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                          Fond des pages PDF
+                        </h3>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Modifie le document exporté, pas seulement l’espace de travail.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={designerSettings.pageBackground}
+                          disabled={!designerSettings.pageBackgroundEnabled}
+                          onChange={(event) => updateDesigner("pageBackground", event.target.value)}
+                          aria-label="Couleur du fond des pages"
+                          className="h-9 w-10 cursor-pointer disabled:opacity-40"
+                        />
+                        <input
+                          type="checkbox"
+                          checked={designerSettings.pageBackgroundEnabled}
+                          onChange={(event) =>
+                            updateDesigner("pageBackgroundEnabled", event.target.checked)
+                          }
+                          aria-label="Activer le fond des pages"
+                          className="h-4 w-4 accent-blue-600"
+                        />
+                      </div>
+                    </div>
+                  </section>
 
                   <div className="grid gap-4 lg:grid-cols-2">
                     <section className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
@@ -913,7 +1245,10 @@ export function PreviewControlDock({
               title={label}
               aria-label={label}
               aria-pressed={activeTool === id}
-              onClick={() => setActiveTool((current) => (current === id ? null : id))}
+              onClick={() => {
+                if (id === "designer" && activeTool !== "designer") onFocusModeChange(true);
+                setActiveTool((current) => (current === id ? null : id));
+              }}
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                 activeTool === id && "bg-white text-blue-700 shadow-sm",

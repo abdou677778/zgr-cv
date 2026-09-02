@@ -1223,9 +1223,9 @@ function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = 
     margin: rtl ? [1, 1, 0, 0] : [1, 1, 1, 0],
   } as Content;
   const textNode = {
-    width: "*",
-    text: v2RtlText(text, rtl, 32),
-    fontSize: 10,
+    width: rtl ? "auto" : "*",
+    text: v2RtlText(text, rtl, 52),
+    fontSize: rtl ? 9.6 : 10,
     lineHeight: 1.25,
     alignment: rtl ? "right" : "left",
   } as Content;

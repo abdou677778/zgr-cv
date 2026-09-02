@@ -1156,15 +1156,45 @@ const CONTACT_ICONS_V2 = {
   plane: `<svg viewBox="0 0 24 24" fill="none" stroke="${V2_ACCENT}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 19h20"/><path d="M4 15h4l3-4 9 3 2-2-10-6-3-4-2 1 2 5-3 3-3-1-1 1Z"/></svg>`,
 } as const;
 
+function v2WrappedRtlText(text: string, maxLineLength: number) {
+  const limit = Math.max(1, Math.floor(maxLineLength));
+  return text
+    .normalize("NFC")
+    .split(/\r?\n/u)
+    .flatMap((paragraph) => {
+      const words = paragraph.trim().split(/\s+/u).filter(Boolean);
+      if (!words.length) return [""];
+      const lines: string[] = [];
+      let current: string[] = [];
+      let currentLength = 0;
+      for (const word of words) {
+        const wordLength = Array.from(word).length;
+        const nextLength = currentLength + (current.length ? 1 : 0) + wordLength;
+        if (current.length && nextLength > limit) {
+          lines.push(current.join("\u00a0"));
+          current = [word];
+          currentLength = wordLength;
+        } else {
+          current.push(word);
+          currentLength = nextLength;
+        }
+      }
+      if (current.length) lines.push(current.join("\u00a0"));
+      return lines;
+    })
+    .join("\n");
+}
+
 function v2RtlText(text: string, rtl: boolean, maxLineLength = 82) {
   if (!rtl) return text;
   const containsArabic = /\p{Script=Arabic}/u.test(text);
   if (!containsArabic) return text;
+  const startsWithArabic = /^\s*\p{Script=Arabic}/u.test(text);
   const protectedLatin = text.replace(
     /[A-Za-z][A-Za-z0-9.+/#@_-]*/g,
-    (token) => `\u200e${containsArabic ? Array.from(token).reverse().join("") : token}\u200e`,
+    (token) => `\u200e${startsWithArabic ? Array.from(token).reverse().join("") : token}\u200e`,
   );
-  return toPdfRtlVisualText(protectedLatin, maxLineLength);
+  return v2WrappedRtlText(protectedLatin, maxLineLength);
 }
 
 function v2RtlRichInline(item: RichInline, rtl: boolean, maxLineLength = 72): RichInline {

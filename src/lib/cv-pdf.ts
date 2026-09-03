@@ -63,6 +63,13 @@ const CONTENT_W = PAGE_W - MARGIN_X * 2;
 const V2_PAGE_W = 612;
 const V2_MARGIN_X = 48;
 const V2_CONTENT_W = V2_PAGE_W - V2_MARGIN_X * 2;
+const V2_DATE_COLUMN_W = 100;
+const V2_COLUMN_GAP = 13;
+const V2_DETAILS_W = V2_CONTENT_W - V2_DATE_COLUMN_W - V2_COLUMN_GAP;
+const V2_LIST_MARKER_W = 10;
+const V2_LIST_GAP = 4;
+const V2_FULL_LIST_TEXT_W = V2_CONTENT_W - V2_LIST_MARKER_W - V2_LIST_GAP;
+const V2_DETAILS_LIST_TEXT_W = V2_DETAILS_W - V2_LIST_MARKER_W - V2_LIST_GAP;
 const V2_ACCENT = "#953735";
 const V2_MUTED = "#595959";
 const V2_BANNER_BG = "#f2f2f2";
@@ -1161,27 +1168,67 @@ const CONTACT_ICONS_V2 = {
   plane: `<svg viewBox="0 0 24 24" fill="none" stroke="${V2_ACCENT}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 19h20"/><path d="M4 15h4l3-4 9 3 2-2-10-6-3-4-2 1 2 5-3 3-3-1-1 1Z"/></svg>`,
 } as const;
 
-function v2WrappedRtlText(text: string, maxLineLength: number) {
-  const limit = Math.max(1, Math.floor(maxLineLength));
+function v2CharacterWidthEm(character: string) {
+  if (/\p{Mark}/u.test(character)) return 0;
+  if (/\s/u.test(character)) return 0.28;
+  if (/\p{Script=Arabic}/u.test(character)) return 0.37;
+  if (/[A-Z]/u.test(character)) return 0.64;
+  if (/[a-z]/u.test(character)) return 0.5;
+  if (/\d/u.test(character)) return 0.52;
+  if (/[\p{Punctuation}\p{Symbol}]/u.test(character)) return 0.3;
+  return 0.5;
+}
+
+function v2EstimatedTextWidth(text: string, fontSize: number) {
+  return Array.from(text).reduce(
+    (total, character) => total + v2CharacterWidthEm(character) * fontSize,
+    0,
+  );
+}
+
+function v2SplitOversizedWord(word: string, maxWidth: number, fontSize: number) {
+  const pieces: string[] = [];
+  let current = "";
+  for (const character of Array.from(word)) {
+    const candidate = `${current}${character}`;
+    if (current && v2EstimatedTextWidth(candidate, fontSize) > maxWidth) {
+      pieces.push(current);
+      current = character;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) pieces.push(current);
+  return pieces;
+}
+
+function v2WrappedRtlText(text: string, maxWidth: number, fontSize: number) {
+  // pdfMake shapes connected Arabic glyphs after this pass. Keep a small safety
+  // reserve so its final glyph metrics never force a second, mid-word wrap.
+  const widthLimit = Math.max(fontSize, maxWidth * 0.9);
   return text
     .normalize("NFC")
     .split(/\r?\n/u)
     .flatMap((paragraph) => {
-      const words = paragraph.trim().split(/\s+/u).filter(Boolean);
+      const words = paragraph
+        .trim()
+        .split(/\s+/u)
+        .filter(Boolean)
+        .flatMap((word) =>
+          v2EstimatedTextWidth(word, fontSize) > widthLimit
+            ? v2SplitOversizedWord(word, widthLimit, fontSize)
+            : [word],
+        );
       if (!words.length) return [""];
       const lines: string[] = [];
       let current: string[] = [];
-      let currentLength = 0;
       for (const word of words) {
-        const wordLength = Array.from(word).length;
-        const nextLength = currentLength + (current.length ? 1 : 0) + wordLength;
-        if (current.length && nextLength > limit) {
+        const candidate = [...current, word].join(" ");
+        if (current.length && v2EstimatedTextWidth(candidate, fontSize) > widthLimit) {
           lines.push(current.join("\u00a0"));
           current = [word];
-          currentLength = wordLength;
         } else {
           current.push(word);
-          currentLength = nextLength;
         }
       }
       if (current.length) lines.push(current.join("\u00a0"));
@@ -1190,7 +1237,7 @@ function v2WrappedRtlText(text: string, maxLineLength: number) {
     .join("\n");
 }
 
-function v2RtlText(text: string, rtl: boolean, maxLineLength = 82) {
+function v2RtlText(text: string, rtl: boolean, maxWidth = V2_CONTENT_W, fontSize = 10.6) {
   if (!rtl) return text;
   const containsArabic = /\p{Script=Arabic}/u.test(text);
   if (!containsArabic) return text;
@@ -1202,22 +1249,27 @@ function v2RtlText(text: string, rtl: boolean, maxLineLength = 82) {
     /[A-Za-z][A-Za-z0-9.+/#@_-]*/g,
     (token) => `\u200e${startsWithArabic ? Array.from(token).reverse().join("") : token}\u200e`,
   );
-  return v2WrappedRtlText(protectedLatin, maxLineLength);
+  return v2WrappedRtlText(protectedLatin, maxWidth, fontSize);
 }
 
-function v2RtlRichInline(item: RichInline, rtl: boolean, maxLineLength = 72): RichInline {
+function v2RtlRichInline(
+  item: RichInline,
+  rtl: boolean,
+  maxWidth = V2_FULL_LIST_TEXT_W,
+  fontSize = 10.6,
+): RichInline {
   if (!rtl) return item;
   return typeof item === "string"
-    ? v2RtlText(item, true, maxLineLength)
+    ? v2RtlText(item, true, maxWidth, fontSize)
     : item.map((run) => ({
         ...run,
-        text: v2RtlText(run.text, true, maxLineLength),
+        text: v2RtlText(run.text, true, maxWidth, fontSize),
       }));
 }
 
 function v2DateText(value: string, language: DocumentLanguage, rtl: boolean) {
   const formatted = formatCvDate(value, language).toLocaleUpperCase(language);
-  return v2RtlText(rtl ? formatted.replace(/\s+-\s+/g, "\n") : formatted, rtl, 24);
+  return v2RtlText(rtl ? formatted.replace(/\s+-\s+/g, "\n") : formatted, rtl, V2_DATE_COLUMN_W, 9);
 }
 
 function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = false): Content {
@@ -1229,7 +1281,7 @@ function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = 
   } as Content;
   const textNode = {
     width: rtl ? 160 : "*",
-    text: v2RtlText(text, rtl, 52),
+    text: v2RtlText(text, rtl, 160, 8.2),
     fontSize: rtl ? 8.2 : 10,
     lineHeight: 1.25,
     alignment: "left",
@@ -1258,9 +1310,9 @@ function v2Header(cv: CV, rtl = false): Content {
       {
         text: rtl
           ? [
-              { text: v2RtlText(remainingName, true, 32), color: V2_ACCENT },
+              { text: v2RtlText(remainingName, true, 220, 24), color: V2_ACCENT },
               { text: remainingName ? "\u00a0" : "" },
-              { text: v2RtlText(firstName, true, 16), color: "#000000" },
+              { text: v2RtlText(firstName, true, 110, 24), color: "#000000" },
             ]
           : [
               { text: firstName.toLocaleUpperCase("fr"), color: "#000000" },
@@ -1274,7 +1326,7 @@ function v2Header(cv: CV, rtl = false): Content {
         alignment: rtl ? "right" : "left",
       },
       {
-        text: v2RtlText((cv.titre_poste || " ").toLocaleUpperCase("fr"), rtl, 38),
+        text: v2RtlText((cv.titre_poste || " ").toLocaleUpperCase("fr"), rtl, 300, 14),
         fontSize: 14,
         bold: true,
         color: V2_MUTED,
@@ -1310,7 +1362,7 @@ function v2SectionTitle(label: string, topMargin = 10, rtl = false): Content {
     headlineLevel: 1,
     stack: [
       {
-        text: v2RtlText(label, rtl, 52),
+        text: v2RtlText(label, rtl, V2_CONTENT_W, 14.2),
         fontSize: 14.2,
         bold: true,
         color: V2_ACCENT,
@@ -1347,6 +1399,7 @@ function v2List(
   marker: "diamond" | "check" = "diamond",
   format?: ObjectiveFormat,
   rtl = false,
+  availableTextWidth = V2_FULL_LIST_TEXT_W,
 ): Content {
   return {
     stack: items.filter(Boolean).map((item) => {
@@ -1356,7 +1409,8 @@ function v2List(
         fit: [7, 7],
         margin: rtl ? [3, V2_LIST_MARKER_TOP, 0, 0] : [0, V2_LIST_MARKER_TOP, 3, 0],
       } as Content;
-      const visualItem = v2RtlRichInline(item, rtl, 70);
+      const listFontSize = format ? Number((10 * (format.fontSize / 15)).toFixed(2)) : 10.6;
+      const visualItem = v2RtlRichInline(item, rtl, availableTextWidth, listFontSize);
       const textNode = format
         ? richListText(format, visualItem, 10, {
             width: "*",
@@ -1394,7 +1448,7 @@ function v2ExperienceBlock(
         alignment: rtl ? "right" : "left",
       },
       {
-        text: v2RtlText(experience.lieu || "", rtl, 18),
+        text: v2RtlText(experience.lieu || "", rtl, V2_DATE_COLUMN_W, 9),
         fontSize: 9,
         alignment: rtl ? "right" : "left",
         margin: [0, 2, 0, 0],
@@ -1405,14 +1459,14 @@ function v2ExperienceBlock(
     width: "*",
     stack: [
       {
-        text: v2RtlText((experience.titre || "").toLocaleUpperCase("fr"), rtl, 66),
+        text: v2RtlText((experience.titre || "").toLocaleUpperCase("fr"), rtl, V2_DETAILS_W, 11),
         bold: true,
         fontSize: 11,
         alignment: rtl ? "right" : "left",
       },
       companyLine(
         experience,
-        v2RtlText((experience.employeur || "").toLocaleUpperCase("fr"), rtl, 66),
+        v2RtlText((experience.employeur || "").toLocaleUpperCase("fr"), rtl, V2_DETAILS_W, 11),
         11,
         {
           bold: true,
@@ -1423,12 +1477,12 @@ function v2ExperienceBlock(
         },
         rtl,
       ),
-      v2List(descriptions, "diamond", experience.descriptions_format, rtl),
+      v2List(descriptions, "diamond", experience.descriptions_format, rtl, V2_DETAILS_LIST_TEXT_W),
     ],
   } as Content;
   return {
     columns: rtl ? [detailsColumn, dateColumn] : [dateColumn, detailsColumn],
-    columnGap: 13,
+    columnGap: V2_COLUMN_GAP,
     margin: [0, 0, 0, 14],
   } as Content;
 }
@@ -1445,7 +1499,7 @@ function v2FormationBlock(formation: Formation, language: DocumentLanguage, rtl 
         alignment: rtl ? "right" : "left",
       },
       {
-        text: v2RtlText(formation.lieu || "", rtl, 18),
+        text: v2RtlText(formation.lieu || "", rtl, V2_DATE_COLUMN_W, 9),
         fontSize: 9,
         alignment: rtl ? "right" : "left",
         margin: [0, 2, 0, 0],
@@ -1456,13 +1510,18 @@ function v2FormationBlock(formation: Formation, language: DocumentLanguage, rtl 
     width: "*",
     stack: [
       {
-        text: v2RtlText((formation.titre || "").toLocaleUpperCase("fr"), rtl, 66),
+        text: v2RtlText((formation.titre || "").toLocaleUpperCase("fr"), rtl, V2_DETAILS_W, 11),
         bold: true,
         fontSize: 11,
         alignment: rtl ? "right" : "left",
       },
       {
-        text: v2RtlText((formation.institution || "").toLocaleUpperCase("fr"), rtl, 66),
+        text: v2RtlText(
+          (formation.institution || "").toLocaleUpperCase("fr"),
+          rtl,
+          V2_DETAILS_W,
+          11,
+        ),
         bold: true,
         fontSize: 11,
         color: V2_MUTED,
@@ -1470,14 +1529,14 @@ function v2FormationBlock(formation: Formation, language: DocumentLanguage, rtl 
         margin: [0, 2, 0, 3],
       },
       ...(formation.competences
-        ? [v2List([formation.competences], "diamond", undefined, rtl)]
+        ? [v2List([formation.competences], "diamond", undefined, rtl, V2_DETAILS_LIST_TEXT_W)]
         : []),
     ],
   } as Content;
   return {
     unbreakable: true,
     columns: rtl ? [detailsColumn, dateColumn] : [dateColumn, detailsColumn],
-    columnGap: 13,
+    columnGap: V2_COLUMN_GAP,
     margin: [0, 0, 0, 14],
   } as Content;
 }
@@ -1494,7 +1553,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
         alignment: rtl ? "right" : "left",
       },
       {
-        text: v2RtlText(education.lieu || "", rtl, 18),
+        text: v2RtlText(education.lieu || "", rtl, V2_DATE_COLUMN_W, 9),
         fontSize: 9,
         alignment: rtl ? "right" : "left",
         margin: [0, 2, 0, 0],
@@ -1505,7 +1564,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
     width: "*",
     stack: [
       {
-        text: v2RtlText((education.titre || "").toLocaleUpperCase("fr"), rtl, 66),
+        text: v2RtlText((education.titre || "").toLocaleUpperCase("fr"), rtl, V2_DETAILS_W, 11),
         bold: true,
         fontSize: 11,
         alignment: rtl ? "right" : "left",
@@ -1513,7 +1572,12 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
       ...(education.institution
         ? [
             {
-              text: v2RtlText(education.institution.toLocaleUpperCase(language), rtl, 66),
+              text: v2RtlText(
+                education.institution.toLocaleUpperCase(language),
+                rtl,
+                V2_DETAILS_W,
+                11,
+              ),
               bold: true,
               fontSize: 11,
               color: V2_MUTED,
@@ -1525,7 +1589,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
       ...(education.option
         ? [
             {
-              text: v2RtlText(education.option, rtl, 66),
+              text: v2RtlText(education.option, rtl, V2_DETAILS_W, 10.6),
               alignment: rtl ? "right" : "left",
               margin: [0, 2, 0, 0],
             } as Content,
@@ -1534,7 +1598,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
       ...(education.equivalence
         ? [
             {
-              text: v2RtlText(education.equivalence, rtl, 66),
+              text: v2RtlText(education.equivalence, rtl, V2_DETAILS_W, 10.6),
               alignment: rtl ? "right" : "left",
               margin: [0, 2, 0, 0],
             } as Content,
@@ -1545,7 +1609,7 @@ function v2EducationBlock(education: Education, language: DocumentLanguage, rtl 
   return {
     unbreakable: true,
     columns: rtl ? [detailsColumn, dateColumn] : [dateColumn, detailsColumn],
-    columnGap: 13,
+    columnGap: V2_COLUMN_GAP,
     margin: [0, 0, 0, 14],
   } as Content;
 }
@@ -1611,7 +1675,7 @@ function buildCvPdfV2(
         cv,
         10.6,
         rtl ? { alignment: "right" } : {},
-        rtl ? (text) => v2RtlText(text, true, 88) : undefined,
+        rtl ? (text) => v2RtlText(text, true, V2_CONTENT_W, 10.6) : undefined,
       ),
     );
 
@@ -1628,9 +1692,9 @@ function buildCvPdfV2(
           .map(([label, value]) => ({
             text: rtl
               ? [
-                  { text: v2RtlText(value as string, true, 24) },
+                  { text: v2RtlText(value as string, true, 154, 10.6) },
                   { text: "\u00a0:\u00a0" },
-                  { text: v2RtlText(label, true, 20), bold: true },
+                  { text: v2RtlText(label, true, 154, 10.6), bold: true },
                 ]
               : [{ text: `${label} : `, bold: true }, { text: value as string }],
             alignment: rtl ? "right" : "left",

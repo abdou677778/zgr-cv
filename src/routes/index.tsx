@@ -1,5 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -115,6 +123,7 @@ import {
   normalizeDesignerPresets,
   normalizeTemplateDesignerSettings,
   type DesignerPreset,
+  type DesignerExtraElement,
   type DesignerTextOverride,
   type DesignerTextTarget,
   type TemplateDesignerSettings,
@@ -467,6 +476,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [activeDesignerPresetId, setActiveDesignerPresetId] = useState<string | null>(null);
   const [designerModeActive, setDesignerModeActive] = useState(false);
   const [designerSelection, setDesignerSelection] = useState<DesignerTextTarget | null>(null);
+  const [designerExtraSelectionId, setDesignerExtraSelectionId] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [pdfRetryNonce, setPdfRetryNonce] = useState(0);
@@ -516,6 +526,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             designerSelection.text.replace(/\s+/g, " ").trim() &&
           override.occurrence === designerSelection.occurrence,
       ) ?? null)
+    : null;
+  const selectedDesignerExtraElement = designerExtraSelectionId
+    ? (designerSettings.extraElements.find((element) => element.id === designerExtraSelectionId) ??
+      null)
     : null;
   const isEuropassTemplate = documentKind === "cv" && templateId === EUROPASS_TEMPLATE_ID;
   const themeTemplateId = (
@@ -1691,24 +1705,28 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setTemplateId(optionId as PdfTemplateId);
   };
 
-  const updateDesignerSettings = (settings: TemplateDesignerSettings) => {
-    const normalized = normalizeTemplateDesignerSettings(settings);
-    if (activeDesignerPresetId) {
-      setDesignerPresets((current) =>
-        current.map((preset) =>
-          preset.id === activeDesignerPresetId
-            ? { ...preset, settings: normalized, updatedAt: new Date().toISOString() }
-            : preset,
-        ),
-      );
-      return;
-    }
-    setTemplateDesignerSettings((current) => ({ ...current, [templateId]: normalized }));
-  };
+  const updateDesignerSettings = useCallback(
+    (settings: TemplateDesignerSettings) => {
+      const normalized = normalizeTemplateDesignerSettings(settings);
+      if (activeDesignerPresetId) {
+        setDesignerPresets((current) =>
+          current.map((preset) =>
+            preset.id === activeDesignerPresetId
+              ? { ...preset, settings: normalized, updatedAt: new Date().toISOString() }
+              : preset,
+          ),
+        );
+        return;
+      }
+      setTemplateDesignerSettings((current) => ({ ...current, [templateId]: normalized }));
+    },
+    [activeDesignerPresetId, templateId],
+  );
 
   const resetDesignerSettings = () => {
     updateDesignerSettings(DEFAULT_TEMPLATE_DESIGNER_SETTINGS);
     setDesignerSelection(null);
+    setDesignerExtraSelectionId(null);
     setImportMessage({ ok: true, text: "Réglages Designer réinitialisés pour ce modèle." });
   };
 
@@ -1755,28 +1773,104 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     });
   };
 
-  const moveDesignerText = (target: DesignerTextTarget, deltaX: number, deltaY: number) => {
-    const existing =
-      designerSettings.textOverrides.find((override) => sameDesignerTextTarget(override, target)) ??
-      createDesignerTextOverride(target);
+  const moveDesignerText = useCallback(
+    (target: DesignerTextTarget, deltaX: number, deltaY: number) => {
+      const existing =
+        designerSettings.textOverrides.find((override) =>
+          sameDesignerTextTarget(override, target),
+        ) ?? createDesignerTextOverride(target);
+      setDesignerSelection(target);
+      updateDesignerSettings({
+        ...designerSettings,
+        textOverrides: [
+          ...designerSettings.textOverrides.filter(
+            (override) => !sameDesignerTextTarget(override, target),
+          ),
+          {
+            ...existing,
+            id: target.id,
+            text: existing.text,
+            occurrence: target.occurrence,
+            offsetX: Math.round((existing.offsetX + deltaX) * 2) / 2,
+            offsetY: Math.round((existing.offsetY + deltaY) * 2) / 2,
+          },
+        ],
+      });
+    },
+    [designerSettings, updateDesignerSettings],
+  );
+
+  const selectDesignerText = (target: DesignerTextTarget) => {
+    setDesignerExtraSelectionId(null);
     setDesignerSelection(target);
+  };
+
+  const selectDesignerExtraElement = (elementId: string) => {
+    setDesignerSelection(null);
+    setDesignerExtraSelectionId(elementId);
+  };
+
+  const updateSelectedDesignerExtraElement = (patch: Partial<DesignerExtraElement>) => {
+    if (!designerExtraSelectionId) return;
     updateDesignerSettings({
       ...designerSettings,
-      textOverrides: [
-        ...designerSettings.textOverrides.filter(
-          (override) => !sameDesignerTextTarget(override, target),
-        ),
-        {
-          ...existing,
-          id: target.id,
-          text: existing.text,
-          occurrence: target.occurrence,
-          offsetX: Math.round((existing.offsetX + deltaX) * 2) / 2,
-          offsetY: Math.round((existing.offsetY + deltaY) * 2) / 2,
-        },
-      ],
+      extraElements: designerSettings.extraElements.map((element) =>
+        element.id === designerExtraSelectionId ? { ...element, ...patch } : element,
+      ),
     });
   };
+
+  const moveDesignerExtraElement = useCallback(
+    (elementId: string, deltaX: number, deltaY: number) => {
+      setDesignerSelection(null);
+      setDesignerExtraSelectionId(elementId);
+      updateDesignerSettings({
+        ...designerSettings,
+        extraElements: designerSettings.extraElements.map((element) =>
+          element.id === elementId
+            ? {
+                ...element,
+                placement: "absolute",
+                x: Math.round((element.x + deltaX) * 2) / 2,
+                y: Math.round((element.y + deltaY) * 2) / 2,
+              }
+            : element,
+        ),
+      });
+    },
+    [designerSettings, updateDesignerSettings],
+  );
+
+  useEffect(() => {
+    if (!designerModeActive || (!designerSelection && !designerExtraSelectionId)) return;
+    const handleDesignerArrow = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.matches("input, textarea, select, [contenteditable='true']") ||
+        !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      const step = event.shiftKey ? 5 : event.ctrlKey || event.metaKey ? 0.1 : 0.5;
+      const deltaX = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+      const deltaY = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+      if (designerExtraSelectionId) {
+        moveDesignerExtraElement(designerExtraSelectionId, deltaX, deltaY);
+      } else if (designerSelection) {
+        moveDesignerText(designerSelection, deltaX, deltaY);
+      }
+    };
+    window.addEventListener("keydown", handleDesignerArrow);
+    return () => window.removeEventListener("keydown", handleDesignerArrow);
+  }, [
+    designerExtraSelectionId,
+    designerModeActive,
+    designerSelection,
+    designerSettings,
+    moveDesignerExtraElement,
+    moveDesignerText,
+  ]);
 
   const createDesignerPreset = (name: string) => {
     const now = new Date().toISOString();
@@ -3093,8 +3187,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   surface={previewSurface}
                   designerMode={designerModeActive}
                   designerSelectionId={designerSelection?.id ?? null}
-                  onDesignerTextSelect={setDesignerSelection}
+                  onDesignerTextSelect={selectDesignerText}
                   onDesignerTextMove={moveDesignerText}
+                  designerExtraElements={designerSettings.extraElements}
+                  designerExtraSelectionId={designerExtraSelectionId}
+                  onDesignerExtraSelect={selectDesignerExtraElement}
+                  onDesignerExtraMove={moveDesignerExtraElement}
                 />
               ) : (
                 <div className="flex min-h-[720px] items-center justify-center bg-white text-sm text-muted-foreground">
@@ -3163,10 +3261,31 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 designerDisabled={documentKind !== "cv" || isEuropassTemplate}
                 designerSelection={designerSelection}
                 selectedTextOverride={selectedTextOverride}
+                selectedExtraElement={selectedDesignerExtraElement}
                 onDesignerModeChange={setDesignerModeActive}
                 onSelectedTextOverrideChange={updateSelectedTextOverride}
                 onSelectedTextReset={resetSelectedTextOverride}
                 onDesignerSelectionClear={() => setDesignerSelection(null)}
+                onSelectedExtraElementChange={updateSelectedDesignerExtraElement}
+                onSelectedExtraElementDelete={() => {
+                  if (!designerExtraSelectionId) return;
+                  updateDesignerSettings({
+                    ...designerSettings,
+                    extraElements: designerSettings.extraElements.filter(
+                      (element) => element.id !== designerExtraSelectionId,
+                    ),
+                  });
+                  setDesignerExtraSelectionId(null);
+                }}
+                onExtraElementSelect={selectDesignerExtraElement}
+                onExtraSelectionClear={() => setDesignerExtraSelectionId(null)}
+                onNudgeSelection={(deltaX, deltaY) => {
+                  if (designerExtraSelectionId) {
+                    moveDesignerExtraElement(designerExtraSelectionId, deltaX, deltaY);
+                  } else if (designerSelection) {
+                    moveDesignerText(designerSelection, deltaX, deltaY);
+                  }
+                }}
               />
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">
@@ -3399,6 +3518,10 @@ function PdfPreview({
   designerSelectionId,
   onDesignerTextSelect,
   onDesignerTextMove,
+  designerExtraElements,
+  designerExtraSelectionId,
+  onDesignerExtraSelect,
+  onDesignerExtraMove,
 }: {
   blob: Blob;
   templateId: PdfTemplateId;
@@ -3410,6 +3533,10 @@ function PdfPreview({
   designerSelectionId: string | null;
   onDesignerTextSelect: (target: DesignerTextTarget) => void;
   onDesignerTextMove: (target: DesignerTextTarget, deltaX: number, deltaY: number) => void;
+  designerExtraElements: DesignerExtraElement[];
+  designerExtraSelectionId: string | null;
+  onDesignerExtraSelect: (elementId: string) => void;
+  onDesignerExtraMove: (elementId: string, deltaX: number, deltaY: number) => void;
 }) {
   const pagesRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(zoom);
@@ -3418,6 +3545,10 @@ function PdfPreview({
     selectedId: designerSelectionId,
     onSelect: onDesignerTextSelect,
     onMove: onDesignerTextMove,
+    extraElements: designerExtraElements,
+    selectedExtraId: designerExtraSelectionId,
+    onExtraSelect: onDesignerExtraSelect,
+    onExtraMove: onDesignerExtraMove,
   });
   const [rendering, setRendering] = useState(true);
   const [renderError, setRenderError] = useState("");
@@ -3442,6 +3573,10 @@ function PdfPreview({
       selectedId: designerSelectionId,
       onSelect: onDesignerTextSelect,
       onMove: onDesignerTextMove,
+      extraElements: designerExtraElements,
+      selectedExtraId: designerExtraSelectionId,
+      onExtraSelect: onDesignerExtraSelect,
+      onExtraMove: onDesignerExtraMove,
     };
     const layers = pagesRef.current?.querySelectorAll<HTMLElement>("[data-designer-layer]");
     layers?.forEach((layer) => {
@@ -3455,7 +3590,24 @@ function PdfPreview({
       target.style.borderColor = selected ? "#2563eb" : "transparent";
       target.style.background = selected ? "rgba(37, 99, 235, 0.12)" : "transparent";
     });
-  }, [designerMode, designerSelectionId, onDesignerTextMove, onDesignerTextSelect]);
+    const extraTargets =
+      pagesRef.current?.querySelectorAll<HTMLButtonElement>("[data-designer-extra]");
+    extraTargets?.forEach((target) => {
+      const selected = target.dataset.designerExtraId === designerExtraSelectionId;
+      target.dataset.selected = selected ? "true" : "false";
+      target.style.borderColor = selected ? "#7c3aed" : "#a78bfa";
+      target.style.background = selected ? "rgba(124, 58, 237, 0.16)" : "rgba(167, 139, 250, 0.06)";
+    });
+  }, [
+    designerExtraElements,
+    designerExtraSelectionId,
+    designerMode,
+    designerSelectionId,
+    onDesignerExtraMove,
+    onDesignerExtraSelect,
+    onDesignerTextMove,
+    onDesignerTextSelect,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3619,6 +3771,86 @@ function PdfPreview({
             });
             designerLayer.appendChild(hitTarget);
           });
+
+          designerRef.current.extraElements
+            .filter((element) => element.placement === "absolute" && element.page === pageNumber)
+            .forEach((element) => {
+              const hitTarget = window.document.createElement("button");
+              hitTarget.type = "button";
+              hitTarget.dataset.designerExtra = "true";
+              hitTarget.dataset.designerExtraId = element.id;
+              const elementLabel =
+                element.type === "icon"
+                  ? "icône"
+                  : element.type === "separator"
+                    ? "ligne"
+                    : "texte ajouté";
+              hitTarget.setAttribute("aria-label", `Modifier l’élément ${elementLabel}`);
+              hitTarget.title = `Déplacer l’élément ${elementLabel}`;
+              hitTarget.className =
+                "absolute z-20 cursor-move overflow-hidden rounded border border-violet-400 bg-violet-400/5 p-0 text-[10px] text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-600";
+              hitTarget.style.left = `${(element.x / baseViewport.width) * 100}%`;
+              hitTarget.style.top = `${(element.y / baseViewport.height) * 100}%`;
+              hitTarget.style.width = `${(element.width / baseViewport.width) * 100}%`;
+              hitTarget.style.height = `${(element.height / baseViewport.height) * 100}%`;
+              if (element.type === "icon") {
+                hitTarget.textContent =
+                  (
+                    {
+                      star: "★",
+                      check: "✓",
+                      mail: "✉",
+                      phone: "☎",
+                      home: "⌂",
+                      location: "●",
+                    } as Record<string, string>
+                  )[element.text] ?? "★";
+              } else if (element.type === "text") {
+                hitTarget.textContent = element.text.slice(0, 40);
+              }
+              if (designerRef.current.selectedExtraId === element.id) {
+                hitTarget.dataset.selected = "true";
+                hitTarget.style.borderColor = "#7c3aed";
+                hitTarget.style.background = "rgba(124, 58, 237, 0.16)";
+              }
+              hitTarget.addEventListener("click", () =>
+                designerRef.current.onExtraSelect(element.id),
+              );
+              hitTarget.addEventListener("pointerdown", (event) => {
+                if (!designerRef.current.active) return;
+                event.preventDefault();
+                designerRef.current.onExtraSelect(element.id);
+                const startX = event.clientX;
+                const startY = event.clientY;
+                let deltaX = 0;
+                let deltaY = 0;
+                hitTarget.setPointerCapture(event.pointerId);
+                const onPointerMove = (moveEvent: PointerEvent) => {
+                  deltaX = moveEvent.clientX - startX;
+                  deltaY = moveEvent.clientY - startY;
+                  hitTarget.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+                };
+                const finish = () => {
+                  hitTarget.removeEventListener("pointermove", onPointerMove);
+                  hitTarget.removeEventListener("pointerup", finish);
+                  hitTarget.removeEventListener("pointercancel", finish);
+                  if (Math.abs(deltaX) + Math.abs(deltaY) < 2) {
+                    hitTarget.style.transform = "";
+                    return;
+                  }
+                  const displayedScale = cssScale * (zoomRef.current / 100);
+                  designerRef.current.onExtraMove(
+                    element.id,
+                    deltaX / displayedScale,
+                    deltaY / displayedScale,
+                  );
+                };
+                hitTarget.addEventListener("pointermove", onPointerMove);
+                hitTarget.addEventListener("pointerup", finish);
+                hitTarget.addEventListener("pointercancel", finish);
+              });
+              designerLayer.appendChild(hitTarget);
+            });
           pageShell.appendChild(designerLayer);
         }
       } catch (error) {

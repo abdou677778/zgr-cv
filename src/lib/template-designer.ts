@@ -41,7 +41,12 @@ export type DesignerTextOverride = {
 export type DesignerExtraElement = {
   id: string;
   type: "text" | "separator" | "icon";
-  placement: "start" | "end";
+  placement: "start" | "end" | "absolute";
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   text: string;
   fontSize: number;
   color: string;
@@ -128,7 +133,12 @@ export function newDesignerElement(type: DesignerExtraElement["type"]): Designer
   return {
     id: crypto.randomUUID(),
     type,
-    placement: "end",
+    placement: "absolute",
+    page: 1,
+    x: 48,
+    y: 48,
+    width: type === "separator" ? 180 : type === "text" ? 180 : 28,
+    height: type === "separator" ? 8 : type === "text" ? 34 : 28,
     text: type === "text" ? "Nouveau bloc de texte" : type === "icon" ? "star" : "",
     fontSize: 10,
     color: "#111827",
@@ -157,7 +167,17 @@ export function normalizeTemplateDesignerSettings(value: unknown): TemplateDesig
                 ? element.id
                 : `designer-element-${index}`,
             type,
-            placement: element.placement === "start" ? "start" : "end",
+            placement:
+              element.placement === "start"
+                ? "start"
+                : element.placement === "absolute"
+                  ? "absolute"
+                  : "end",
+            page: Math.round(clamp(element.page, 1, 99, 1)),
+            x: clamp(element.x, 0, 1_200, 48),
+            y: clamp(element.y, 0, 1_700, 48),
+            width: clamp(element.width, 8, 1_200, type === "separator" ? 180 : 40),
+            height: clamp(element.height, 4, 1_700, type === "separator" ? 8 : 28),
             text: typeof element.text === "string" ? element.text.slice(0, 2_000) : "",
             fontSize: clamp(element.fontSize, 6, 42, 10),
             color: normalizeColor(element.color),
@@ -427,12 +447,24 @@ const marginTuple = (value: TDocumentDefinitions["pageMargins"]) => {
 
 function extraElementContent(element: DesignerExtraElement, font?: string): Content {
   if (element.type === "separator") {
-    return {
+    const content: Content = {
       canvas: [
-        { type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: element.color },
+        {
+          type: "line",
+          x1: 0,
+          y1: 0,
+          x2: element.placement === "absolute" ? element.width : 515,
+          y2: 0,
+          lineWidth: Math.max(1, element.height / 4),
+          lineColor: element.color,
+        },
       ],
       margin: [0, element.marginBefore, 0, element.marginAfter],
     };
+    if (element.placement === "absolute") {
+      (content as Record<string, unknown>).absolutePosition = { x: element.x, y: element.y };
+    }
+    return content;
   }
   if (element.type === "icon") {
     const paths: Record<string, string> = {
@@ -448,15 +480,19 @@ function extraElementContent(element: DesignerExtraElement, font?: string): Cont
     };
     const path = paths[element.text] ?? paths.star;
     const size = Math.max(8, element.fontSize * 1.5);
-    return {
+    const content: Content = {
       svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${element.color}">${path}</svg>`,
-      width: size,
-      height: size,
+      width: element.placement === "absolute" ? element.width : size,
+      height: element.placement === "absolute" ? element.height : size,
       alignment: element.alignment,
       margin: [0, element.marginBefore, 0, element.marginAfter],
     };
+    if (element.placement === "absolute") {
+      (content as Record<string, unknown>).absolutePosition = { x: element.x, y: element.y };
+    }
+    return content;
   }
-  return {
+  const content: Content = {
     text: element.text || " ",
     font,
     fontSize: element.fontSize,
@@ -465,6 +501,11 @@ function extraElementContent(element: DesignerExtraElement, font?: string): Cont
     alignment: element.alignment,
     margin: [0, element.marginBefore, 0, element.marginAfter],
   };
+  if (element.placement === "absolute") {
+    (content as Record<string, unknown>).absolutePosition = { x: element.x, y: element.y };
+    (content as Record<string, unknown>).width = element.width;
+  }
+  return content;
 }
 
 export function applyTemplateDesigner(
@@ -504,7 +545,11 @@ export function applyTemplateDesigner(
   if (settings.pageSize !== "template") designed.pageSize = settings.pageSize;
   if (settings.orientation !== "template") designed.pageOrientation = settings.orientation;
 
-  if (settings.pageBackgroundEnabled) {
+  const font = settings.fontFamily === "template" ? undefined : settings.fontFamily;
+  const absoluteElements = settings.extraElements.filter(
+    (element) => element.placement === "absolute",
+  );
+  if (settings.pageBackgroundEnabled || absoluteElements.length > 0) {
     const originalBackground = designed.background;
     designed.background = (currentPage, pageSize) => {
       const original =
@@ -512,25 +557,31 @@ export function applyTemplateDesigner(
           ? originalBackground(currentPage, pageSize)
           : originalBackground;
       return [
-        {
-          canvas: [
-            {
-              type: "rect",
-              x: 0,
-              y: 0,
-              w: pageSize.width,
-              h: pageSize.height,
-              color: settings.pageBackground,
-            },
-          ],
-          absolutePosition: { x: 0, y: 0 },
-        },
+        ...(settings.pageBackgroundEnabled
+          ? [
+              {
+                canvas: [
+                  {
+                    type: "rect" as const,
+                    x: 0,
+                    y: 0,
+                    w: pageSize.width,
+                    h: pageSize.height,
+                    color: settings.pageBackground,
+                  },
+                ],
+                absolutePosition: { x: 0, y: 0 },
+              },
+            ]
+          : []),
         ...(original ? (Array.isArray(original) ? original : [original]) : []),
+        ...absoluteElements
+          .filter((element) => element.page === currentPage)
+          .map((element) => extraElementContent(element, font)),
       ] as Content;
     };
   }
 
-  const font = settings.fontFamily === "template" ? undefined : settings.fontFamily;
   const start = settings.extraElements
     .filter((element) => element.placement === "start")
     .map((element) => extraElementContent(element, font));

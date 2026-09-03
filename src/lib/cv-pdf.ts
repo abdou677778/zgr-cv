@@ -1203,9 +1203,10 @@ function v2SplitOversizedWord(word: string, maxWidth: number, fontSize: number) 
 }
 
 function v2WrappedRtlText(text: string, maxWidth: number, fontSize: number) {
-  // pdfMake shapes connected Arabic glyphs after this pass. Keep a small safety
-  // reserve so its final glyph metrics never force a second, mid-word wrap.
-  const widthLimit = Math.max(fontSize, maxWidth * 0.9);
+  // pdfMake shapes connected Arabic glyphs after this pass. Keep only the small
+  // reserve required by those final glyph metrics, so each line still uses the
+  // available column width before wrapping at a word boundary.
+  const widthLimit = Math.max(fontSize, maxWidth * 0.97);
   return text
     .normalize("NFC")
     .split(/\r?\n/u)

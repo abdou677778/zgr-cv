@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   newDesignerElement,
+  isNativeDesignerElement,
   type DesignerExtraElement,
   type DesignerFontFamily,
   type DesignerPreset,
@@ -366,12 +367,15 @@ export function PreviewControlDock({
                           <span className="mr-2 text-[10px] font-bold uppercase tracking-wider text-violet-300">
                             Page {selectedExtraElement.page}
                           </span>
-                          Élément{" "}
-                          {selectedExtraElement.type === "icon"
-                            ? "icône"
-                            : selectedExtraElement.type === "separator"
-                              ? "ligne"
-                              : "texte"}
+                          {isNativeDesignerElement(selectedExtraElement.id)
+                            ? "Barre verticale d’en-tête"
+                            : `Élément ${
+                                selectedExtraElement.type === "icon"
+                                  ? "icône"
+                                  : selectedExtraElement.type === "separator"
+                                    ? "ligne"
+                                    : "texte"
+                              }`}
                         </div>
 
                         {selectedExtraElement.type === "text" && (
@@ -469,7 +473,7 @@ export function PreviewControlDock({
                             </span>
                             <input
                               type="number"
-                              min={8}
+                              min={selectedExtraElement.type === "separator" ? 1 : 8}
                               value={selectedExtraElement.width}
                               onChange={(event) =>
                                 onSelectedExtraElementChange({ width: Number(event.target.value) })
@@ -483,7 +487,7 @@ export function PreviewControlDock({
                             </span>
                             <input
                               type="number"
-                              min={4}
+                              min={selectedExtraElement.type === "separator" ? 2 : 4}
                               value={selectedExtraElement.height}
                               onChange={(event) =>
                                 onSelectedExtraElementChange({ height: Number(event.target.value) })
@@ -528,13 +532,20 @@ export function PreviewControlDock({
                           )}
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={onSelectedExtraElementDelete}
-                          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100"
-                        >
-                          <Trash2 className="h-4 w-4" /> Supprimer l’élément
-                        </button>
+                        {isNativeDesignerElement(selectedExtraElement.id) ? (
+                          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-medium leading-4 text-emerald-800">
+                            Élément natif du modèle : position, épaisseur, hauteur et couleur sont
+                            modifiables sans le fusionner avec le fond.
+                          </p>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={onSelectedExtraElementDelete}
+                            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                          >
+                            <Trash2 className="h-4 w-4" /> Supprimer l’élément
+                          </button>
+                        )}
                       </div>
                     ) : !designerSelection ? (
                       <div className="rounded-xl border border-dashed border-blue-300 bg-white/80 px-3 py-5 text-center text-xs font-medium text-blue-700">

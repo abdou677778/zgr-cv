@@ -78,6 +78,47 @@ export type TemplateDesignerSettings = {
 
 export type TemplateDesignerSettingsMap = Partial<Record<PdfTemplateId, TemplateDesignerSettings>>;
 
+export const ARABIC_V2_HEADER_DIVIDER_ID = "native:arabic-pro-v2:header-divider";
+
+const ARABIC_V2_HEADER_DIVIDER: DesignerExtraElement = {
+  id: ARABIC_V2_HEADER_DIVIDER_ID,
+  type: "separator",
+  placement: "absolute",
+  page: 1,
+  x: 229,
+  y: 28,
+  width: 3,
+  height: 60,
+  text: "",
+  fontSize: 10,
+  color: "#595959",
+  bold: false,
+  alignment: "left",
+  marginBefore: 0,
+  marginAfter: 0,
+};
+
+export function isNativeDesignerElement(elementId: string) {
+  return elementId === ARABIC_V2_HEADER_DIVIDER_ID;
+}
+
+export function withTemplateDesignerElements(
+  settings: TemplateDesignerSettings,
+  templateId: PdfTemplateId,
+): TemplateDesignerSettings {
+  const normalized = normalizeTemplateDesignerSettings(settings);
+  if (
+    templateId !== "arabic-pro-v2" ||
+    normalized.extraElements.some((element) => element.id === ARABIC_V2_HEADER_DIVIDER_ID)
+  ) {
+    return normalized;
+  }
+  return {
+    ...normalized,
+    extraElements: [...normalized.extraElements, { ...ARABIC_V2_HEADER_DIVIDER }],
+  };
+}
+
 export type DesignerPreset = {
   id: string;
   name: string;
@@ -176,8 +217,18 @@ export function normalizeTemplateDesignerSettings(value: unknown): TemplateDesig
             page: Math.round(clamp(element.page, 1, 99, 1)),
             x: clamp(element.x, 0, 1_200, 48),
             y: clamp(element.y, 0, 1_700, 48),
-            width: clamp(element.width, 8, 1_200, type === "separator" ? 180 : 40),
-            height: clamp(element.height, 4, 1_700, type === "separator" ? 8 : 28),
+            width: clamp(
+              element.width,
+              type === "separator" ? 1 : 8,
+              1_200,
+              type === "separator" ? 180 : 40,
+            ),
+            height: clamp(
+              element.height,
+              type === "separator" ? 2 : 4,
+              1_700,
+              type === "separator" ? 8 : 28,
+            ),
             text: typeof element.text === "string" ? element.text.slice(0, 2_000) : "",
             fontSize: clamp(element.fontSize, 6, 42, 10),
             color: normalizeColor(element.color),
@@ -508,12 +559,46 @@ function extraElementContent(element: DesignerExtraElement, font?: string): Cont
   return content;
 }
 
+function applyNativeDesignerElements(value: unknown, settings: TemplateDesignerSettings): void {
+  if (Array.isArray(value)) {
+    value.forEach((item) => applyNativeDesignerElements(item, settings));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+
+  const node = value as Record<string, unknown>;
+  if (node.designerElementId === ARABIC_V2_HEADER_DIVIDER_ID) {
+    const element = settings.extraElements.find(
+      (candidate) => candidate.id === ARABIC_V2_HEADER_DIVIDER_ID,
+    );
+    if (element) {
+      const canvas = Array.isArray(node.canvas) ? node.canvas : [];
+      const rect =
+        canvas[0] && typeof canvas[0] === "object" ? (canvas[0] as Record<string, unknown>) : null;
+      if (rect) {
+        rect.w = element.width;
+        rect.h = element.height;
+        rect.color = element.color;
+      }
+      node.relativePosition = {
+        x: element.x - ARABIC_V2_HEADER_DIVIDER.x,
+        y: element.y - ARABIC_V2_HEADER_DIVIDER.y,
+      };
+    }
+  }
+
+  Object.values(node).forEach((item) => applyNativeDesignerElements(item, settings));
+}
+
 export function applyTemplateDesigner(
   definition: TDocumentDefinitions,
   rawSettings?: TemplateDesignerSettings,
+  templateId?: PdfTemplateId,
 ): TDocumentDefinitions {
   if (!rawSettings) return definition;
-  const settings = normalizeTemplateDesignerSettings(rawSettings);
+  const settings = templateId
+    ? withTemplateDesignerElements(rawSettings, templateId)
+    : normalizeTemplateDesignerSettings(rawSettings);
   // applyPdfTheme already returns a detached document tree. Mutating that tree
   // preserves pdfMake callbacks (background/header/footer), which cannot be
   // copied with structuredClone.
@@ -523,6 +608,7 @@ export function applyTemplateDesigner(
   transformNode(designed.styles, settings);
   transformNode(designed.defaultStyle, settings);
   applyTextOverrides(designed.content, settings);
+  applyNativeDesignerElements(designed.content, settings);
 
   designed.defaultStyle = {
     ...(designed.defaultStyle || {}),
@@ -547,7 +633,7 @@ export function applyTemplateDesigner(
 
   const font = settings.fontFamily === "template" ? undefined : settings.fontFamily;
   const absoluteElements = settings.extraElements.filter(
-    (element) => element.placement === "absolute",
+    (element) => element.placement === "absolute" && !isNativeDesignerElement(element.id),
   );
   if (settings.pageBackgroundEnabled || absoluteElements.length > 0) {
     const originalBackground = designed.background;
@@ -583,10 +669,10 @@ export function applyTemplateDesigner(
   }
 
   const start = settings.extraElements
-    .filter((element) => element.placement === "start")
+    .filter((element) => element.placement === "start" && !isNativeDesignerElement(element.id))
     .map((element) => extraElementContent(element, font));
   const end = settings.extraElements
-    .filter((element) => element.placement === "end")
+    .filter((element) => element.placement === "end" && !isNativeDesignerElement(element.id))
     .map((element) => extraElementContent(element, font));
   const content = Array.isArray(designed.content) ? designed.content : [designed.content];
   designed.content = [...start, ...content, ...end];

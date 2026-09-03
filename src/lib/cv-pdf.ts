@@ -1285,6 +1285,7 @@ function v2Header(cv: CV, rtl = false): Content {
   } as Content;
   const divider = {
     width: 3,
+    designerElementId: "native:arabic-pro-v2:header-divider",
     canvas: [{ type: "rect", x: 0, y: 0, w: 3, h: 60, color: V2_MUTED }],
   } as Content;
   const contactStack = {
@@ -4554,6 +4555,7 @@ export async function createCvPdfBlob(
       applyTemplateDesigner(
         applyPdfTheme(document, normalizedTemplateId, accentColor),
         effectiveDesign,
+        normalizedTemplateId,
       ),
     )
     .getBlob();

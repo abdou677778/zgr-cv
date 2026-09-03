@@ -120,8 +120,10 @@ import {
   createDesignerTextOverride,
   designerFontsForLanguage,
   effectiveDesignerSettings,
+  isNativeDesignerElement,
   normalizeDesignerPresets,
   normalizeTemplateDesignerSettings,
+  withTemplateDesignerElements,
   type DesignerPreset,
   type DesignerExtraElement,
   type DesignerTextOverride,
@@ -515,8 +517,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     activeDesignerPreset?.settings ?? templateDesignerSettings[templateId];
   const designerSettings = useMemo(
     () =>
-      effectiveDesignerSettings(normalizeTemplateDesignerSettings(rawDesignerSettings), language),
-    [language, rawDesignerSettings],
+      withTemplateDesignerElements(
+        effectiveDesignerSettings(normalizeTemplateDesignerSettings(rawDesignerSettings), language),
+        templateId,
+      ),
+    [language, rawDesignerSettings, templateId],
   );
   const designerFonts = designerFontsForLanguage(language);
   const selectedTextOverride = designerSelection
@@ -3269,6 +3274,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 onSelectedExtraElementChange={updateSelectedDesignerExtraElement}
                 onSelectedExtraElementDelete={() => {
                   if (!designerExtraSelectionId) return;
+                  if (isNativeDesignerElement(designerExtraSelectionId)) {
+                    updateDesignerSettings({
+                      ...designerSettings,
+                      extraElements: designerSettings.extraElements.filter(
+                        (element) => element.id !== designerExtraSelectionId,
+                      ),
+                    });
+                    setDesignerExtraSelectionId(null);
+                    return;
+                  }
                   updateDesignerSettings({
                     ...designerSettings,
                     extraElements: designerSettings.extraElements.filter(
@@ -3775,6 +3790,8 @@ function PdfPreview({
           designerRef.current.extraElements
             .filter((element) => element.placement === "absolute" && element.page === pageNumber)
             .forEach((element) => {
+              const nativeElement = isNativeDesignerElement(element.id);
+              const hitPadding = nativeElement ? 6 : 0;
               const hitTarget = window.document.createElement("button");
               hitTarget.type = "button";
               hitTarget.dataset.designerExtra = "true";
@@ -3789,9 +3806,9 @@ function PdfPreview({
               hitTarget.title = `Déplacer l’élément ${elementLabel}`;
               hitTarget.className =
                 "absolute z-20 cursor-move overflow-hidden rounded border border-violet-400 bg-violet-400/5 p-0 text-[10px] text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-600";
-              hitTarget.style.left = `${(element.x / baseViewport.width) * 100}%`;
+              hitTarget.style.left = `${((element.x - hitPadding) / baseViewport.width) * 100}%`;
               hitTarget.style.top = `${(element.y / baseViewport.height) * 100}%`;
-              hitTarget.style.width = `${(element.width / baseViewport.width) * 100}%`;
+              hitTarget.style.width = `${((element.width + hitPadding * 2) / baseViewport.width) * 100}%`;
               hitTarget.style.height = `${(element.height / baseViewport.height) * 100}%`;
               if (element.type === "icon") {
                 hitTarget.textContent =

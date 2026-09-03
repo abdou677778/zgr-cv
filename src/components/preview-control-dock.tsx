@@ -112,7 +112,7 @@ const dockButtons: Array<{
   { id: "layout", label: "Mise en page", icon: Columns3 },
   { id: "organize", label: "Organiser", icon: ListTree },
   { id: "sections", label: "Sections et couleurs", icon: Palette },
-  { id: "designer", label: "Designer professionnel", icon: PenTool },
+  { id: "designer", label: "Éditeur direct", icon: PenTool },
 ];
 
 function DesignerRange({
@@ -260,8 +260,8 @@ export function PreviewControlDock({
             <div className="space-y-4">
               {designerDisabled ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
-                  Le Designer agit sur les modèles PDF internes. Sélectionnez un modèle de CV autre
-                  que Europass pour modifier réellement l’aperçu et le fichier exporté.
+                  L’éditeur direct agit sur les modèles PDF internes. Sélectionnez un modèle de CV
+                  autre que Europass pour modifier réellement l’aperçu et le fichier exporté.
                 </div>
               ) : (
                 <>

@@ -1332,7 +1332,39 @@ function v2ObjectiveContent(cv: CV, rtl: boolean): Content {
 
 function v2DateText(value: string, language: DocumentLanguage, rtl: boolean) {
   const formatted = formatCvDate(value, language).toLocaleUpperCase(language);
-  return v2RtlText(rtl ? formatted.replace(/\s+-\s+/g, "\n") : formatted, rtl, V2_DATE_COLUMN_W, 9);
+  return v2RtlText(formatted, rtl, V2_DATE_COLUMN_W, 9);
+}
+
+function v2EmployerWithoutDuplicateLocation(employer: string, location: string) {
+  const employerParts = employer
+    .split(/\s*[،,]\s*/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const normalizedLocations = new Set(
+    location
+      .split(/\s*[،,]\s*/u)
+      .map((part) =>
+        part
+          .normalize("NFC")
+          .replace(/[\s.;:]+/gu, " ")
+          .trim()
+          .toLocaleLowerCase("fr"),
+      )
+      .filter(Boolean),
+  );
+
+  while (employerParts.length > 1) {
+    const trailingPart = employerParts.at(-1) || "";
+    const normalizedTrailingPart = trailingPart
+      .normalize("NFC")
+      .replace(/[\s.;:]+/gu, " ")
+      .trim()
+      .toLocaleLowerCase("fr");
+    if (!normalizedLocations.has(normalizedTrailingPart)) break;
+    employerParts.pop();
+  }
+
+  return employerParts.join("، ");
 }
 
 function v2ContactLine(icon: keyof typeof CONTACT_ICONS_V2, text: string, rtl = false): Content {
@@ -1512,6 +1544,7 @@ function v2ExperienceBlock(
         bold: true,
         color: V2_ACCENT,
         fontSize: 9,
+        noWrap: true,
         alignment: rtl ? "right" : "left",
       },
       {
@@ -1533,7 +1566,15 @@ function v2ExperienceBlock(
       },
       companyLine(
         experience,
-        v2RtlText((experience.employeur || "").toLocaleUpperCase("fr"), rtl, V2_DETAILS_W, 11),
+        v2RtlText(
+          (rtl
+            ? v2EmployerWithoutDuplicateLocation(experience.employeur || "", experience.lieu || "")
+            : experience.employeur || ""
+          ).toLocaleUpperCase("fr"),
+          rtl,
+          V2_DETAILS_W,
+          11,
+        ),
         11,
         {
           bold: true,

@@ -390,7 +390,7 @@ function richListUl(
 
 function companyLine(
   experience: Experience,
-  text: string,
+  text: string | ObjectiveRun[],
   logoSize: number,
   defaults: Record<string, unknown> = {},
   rtl = false,
@@ -1202,55 +1202,109 @@ function v2SplitOversizedWord(word: string, maxWidth: number, fontSize: number) 
   return pieces;
 }
 
-function v2WrappedRtlText(text: string, maxWidth: number, fontSize: number) {
+function v2VisualRtlLine(words: ObjectiveRun[]) {
+  const groups: Array<{ ltr: boolean; words: ObjectiveRun[] }> = [];
+  for (const word of words) {
+    const ltr = /[\p{Script=Latin}\d]/u.test(word.text) && !/\p{Script=Arabic}/u.test(word.text);
+    const previous = groups.at(-1);
+    if (ltr && previous?.ltr) {
+      previous.words.push(word);
+    } else {
+      groups.push({ ltr, words: [word] });
+    }
+  }
+  const visualWords = groups.reverse().flatMap((group) => group.words);
+  return visualWords.flatMap((word, index) => {
+    const containsArabic = /\p{Script=Arabic}/u.test(word.text);
+    const containsLtr = /[\p{Script=Latin}\d]/u.test(word.text);
+    const pieces =
+      containsArabic && containsLtr
+        ? (
+            word.text.match(/[\p{Script=Arabic}\p{Mark}]+|[^\p{Script=Arabic}\p{Mark}]+/gu) || [
+              word.text,
+            ]
+          )
+            .reverse()
+            .map((text) => ({ ...word, text }))
+        : [word];
+    return index ? [{ text: "\u00a0" }, ...pieces] : pieces;
+  });
+}
+
+function v2RtlParagraphs(text: RichInline) {
+  const sourceRuns = typeof text === "string" ? [{ text }] : text;
+  const paragraphs: ObjectiveRun[][] = [[]];
+  for (const sourceRun of sourceRuns) {
+    const parts = sourceRun.text.normalize("NFC").split(/(\r?\n|\s+)/u);
+    for (const part of parts) {
+      if (!part) continue;
+      if (/\r?\n/u.test(part)) {
+        paragraphs.push([]);
+      } else if (!/^\s+$/u.test(part)) {
+        const visualPunctuation = /\p{Script=Arabic}/u.test(part)
+          ? part.replace(
+              /[()[\]{}]/g,
+              (character) =>
+                ({ "(": ")", ")": "(", "[": "]", "]": "[", "{": "}", "}": "{" })[character] ||
+                character,
+            )
+          : part;
+        paragraphs.at(-1)?.push({ ...sourceRun, text: visualPunctuation });
+      }
+    }
+  }
+  return paragraphs;
+}
+
+function v2WrappedRtlText(text: RichInline, maxWidth: number, fontSize: number) {
   // pdfMake shapes connected Arabic glyphs after this pass. Keep only the small
   // reserve required by those final glyph metrics, so each line still uses the
   // available column width before wrapping at a word boundary.
   const widthLimit = Math.max(fontSize, maxWidth * 0.97);
-  return text
-    .normalize("NFC")
-    .split(/\r?\n/u)
-    .flatMap((paragraph) => {
-      const words = paragraph
-        .trim()
-        .split(/\s+/u)
-        .filter(Boolean)
-        .flatMap((word) =>
-          v2EstimatedTextWidth(word, fontSize) > widthLimit
-            ? v2SplitOversizedWord(word, widthLimit, fontSize)
-            : [word],
-        );
-      if (!words.length) return [""];
-      const lines: string[] = [];
-      let current: string[] = [];
-      for (const word of words) {
-        const candidate = [...current, word].join(" ");
-        if (current.length && v2EstimatedTextWidth(candidate, fontSize) > widthLimit) {
-          lines.push(current.join("\u00a0"));
-          current = [word];
-        } else {
-          current.push(word);
-        }
+  const visualLines = v2RtlParagraphs(text).flatMap((paragraph) => {
+    const words = paragraph.flatMap((word) =>
+      v2EstimatedTextWidth(word.text, fontSize) > widthLimit
+        ? v2SplitOversizedWord(word.text, widthLimit, fontSize).map((piece) => ({
+            ...word,
+            text: piece,
+          }))
+        : [word],
+    );
+    if (!words.length) return [[]];
+    const lines: ObjectiveRun[][] = [];
+    let current: ObjectiveRun[] = [];
+    for (const word of words) {
+      const candidate = [...current, word].map((run) => run.text).join(" ");
+      if (current.length && v2EstimatedTextWidth(candidate, fontSize) > widthLimit) {
+        lines.push(current);
+        current = [word];
+      } else {
+        current.push(word);
       }
-      if (current.length) lines.push(current.join("\u00a0"));
-      return lines;
-    })
-    .join("\n");
+    }
+    if (current.length) lines.push(current);
+    return lines.map(v2VisualRtlLine);
+  });
+  return visualLines.flatMap((line, index) => (index ? [{ text: "\n" }, ...line] : line));
 }
 
-function v2RtlText(text: string, rtl: boolean, maxWidth = V2_CONTENT_W, fontSize = 10.6) {
+type V2PdfText = string | ObjectiveRun[];
+
+function v2RtlText(
+  text: string,
+  rtl: boolean,
+  maxWidth = V2_CONTENT_W,
+  fontSize = 10.6,
+): V2PdfText {
   if (!rtl) return text;
   const containsArabic = /\p{Script=Arabic}/u.test(text);
   if (!containsArabic) return text;
-  const startsWithArabic = /^\s*\p{Script=Arabic}/u.test(text);
-  const numericCompensated = text.replace(/\d+(?:[.,:/+-]\d+)*/gu, (token) =>
-    Array.from(token).reverse().join(""),
-  );
-  const protectedLatin = numericCompensated.replace(
-    /[A-Za-z][A-Za-z0-9.+/#@_-]*/g,
-    (token) => `\u200e${startsWithArabic ? Array.from(token).reverse().join("") : token}\u200e`,
-  );
-  return v2WrappedRtlText(protectedLatin, maxWidth, fontSize);
+  return v2WrappedRtlText(text, maxWidth, fontSize);
+}
+
+function v2InlineRuns(text: V2PdfText, defaults: Record<string, unknown> = {}) {
+  const runs = typeof text === "string" ? [{ text }] : text;
+  return runs.map((run) => ({ ...run, ...defaults }));
 }
 
 function v2RtlRichInline(
@@ -1258,14 +1312,22 @@ function v2RtlRichInline(
   rtl: boolean,
   maxWidth = V2_FULL_LIST_TEXT_W,
   fontSize = 10.6,
-): RichInline {
+): V2PdfText {
   if (!rtl) return item;
-  return typeof item === "string"
-    ? v2RtlText(item, true, maxWidth, fontSize)
-    : item.map((run) => ({
-        ...run,
-        text: v2RtlText(run.text, true, maxWidth, fontSize),
-      }));
+  const plainText = typeof item === "string" ? item : item.map((run) => run.text).join("");
+  return /\p{Script=Arabic}/u.test(plainText) ? v2WrappedRtlText(item, maxWidth, fontSize) : item;
+}
+
+function v2ObjectiveContent(cv: CV, rtl: boolean): Content {
+  if (!rtl) return objectivePdfContent(cv, 10.6);
+  const format = normalizeObjectiveFormat(cv.objectif_format);
+  const fontSize = Number((10.6 * (format.fontSize / 15)).toFixed(2));
+  return {
+    text: v2RtlRichInline(objectiveRichRuns(cv), true, V2_CONTENT_W, fontSize),
+    fontSize,
+    alignment: format.alignment || "right",
+    ...(format.color ? { color: format.color } : {}),
+  } as Content;
 }
 
 function v2DateText(value: string, language: DocumentLanguage, rtl: boolean) {
@@ -1311,9 +1373,13 @@ function v2Header(cv: CV, rtl = false): Content {
       {
         text: rtl
           ? [
-              { text: v2RtlText(remainingName, true, 220, 24), color: V2_ACCENT },
+              ...v2InlineRuns(v2RtlText(remainingName, true, 220, 24), {
+                color: V2_ACCENT,
+              }),
               { text: remainingName ? "\u00a0" : "" },
-              { text: v2RtlText(firstName, true, 110, 24), color: "#000000" },
+              ...v2InlineRuns(v2RtlText(firstName, true, 110, 24), {
+                color: "#000000",
+              }),
             ]
           : [
               { text: firstName.toLocaleUpperCase("fr"), color: "#000000" },
@@ -1669,16 +1735,7 @@ function buildCvPdfV2(
     );
   };
 
-  if (cv.objectif)
-    pushSection(
-      labels.objective,
-      objectivePdfContent(
-        cv,
-        10.6,
-        rtl ? { alignment: "right" } : {},
-        rtl ? (text) => v2RtlText(text, true, V2_CONTENT_W, 10.6) : undefined,
-      ),
-    );
+  if (cv.objectif) pushSection(labels.objective, v2ObjectiveContent(cv, rtl));
 
   const competences = cv.competences.filter(Boolean);
   if (competences.length)
@@ -1693,9 +1750,9 @@ function buildCvPdfV2(
           .map(([label, value]) => ({
             text: rtl
               ? [
-                  { text: v2RtlText(value as string, true, 154, 10.6) },
+                  ...v2InlineRuns(v2RtlText(value as string, true, 154, 10.6)),
                   { text: "\u00a0:\u00a0" },
-                  { text: v2RtlText(label, true, 154, 10.6), bold: true },
+                  ...v2InlineRuns(v2RtlText(label, true, 154, 10.6), { bold: true }),
                 ]
               : [{ text: `${label} : `, bold: true }, { text: value as string }],
             alignment: rtl ? "right" : "left",

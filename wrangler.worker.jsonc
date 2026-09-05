@@ -9,6 +9,12 @@
     "enabled": true,
     "head_sampling_rate": 1,
   },
+  "assets": {
+    "directory": "./dist-spa",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/health"],
+  },
   "vars": {
     "ALLOWED_ORIGINS": "https://abdou677778.github.io,http://localhost:3000,http://127.0.0.1:3000,http://localhost:4173,http://127.0.0.1:4173,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080,null",
     "ADMIN_USERNAME": "admin",

@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { clearAdminSession, loginAdmin, type SessionUser } from "@/lib/auth-client";
+import { clearAdminSession, CLOUD_APP_URL, loginAdmin, type SessionUser } from "@/lib/auth-client";
 
 const ONLINE_APP_URL = "https://abdou677778.github.io/zgr-cv/";
 
@@ -22,6 +22,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
   const [error, setError] = useState("");
   const [networkFailure, setNetworkFailure] = useState(false);
   const [runtimeMode, setRuntimeMode] = useState<"online" | "local" | "file">("online");
+  const [cloudMode, setCloudMode] = useState(false);
   const fileMode = runtimeMode === "file";
   const localMode = runtimeMode === "local";
 
@@ -35,6 +36,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
           ? "local"
           : "online",
     );
+    setCloudMode(window.location.origin === new URL(CLOUD_APP_URL).origin);
   }, []);
 
   const openOnlineVersion = () => {
@@ -46,7 +48,13 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
 
   const repairSession = () => {
     clearAdminSession();
-    const target = fileMode || localMode ? new URL(ONLINE_APP_URL) : new URL(window.location.href);
+    const cloudTarget = new URL(CLOUD_APP_URL);
+    const target =
+      fileMode || localMode
+        ? new URL(ONLINE_APP_URL)
+        : cloudMode
+          ? new URL(window.location.href)
+          : cloudTarget;
     if (username.trim()) target.searchParams.set("login", username.trim());
     target.searchParams.set("refresh", Date.now().toString());
     window.location.replace(target.toString());
@@ -156,7 +164,9 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
                   )}
                   {fileMode || localMode
                     ? "Ouvrir la version officielle"
-                    : "Réparer la session et actualiser"}
+                    : cloudMode
+                      ? "Réparer la session et actualiser"
+                      : "Ouvrir la version Cloudflare fiable"}
                 </Button>
               )}
             </div>

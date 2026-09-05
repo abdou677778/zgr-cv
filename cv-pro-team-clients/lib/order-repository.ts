@@ -65,6 +65,7 @@ export interface StoredDelivery {
 }
 
 type D1Row = Record<string, unknown>;
+const STALE_DRIVE_SYNC_MS = 20 * 60 * 1000;
 
 function textValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
@@ -147,8 +148,24 @@ function mapDelivery(row: D1Row): StoredDelivery {
   };
 }
 
+async function repairStaleDriveSyncs() {
+  const cutoff = new Date(Date.now() - STALE_DRIVE_SYNC_MS).toISOString();
+  await runtimeEnv()
+    .DB.prepare(
+      `UPDATE orders
+       SET drive_status = CASE
+         WHEN drive_folder_id IS NULL OR drive_folder_id = '' THEN 'ERROR'
+         ELSE 'SYNCED'
+       END
+       WHERE drive_status = 'SYNCING' AND updated_at < ?`,
+    )
+    .bind(cutoff)
+    .run();
+}
+
 export async function getOrder(id: string) {
   await ensureSchema();
+  await repairStaleDriveSyncs();
   const row = await runtimeEnv()
     .DB.prepare('SELECT * FROM orders WHERE id = ?')
     .bind(id)
@@ -227,6 +244,7 @@ export async function validateUploadToken(
 
 export async function listOrders(limit = 200) {
   await ensureSchema();
+  await repairStaleDriveSyncs();
   const result = await runtimeEnv()
     .DB.prepare(
       `SELECT o.*,

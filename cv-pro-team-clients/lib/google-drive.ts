@@ -239,12 +239,15 @@ export async function syncOrderToDrive(orderId: string) {
   if (!order) throw new Error('Commande introuvable.');
   const env = runtimeEnv();
   const rootId = env.GOOGLE_DRIVE_ROOT_FOLDER_ID!;
+  const startedAt = new Date().toISOString();
 
-  await env.DB.prepare(
-    "UPDATE orders SET drive_status = 'SYNCING' WHERE id = ?",
+  const lock = await env.DB.prepare(
+    "UPDATE orders SET drive_status = 'SYNCING', updated_at = ? WHERE id = ? AND drive_status <> 'SYNCING'",
   )
-    .bind(orderId)
+    .bind(startedAt, orderId)
     .run();
+  if (!Number(lock.meta.changes))
+    throw new Error('Une synchronisation Google Drive est déjà en cours.');
   try {
     const cache: DriveDirectoryCache = new Map();
     const files = await getOrderFiles(orderId);

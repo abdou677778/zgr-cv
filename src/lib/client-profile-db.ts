@@ -9,6 +9,7 @@ import {
   normalizeProfilePhoto,
   profilePhotoBlob,
 } from "./profile-photo";
+import { authenticatedFetch } from "./auth-client";
 
 const DB_NAME = "zgr-cv-clients";
 const DB_VERSION = 1;
@@ -176,17 +177,19 @@ function profileForCloud(profile: ClientProfile, photo?: ProfilePhoto): ClientPr
 }
 
 export async function listCloudProfiles(endpoint: string, token: string) {
-  const response = await fetch(cloudUrl(endpoint), { headers: cloudHeaders(token) });
+  const response = await authenticatedFetch(cloudUrl(endpoint), { headers: cloudHeaders(token) });
   const body = await cloudResponse<{ profiles: CloudProfileSummary[] }>(response);
   return body.profiles;
 }
 
 export async function getCloudProfile(endpoint: string, token: string, id: string) {
-  const response = await fetch(cloudUrl(endpoint, id), { headers: cloudHeaders(token) });
+  const response = await authenticatedFetch(cloudUrl(endpoint, id), {
+    headers: cloudHeaders(token),
+  });
   const profile = await cloudResponse<ClientProfile>(response);
   const metadata = profilePhoto(profile);
   if (!metadata) return profile;
-  const photoResponse = await fetch(cloudPhotoUrl(endpoint, id), {
+  const photoResponse = await authenticatedFetch(cloudPhotoUrl(endpoint, id), {
     headers: cloudHeaders(token),
     cache: "no-store",
   });
@@ -211,7 +214,7 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
   const photo = profilePhoto(profile);
   if (photo?.dataUrl) {
     const blob = await profilePhotoBlob(photo);
-    const photoResponse = await fetch(cloudPhotoUrl(endpoint, profile.id), {
+    const photoResponse = await authenticatedFetch(cloudPhotoUrl(endpoint, profile.id), {
       method: "PUT",
       headers: {
         ...cloudHeaders(token),
@@ -222,14 +225,14 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
     await cloudResponse<{ ok: true; key: string }>(photoResponse);
   }
   const cloudProfile = profileForCloud(profile, photo);
-  const response = await fetch(cloudUrl(endpoint, profile.id), {
+  const response = await authenticatedFetch(cloudUrl(endpoint, profile.id), {
     method: "PUT",
     headers: cloudHeaders(token, true),
     body: JSON.stringify(cloudProfile),
   });
   await cloudResponse<{ ok: true }>(response);
   if (!photo) {
-    const photoResponse = await fetch(cloudPhotoUrl(endpoint, profile.id), {
+    const photoResponse = await authenticatedFetch(cloudPhotoUrl(endpoint, profile.id), {
       method: "DELETE",
       headers: cloudHeaders(token),
     });

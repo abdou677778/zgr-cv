@@ -17,6 +17,7 @@ const decoder = new TextDecoder();
 function allowedOrigin(request, env) {
   const origin = request.headers.get("Origin");
   if (!origin) return null;
+  if (origin === new URL(request.url).origin) return origin;
   const origins = String(env.ALLOWED_ORIGINS || "")
     .split(",")
     .map((value) => value.trim())

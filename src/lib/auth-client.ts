@@ -4,7 +4,10 @@ const SESSION_CHANGED_EVENT = "zgr-cv-session-changed";
 const SESSION_VERIFY_TIMEOUT_MS = 12_000;
 const SESSION_LOGIN_TIMEOUT_MS = 25_000;
 const AUTH_NETWORK_ATTEMPTS = 2;
+const API_REQUEST_TIMEOUT_MS = 30_000;
+const API_READ_ATTEMPTS = 3;
 const CLOUD_API_ROOT = "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev";
+export const CLOUD_APP_URL = `${CLOUD_API_ROOT}/`;
 const FILE_CLIENTS_API_ENDPOINT = `${CLOUD_API_ROOT}/api/clients`;
 // GitHub Pages and the local Vite preview are static frontends: neither owns
 // an /api route. Pointing them at a relative URL first caused an avoidable
@@ -17,6 +20,24 @@ export const API_ROOT = configuredClientsEndpoint.replace(/\/api\/clients\/?$/, 
 export const CLIENTS_API_ENDPOINT = `${API_ROOT}/api/clients`;
 
 export const apiUrl = (path: string) => `${API_ROOT}${path.startsWith("/") ? path : `/${path}`}`;
+
+function requestTarget(path: string) {
+  return /^https?:\/\//i.test(path) ? path : apiUrl(path);
+}
+
+function apiNetworkError(failure: unknown) {
+  const message = failure instanceof Error ? failure.message : "";
+  if (
+    failure instanceof TypeError ||
+    failure instanceof DOMException ||
+    /failed to fetch|networkerror|load failed|abort|timeout|délai/i.test(message)
+  ) {
+    return new Error(
+      "Connexion Cloudflare bloquée par ce navigateur ou ce réseau. Réessayez, puis utilisez la version Cloudflare du site si le blocage continue.",
+    );
+  }
+  return failure instanceof Error ? failure : new Error("Le service sécurisé est indisponible.");
+}
 
 export type SessionUser = {
   username: string;
@@ -225,12 +246,41 @@ export async function authenticatedFetch(path: string, init: RequestInit = {}) {
   if (!token) throw new Error("Session administrateur absente.");
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(apiUrl(path), {
-    ...init,
-    cache: "no-store",
-    credentials: "omit",
-    headers,
-  });
-  if (response.status === 401) clearAdminSession();
-  return response;
+  const method = (init.method || "GET").toUpperCase();
+  const attempts = method === "GET" || method === "HEAD" ? API_READ_ATTEMPTS : 1;
+  let lastFailure: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+    const abortFromCaller = () => controller.abort();
+    init.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    try {
+      const target = new URL(requestTarget(path));
+      if (attempt) target.searchParams.set("retry", String(attempt + 1));
+      const response = await fetch(target, {
+        ...init,
+        cache: "no-store",
+        credentials: "omit",
+        mode: "cors",
+        redirect: "error",
+        referrerPolicy: "strict-origin-when-cross-origin",
+        headers,
+        signal: controller.signal,
+      });
+      if (response.status === 401) clearAdminSession();
+      if (response.status < 500 || attempt + 1 === attempts) return response;
+      lastFailure = new Error(`Service temporairement indisponible (${response.status}).`);
+    } catch (failure) {
+      if (init.signal?.aborted) throw failure;
+      lastFailure = failure;
+    } finally {
+      window.clearTimeout(timeout);
+      init.signal?.removeEventListener("abort", abortFromCaller);
+    }
+    if (attempt + 1 < attempts)
+      await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)));
+  }
+
+  throw apiNetworkError(lastFailure);
 }

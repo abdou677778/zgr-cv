@@ -57,6 +57,14 @@ export type Langues = {
   kab: string;
 };
 
+export type SoftwareIcon = "word" | "excel" | "powerpoint" | "generic";
+
+export type SoftwareSkill = {
+  id: string;
+  label: string;
+  icon: SoftwareIcon;
+};
+
 export type EuropassCefrLevel = "" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 
 export type EuropassLanguageProfile = {
@@ -188,6 +196,7 @@ export type CV = {
   objectif_format?: ObjectiveFormat;
   competences: string[];
   competences_format?: ObjectiveFormat;
+  logiciels: SoftwareSkill[];
   langues: Langues;
   experiences: Experience[];
   formations: Formation[];
@@ -224,6 +233,7 @@ export const emptyCV: CV = {
   objectif_format: { html: "", alignment: "", fontSize: 15, color: "" },
   competences: ["", "", "", "", "", "", ""],
   competences_format: { html: "", alignment: "", fontSize: 15, color: "" },
+  logiciels: [],
   langues: { fr: "", en: "", ar: "", de: "", es: "", kab: "" },
   experiences: [],
   formations: [],

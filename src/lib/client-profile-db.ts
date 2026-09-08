@@ -23,6 +23,8 @@ export type ClientProfile = {
   phone: string;
   createdAt: string;
   updatedAt: string;
+  createdBy?: ClientProfileActor;
+  updatedBy?: ClientProfileActor;
   language: DocumentLanguage;
   cvByLanguage: Record<DocumentLanguage, CV>;
   hiddenElements: HiddenCvElements;
@@ -33,9 +35,23 @@ export type ClientProfile = {
   photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
 
+export type ClientProfileActor = {
+  username: string;
+  displayName: string;
+  role: "admin" | "user";
+};
+
 export type ClientProfileSummary = Pick<
   ClientProfile,
-  "id" | "name" | "email" | "phone" | "createdAt" | "updatedAt" | "language"
+  | "id"
+  | "name"
+  | "email"
+  | "phone"
+  | "createdAt"
+  | "updatedAt"
+  | "createdBy"
+  | "updatedBy"
+  | "language"
 > & { hasPhoto?: boolean };
 
 const asPromise = <T>(request: IDBRequest<T>) =>
@@ -128,6 +144,19 @@ export async function deleteClientProfile(id: string) {
 
 export type CloudProfileSummary = ClientProfileSummary & { size?: number };
 
+export type CloudDeletedProfileSummary = {
+  id: string;
+  deletedAt: string;
+  deletedBy: string;
+};
+
+export type CloudProfileCommit = Pick<
+  ClientProfile,
+  "createdAt" | "updatedAt" | "createdBy" | "updatedBy"
+> & {
+  photoAsset?: Omit<ProfilePhoto, "dataUrl">;
+};
+
 function cloudHeaders(token: string, json = false): HeadersInit {
   return {
     ...(json ? { "Content-Type": "application/json" } : {}),
@@ -178,8 +207,14 @@ function profileForCloud(profile: ClientProfile, photo?: ProfilePhoto): ClientPr
 
 export async function listCloudProfiles(endpoint: string, token: string) {
   const response = await authenticatedFetch(cloudUrl(endpoint), { headers: cloudHeaders(token) });
-  const body = await cloudResponse<{ profiles: CloudProfileSummary[] }>(response);
-  return body.profiles;
+  const body = await cloudResponse<{
+    profiles: CloudProfileSummary[];
+    deletedProfiles?: CloudDeletedProfileSummary[];
+  }>(response);
+  return {
+    profiles: body.profiles,
+    deletedProfiles: body.deletedProfiles ?? [],
+  };
 }
 
 export async function getCloudProfile(endpoint: string, token: string, id: string) {
@@ -210,6 +245,14 @@ export async function getCloudProfile(endpoint: string, token: string, id: strin
   return profile;
 }
 
+export async function deleteCloudProfile(endpoint: string, token: string, id: string) {
+  const response = await authenticatedFetch(cloudUrl(endpoint, id), {
+    method: "DELETE",
+    headers: cloudHeaders(token),
+  });
+  await cloudResponse<{ ok: true; id: string }>(response);
+}
+
 export async function putCloudProfile(endpoint: string, token: string, profile: ClientProfile) {
   const photo = profilePhoto(profile);
   if (photo?.dataUrl) {
@@ -230,7 +273,10 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
     headers: cloudHeaders(token, true),
     body: JSON.stringify(cloudProfile),
   });
-  await cloudResponse<{ ok: true }>(response);
+  const result = await cloudResponse<{
+    ok: true;
+    profile?: Pick<ClientProfile, "createdAt" | "updatedAt" | "createdBy" | "updatedBy">;
+  }>(response);
   if (!photo) {
     const photoResponse = await authenticatedFetch(cloudPhotoUrl(endpoint, profile.id), {
       method: "DELETE",
@@ -238,14 +284,53 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
     });
     if (photoResponse.status !== 404) await cloudResponse<{ ok: true }>(photoResponse);
   }
-  return cloudProfile.photoAsset;
+  return {
+    createdAt: result.profile?.createdAt ?? cloudProfile.createdAt,
+    updatedAt: result.profile?.updatedAt ?? cloudProfile.updatedAt,
+    createdBy: result.profile?.createdBy ?? cloudProfile.createdBy,
+    updatedBy: result.profile?.updatedBy ?? cloudProfile.updatedBy,
+    photoAsset: cloudProfile.photoAsset,
+  } satisfies CloudProfileCommit;
+}
+
+export function applyCloudCommit(profile: ClientProfile, commit: CloudProfileCommit) {
+  const committed = structuredClone(profile);
+  committed.createdAt = commit.createdAt;
+  committed.updatedAt = commit.updatedAt;
+  committed.createdBy = commit.createdBy;
+  committed.updatedBy = commit.updatedBy;
+  committed.photoAsset = commit.photoAsset;
+  if (commit.photoAsset?.r2Key) {
+    for (const cv of Object.values(committed.cvByLanguage)) {
+      if (cv.photo) cv.photo.r2Key = commit.photoAsset.r2Key;
+    }
+  }
+  return committed;
 }
 
 export async function synchronizeClientProfiles(endpoint: string, token: string) {
-  const localSummaries = await listClientProfiles();
-  const remoteSummaries = await listCloudProfiles(endpoint, token);
-  const localById = new Map(localSummaries.map((profile) => [profile.id, profile]));
+  const initialLocalSummaries = await listClientProfiles();
+  const remoteIndex = await listCloudProfiles(endpoint, token);
+  const remoteSummaries = remoteIndex.profiles;
+  const initialLocalById = new Map(initialLocalSummaries.map((profile) => [profile.id, profile]));
   const remoteById = new Map(remoteSummaries.map((profile) => [profile.id, profile]));
+  let removed = 0;
+
+  for (const deleted of remoteIndex.deletedProfiles) {
+    const local = initialLocalById.get(deleted.id);
+    const remote = remoteById.get(deleted.id);
+    if (
+      local &&
+      (!remote || remote.updatedAt <= deleted.deletedAt) &&
+      local.updatedAt <= deleted.deletedAt
+    ) {
+      await deleteClientProfile(deleted.id);
+      removed += 1;
+    }
+  }
+
+  const localSummaries = removed ? await listClientProfiles() : initialLocalSummaries;
+  const localById = new Map(localSummaries.map((profile) => [profile.id, profile]));
   let uploaded = 0;
   let downloaded = 0;
 
@@ -254,7 +339,8 @@ export async function synchronizeClientProfiles(endpoint: string, token: string)
     if (!remote || local.updatedAt > remote.updatedAt) {
       const profile = await getClientProfile(local.id);
       if (profile) {
-        await putCloudProfile(endpoint, token, profile);
+        const commit = await putCloudProfile(endpoint, token, profile);
+        await saveClientProfile(applyCloudCommit(profile, commit));
         uploaded += 1;
       }
     }
@@ -269,5 +355,10 @@ export async function synchronizeClientProfiles(endpoint: string, token: string)
     }
   }
 
-  return { uploaded, downloaded, total: new Set([...localById.keys(), ...remoteById.keys()]).size };
+  return {
+    uploaded,
+    downloaded,
+    removed,
+    total: new Set([...localById.keys(), ...remoteById.keys()]).size,
+  };
 }

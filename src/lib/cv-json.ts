@@ -8,6 +8,8 @@ import {
   type EuropassProfile,
   type Experience,
   type Formation,
+  type SoftwareIcon,
+  type SoftwareSkill,
 } from "./cv-types";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
@@ -39,6 +41,37 @@ const text = (value: unknown) => (typeof value === "string" ? value.trim() : "")
 const stringList = (value: unknown): string[] => {
   if (Array.isArray(value)) return value.map(text).filter(Boolean);
   return Object.values(record(value)).map(text).filter(Boolean);
+};
+
+const SOFTWARE_ICONS = new Set<SoftwareIcon>(["word", "excel", "powerpoint", "generic"]);
+
+const inferSoftwareIcon = (label: string): SoftwareIcon => {
+  const normalized = label.toLowerCase();
+  if (/\bword\b/.test(normalized)) return "word";
+  if (/\bexcel\b/.test(normalized)) return "excel";
+  if (/power\s*point|powerpoint/.test(normalized)) return "powerpoint";
+  return "generic";
+};
+
+const softwareList = (value: unknown): SoftwareSkill[] => {
+  const values = Array.isArray(value) ? value : Object.values(record(value));
+  return values
+    .map((entry) => {
+      if (typeof entry === "string") {
+        const label = text(entry);
+        return label ? { id: newId(), label, icon: inferSoftwareIcon(label) } : null;
+      }
+      const item = record(entry);
+      const label = firstText(item, "label", "nom", "name", "logiciel", "software");
+      if (!label) return null;
+      const requestedIcon = text(item.icon).toLowerCase() as SoftwareIcon;
+      return {
+        id: text(item.id) || newId(),
+        label,
+        icon: SOFTWARE_ICONS.has(requestedIcon) ? requestedIcon : inferSoftwareIcon(label),
+      };
+    })
+    .filter((item): item is SoftwareSkill => Boolean(item));
 };
 
 const objectList = (value: unknown) => Object.values(record(value)).map(record);
@@ -208,6 +241,7 @@ function directCv(source: JsonRecord): CV {
     objectif_format: normalizeObjectiveFormat(source.objectif_format),
     competences: stringList(source.competences),
     competences_format: normalizeObjectiveFormat(source.competences_format),
+    logiciels: softwareList(source.logiciels ?? source.software),
     langues: {
       fr: text(langues.fr),
       en: text(langues.en),
@@ -363,6 +397,7 @@ function structuredCv(root: JsonRecord, language: "fr" | "en"): CV {
       : `Application for a ${position} opportunity in Canada`,
     objectif: firstText(objective, french ? "Texte de l'objectif" : "Objective Text"),
     competences: stringList(content[french ? "COMPÉTENCES CLÉS" : "KEY SKILLS"]),
+    logiciels: softwareList(content[french ? "LOGICIELS" : "SOFTWARE"]),
     langues: {
       fr: firstText(languages, french ? "Français" : "French"),
       en: firstText(languages, french ? "Anglais" : "English"),

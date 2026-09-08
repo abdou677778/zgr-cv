@@ -32,6 +32,10 @@ test("preserves every populated CV item until the user hides it", () => {
     equivalence: `المعادلة ${index + 1}`,
   }));
   cv.competences = ["مهارة أولى", "مهارة ثانية", "مهارة ثالثة"];
+  cv.logiciels = [
+    { id: "software-1", label: "Microsoft Word", icon: "word" },
+    { id: "software-2", label: "Microsoft Excel", icon: "excel" },
+  ];
   cv.interets = ["اهتمام أول", "اهتمام ثان"];
   cv.photo = {
     dataUrl: "data:image/webp;base64,UklGRg==",
@@ -48,6 +52,7 @@ test("preserves every populated CV item until the user hides it", () => {
   assert.equal(complete.formations.length, 3);
   assert.equal(complete.educations.length, 3);
   assert.equal(complete.competences.length, 3);
+  assert.equal(complete.logiciels.length, 2);
   assert.equal(complete.interets.length, 2);
   assert.equal(complete.photo?.name, "photo-profil.webp");
 
@@ -56,6 +61,7 @@ test("preserves every populated CV item until the user hides it", () => {
     "formation.0": true,
     "education.2": true,
     "skills.1": true,
+    "software.0": true,
     "section.interests": true,
     "personal.photo": true,
   });
@@ -72,6 +78,10 @@ test("preserves every populated CV item until the user hides it", () => {
     ["education-0", "education-1"],
   );
   assert.deepEqual(filtered.competences, ["مهارة أولى", "مهارة ثالثة"]);
+  assert.deepEqual(
+    filtered.logiciels.map((item) => item.id),
+    ["software-2"],
+  );
   assert.deepEqual(filtered.interets, []);
   assert.equal(filtered.photo, undefined);
   assert.equal(cv.photo?.name, "photo-profil.webp");

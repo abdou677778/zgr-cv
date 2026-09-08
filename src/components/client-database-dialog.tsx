@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Cloud,
+  CloudCheck,
   Database,
   Download,
   ExternalLink,
   LoaderCircle,
+  PencilLine,
   RefreshCw,
   Search,
   Trash2,
+  UserRoundPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,23 +23,28 @@ import {
 } from "@/components/ui/dialog";
 import {
   deleteClientProfile,
+  deleteCloudProfile,
+  getCloudProfile,
   getClientProfile,
   listClientProfiles,
+  saveClientProfile,
   synchronizeClientProfiles,
   type ClientProfile,
   type ClientProfileSummary,
 } from "@/lib/client-profile-db";
-import { CLIENTS_API_ENDPOINT, getAdminSession } from "@/lib/auth-client";
+import { CLIENTS_API_ENDPOINT, getAdminSession, type SessionUser } from "@/lib/auth-client";
 
 export function ClientDatabaseDialog({
   open,
   onOpenChange,
+  user,
   activeProfileId,
   onOpenProfile,
   onDownloadPdf,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  user: SessionUser;
   activeProfileId: string | null;
   onOpenProfile: (profile: ClientProfile) => void;
   onDownloadPdf: (profile: ClientProfile) => Promise<void>;
@@ -46,37 +54,67 @@ export function ClientDatabaseDialog({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
 
-  const refresh = async () => {
-    setBusy("refresh");
+  const refresh = useCallback(async (includeCloud = false, automatic = false) => {
+    setBusy(includeCloud ? "cloud" : "refresh");
+    setMessage("");
     try {
       setProfiles(await listClientProfiles());
-      setMessage("");
+      if (!includeCloud) return;
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const result = await synchronizeClientProfiles(CLIENTS_API_ENDPOINT, token);
+      setProfiles(await listClientProfiles());
+      setMessage(
+        automatic
+          ? `Base partagée actualisée : ${result.total} profil(s) disponible(s)${result.removed ? `, ${result.removed} suppression(s) appliquée(s)` : ""}.`
+          : `Synchronisation terminée : ${result.uploaded} envoyé(s), ${result.downloaded} récupéré(s), ${result.removed} supprimé(s), ${result.total} profil(s).`,
+      );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Base locale indisponible.");
+      setMessage(
+        error instanceof Error
+          ? `Les données locales restent disponibles. ${error.message}`
+          : "Les données locales restent disponibles, mais la base partagée est indisponible.",
+      );
     } finally {
       setBusy("");
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (open) void refresh();
-  }, [open]);
+    if (open) void refresh(true, true);
+  }, [open, refresh]);
 
   const filteredProfiles = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
     if (!query) return profiles;
     return profiles.filter((profile) =>
-      [profile.id, profile.name, profile.email, profile.phone].some((value) =>
-        value.toLocaleLowerCase("fr").includes(query),
-      ),
+      [
+        profile.id,
+        profile.name,
+        profile.email,
+        profile.phone,
+        profile.createdBy?.displayName ?? "",
+        profile.createdBy?.username ?? "",
+        profile.updatedBy?.displayName ?? "",
+        profile.updatedBy?.username ?? "",
+      ].some((value) => value.toLocaleLowerCase("fr").includes(query)),
     );
   }, [profiles, search]);
+
+  const resolveProfile = async (id: string) => {
+    const local = await getClientProfile(id);
+    if (local) return local;
+    const token = getAdminSession();
+    if (!token) throw new Error("Profil local introuvable et session cloud expirée.");
+    const cloud = await getCloudProfile(CLIENTS_API_ENDPOINT, token, id);
+    await saveClientProfile(cloud);
+    return cloud;
+  };
 
   const openProfile = async (id: string) => {
     setBusy(id);
     try {
-      const profile = await getClientProfile(id);
-      if (!profile) throw new Error("Profil introuvable.");
+      const profile = await resolveProfile(id);
       onOpenProfile(profile);
       onOpenChange(false);
     } catch (error) {
@@ -89,8 +127,7 @@ export function ClientDatabaseDialog({
   const download = async (id: string) => {
     setBusy(`pdf:${id}`);
     try {
-      const profile = await getClientProfile(id);
-      if (!profile) throw new Error("Profil introuvable.");
+      const profile = await resolveProfile(id);
       await onDownloadPdf(profile);
       setMessage(`PDF généré pour ${profile.name}.`);
     } catch (error) {
@@ -101,36 +138,22 @@ export function ClientDatabaseDialog({
   };
 
   const remove = async (profile: ClientProfileSummary) => {
-    if (!confirm(`Supprimer définitivement le profil local « ${profile.name} » (${profile.id}) ?`))
+    if (
+      !confirm(
+        `Supprimer définitivement « ${profile.name} » (${profile.id}) de la base partagée et de tous les navigateurs ?`,
+      )
+    )
       return;
     setBusy(`delete:${profile.id}`);
     try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      await deleteCloudProfile(CLIENTS_API_ENDPOINT, token, profile.id);
       await deleteClientProfile(profile.id);
-      await refresh();
-      setMessage("Profil local supprimé. La copie R2 éventuelle n’a pas été supprimée.");
+      await refresh(false);
+      setMessage("Profil supprimé de la base partagée et du cache de ce navigateur.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Suppression impossible.");
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const synchronize = async () => {
-    const token = getAdminSession();
-    if (!token) {
-      setMessage("La session administrateur a expiré. Reconnectez-vous.");
-      return;
-    }
-    setBusy("cloud");
-    setMessage("");
-    try {
-      const result = await synchronizeClientProfiles(CLIENTS_API_ENDPOINT, token);
-      await refresh();
-      setMessage(
-        `Synchronisation terminée : ${result.uploaded} envoyé(s), ${result.downloaded} récupéré(s), ${result.total} profil(s).`,
-      );
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Synchronisation R2 impossible.");
     } finally {
       setBusy("");
     }
@@ -144,8 +167,9 @@ export function ClientDatabaseDialog({
             <Database className="h-5 w-5 text-primary" /> Base de données clients
           </DialogTitle>
           <DialogDescription>
-            Profils JSON enregistrés localement par ID. Ouvrez un profil pour le modifier, puis
-            utilisez Sauvegarder afin de mettre à jour la même fiche.
+            Base partagée synchronisée avec Cloudflare R2 et mise en cache dans ce navigateur.
+            Ouvrez un profil, modifiez-le, puis utilisez Sauvegarder pour mettre à jour la même
+            fiche.
           </DialogDescription>
         </DialogHeader>
 
@@ -166,7 +190,8 @@ export function ClientDatabaseDialog({
                 variant="outline"
                 size="icon"
                 aria-label="Actualiser la base"
-                onClick={() => void refresh()}
+                onClick={() => void refresh(true)}
+                disabled={Boolean(busy)}
               >
                 <RefreshCw className={busy === "refresh" ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
               </Button>
@@ -175,9 +200,16 @@ export function ClientDatabaseDialog({
             <div className="overflow-hidden rounded-lg border">
               {filteredProfiles.length === 0 ? (
                 <div className="p-10 text-center text-sm text-muted-foreground">
-                  {profiles.length
-                    ? "Aucun profil ne correspond à cette recherche."
-                    : "Aucun profil enregistré. Importez ou remplissez un CV, puis cliquez sur Sauvegarder."}
+                  {busy === "cloud" ? (
+                    <span className="inline-flex items-center gap-2">
+                      <LoaderCircle className="h-4 w-4 animate-spin" /> Synchronisation de la base
+                      partagée…
+                    </span>
+                  ) : profiles.length ? (
+                    "Aucun profil ne correspond à cette recherche."
+                  ) : (
+                    "Aucun profil enregistré dans la base locale ou partagée. Importez ou remplissez un CV, puis cliquez sur Sauvegarder."
+                  )}
                 </div>
               ) : (
                 <div className="divide-y">
@@ -194,6 +226,22 @@ export function ClientDatabaseDialog({
                             {profile.email || profile.phone || "Coordonnées non renseignées"} · Mis
                             à jour {new Date(profile.updatedAt).toLocaleString("fr-DZ")}
                           </p>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                            <span className="inline-flex items-center gap-1.5">
+                              <UserRoundPlus className="h-3.5 w-3.5 text-emerald-600" />
+                              Créé par {profile.createdBy?.displayName || "non enregistré"}
+                              {profile.createdBy?.username
+                                ? ` (${profile.createdBy.username})`
+                                : ""}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <PencilLine className="h-3.5 w-3.5 text-violet-600" />
+                              Modifié par {profile.updatedBy?.displayName || "non enregistré"}
+                              {profile.updatedBy?.username
+                                ? ` (${profile.updatedBy.username})`
+                                : ""}
+                            </span>
+                          </div>
                         </div>
                         {activeProfileId === profile.id && (
                           <span className="rounded-full bg-primary px-2 py-1 text-[11px] text-primary-foreground">
@@ -253,7 +301,7 @@ export function ClientDatabaseDialog({
           <aside className="h-fit space-y-3 rounded-lg border bg-muted/30 p-4">
             <div>
               <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <Cloud className="h-4 w-4 text-sky-600" /> Sauvegarde Cloudflare R2
+                <CloudCheck className="h-4 w-4 text-sky-600" /> Base partagée Cloudflare R2
               </h3>
               <p className="mt-1 text-xs text-muted-foreground">
                 Synchronisation bidirectionnelle par date de modification. Les profils JSON et leurs
@@ -262,14 +310,14 @@ export function ClientDatabaseDialog({
               </p>
             </div>
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-              API R2 protégée par la session administrateur active. Aucun jeton supplémentaire à
-              saisir.
+              Connecté comme {user.displayName} ({user.username}). Chaque création et chaque
+              modification sont attribuées à ce profil.
             </div>
             <Button
               type="button"
               className="w-full"
-              onClick={() => void synchronize()}
-              disabled={busy === "cloud"}
+              onClick={() => void refresh(true)}
+              disabled={Boolean(busy)}
             >
               {busy === "cloud" ? (
                 <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
@@ -279,8 +327,8 @@ export function ClientDatabaseDialog({
               Synchroniser maintenant
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              La session disparaît à la fermeture de l’onglet et les profils restent chiffrés en
-              transit via HTTPS.
+              La base est actualisée automatiquement à chaque ouverture. Les profils restent
+              chiffrés en transit via HTTPS.
             </p>
           </aside>
         </div>

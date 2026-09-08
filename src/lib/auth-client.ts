@@ -6,6 +6,7 @@ const SESSION_LOGIN_TIMEOUT_MS = 25_000;
 const AUTH_NETWORK_ATTEMPTS = 2;
 const API_REQUEST_TIMEOUT_MS = 30_000;
 const API_READ_ATTEMPTS = 3;
+const API_PUT_ATTEMPTS = 2;
 const CLOUD_API_ROOT = "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev";
 export const CLOUD_APP_URL = `${CLOUD_API_ROOT}/`;
 const FILE_CLIENTS_API_ENDPOINT = `${CLOUD_API_ROOT}/api/clients`;
@@ -243,11 +244,16 @@ export async function verifyAdminSession(token = getAdminSession()) {
 
 export async function authenticatedFetch(path: string, init: RequestInit = {}) {
   const token = getAdminSession();
-  if (!token) throw new Error("Session administrateur absente.");
+  if (!token) throw new Error("Session utilisateur absente.");
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
   const method = (init.method || "GET").toUpperCase();
-  const attempts = method === "GET" || method === "HEAD" ? API_READ_ATTEMPTS : 1;
+  const attempts =
+    method === "GET" || method === "HEAD"
+      ? API_READ_ATTEMPTS
+      : method === "PUT"
+        ? API_PUT_ATTEMPTS
+        : 1;
   let lastFailure: unknown;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {

@@ -12,6 +12,7 @@ test("offers both active Arabic layouts for Arabic CVs", async () => {
       "canadian-v3",
       "canadian-v4",
       "ats-a4",
+      "cv-pro",
       "arabic-pro-v1",
       "arabic-pro-v2",
     ],
@@ -25,6 +26,10 @@ test("offers both active Arabic layouts for Arabic CVs", async () => {
     templates.getCvTemplatesForLanguage("ar").find((template) => template.id === "arabic-pro-v2")
       ?.name,
     "CV PRO Arabe V2",
+  );
+  assert.equal(
+    templates.getCvTemplatesForLanguage("fr").some((template) => template.id === "cv-pro"),
+    true,
   );
   assert.equal(
     templates

@@ -58,6 +58,7 @@ import {
   type CompanyLogo,
   type ProfilePhoto,
   type ObjectiveFormat,
+  type SoftwareIcon,
   emptyCV,
   newId,
 } from "@/lib/cv-types";
@@ -75,6 +76,7 @@ import {
 } from "@/lib/pdf-theme";
 import {
   createCompletePackZip,
+  COMPLETE_PACK_DOCUMENT_COUNT,
   createCurrentTemplateMultilingualZip,
   createDocumentPdfBlob,
   defaultTemplateFor,
@@ -149,6 +151,7 @@ import {
   type SessionUser,
 } from "@/lib/auth-client";
 import {
+  applyCloudCommit,
   getClientProfile,
   newClientProfileId,
   putCloudProfile,
@@ -318,9 +321,9 @@ const UI_COPY = {
     downloadCurrent: "Modèle actuel · 7 langues (.zip)",
     downloadCurrentHint: "FR · EN · ES · DE · IT · 中文 · AR",
     downloadPack: "Télécharger le pack complet (.zip)",
-    downloadPackHint: "81 PDF · modèles arabes réservés à l’arabe",
+    downloadPackHint: "86 PDF · modèles arabes réservés à l’arabe",
     preparingPack: "Création du pack",
-    packReady: "Pack téléchargé : 81 PDF, dont 4 modèles arabes dédiés.",
+    packReady: "Pack téléchargé : 86 PDF, dont 2 modèles arabes dédiés.",
     currentPackReady: "Modèle actuel téléchargé dans les 7 langues.",
     packError: "Impossible de créer le pack complet.",
     resetConfirm: "Réinitialiser les données françaises ?",
@@ -360,9 +363,9 @@ const UI_COPY = {
     downloadCurrent: "Current template · 7 languages (.zip)",
     downloadCurrentHint: "FR · EN · ES · DE · IT · 中文 · AR",
     downloadPack: "Download complete pack (.zip)",
-    downloadPackHint: "81 PDFs · Arabic templates are Arabic-only",
+    downloadPackHint: "86 PDFs · Arabic templates are Arabic-only",
     preparingPack: "Building pack",
-    packReady: "Pack downloaded: 81 PDFs, including 4 dedicated Arabic templates.",
+    packReady: "Pack downloaded: 86 PDFs, including 2 dedicated Arabic templates.",
     currentPackReady: "Current template downloaded in all 7 languages.",
     packError: "Unable to create the complete pack.",
     resetConfirm: "Reset the English data?",
@@ -483,7 +486,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [pdfError, setPdfError] = useState("");
   const [pdfRetryNonce, setPdfRetryNonce] = useState(0);
   const [packLoading, setPackLoading] = useState(false);
-  const [packProgress, setPackProgress] = useState({ completed: 0, total: 81 });
+  const [packProgress, setPackProgress] = useState({
+    completed: 0,
+    total: COMPLETE_PACK_DOCUMENT_COUNT,
+  });
   const [packMessage, setPackMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [importMessage, setImportMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettings>(() => defaultAiSettings());
@@ -1197,6 +1203,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const now = new Date().toISOString();
       const existing = activeProfileId ? await getClientProfile(activeProfileId) : undefined;
       const id = existing?.id ?? newClientProfileId();
+      const actor = {
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
+      } as const;
       const profile: ClientProfile = {
         version: 1,
         id,
@@ -1205,6 +1216,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         phone: cv.telephone.trim(),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
+        createdBy: existing?.createdBy ?? actor,
+        updatedBy: actor,
         language,
         cvByLanguage: structuredClone(cvByLanguage),
         hiddenElements: structuredClone(hiddenElements),
@@ -1219,16 +1232,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const token = getAdminSession();
       if (token) {
         try {
-          const photoAsset = await putCloudProfile(CLIENTS_API_ENDPOINT, token, profile);
+          const commit = await putCloudProfile(CLIENTS_API_ENDPOINT, token, profile);
+          Object.assign(profile, applyCloudCommit(profile, commit));
           cloudSynced = true;
-          if (photoAsset) {
-            profile.photoAsset = photoAsset;
+          if (commit.photoAsset) {
             for (const profileCv of Object.values(profile.cvByLanguage)) {
-              if (profileCv.photo) profileCv.photo.r2Key = photoAsset.r2Key;
+              if (profileCv.photo) profileCv.photo.r2Key = commit.photoAsset.r2Key;
             }
-            await saveClientProfile(profile);
-            if (cv.photo) updateProfilePhoto({ ...cv.photo, r2Key: photoAsset.r2Key });
+            if (cv.photo) updateProfilePhoto({ ...cv.photo, r2Key: commit.photoAsset.r2Key });
           }
+          await saveClientProfile(profile);
         } catch (error) {
           cloudError = error instanceof Error ? error.message : "synchronisation R2 impossible";
         }
@@ -1513,7 +1526,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const downloadCompletePack = async () => {
     if (packLoading) return;
     setPackLoading(true);
-    setPackProgress({ completed: 0, total: 81 });
+    setPackProgress({ completed: 0, total: COMPLETE_PACK_DOCUMENT_COUNT });
     setPackMessage(null);
     try {
       const blob = await createCompletePackZip(
@@ -2602,6 +2615,97 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           </CvSectionPanel>
 
           <CvSectionPanel
+            id="software"
+            fallbackTitle={form.software}
+            appearance={appearanceFor("software")}
+            onAppearanceChange={(appearance) => setAppearanceFor("software", appearance)}
+            open={sectionIsOpen("software")}
+            onOpenChange={(open) => setSectionOpen("software", open)}
+            visible={sectionIsVisible("software")}
+            onVisibleChange={(visible) => setSectionVisible("software", visible)}
+            count={cv.logiciels.length}
+            onAdd={() =>
+              set("logiciels", [...cv.logiciels, { id: newId(), label: "", icon: "generic" }])
+            }
+          >
+            <div className="space-y-3">
+              {cv.logiciels.map((logiciel, index) => (
+                <div
+                  key={logiciel.id}
+                  className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_150px_auto]"
+                >
+                  <Field
+                    label={`${form.softwareItem} ${index + 1}`}
+                    {...visibilityProps(`software.${index}`)}
+                    {...aiFieldProps(form.softwareItem, logiciel.label, (value) =>
+                      set(
+                        "logiciels",
+                        cv.logiciels.map((item) =>
+                          item.id === logiciel.id ? { ...item, label: value.slice(0, 80) } : item,
+                        ),
+                      ),
+                    )}
+                  >
+                    <Input
+                      value={logiciel.label}
+                      placeholder="Microsoft Word"
+                      onChange={(event) =>
+                        set(
+                          "logiciels",
+                          cv.logiciels.map((item) =>
+                            item.id === logiciel.id
+                              ? { ...item, label: event.target.value.slice(0, 80) }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </Field>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Icône</span>
+                    <select
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={logiciel.icon}
+                      onChange={(event) =>
+                        set(
+                          "logiciels",
+                          cv.logiciels.map((item) =>
+                            item.id === logiciel.id
+                              ? { ...item, icon: event.target.value as SoftwareIcon }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="generic">Générique</option>
+                      <option value="word">Word</option>
+                      <option value="excel">Excel</option>
+                      <option value="powerpoint">PowerPoint</option>
+                    </select>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="self-end text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                    aria-label={`${form.remove} ${form.softwareItem}`}
+                    onClick={() => {
+                      removeIndexedVisibility("software", index);
+                      set(
+                        "logiciels",
+                        cv.logiciels.filter((item) => item.id !== logiciel.id),
+                      );
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              {!cv.logiciels.length && <p className="text-sm text-slate-400">{form.noItems}</p>}
+            </div>
+          </CvSectionPanel>
+
+          <CvSectionPanel
             id="languages"
             fallbackTitle={form.languages}
             appearance={appearanceFor("languages")}
@@ -3353,6 +3457,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <ClientDatabaseDialog
         open={clientDatabaseOpen}
         onOpenChange={setClientDatabaseOpen}
+        user={user}
         activeProfileId={activeProfileId}
         onOpenProfile={openClientProfile}
         onDownloadPdf={downloadClientProfilePdf}

@@ -8,6 +8,13 @@ import type { DocumentLanguage } from "./document-language";
 // Example button never depends on an external file being present.
 const frenchSample = importCvJson(sampleData, "fr").cv;
 const englishSample = importCvJson(sampleData, "en").cv;
+const sampleSoftware: CV["logiciels"] = [
+  { id: "software-word", label: "Microsoft Word", icon: "word" },
+  { id: "software-excel", label: "Microsoft Excel", icon: "excel" },
+  { id: "software-powerpoint", label: "Microsoft PowerPoint", icon: "powerpoint" },
+];
+frenchSample.logiciels = sampleSoftware.map((item) => ({ ...item }));
+englishSample.logiciels = sampleSoftware.map((item) => ({ ...item }));
 const cloneCv = (): CV => {
   const cv = JSON.parse(JSON.stringify(englishSample)) as typeof englishSample;
   cv.lettre_motivation = {

@@ -4,6 +4,7 @@ export type CvTemplateId =
   | "canadian-v3"
   | "canadian-v4"
   | "ats-a4"
+  | "cv-pro"
   | "arabic-pro-v1"
   | "arabic-pro-v2";
 
@@ -13,6 +14,7 @@ export const CV_TEMPLATES: ReadonlyArray<{ id: CvTemplateId; name: string }> = [
   { id: "canadian-v3", name: "CV Canadien V3" },
   { id: "canadian-v4", name: "CV Canadien V4" },
   { id: "ats-a4", name: "CV ATS Format A4" },
+  { id: "cv-pro", name: "CV PRO" },
   { id: "arabic-pro-v1", name: "CV Pro Arabe V1" },
   { id: "arabic-pro-v2", name: "CV PRO Arabe V2" },
 ];

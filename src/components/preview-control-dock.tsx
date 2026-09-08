@@ -123,6 +123,7 @@ function DesignerRange({
   max,
   step = 1,
   unit,
+  editableValue = false,
   onChange,
 }: {
   label: string;
@@ -131,16 +132,54 @@ function DesignerRange({
   max: number;
   step?: number;
   unit: string;
+  editableValue?: boolean;
   onChange: (value: number) => void;
 }) {
+  const [draftValue, setDraftValue] = useState(String(value));
+
+  useEffect(() => {
+    setDraftValue(String(value));
+  }, [value]);
+
+  const commitDraftValue = () => {
+    const parsed = Number(draftValue.replace(",", "."));
+    if (!Number.isFinite(parsed)) {
+      setDraftValue(String(value));
+      return;
+    }
+    const normalized = Math.min(max, Math.max(min, parsed));
+    setDraftValue(String(normalized));
+    onChange(normalized);
+  };
+
   return (
-    <label className="block rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+    <div className="block rounded-xl border border-slate-200 bg-white px-3 py-2.5">
       <span className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold text-slate-600">
         {label}
-        <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-700">
-          {value}
-          {unit}
-        </span>
+        {editableValue ? (
+          <span className="flex shrink-0 items-center overflow-hidden rounded-lg border border-slate-200 bg-white focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+            <input
+              type="number"
+              min={min}
+              max={max}
+              step={step}
+              value={draftValue}
+              onChange={(event) => setDraftValue(event.target.value)}
+              onBlur={commitDraftValue}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              aria-label={`Valeur de ${label.toLocaleLowerCase("fr")}`}
+              className="h-8 w-16 bg-transparent px-2 text-right font-mono text-xs text-slate-700 outline-none"
+            />
+            <span className="pr-2 font-mono text-[11px] text-slate-500">{unit}</span>
+          </span>
+        ) : (
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-700">
+            {value}
+            {unit}
+          </span>
+        )}
       </span>
       <input
         type="range"
@@ -149,9 +188,10 @@ function DesignerRange({
         step={step}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
+        aria-label={label}
         className="h-2 w-full cursor-pointer accent-blue-600"
       />
-    </label>
+    </div>
   );
 }
 
@@ -890,11 +930,12 @@ export function PreviewControlDock({
                             onChange={(value) => updateDesigner("fontScale", value)}
                           />
                           <DesignerRange
-                            label="Interligne"
+                            label="Interligne global personnalisé"
                             value={designerSettings.lineHeightScale}
-                            min={75}
-                            max={180}
+                            min={60}
+                            max={250}
                             unit="%"
+                            editableValue
                             onChange={(value) => updateDesigner("lineHeightScale", value)}
                           />
                           <DesignerRange

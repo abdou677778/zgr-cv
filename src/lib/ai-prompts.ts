@@ -18,6 +18,7 @@ export function fieldAiPrompt(
     candidature: cv.candidature,
     objectif: cv.objectif,
     competences: cv.competences.filter(Boolean),
+    logiciels: cv.logiciels.filter((item) => item.label.trim()),
     experiences: cv.experiences.map(({ dates, titre, employeur, descriptions }) => ({
       dates,
       titre,
@@ -48,6 +49,7 @@ export function importAiPrompt(language: DocumentLanguage, source: unknown) {
       candidature: "",
       objectif: "",
       competences: [],
+      logiciels: [{ id: "software-01", label: "", icon: "generic" }],
       langues: { fr: "", en: "", ar: "", de: "", es: "", kab: "" },
       experiences: [
         { id: "experience-01", dates: "", lieu: "", titre: "", employeur: "", descriptions: [] },

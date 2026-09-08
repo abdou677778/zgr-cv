@@ -6,6 +6,7 @@ export const TEMPLATE_DEFAULT_COLORS = {
   "canadian-v3": "#0070c0",
   "canadian-v4": "#ef4444",
   "ats-a4": "#101010",
+  "cv-pro": "#5c0632",
   "arabic-pro-v1": "#c00000",
   "arabic-pro-v2": "#953735",
   "cover-letter-v1": "#cf1645",
@@ -70,6 +71,7 @@ const themedReplacements = (templateId: ThemeTemplateId, selectedColor: string) 
     "canadian-v3": { "#0070c0": accent, "#0563c1": darker },
     "canadian-v4": { "#ef4444": accent },
     "ats-a4": { "#101010": accent, "#0563c1": accent, "#afabab": mix(accent, "#ffffff", 0.64) },
+    "cv-pro": { "#5c0632": accent },
     "arabic-pro-v1": { "#ff4761": accent },
     "arabic-pro-v2": { "#953735": accent },
     "cover-letter-v1": {

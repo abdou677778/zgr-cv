@@ -642,6 +642,7 @@ function profilePhotoId(pathname) {
 }
 
 const profilePhotoKey = (id) => `clients/${id}/photo.webp`;
+const profileDeletedKey = (id) => `clients/${id}.deleted.json`;
 
 function isWebp(buffer) {
   if (buffer.byteLength < 12) return false;
@@ -691,6 +692,7 @@ async function putProfilePhoto(request, env, id, origin) {
 
 async function listProfiles(env, origin) {
   const profiles = [];
+  const deletedProfiles = [];
   let cursor;
   do {
     const page = await env.CLIENTS_BUCKET.list({
@@ -700,6 +702,15 @@ async function listProfiles(env, origin) {
       limit: 500,
     });
     for (const object of page.objects) {
+      if (object.key.endsWith(".deleted.json")) {
+        const metadata = object.customMetadata || {};
+        deletedProfiles.push({
+          id: metadata.id || object.key.replace(/^clients\//, "").replace(/\.deleted\.json$/, ""),
+          deletedAt: metadata.deletedAt || object.uploaded.toISOString(),
+          deletedBy: metadata.deletedBy || "unknown",
+        });
+        continue;
+      }
       if (!object.key.endsWith(".json")) continue;
       const metadata = object.customMetadata || {};
       profiles.push({
@@ -712,12 +723,27 @@ async function listProfiles(env, origin) {
         language: metadata.language || "fr",
         size: object.size,
         hasPhoto: metadata.hasPhoto === "true",
+        createdBy: metadata.createdByUsername
+          ? {
+              username: metadata.createdByUsername,
+              displayName: metadata.createdByDisplayName || metadata.createdByUsername,
+              role: metadata.createdByRole === "admin" ? "admin" : "user",
+            }
+          : undefined,
+        updatedBy: metadata.updatedByUsername
+          ? {
+              username: metadata.updatedByUsername,
+              displayName: metadata.updatedByDisplayName || metadata.updatedByUsername,
+              role: metadata.updatedByRole === "admin" ? "admin" : "user",
+            }
+          : undefined,
       });
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
   profiles.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-  return json({ profiles }, 200, origin);
+  deletedProfiles.sort((left, right) => right.deletedAt.localeCompare(left.deletedAt));
+  return json({ profiles, deletedProfiles }, 200, origin);
 }
 
 async function getProfile(env, id, origin) {
@@ -734,7 +760,29 @@ async function getProfile(env, id, origin) {
   });
 }
 
-async function putProfile(request, env, id, origin) {
+function clientProfileActor(user) {
+  return {
+    username: normalizeUsername(user?.username) || "unknown",
+    displayName: String(user?.displayName || user?.username || "Profil").slice(0, 120),
+    role: user?.role === "admin" ? "admin" : "user",
+  };
+}
+
+function storedProfileActor(value) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !USERNAME_PATTERN.test(normalizeUsername(value.username))
+  )
+    return undefined;
+  return {
+    username: normalizeUsername(value.username),
+    displayName: String(value.displayName || value.username).slice(0, 120),
+    role: value.role === "admin" ? "admin" : "user",
+  };
+}
+
+async function putProfile(request, env, id, actor, origin, ctx) {
   let parsed;
   try {
     parsed = await readJson(request, MAX_JSON_BYTES);
@@ -759,20 +807,74 @@ async function putProfile(request, env, id, origin) {
   )
     return json({ error: "Structure du profil invalide." }, 422, origin);
 
-  await env.CLIENTS_BUCKET.put(`clients/${id}.json`, parsed.raw, {
+  const previous = await readR2Json(env, `clients/${id}.json`);
+  const now = new Date().toISOString();
+  const editor = clientProfileActor(actor);
+  const creator = previous ? storedProfileActor(previous.createdBy) : editor;
+  const storedProfile = {
+    ...profile,
+    createdAt:
+      previous && typeof previous.createdAt === "string"
+        ? previous.createdAt
+        : typeof profile.createdAt === "string"
+          ? profile.createdAt
+          : now,
+    updatedAt: now,
+    createdBy: creator,
+    updatedBy: editor,
+  };
+  const storedRaw = JSON.stringify(storedProfile);
+
+  await env.CLIENTS_BUCKET.put(`clients/${id}.json`, storedRaw, {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
     customMetadata: {
       id,
-      name: profile.name.slice(0, 180),
-      email: String(profile.email || "").slice(0, 180),
-      phone: String(profile.phone || "").slice(0, 80),
-      language: String(profile.language || "fr").slice(0, 8),
-      createdAt: String(profile.createdAt || profile.updatedAt).slice(0, 40),
-      updatedAt: profile.updatedAt.slice(0, 40),
-      hasPhoto: profile.photoAsset?.r2Key ? "true" : "false",
+      name: storedProfile.name.slice(0, 180),
+      email: String(storedProfile.email || "").slice(0, 180),
+      phone: String(storedProfile.phone || "").slice(0, 80),
+      language: String(storedProfile.language || "fr").slice(0, 8),
+      createdAt: storedProfile.createdAt.slice(0, 40),
+      updatedAt: storedProfile.updatedAt.slice(0, 40),
+      hasPhoto: storedProfile.photoAsset?.r2Key ? "true" : "false",
+      ...(creator
+        ? {
+            createdByUsername: creator.username,
+            createdByDisplayName: creator.displayName,
+            createdByRole: creator.role,
+          }
+        : {}),
+      updatedByUsername: editor.username,
+      updatedByDisplayName: editor.displayName,
+      updatedByRole: editor.role,
     },
   });
-  return json({ ok: true, id }, 200, origin);
+  await env.CLIENTS_BUCKET.delete(profileDeletedKey(id));
+  ctx.waitUntil(
+    writeAudit(
+      env,
+      request,
+      previous ? "client_updated" : "client_created",
+      actor.username,
+      "success",
+      {
+        clientId: id,
+      },
+    ),
+  );
+  return json(
+    {
+      ok: true,
+      id,
+      profile: {
+        createdAt: storedProfile.createdAt,
+        updatedAt: storedProfile.updatedAt,
+        createdBy: storedProfile.createdBy,
+        updatedBy: storedProfile.updatedBy,
+      },
+    },
+    200,
+    origin,
+  );
 }
 
 function secretKeys(value) {
@@ -1396,12 +1498,24 @@ async function route(request, env, ctx) {
   const id = profileId(url.pathname);
   if (!id) return json({ error: "Route ou ID client invalide." }, 404, origin);
   if (request.method === "GET") return getProfile(env, id, origin);
-  if (request.method === "PUT") return putProfile(request, env, id, origin);
+  if (request.method === "PUT") return putProfile(request, env, id, actor, origin, ctx);
   if (request.method === "DELETE") {
+    const deletedAt = new Date().toISOString();
     await Promise.all([
       env.CLIENTS_BUCKET.delete(`clients/${id}.json`),
       env.CLIENTS_BUCKET.delete(profilePhotoKey(id)),
+      env.CLIENTS_BUCKET.put(
+        profileDeletedKey(id),
+        JSON.stringify({ id, deletedAt, deletedBy: actor.username }),
+        {
+          httpMetadata: { contentType: "application/json; charset=utf-8" },
+          customMetadata: { id, deletedAt, deletedBy: actor.username },
+        },
+      ),
     ]);
+    ctx.waitUntil(
+      writeAudit(env, request, "client_deleted", actor.username, "success", { clientId: id }),
+    );
     return json({ ok: true, id }, 200, origin);
   }
   return json({ error: "Méthode non autorisée." }, 405, origin);

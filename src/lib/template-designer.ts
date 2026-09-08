@@ -298,7 +298,7 @@ export function normalizeTemplateDesignerSettings(value: unknown): TemplateDesig
       ? (input.fontFamily as DesignerFontFamily)
       : "template",
     fontScale: clamp(input.fontScale, 70, 160, 100),
-    lineHeightScale: clamp(input.lineHeightScale, 75, 180, 100),
+    lineHeightScale: clamp(input.lineHeightScale, 60, 250, 100),
     spacingScale: clamp(input.spacingScale, 60, 180, 100),
     alignment: ALIGNMENTS.has(input.alignment as DesignerAlignment)
       ? (input.alignment as DesignerAlignment)
@@ -362,13 +362,17 @@ function transformNode(value: unknown, settings: TemplateDesignerSettings): void
   if (!value || typeof value !== "object") return;
 
   const node = value as Record<string, unknown>;
+  const preserveDesignerVerticalMargin = node.preserveDesignerVerticalMargin === true;
+  delete node.preserveDesignerVerticalMargin;
   if (typeof node.fontSize === "number")
     node.fontSize = scaled(node.fontSize, settings.fontScale, 5);
   if (typeof node.lineHeight === "number") {
     node.lineHeight = scaled(node.lineHeight, settings.lineHeightScale, 0.7);
   }
   if (Array.isArray(node.margin) && node.margin.every((item) => typeof item === "number")) {
-    if (node.margin.length === 4) {
+    if (preserveDesignerVerticalMargin) {
+      node.margin = [...node.margin];
+    } else if (node.margin.length === 4) {
       node.margin = [
         node.margin[0],
         scaled(node.margin[1], settings.spacingScale),
@@ -513,7 +517,10 @@ function extraElementContent(element: DesignerExtraElement, font?: string): Cont
       margin: [0, element.marginBefore, 0, element.marginAfter],
     };
     if (element.placement === "absolute") {
-      (content as Record<string, unknown>).absolutePosition = { x: element.x, y: element.y };
+      (content as unknown as Record<string, unknown>).absolutePosition = {
+        x: element.x,
+        y: element.y,
+      };
     }
     return content;
   }
@@ -539,7 +546,10 @@ function extraElementContent(element: DesignerExtraElement, font?: string): Cont
       margin: [0, element.marginBefore, 0, element.marginAfter],
     };
     if (element.placement === "absolute") {
-      (content as Record<string, unknown>).absolutePosition = { x: element.x, y: element.y };
+      (content as unknown as Record<string, unknown>).absolutePosition = {
+        x: element.x,
+        y: element.y,
+      };
     }
     return content;
   }
@@ -553,8 +563,11 @@ function extraElementContent(element: DesignerExtraElement, font?: string): Cont
     margin: [0, element.marginBefore, 0, element.marginAfter],
   };
   if (element.placement === "absolute") {
-    (content as Record<string, unknown>).absolutePosition = { x: element.x, y: element.y };
-    (content as Record<string, unknown>).width = element.width;
+    (content as unknown as Record<string, unknown>).absolutePosition = {
+      x: element.x,
+      y: element.y,
+    };
+    (content as unknown as Record<string, unknown>).width = element.width;
   }
   return content;
 }

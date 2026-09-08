@@ -7,6 +7,7 @@ const PROFILE_PHOTO_INITIAL_MAX_EDGE = 1200;
 const PROFILE_PHOTO_MIN_OUTPUT_EDGE = 280;
 const PROFILE_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const pdfPhotoCache = new Map<string, string>();
+const pdfCircularPhotoCache = new Map<string, string>();
 
 function blobAsDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
@@ -190,6 +191,41 @@ export async function profilePhotoDataUrlForPdf(photo: ProfilePhoto) {
     const jpeg = await canvasAsBlob(canvas, "image/jpeg", 0.92);
     const dataUrl = await blobAsDataUrl(jpeg);
     pdfPhotoCache.set(photo.dataUrl, dataUrl);
+    return dataUrl;
+  } finally {
+    closeBitmap(image);
+  }
+}
+
+/** Produces an in-memory transparent PNG crop for circular PDF portrait frames. */
+export async function circularProfilePhotoDataUrlForPdf(photo: ProfilePhoto) {
+  if (!photo.dataUrl) throw new Error("Photo de profil indisponible.");
+  const cached = pdfCircularPhotoCache.get(photo.dataUrl);
+  if (cached) return cached;
+  const blob = await profilePhotoBlob(photo);
+  const image = await loadBitmap(blob);
+  try {
+    const dimensions = imageDimensions(image);
+    const edge = 900;
+    const scale = Math.max(edge / dimensions.width, edge / dimensions.height);
+    const renderedWidth = dimensions.width * scale;
+    const renderedHeight = dimensions.height * scale;
+    const offsetX = (edge - renderedWidth) / 2;
+    const offsetY = (edge - renderedHeight) / 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = edge;
+    canvas.height = edge;
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) throw new Error("Canvas 2D indisponible pour traiter la photo.");
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.beginPath();
+    context.arc(edge / 2, edge / 2, edge / 2, 0, Math.PI * 2);
+    context.clip();
+    context.drawImage(image, offsetX, offsetY, renderedWidth, renderedHeight);
+    const png = await canvasAsBlob(canvas, "image/png", 1);
+    const dataUrl = await blobAsDataUrl(png);
+    pdfCircularPhotoCache.set(photo.dataUrl, dataUrl);
     return dataUrl;
   } finally {
     closeBitmap(image);

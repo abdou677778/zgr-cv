@@ -18,6 +18,12 @@ import { strToU8, zipSync } from "fflate";
 export type DocumentKind = "cv" | "cover-letter" | "advises";
 export type { PdfTemplateId } from "./document-templates";
 
+export const COMPLETE_PACK_DOCUMENT_COUNT = DOCUMENT_LANGUAGES.reduce(
+  (total, language) =>
+    total + getCvTemplatesForLanguage(language.id).length + COVER_LETTER_TEMPLATES.length + 1,
+  0,
+);
+
 export function getDocumentKinds(language: DocumentLanguage) {
   const names = {
     fr: ["Curriculum vitae", "Lettre de motivation", "Conseils / Plan professionnel"],

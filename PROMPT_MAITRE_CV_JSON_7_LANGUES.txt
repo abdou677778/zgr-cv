@@ -1,5 +1,5 @@
 PROMPT MAÎTRE — EXTRACTION DE DOSSIER, RÉDACTION CV/LETTRE ET JSON ZGR EN 7 LANGUES
-Version 1.1 — compatible ZGR CV et export Europass Candidate XML moderne
+Version 1.2 — compatible ZGR CV, section Logiciels et export Europass Candidate XML moderne
 
 MODE D’EMPLOI POUR L’UTILISATEUR
 1. Copie l’intégralité de ce prompt dans ChatGPT, Gemini ou un autre assistant capable de lire des pièces jointes.
@@ -63,6 +63,7 @@ Règles communes :
 - aucune phrase copiée de l’offre si elle n’est pas soutenue par l’expérience du candidat ;
 - 3 à 5 puces pertinentes par expérience récente lorsque les preuves le permettent ;
 - compétences dédupliquées, spécifiques et soutenues par les sources ;
+- logiciels strictement attestés par les sources, dédupliqués et structurés avec un id stable, un libellé et une icône parmi word, excel, powerpoint ou generic ;
 - objectif professionnel bref, ciblé et cohérent avec les faits ;
 - lettre de motivation différente d’un résumé du CV, personnalisée seulement avec les éléments réellement fournis.
 
@@ -175,6 +176,13 @@ SCHÉMA DOCUMENT — À DUPLIQUER EXACTEMENT POUR CHACUNE DES SEPT LANGUES
   "candidature": "",
   "objectif": "",
   "competences": [],
+  "logiciels": [
+    {
+      "id": "software-01",
+      "label": "",
+      "icon": "generic"
+    }
+  ],
   "langues": {
     "fr": "",
     "en": "",

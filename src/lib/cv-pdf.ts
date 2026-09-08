@@ -22,7 +22,8 @@ import {
   type CvTemplateId,
 } from "./document-templates";
 import { toPdfRtlVisualText } from "./arabic-pdf-text";
-import { profilePhotoDataUrlForPdf } from "./profile-photo";
+import { circularProfilePhotoDataUrlForPdf, profilePhotoDataUrlForPdf } from "./profile-photo";
+import { buildCvProPdf } from "./cv-pro-pdf";
 import pdfMake from "pdfmake/build/pdfmake";
 import calibriRegularUrl from "@/assets/fonts/CalibriLatin-Regular.ttf?url";
 import calibriItalicUrl from "@/assets/fonts/CalibriLatin-Italic.ttf?url";
@@ -4695,7 +4696,10 @@ export async function createCvPdfBlob(
         ...cv,
         photo: {
           ...cv.photo,
-          dataUrl: await profilePhotoDataUrlForPdf(cv.photo),
+          dataUrl:
+            normalizedTemplateId === "cv-pro"
+              ? await circularProfilePhotoDataUrlForPdf(cv.photo)
+              : await profilePhotoDataUrlForPdf(cv.photo),
         },
       }
     : cv;
@@ -4704,15 +4708,17 @@ export async function createCvPdfBlob(
       ? buildCvPdfArabicProV5(pdfCv, language)
       : normalizedTemplateId === "arabic-pro-v2"
         ? buildCvPdfArabicProV2(pdfCv)
-        : normalizedTemplateId === "ats-a4"
-          ? buildCvPdfAtsA4(pdfCv, language)
-          : normalizedTemplateId === "canadian-v4"
-            ? buildCvPdfV4(pdfCv, language)
-            : normalizedTemplateId === "canadian-v3"
-              ? buildCvPdfV3(pdfCv, language)
-              : normalizedTemplateId === "canadian-v2"
-                ? buildCvPdfV2(pdfCv, language)
-                : buildCvPdfV1(pdfCv, language);
+        : normalizedTemplateId === "cv-pro"
+          ? buildCvProPdf(pdfCv, language)
+          : normalizedTemplateId === "ats-a4"
+            ? buildCvPdfAtsA4(pdfCv, language)
+            : normalizedTemplateId === "canadian-v4"
+              ? buildCvPdfV4(pdfCv, language)
+              : normalizedTemplateId === "canadian-v3"
+                ? buildCvPdfV3(pdfCv, language)
+                : normalizedTemplateId === "canadian-v2"
+                  ? buildCvPdfV2(pdfCv, language)
+                  : buildCvPdfV1(pdfCv, language);
   return pdfMake
     .createPdf(
       applyTemplateDesigner(

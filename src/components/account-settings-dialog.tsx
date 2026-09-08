@@ -45,6 +45,9 @@ const eventLabels: Record<string, string> = {
   password_changed: "Mot de passe modifié",
   ai_key_saved: "Clé IA enregistrée",
   ai_key_deleted: "Clé IA supprimée",
+  client_created: "Client créé",
+  client_updated: "Client modifié",
+  client_deleted: "Client supprimé",
 };
 
 function formatDate(value: string | null) {

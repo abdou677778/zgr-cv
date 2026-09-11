@@ -100,8 +100,7 @@ export function PromptMasterDialog({
       <DialogContent className="max-h-[94vh] max-w-5xl overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <BookOpenText className="h-5 w-5 text-amber-600" /> Prompte maître CV + JSON +
-            Europass
+            <BookOpenText className="h-5 w-5 text-amber-600" /> Prompte maître CV + JSON + Europass
           </DialogTitle>
           <DialogDescription>
             L’IA produit un JSON ZGR enrichi pour Europass. Importez ensuite ce JSON dans ZGR CV,

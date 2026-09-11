@@ -88,11 +88,7 @@ function parseDateRange(value: string): { start: string; end: string; current: b
   if (!matches.length) return { start: "", end: "", current };
   const firstEnd = (matches[0].index || 0) + matches[0][0].length;
   const start = isoDate(source.slice(0, firstEnd));
-  const end = current
-    ? ""
-    : matches.length > 1
-      ? isoDate(source.slice(firstEnd))
-      : start;
+  const end = current ? "" : matches.length > 1 ? isoDate(source.slice(firstEnd)) : start;
   return { start, end, current };
 }
 
@@ -120,9 +116,7 @@ function normalizeGender(value: string): string {
 
 function parseCefrLevel(value: string): EuropassLanguageProfile["listening"] {
   const level = (value || "").trim().toUpperCase();
-  return /^(A1|A2|B1|B2|C1|C2)$/.test(level)
-    ? (level as EuropassLanguageProfile["listening"])
-    : "";
+  return /^(A1|A2|B1|B2|C1|C2)$/.test(level) ? (level as EuropassLanguageProfile["listening"]) : "";
 }
 
 function richList(items: string[]): string {
@@ -210,7 +204,10 @@ export function analyzeEuropassCoverage(cv: CV): EuropassCoverage {
     ["expériences", cv.experiences.length > 0],
     ["études et formations", cv.educations.length + cv.formations.length > 0],
     ["compétences", cv.competences.length > 0],
-    ["langues CECRL", profile.languages.some((item) => !item.mother_tongue && Boolean(item.listening))],
+    [
+      "langues CECRL",
+      profile.languages.some((item) => !item.mother_tongue && Boolean(item.listening)),
+    ],
     ["certifications", cv.certifications.length > 0],
     ["permis de conduire", Boolean(profile.driving_licences.length || cv.permis_conduire)],
     ["centres d’intérêt", cv.interets.length > 0],
@@ -241,7 +238,8 @@ export function convertCvToEuropassXml(
   const birthDate = isoDate(cv.date_naissance);
   const gender = normalizeGender(profile.gender_code);
   const residenceCountry =
-    cleanCountryCode(profile.country_code) || countryCodeFromText(profile.country_label || cv.pays || cv.adresse);
+    cleanCountryCode(profile.country_code) ||
+    countryCodeFromText(profile.country_label || cv.pays || cv.adresse);
   const nationalityCode = cleanCountryCode(profile.nationality_code);
   const birthCountryCode = cleanCountryCode(profile.birth_country_code);
   const city = profile.city || cv.adresse.split(",")[0]?.trim() || cv.wilaya.split(",")[0]?.trim();
@@ -266,9 +264,9 @@ export function convertCvToEuropassXml(
   const primaryLanguage = languages.find((item) => item.mother_tongue);
   const licences = profile.driving_licences.length
     ? profile.driving_licences
-    : Array.from(cv.permis_conduire.matchAll(/(?:cat[eé]gorie|category|classe?)\s*([A-Z][A-Z0-9]*)/gi)).map(
-        (match) => match[1].toUpperCase(),
-      );
+    : Array.from(
+        cv.permis_conduire.matchAll(/(?:cat[eé]gorie|category|classe?)\s*([A-Z][A-Z0-9]*)/gi),
+      ).map((match) => match[1].toUpperCase());
   const photoPrefix = xmlPhoto ? `data:${xmlPhoto.mimeType};base64,` : "";
   const photoBase64 = xmlPhoto?.dataUrl.startsWith(photoPrefix)
     ? xmlPhoto.dataUrl.slice(photoPrefix.length)
@@ -306,7 +304,9 @@ export function convertCvToEuropassXml(
         }${profile.address_line_2 ? `<oa:AddressLine>${escapeXml(profile.address_line_2)}</oa:AddressLine>` : ""}${
           city ? `<oa:CityName>${escapeXml(city)}</oa:CityName>` : ""
         }${residenceCountry ? `<CountryCode>${residenceCountry}</CountryCode>` : ""}${
-          profile.postal_code ? `<oa:PostalCode>${escapeXml(profile.postal_code)}</oa:PostalCode>` : ""
+          profile.postal_code
+            ? `<oa:PostalCode>${escapeXml(profile.postal_code)}</oa:PostalCode>`
+            : ""
         }</Address></Communication>`
       : "",
     profile.website
@@ -315,9 +315,10 @@ export function convertCvToEuropassXml(
     ...profile.social_profiles
       .filter((item) => item.url || item.username)
       .map(
-        (item) => `<Communication><ChannelCode>SocialMedia</ChannelCode>${
-          item.platform ? `<UseCode>${escapeXml(item.platform.toLowerCase())}</UseCode>` : ""
-        }<oa:URI>${escapeXml(item.url || item.username)}</oa:URI></Communication>`,
+        (item) =>
+          `<Communication><ChannelCode>SocialMedia</ChannelCode>${
+            item.platform ? `<UseCode>${escapeXml(item.platform.toLowerCase())}</UseCode>` : ""
+          }<oa:URI>${escapeXml(item.url || item.username)}</oa:URI></Communication>`,
       ),
   ].filter(Boolean);
 
@@ -326,7 +327,8 @@ export function convertCvToEuropassXml(
       const details = experienceDetails(cv, experience.id);
       const dates = parseDateRange(experience.dates);
       const countryCode =
-        cleanCountryCode(details?.country_code || "") || countryCodeFromText(details?.country_label || experience.lieu);
+        cleanCountryCode(details?.country_code || "") ||
+        countryCodeFromText(details?.country_label || experience.lieu);
       const place = details?.city || experience.lieu.split(",")[0]?.trim();
       return `<EmployerHistory>
         <hr:OrganizationName>${escapeXml(experience.employeur)}</hr:OrganizationName>
@@ -399,7 +401,8 @@ export function convertCvToEuropassXml(
       const details = educationDetails(cv, item.id);
       const dates = parseDateRange(item.date);
       const countryCode =
-        cleanCountryCode(details?.country_code || "") || countryCodeFromText(details?.country_label || item.lieu);
+        cleanCountryCode(details?.country_code || "") ||
+        countryCodeFromText(details?.country_label || item.lieu);
       const place = details?.city || item.lieu.split(",")[0]?.trim();
       return `<EducationOrganizationAttendance>
         <hr:OrganizationName>${escapeXml(item.institution)}</hr:OrganizationName>
@@ -420,7 +423,9 @@ export function convertCvToEuropassXml(
         }
         ${details?.eqf_level ? `<EducationLevelCode>${escapeXml(details.eqf_level)}</EducationLevelCode>` : ""}
         <AttendancePeriod>${
-          dates.start ? `<StartDate><hr:FormattedDateTime>${dates.start}</hr:FormattedDateTime></StartDate>` : ""
+          dates.start
+            ? `<StartDate><hr:FormattedDateTime>${dates.start}</hr:FormattedDateTime></StartDate>`
+            : ""
         }${dates.end ? `<EndDate><hr:FormattedDateTime>${dates.end}</hr:FormattedDateTime></EndDate>` : ""}<Ongoing>${
           dates.current
         }</Ongoing></AttendancePeriod>
@@ -450,9 +455,10 @@ export function convertCvToEuropassXml(
   const languageXml = languages.map(renderLanguage).filter(Boolean).join("");
   const skillsXml = cv.competences
     .map(
-      (skill) => `<PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>${escapeXml(
-        skill,
-      )}</hr:CompetencyName></PersonCompetency>`,
+      (skill) =>
+        `<PersonCompetency><hr:TaxonomyID>Digital_Skill</hr:TaxonomyID><hr:CompetencyName>${escapeXml(
+          skill,
+        )}</hr:CompetencyName></PersonCompetency>`,
     )
     .join("");
   const certificationsXml = cv.certifications
@@ -460,11 +466,15 @@ export function convertCvToEuropassXml(
     .join("");
   const hobbiesXml = cv.interets
     .map(
-      (item) => `<HobbyOrInterest><Title>${escapeXml(item)}</Title><Description>${escapeXml(item)}</Description></HobbyOrInterest>`,
+      (item) =>
+        `<HobbyOrInterest><Title>${escapeXml(item)}</Title><Description>${escapeXml(item)}</Description></HobbyOrInterest>`,
     )
     .join("");
   const projectsXml = cv.participations
-    .map((item) => `<Project><Title>${escapeXml(item)}</Title><Description>${escapeXml(item)}</Description></Project>`)
+    .map(
+      (item) =>
+        `<Project><Title>${escapeXml(item)}</Title><Description>${escapeXml(item)}</Description></Project>`,
+    )
     .join("");
   const sections = [
     cv.experiences.length ? "work-experience" : "",
@@ -524,7 +534,10 @@ export function convertCvToEuropassXml(
     <EmploymentHistory>${employmentXml}</EmploymentHistory>
     <EducationHistory>${educationXml}</EducationHistory>
     <eures:Licenses>${licences
-      .map((licence) => `<eures:License><hr:LicenseTypeCode>${escapeXml(licence)}</hr:LicenseTypeCode></eures:License>`)
+      .map(
+        (licence) =>
+          `<eures:License><hr:LicenseTypeCode>${escapeXml(licence)}</hr:LicenseTypeCode></eures:License>`,
+      )
       .join("")}</eures:Licenses>
     <Certifications />
     <PublicationHistory />
@@ -621,14 +634,20 @@ function parseCandidateEuropassXml(doc: Document): CV {
       .filter(Boolean);
     if (listItems.length) return listItems;
     const plain = (parsed.body.textContent || source).trim();
-    return plain ? plain.split(/\n|•|\*/).map((item) => item.trim()).filter(Boolean) : [];
+    return plain
+      ? plain
+          .split(/\n|•|\*/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [];
   };
   const formattedPeriod = (context: Element): string => {
     const startNode = one("StartDate", context);
     const endNode = one("EndDate", context);
     const start = startNode ? value("FormattedDateTime", startNode) : "";
     const end = endNode ? value("FormattedDateTime", endNode) : "";
-    const current = value("CurrentIndicator", context) === "true" || value("Ongoing", context) === "true";
+    const current =
+      value("CurrentIndicator", context) === "true" || value("Ongoing", context) === "true";
     return [start, current ? "Présent" : end].filter(Boolean).join(" – ");
   };
 
@@ -651,7 +670,9 @@ function parseCandidateEuropassXml(doc: Document): CV {
   const dialing = phoneNode ? value("CountryDialing", phoneNode) : "";
   const dialNumber = phoneNode ? value("DialNumber", phoneNode) : "";
   const phone = dialNumber ? `${dialing ? `+${dialing} ` : ""}${dialNumber}` : "";
-  const addressLines = addressNode ? all("AddressLine", addressNode).map((item) => (item.textContent || "").trim()) : [];
+  const addressLines = addressNode
+    ? all("AddressLine", addressNode).map((item) => (item.textContent || "").trim())
+    : [];
   const city = addressNode ? value("CityName", addressNode) : "";
   const countryCode = addressNode ? value("CountryCode", addressNode).toLowerCase() : "";
   const postalCode = addressNode ? value("PostalCode", addressNode) : "";
@@ -662,8 +683,12 @@ function parseCandidateEuropassXml(doc: Document): CV {
     const id = newId();
     const position = one("PositionHistory", node) || node;
     const organizationContact = one("OrganizationContact", node);
-    const place = organizationContact ? value("CityName", organizationContact) : value("City", position);
-    const itemCountry = value("Country", position) || (organizationContact ? value("CountryCode", organizationContact) : "");
+    const place = organizationContact
+      ? value("CityName", organizationContact)
+      : value("City", position);
+    const itemCountry =
+      value("Country", position) ||
+      (organizationContact ? value("CountryCode", organizationContact) : "");
     const websiteCommunication = all("Communication", node).find(
       (item) => directValue("ChannelCode", item) === "Web",
     );
@@ -697,11 +722,14 @@ function parseCandidateEuropassXml(doc: Document): CV {
     const detailsText = htmlItems(value("OccupationalSkillsCovered", node));
     const period = formattedPeriod(node);
     const level = value("EducationLevelCode", node);
-    const fieldCodes = all("ProgramConcentration", node).map((item) => (item.textContent || "").trim());
+    const fieldCodes = all("ProgramConcentration", node).map((item) =>
+      (item.textContent || "").trim(),
+    );
     const websiteCommunication = all("Communication", node).find(
       (item) => directValue("ChannelCode", item) === "Web",
     );
-    const degreeLike = Boolean(level) || /master|licen[cs]e|bachelor|degree|dipl[oô]me|bac|universit/i.test(title);
+    const degreeLike =
+      Boolean(level) || /master|licen[cs]e|bachelor|degree|dipl[oô]me|bac|universit/i.test(title);
     const id = newId();
     educationDetailsList.push({
       id,
@@ -759,30 +787,34 @@ function parseCandidateEuropassXml(doc: Document): CV {
       writing: "",
     });
   }
-  all("PersonCompetency", one("PersonQualifications", profileNode) || profileNode).forEach((node) => {
-    if (value("TaxonomyID", node) !== "language") return;
-    const code = value("CompetencyID", node).toLowerCase();
-    const scores = new Map(
-      all("CompetencyDimension", node).map((dimension) => [
-        value("CompetencyDimensionTypeCode", dimension),
-        value("ScoreText", dimension),
-      ]),
-    );
-    languageProfiles.push({
-      code,
-      label: languageLabels[code] || code,
-      mother_tongue: false,
-      listening: parseCefrLevel(scores.get("CEF-Understanding-Listening") || ""),
-      reading: parseCefrLevel(scores.get("CEF-Understanding-Reading") || ""),
-      spoken_interaction: parseCefrLevel(scores.get("CEF-Speaking-Interaction") || ""),
-      spoken_production: parseCefrLevel(scores.get("CEF-Speaking-Production") || ""),
-      writing: parseCefrLevel(scores.get("CEF-Writing-Production") || ""),
-    });
-  });
+  all("PersonCompetency", one("PersonQualifications", profileNode) || profileNode).forEach(
+    (node) => {
+      if (value("TaxonomyID", node) !== "language") return;
+      const code = value("CompetencyID", node).toLowerCase();
+      const scores = new Map(
+        all("CompetencyDimension", node).map((dimension) => [
+          value("CompetencyDimensionTypeCode", dimension),
+          value("ScoreText", dimension),
+        ]),
+      );
+      languageProfiles.push({
+        code,
+        label: languageLabels[code] || code,
+        mother_tongue: false,
+        listening: parseCefrLevel(scores.get("CEF-Understanding-Listening") || ""),
+        reading: parseCefrLevel(scores.get("CEF-Understanding-Reading") || ""),
+        spoken_interaction: parseCefrLevel(scores.get("CEF-Speaking-Interaction") || ""),
+        spoken_production: parseCefrLevel(scores.get("CEF-Speaking-Production") || ""),
+        writing: parseCefrLevel(scores.get("CEF-Writing-Production") || ""),
+      });
+    },
+  );
 
   const skillsNode = one("Skills", profileNode);
   const competencies = skillsNode
-    ? all("CompetencyName", skillsNode).map((item) => (item.textContent || "").trim()).filter(Boolean)
+    ? all("CompetencyName", skillsNode)
+        .map((item) => (item.textContent || "").trim())
+        .filter(Boolean)
     : [];
   const certifications = all("CourseCertification", profileNode)
     .map((item) => value("Title", item))
@@ -888,7 +920,10 @@ async function importedEuropassPhoto(doc: Document) {
     }
   }
 
-  if (!base64 || !["image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/webp"].includes(mimeType)) {
+  if (
+    !base64 ||
+    !["image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/webp"].includes(mimeType)
+  ) {
     return undefined;
   }
   if (base64.length > 28_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return undefined;
@@ -897,11 +932,20 @@ async function importedEuropassPhoto(doc: Document) {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    const normalizedMime = mimeType.includes("png") ? "image/png" : mimeType === "image/webp" ? "image/webp" : "image/jpeg";
-    const extension = normalizedMime === "image/png" ? ".png" : normalizedMime === "image/webp" ? ".webp" : ".jpg";
-    const source = new File([bytes], filename.includes(".") ? filename : `${filename}${extension}`, {
-      type: normalizedMime,
-    });
+    const normalizedMime = mimeType.includes("png")
+      ? "image/png"
+      : mimeType === "image/webp"
+        ? "image/webp"
+        : "image/jpeg";
+    const extension =
+      normalizedMime === "image/png" ? ".png" : normalizedMime === "image/webp" ? ".webp" : ".jpg";
+    const source = new File(
+      [bytes],
+      filename.includes(".") ? filename : `${filename}${extension}`,
+      {
+        type: normalizedMime,
+      },
+    );
     return await processProfilePhoto(source);
   } catch {
     return undefined;
@@ -933,10 +977,13 @@ export async function parseEuropassXml(xmlString: string): Promise<CV> {
   const fullName = [lastName, firstName].filter(Boolean).join(" ") || getText("PersonName");
 
   const email = getText("ContactInfo > Email > Contact");
-  const phone = getText("ContactInfo > TelephoneList > Telephone > Contact") || getText("Telephone > Contact");
-  const address = getText("ContactAddress > AddressLine") || getText("ContactAddress > Municipality");
+  const phone =
+    getText("ContactInfo > TelephoneList > Telephone > Contact") || getText("Telephone > Contact");
+  const address =
+    getText("ContactAddress > AddressLine") || getText("ContactAddress > Municipality");
   const city = getText("ContactAddress > Municipality");
-  const country = getText("ContactAddress > Country > Label") || getText("ContactAddress > Country > Code");
+  const country =
+    getText("ContactAddress > Country > Label") || getText("ContactAddress > Country > Code");
 
   const birthDateEl = doc.querySelector("Demographics > Birthdate");
   let birthDate = "";
@@ -970,7 +1017,10 @@ export async function parseEuropassXml(xmlString: string): Promise<CV> {
     const place = getText("Employer > ContactInfo > Address > ContactAddress > Municipality", node);
     const activitiesText = getText("Activities", node);
     const descriptions = activitiesText
-      ? activitiesText.split(/\n|•|\*/).map((s) => s.trim()).filter(Boolean)
+      ? activitiesText
+          .split(/\n|•|\*/)
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [];
 
     return {
@@ -990,13 +1040,18 @@ export async function parseEuropassXml(xmlString: string): Promise<CV> {
   educationNodes.forEach((node) => {
     const fromEl = node.querySelector("Period > From");
     const toEl = node.querySelector("Period > To");
-    const yFrom = fromEl?.getAttribute("year") || getText("Year", fromEl || node) || fromEl?.textContent || "";
-    const yTo = toEl?.getAttribute("year") || getText("Year", toEl || node) || toEl?.textContent || "";
+    const yFrom =
+      fromEl?.getAttribute("year") || getText("Year", fromEl || node) || fromEl?.textContent || "";
+    const yTo =
+      toEl?.getAttribute("year") || getText("Year", toEl || node) || toEl?.textContent || "";
     const dateStr = [yFrom, yTo].filter(Boolean).join(" – ");
 
     const title = getText("Title", node);
     const org = getText("Organisation > OrganisationName", node);
-    const place = getText("Organisation > ContactInfo > Address > ContactAddress > Municipality", node);
+    const place = getText(
+      "Organisation > ContactInfo > Address > ContactAddress > Municipality",
+      node,
+    );
     const level = getText("Level > Code", node);
 
     if (level && /^[4-8]$|^EQF|CEC/i.test(level)) {
@@ -1024,22 +1079,31 @@ export async function parseEuropassXml(xmlString: string): Promise<CV> {
   const commSkills = getText("Skills > Communication > Description");
   const orgSkills = getText("Skills > Organisational > Description");
   const compSkills = getText("Skills > Computer > Description");
-  const allSkills = [commSkills, orgSkills, compSkills]
-    .filter(Boolean)
-    .flatMap((s) => s.split(/\n|•|\*/).map((item) => item.trim()).filter(Boolean));
+  const allSkills = [commSkills, orgSkills, compSkills].filter(Boolean).flatMap((s) =>
+    s
+      .split(/\n|•|\*/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
 
-  const motherTongues = getAllTexts("Skills > Linguistic > MotherTongueList > MotherTongue > Description > Label");
-  const foreignLangs = Array.from(doc.querySelectorAll("Skills > Linguistic > ForeignLanguageList > ForeignLanguage")).map((n) => {
+  const motherTongues = getAllTexts(
+    "Skills > Linguistic > MotherTongueList > MotherTongue > Description > Label",
+  );
+  const foreignLangs = Array.from(
+    doc.querySelectorAll("Skills > Linguistic > ForeignLanguageList > ForeignLanguage"),
+  ).map((n) => {
     const name = getText("Description > Label", n) || getText("Description > Code", n);
     const level = getText("ProficiencyLevel > Listening", n) || "Niveau avancé";
     return { name, level };
   });
 
-  const achievements = Array.from(doc.querySelectorAll("AchievementList > Achievement")).map((n) => {
-    const title = getText("Title > Label", n);
-    const desc = getText("Description", n);
-    return `${title ? title + " : " : ""}${desc}`;
-  });
+  const achievements = Array.from(doc.querySelectorAll("AchievementList > Achievement")).map(
+    (n) => {
+      const title = getText("Title > Label", n);
+      const desc = getText("Description", n);
+      return `${title ? title + " : " : ""}${desc}`;
+    },
+  );
 
   const importedPhoto = await importedEuropassPhoto(doc);
   return {

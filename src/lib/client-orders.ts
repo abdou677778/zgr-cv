@@ -195,11 +195,7 @@ export async function syncClientOrderDrive(orderId: string) {
   return responseJson<{ configured: true; driveFolderId: string }>(response);
 }
 
-export async function addClientOrderDeliverable(
-  orderId: string,
-  file: File,
-  service = "AUTRE",
-) {
+export async function addClientOrderDeliverable(orderId: string, file: File, service = "AUTRE") {
   const data = new FormData();
   data.append("file", file);
   data.append("service", service);
@@ -232,7 +228,5 @@ export async function publishClientOrderDelivery(orderId: string, fileIds: strin
       body: JSON.stringify({ fileIds }),
     },
   );
-  return responseJson<{ delivery: ClientOrderDelivery }>(response).then(
-    (body) => body.delivery,
-  );
+  return responseJson<{ delivery: ClientOrderDelivery }>(response).then((body) => body.delivery);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   CircleCheck,
@@ -158,13 +158,12 @@ export function ClientOrdersDialog({
     }
   };
 
-  const refresh = async (keepSelection = true) => {
+  const loadOrders = useCallback(async (selectedId?: string) => {
     setBusy("refresh");
     setMessage("");
     try {
       const next = await listClientOrders();
       setOrders(next);
-      const selectedId = keepSelection ? detail?.order.id : undefined;
       if (selectedId && next.some((order) => order.id === selectedId)) {
         setDetail(await getClientOrder(selectedId));
       } else if (next[0]) {
@@ -179,16 +178,23 @@ export function ClientOrdersDialog({
     } finally {
       setBusy("");
     }
-  };
+  }, []);
+
+  const selectedOrderId = detail?.order.id;
+  const refresh = useCallback(
+    (keepSelection = true) => loadOrders(keepSelection ? selectedOrderId : undefined),
+    [loadOrders, selectedOrderId],
+  );
 
   useEffect(() => {
-    if (open) void refresh(false);
-  }, [open]);
+    if (open) void loadOrders();
+  }, [loadOrders, open]);
 
+  const firstOrderService = detail?.order.services[0] || "AUTRE";
   useEffect(() => {
     setSelectedDeliverables([]);
-    setDeliverableService(detail?.order.services[0] || "AUTRE");
-  }, [detail?.order.id]);
+    setDeliverableService(firstOrderService);
+  }, [detail?.order.id, firstOrderService]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
@@ -305,9 +311,7 @@ export function ClientOrdersDialog({
     try {
       const added: ClientOrderDeliverable[] = [];
       for (const file of files) {
-        added.push(
-          await addClientOrderDeliverable(detail.order.id, file, deliverableService),
-        );
+        added.push(await addClientOrderDeliverable(detail.order.id, file, deliverableService));
       }
       setSelectedDeliverables((current) => [
         ...new Set([...current, ...added.map((item) => item.id)]),
@@ -331,11 +335,7 @@ export function ClientOrdersDialog({
     setMessage("");
     try {
       const result = await onCreateCurrentDeliverable(detail.order);
-      const added = await addClientOrderDeliverable(
-        detail.order.id,
-        result.file,
-        result.service,
-      );
+      const added = await addClientOrderDeliverable(detail.order.id, result.file, result.service);
       setSelectedDeliverables((current) => [...new Set([...current, added.id])]);
       await refresh();
       setMessage(`Document actuel ajouté aux livrables : ${result.file.name}.`);
@@ -363,10 +363,7 @@ export function ClientOrdersDialog({
     setBusy("delivery-publish");
     setMessage("");
     try {
-      const delivery = await publishClientOrderDelivery(
-        detail.order.id,
-        selectedDeliverables,
-      );
+      const delivery = await publishClientOrderDelivery(detail.order.id, selectedDeliverables);
       const copied = await navigator.clipboard
         .writeText(delivery.shareUrl)
         .then(() => true)
@@ -375,7 +372,9 @@ export function ClientOrdersDialog({
       await refresh();
       setMessage(
         `Livraison v${String(delivery.versionNumber).padStart(3, "0")} créée sur Google Drive.${
-          copied ? " Le lien client a été copié." : " Utilisez le bouton Copier pour partager le lien."
+          copied
+            ? " Le lien client a été copié."
+            : " Utilisez le bouton Copier pour partager le lien."
         }`,
       );
     } catch (error) {
@@ -800,8 +799,8 @@ export function ClientOrdersDialog({
                     <div className="space-y-2">
                       {detail.deliverables.length === 0 ? (
                         <div className="rounded-lg border border-dashed bg-white p-6 text-center text-xs text-muted-foreground">
-                          Aucun livrable final. Ouvrez le JSON dans ZGR, corrigez le CV, puis ajoutez
-                          le document actuel ou vos fichiers terminés.
+                          Aucun livrable final. Ouvrez le JSON dans ZGR, corrigez le CV, puis
+                          ajoutez le document actuel ou vos fichiers terminés.
                         </div>
                       ) : (
                         detail.deliverables.map((deliverable) => {

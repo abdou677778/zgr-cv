@@ -699,7 +699,7 @@ async function putProfilePhoto(request, env, id, origin) {
   return json({ ok: true, id, key, size: buffer.byteLength, updatedAt }, 200, origin);
 }
 
-async function listProfiles(env, origin) {
+async function readR2ProfileIndex(env) {
   const profiles = [];
   const deletedProfiles = [];
   let cursor;
@@ -753,7 +753,221 @@ async function listProfiles(env, origin) {
   } while (cursor);
   profiles.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   deletedProfiles.sort((left, right) => right.deletedAt.localeCompare(left.deletedAt));
-  return json({ profiles, deletedProfiles }, 200, origin);
+  return { profiles, deletedProfiles };
+}
+
+const CLIENT_PROFILE_INDEX_UPSERT = `
+  INSERT INTO client_profiles (
+    id, revision, name, email, phone, language, created_at, updated_at, size, has_photo,
+    created_by_username, created_by_display_name, created_by_role,
+    updated_by_username, updated_by_display_name, updated_by_role
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    revision = excluded.revision,
+    name = excluded.name,
+    email = excluded.email,
+    phone = excluded.phone,
+    language = excluded.language,
+    created_at = excluded.created_at,
+    updated_at = excluded.updated_at,
+    size = excluded.size,
+    has_photo = excluded.has_photo,
+    created_by_username = excluded.created_by_username,
+    created_by_display_name = excluded.created_by_display_name,
+    created_by_role = excluded.created_by_role,
+    updated_by_username = excluded.updated_by_username,
+    updated_by_display_name = excluded.updated_by_display_name,
+    updated_by_role = excluded.updated_by_role
+`;
+
+function profileIndexBindings(profile, size = 0) {
+  const createdBy = storedProfileActor(profile.createdBy);
+  const updatedBy = storedProfileActor(profile.updatedBy);
+  return [
+    profile.id,
+    storedProfileRevision(profile),
+    String(profile.name || "Profil sans nom").slice(0, 180),
+    String(profile.email || "").slice(0, 180),
+    String(profile.phone || "").slice(0, 80),
+    String(profile.language || "fr").slice(0, 8),
+    String(profile.createdAt || profile.updatedAt || new Date().toISOString()).slice(0, 40),
+    String(profile.updatedAt || new Date().toISOString()).slice(0, 40),
+    Number(size) || 0,
+    profile.hasPhoto || profile.photoAsset?.r2Key ? 1 : 0,
+    createdBy?.username ?? null,
+    createdBy?.displayName ?? null,
+    createdBy?.role ?? null,
+    updatedBy?.username ?? null,
+    updatedBy?.displayName ?? null,
+    updatedBy?.role ?? null,
+  ];
+}
+
+function d1Actor(row, prefix) {
+  const username = row[`${prefix}_by_username`];
+  if (!username) return undefined;
+  return {
+    username,
+    displayName: row[`${prefix}_by_display_name`] || username,
+    role: row[`${prefix}_by_role`] === "admin" ? "admin" : "user",
+  };
+}
+
+function d1ProfileSummary(row) {
+  return {
+    id: row.id,
+    revision: Number(row.revision) || 0,
+    name: row.name || "Profil sans nom",
+    email: row.email || "",
+    phone: row.phone || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    language: row.language || "fr",
+    size: Number(row.size) || 0,
+    hasPhoto: Number(row.has_photo) === 1,
+    createdBy: d1Actor(row, "created"),
+    updatedBy: d1Actor(row, "updated"),
+  };
+}
+
+async function clientIndexReady(env) {
+  if (!env.CLIENTS_DB) return false;
+  const state = await env.CLIENTS_DB.prepare(
+    "SELECT value FROM system_state WHERE key = 'client_index_ready'",
+  ).first();
+  return state?.value === "1";
+}
+
+async function setClientIndexReady(env, ready) {
+  if (!env.CLIENTS_DB) return;
+  await env.CLIENTS_DB.prepare(
+    `INSERT INTO system_state (key, value, updated_at) VALUES ('client_index_ready', ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  )
+    .bind(ready ? "1" : "0", new Date().toISOString())
+    .run();
+}
+
+async function upsertClientProfileIndex(env, profile, size = 0) {
+  if (!env.CLIENTS_DB) return;
+  await env.CLIENTS_DB.prepare(CLIENT_PROFILE_INDEX_UPSERT)
+    .bind(...profileIndexBindings(profile, size))
+    .run();
+  await env.CLIENTS_DB.prepare("DELETE FROM client_profile_deletions WHERE id = ?")
+    .bind(profile.id)
+    .run();
+}
+
+async function deleteClientProfileIndex(env, id, deletedAt, deletedBy) {
+  if (!env.CLIENTS_DB) return;
+  await env.CLIENTS_DB.batch([
+    env.CLIENTS_DB.prepare("DELETE FROM client_profiles WHERE id = ?").bind(id),
+    env.CLIENTS_DB.prepare(
+      `INSERT INTO client_profile_deletions (id, deleted_at, deleted_by) VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET deleted_at = excluded.deleted_at, deleted_by = excluded.deleted_by`,
+    ).bind(id, deletedAt, deletedBy),
+  ]);
+}
+
+async function maintainClientProfileIndex(env, operation) {
+  if (!env.CLIENTS_DB) return;
+  try {
+    await operation();
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "client_index_write_failed",
+        message: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+    try {
+      await setClientIndexReady(env, false);
+    } catch {
+      // A D1 outage also makes listProfiles fall back to R2.
+    }
+  }
+}
+
+async function readD1ProfileIndex(env) {
+  const [profilesResult, deletionsResult] = await env.CLIENTS_DB.batch([
+    env.CLIENTS_DB.prepare("SELECT * FROM client_profiles ORDER BY updated_at DESC LIMIT 5000"),
+    env.CLIENTS_DB.prepare(
+      "SELECT id, deleted_at, deleted_by FROM client_profile_deletions ORDER BY deleted_at DESC LIMIT 5000",
+    ),
+  ]);
+  return {
+    profiles: (profilesResult.results || []).map(d1ProfileSummary),
+    deletedProfiles: (deletionsResult.results || []).map((row) => ({
+      id: row.id,
+      deletedAt: row.deleted_at,
+      deletedBy: row.deleted_by,
+    })),
+  };
+}
+
+async function listProfiles(env, origin, ctx) {
+  if (env.CLIENTS_DB) {
+    try {
+      if (await clientIndexReady(env)) {
+        const result = await readD1ProfileIndex(env);
+        return json({ ...result, indexSource: "d1" }, 200, origin);
+      }
+      const r2Index = await readR2ProfileIndex(env);
+      ctx?.waitUntil(rebuildClientProfileIndexData(env, r2Index));
+      return json({ ...r2Index, indexSource: "r2-backfill" }, 200, origin);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "client_index_fallback",
+          message: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    }
+  }
+  return json({ ...(await readR2ProfileIndex(env)), indexSource: "r2" }, 200, origin);
+}
+
+async function rebuildClientProfileIndexData(env, existingIndex) {
+  await setClientIndexReady(env, false);
+  const index = existingIndex ?? (await readR2ProfileIndex(env));
+  await env.CLIENTS_DB.batch([
+    env.CLIENTS_DB.prepare("DELETE FROM client_profiles"),
+    env.CLIENTS_DB.prepare("DELETE FROM client_profile_deletions"),
+  ]);
+
+  const statements = [
+    ...index.profiles.map((profile) =>
+      env.CLIENTS_DB.prepare(CLIENT_PROFILE_INDEX_UPSERT).bind(
+        ...profileIndexBindings(profile, profile.size),
+      ),
+    ),
+    ...index.deletedProfiles.map((deleted) =>
+      env.CLIENTS_DB.prepare(
+        `INSERT INTO client_profile_deletions (id, deleted_at, deleted_by) VALUES (?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET deleted_at = excluded.deleted_at, deleted_by = excluded.deleted_by`,
+      ).bind(deleted.id, deleted.deletedAt, deleted.deletedBy),
+    ),
+  ];
+  for (let offset = 0; offset < statements.length; offset += 80) {
+    await env.CLIENTS_DB.batch(statements.slice(offset, offset + 80));
+  }
+  await setClientIndexReady(env, true);
+  return index;
+}
+
+async function rebuildClientProfileIndex(env, origin) {
+  if (!env.CLIENTS_DB) return json({ error: "Binding D1 CLIENTS_DB absent." }, 503, origin);
+  const index = await rebuildClientProfileIndexData(env);
+  return json(
+    {
+      ok: true,
+      profiles: index.profiles.length,
+      deletedProfiles: index.deletedProfiles.length,
+      indexSource: "d1",
+    },
+    200,
+    origin,
+  );
 }
 
 async function getProfile(env, id, origin) {
@@ -924,6 +1138,9 @@ async function putProfile(request, env, id, actor, origin, ctx) {
     );
     return profileConflict(origin, latest);
   }
+  await maintainClientProfileIndex(env, () =>
+    upsertClientProfileIndex(env, storedProfile, storedObject.size),
+  );
   await env.CLIENTS_BUCKET.delete(profileDeletedKey(id));
   ctx.waitUntil(
     writeAudit(
@@ -1542,6 +1759,8 @@ async function route(request, env, ctx) {
       return deleteUser(request, env, actor, username, origin, ctx);
     if (url.pathname === "/api/admin/audit" && request.method === "GET")
       return listAudit(env, origin, url.searchParams.get("limit"));
+    if (url.pathname === "/api/admin/clients/reindex" && request.method === "POST")
+      return rebuildClientProfileIndex(env, origin);
     if (url.pathname === "/api/admin/ai-keys" && request.method === "GET")
       return aiKeyStatus(env, origin);
     if (url.pathname === "/api/admin/ai-keys" && request.method === "PUT")
@@ -1561,7 +1780,8 @@ async function route(request, env, ctx) {
   if (url.pathname === "/api/ai/generate" && request.method === "POST")
     return generateAi(request, env, origin);
 
-  if (url.pathname === "/api/clients" && request.method === "GET") return listProfiles(env, origin);
+  if (url.pathname === "/api/clients" && request.method === "GET")
+    return listProfiles(env, origin, ctx);
   const photoId = profilePhotoId(url.pathname);
   if (photoId) {
     if (request.method === "GET") return getProfilePhoto(env, photoId, origin);
@@ -1590,6 +1810,9 @@ async function route(request, env, ctx) {
         },
       ),
     ]);
+    await maintainClientProfileIndex(env, () =>
+      deleteClientProfileIndex(env, id, deletedAt, actor.username),
+    );
     ctx.waitUntil(
       writeAudit(env, request, "client_deleted", actor.username, "success", { clientId: id }),
     );

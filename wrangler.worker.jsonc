@@ -26,6 +26,13 @@
       "bucket_name": "zgr-cv-clients",
     },
   ],
+  "d1_databases": [
+    {
+      "binding": "CLIENTS_DB",
+      "database_name": "zgr-cv-clients-index",
+      "database_id": "0c353af6-e530-44ed-87f2-08392fecdfb2",
+    },
+  ],
   "services": [
     {
       "binding": "CLIENT_PORTAL_SERVICE",

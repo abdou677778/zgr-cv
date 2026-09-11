@@ -22,17 +22,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  applyCloudCommit,
   deleteClientProfile,
   deleteCloudProfile,
   getCloudProfile,
   getClientProfile,
   listClientProfiles,
+  putCloudProfile,
   saveClientProfile,
   synchronizeClientProfiles,
   type ClientProfile,
   type ClientProfileSummary,
 } from "@/lib/client-profile-db";
 import { CLIENTS_API_ENDPOINT, getAdminSession, type SessionUser } from "@/lib/auth-client";
+
+export type ClientSyncStatus = {
+  state: "idle" | "syncing" | "synced" | "local" | "conflict";
+  message: string;
+};
 
 export function ClientDatabaseDialog({
   open,
@@ -41,6 +48,7 @@ export function ClientDatabaseDialog({
   activeProfileId,
   onOpenProfile,
   onDownloadPdf,
+  onSyncStatusChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,37 +56,67 @@ export function ClientDatabaseDialog({
   activeProfileId: string | null;
   onOpenProfile: (profile: ClientProfile) => void;
   onDownloadPdf: (profile: ClientProfile) => Promise<void>;
+  onSyncStatusChange?: (status: ClientSyncStatus) => void;
 }) {
   const [profiles, setProfiles] = useState<ClientProfileSummary[]>([]);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [conflictIds, setConflictIds] = useState<string[]>([]);
 
-  const refresh = useCallback(async (includeCloud = false, automatic = false) => {
-    setBusy(includeCloud ? "cloud" : "refresh");
-    setMessage("");
-    try {
-      setProfiles(await listClientProfiles());
-      if (!includeCloud) return;
-      const token = getAdminSession();
-      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
-      const result = await synchronizeClientProfiles(CLIENTS_API_ENDPOINT, token);
-      setProfiles(await listClientProfiles());
-      setMessage(
-        automatic
-          ? `Base partagée actualisée : ${result.total} profil(s) disponible(s)${result.removed ? `, ${result.removed} suppression(s) appliquée(s)` : ""}.`
-          : `Synchronisation terminée : ${result.uploaded} envoyé(s), ${result.downloaded} récupéré(s), ${result.removed} supprimé(s), ${result.total} profil(s).`,
-      );
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? `Les données locales restent disponibles. ${error.message}`
-          : "Les données locales restent disponibles, mais la base partagée est indisponible.",
-      );
-    } finally {
-      setBusy("");
-    }
-  }, []);
+  const refresh = useCallback(
+    async (includeCloud = false, automatic = false) => {
+      setBusy(includeCloud ? "cloud" : "refresh");
+      setMessage("");
+      if (includeCloud) {
+        onSyncStatusChange?.({ state: "syncing", message: "Synchronisation en cours…" });
+      }
+      try {
+        setProfiles(await listClientProfiles());
+        if (!includeCloud) return;
+        const token = getAdminSession();
+        if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+        const result = await synchronizeClientProfiles(CLIENTS_API_ENDPOINT, token);
+        setProfiles(await listClientProfiles());
+        if (result.conflicts) {
+          setConflictIds(result.conflictIds);
+          onSyncStatusChange?.({
+            state: "conflict",
+            message: `${result.conflicts} conflit(s) détecté(s). Les versions locales ont été conservées.`,
+          });
+        } else {
+          setConflictIds([]);
+          onSyncStatusChange?.({
+            state: "synced",
+            message: `Base synchronisée à ${new Date().toLocaleTimeString("fr-DZ")}.`,
+          });
+        }
+        setMessage(
+          result.conflicts
+            ? `Synchronisation partielle : ${result.conflicts} conflit(s) détecté(s). Les versions locales concernées ont été conservées pour éviter tout écrasement.`
+            : automatic
+              ? `Base partagée actualisée : ${result.total} profil(s) disponible(s)${result.removed ? `, ${result.removed} suppression(s) appliquée(s)` : ""}.`
+              : `Synchronisation terminée : ${result.uploaded} envoyé(s), ${result.downloaded} récupéré(s), ${result.removed} supprimé(s), ${result.total} profil(s).`,
+        );
+      } catch (error) {
+        onSyncStatusChange?.({
+          state: "local",
+          message:
+            error instanceof Error
+              ? `Mode local : ${error.message}`
+              : "Mode local : base partagée indisponible.",
+        });
+        setMessage(
+          error instanceof Error
+            ? `Les données locales restent disponibles. ${error.message}`
+            : "Les données locales restent disponibles, mais la base partagée est indisponible.",
+        );
+      } finally {
+        setBusy("");
+      }
+    },
+    [onSyncStatusChange],
+  );
 
   useEffect(() => {
     if (open) void refresh(true, true);
@@ -159,6 +197,83 @@ export function ClientDatabaseDialog({
     }
   };
 
+  const acceptCloudVersion = async (profile: ClientProfileSummary) => {
+    if (
+      !confirm(
+        `Remplacer les changements locaux non synchronisés de « ${profile.name} » par la version partagée ?`,
+      )
+    )
+      return;
+    setBusy(`cloud-version:${profile.id}`);
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const cloud = await getCloudProfile(CLIENTS_API_ENDPOINT, token, profile.id);
+      await saveClientProfile(cloud);
+      const remainingConflicts = conflictIds.filter((id) => id !== profile.id);
+      setConflictIds(remainingConflicts);
+      setProfiles(await listClientProfiles());
+      if (activeProfileId === profile.id) onOpenProfile(cloud);
+      onSyncStatusChange?.({
+        state: remainingConflicts.length ? "conflict" : "synced",
+        message: remainingConflicts.length
+          ? `${remainingConflicts.length} autre(s) conflit(s) restent à résoudre.`
+          : `Version partagée ${cloud.revision ?? 0} récupérée.`,
+      });
+      setMessage(`Version partagée récupérée pour ${profile.name}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Récupération cloud impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const publishLocalVersion = async (profile: ClientProfileSummary) => {
+    if (
+      !confirm(
+        `Publier volontairement votre version locale de « ${profile.name} » à la place de la version partagée actuelle ?`,
+      )
+    )
+      return;
+    setBusy(`publish-local:${profile.id}`);
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const [local, cloud] = await Promise.all([
+        getClientProfile(profile.id),
+        getCloudProfile(CLIENTS_API_ENDPOINT, token, profile.id),
+      ]);
+      if (!local) throw new Error("Version locale introuvable.");
+      const candidate: ClientProfile = {
+        ...local,
+        revision: cloud.revision ?? 0,
+        createdAt: cloud.createdAt,
+        createdBy: cloud.createdBy,
+        updatedAt: new Date().toISOString(),
+      };
+      const commit = await putCloudProfile(CLIENTS_API_ENDPOINT, token, candidate);
+      const committed = applyCloudCommit(candidate, commit);
+      await saveClientProfile(committed);
+      const remainingConflicts = conflictIds.filter((id) => id !== profile.id);
+      setConflictIds(remainingConflicts);
+      setProfiles(await listClientProfiles());
+      if (activeProfileId === profile.id) onOpenProfile(committed);
+      onSyncStatusChange?.({
+        state: remainingConflicts.length ? "conflict" : "synced",
+        message: remainingConflicts.length
+          ? `${remainingConflicts.length} autre(s) conflit(s) restent à résoudre.`
+          : `Votre version a été publiée comme révision ${committed.revision ?? 0}.`,
+      });
+      setMessage(`Votre version locale de ${profile.name} est maintenant la version partagée.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Publication de la version locale impossible.",
+      );
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
@@ -222,6 +337,9 @@ export function ClientDatabaseDialog({
                         <div>
                           <h3 className="font-semibold">{profile.name || "Profil sans nom"}</h3>
                           <p className="font-mono text-xs text-muted-foreground">{profile.id}</p>
+                          <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                            Révision serveur {profile.revision ?? 0}
+                          </p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {profile.email || profile.phone || "Coordonnées non renseignées"} · Mis
                             à jour {new Date(profile.updatedAt).toLocaleString("fr-DZ")}
@@ -291,6 +409,38 @@ export function ClientDatabaseDialog({
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
+                      {conflictIds.includes(profile.id) && (
+                        <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                          <p className="text-xs font-semibold text-red-800">
+                            Conflit détecté : aucun changement n’a été écrasé.
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void acceptCloudVersion(profile)}
+                              disabled={Boolean(busy)}
+                            >
+                              {busy === `cloud-version:${profile.id}` && (
+                                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                              )}
+                              Utiliser la version partagée
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => void publishLocalVersion(profile)}
+                              disabled={Boolean(busy)}
+                            >
+                              {busy === `publish-local:${profile.id}` && (
+                                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                              )}
+                              Publier ma version locale
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -304,9 +454,10 @@ export function ClientDatabaseDialog({
                 <CloudCheck className="h-4 w-4 text-sky-600" /> Base partagée Cloudflare R2
               </h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Synchronisation bidirectionnelle par date de modification. Les profils JSON et leurs
-                photos WebP privées sont stockés séparément dans R2. Aucun PDF ni aucune clé IA
-                n’est envoyé.
+                Synchronisation bidirectionnelle avec révision serveur. Une modification concurrente
+                est signalée et conservée localement au lieu d’écraser silencieusement le travail
+                d’un autre utilisateur. Les profils JSON et leurs photos WebP privées sont stockés
+                séparément dans R2.
               </p>
             </div>
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">

@@ -29,7 +29,7 @@ function corsHeaders(origin) {
   if (!origin) return {};
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Profile-Revision",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
@@ -676,6 +676,15 @@ async function putProfilePhoto(request, env, id, origin) {
   if (declaredSize > MAX_PHOTO_BYTES) {
     return json({ error: "La photo WebP dépasse 150 Ko." }, 413, origin);
   }
+  const currentProfile = await readR2Json(env, `clients/${id}.json`);
+  const expectedRevision = Number(request.headers.get("X-Profile-Revision") || 0);
+  if (
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision < 0 ||
+    (currentProfile && expectedRevision !== storedProfileRevision(currentProfile)) ||
+    (!currentProfile && expectedRevision !== 0)
+  )
+    return profileConflict(origin, currentProfile);
   const buffer = await request.arrayBuffer();
   if (buffer.byteLength > MAX_PHOTO_BYTES) {
     return json({ error: "La photo WebP dépasse 150 Ko." }, 413, origin);
@@ -715,6 +724,7 @@ async function listProfiles(env, origin) {
       const metadata = object.customMetadata || {};
       profiles.push({
         id: metadata.id || object.key.replace(/^clients\//, "").replace(/\.json$/, ""),
+        revision: Number(metadata.revision) || 0,
         name: metadata.name || "Profil sans nom",
         email: metadata.email || "",
         phone: metadata.phone || "",
@@ -782,6 +792,30 @@ function storedProfileActor(value) {
   };
 }
 
+function storedProfileRevision(profile) {
+  const revision = Number(profile?.revision);
+  return Number.isSafeInteger(revision) && revision >= 0 ? revision : 0;
+}
+
+function profileConflict(origin, profile) {
+  return json(
+    {
+      error:
+        "Ce profil a été modifié dans une autre session. Rechargez la version partagée avant de fusionner ou de remplacer vos changements.",
+      code: "CLIENT_PROFILE_CONFLICT",
+      current: profile
+        ? {
+            revision: storedProfileRevision(profile),
+            updatedAt: typeof profile.updatedAt === "string" ? profile.updatedAt : "",
+            updatedBy: storedProfileActor(profile.updatedBy),
+          }
+        : undefined,
+    },
+    409,
+    origin,
+  );
+}
+
 async function putProfile(request, env, id, actor, origin, ctx) {
   let parsed;
   try {
@@ -807,12 +841,41 @@ async function putProfile(request, env, id, actor, origin, ctx) {
   )
     return json({ error: "Structure du profil invalide." }, 422, origin);
 
-  const previous = await readR2Json(env, `clients/${id}.json`);
+  if (
+    profile.revision !== undefined &&
+    (!Number.isSafeInteger(profile.revision) || profile.revision < 0)
+  )
+    return json({ error: "Révision du profil invalide." }, 422, origin);
+
+  const profileKey = `clients/${id}.json`;
+  const previousObject = await env.CLIENTS_BUCKET.get(profileKey);
+  let previous = null;
+  if (previousObject) {
+    try {
+      previous = JSON.parse(await previousObject.text());
+    } catch {
+      return json({ error: "Le profil partagé existant est illisible." }, 500, origin);
+    }
+  }
+  const expectedRevision = storedProfileRevision(profile);
+  const currentRevision = storedProfileRevision(previous);
+  if ((previous && expectedRevision !== currentRevision) || (!previous && expectedRevision !== 0)) {
+    ctx.waitUntil(
+      writeAudit(env, request, "client_conflict", actor.username, "rejected", {
+        clientId: id,
+        expectedRevision,
+        currentRevision,
+      }),
+    );
+    return profileConflict(origin, previous);
+  }
+
   const now = new Date().toISOString();
   const editor = clientProfileActor(actor);
   const creator = previous ? storedProfileActor(previous.createdBy) : editor;
   const storedProfile = {
     ...profile,
+    revision: currentRevision + 1,
     createdAt:
       previous && typeof previous.createdAt === "string"
         ? previous.createdAt
@@ -825,10 +888,12 @@ async function putProfile(request, env, id, actor, origin, ctx) {
   };
   const storedRaw = JSON.stringify(storedProfile);
 
-  await env.CLIENTS_BUCKET.put(`clients/${id}.json`, storedRaw, {
+  const storedObject = await env.CLIENTS_BUCKET.put(profileKey, storedRaw, {
+    onlyIf: previousObject ? { etagMatches: previousObject.etag } : { etagDoesNotMatch: "*" },
     httpMetadata: { contentType: "application/json; charset=utf-8" },
     customMetadata: {
       id,
+      revision: String(storedProfile.revision),
       name: storedProfile.name.slice(0, 180),
       email: String(storedProfile.email || "").slice(0, 180),
       phone: String(storedProfile.phone || "").slice(0, 80),
@@ -848,6 +913,17 @@ async function putProfile(request, env, id, actor, origin, ctx) {
       updatedByRole: editor.role,
     },
   });
+  if (!storedObject) {
+    const latest = await readR2Json(env, profileKey);
+    ctx.waitUntil(
+      writeAudit(env, request, "client_conflict", actor.username, "rejected", {
+        clientId: id,
+        expectedRevision,
+        currentRevision: storedProfileRevision(latest),
+      }),
+    );
+    return profileConflict(origin, latest);
+  }
   await env.CLIENTS_BUCKET.delete(profileDeletedKey(id));
   ctx.waitUntil(
     writeAudit(
@@ -866,6 +942,7 @@ async function putProfile(request, env, id, actor, origin, ctx) {
       ok: true,
       id,
       profile: {
+        revision: storedProfile.revision,
         createdAt: storedProfile.createdAt,
         updatedAt: storedProfile.updatedAt,
         createdBy: storedProfile.createdBy,

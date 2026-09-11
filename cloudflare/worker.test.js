@@ -19,20 +19,27 @@ if (typeof crypto.subtle.timingSafeEqual !== "function") {
 
 class MemoryR2Bucket {
   objects = new Map();
+  nextVersion = 1;
 
   async put(key, value, options = {}) {
+    const previous = this.objects.get(key);
+    if (options.onlyIf?.etagMatches && previous?.etag !== options.onlyIf.etagMatches) return null;
+    if (options.onlyIf?.etagDoesNotMatch === "*" && previous) return null;
     const body =
       typeof value === "string"
         ? new TextEncoder().encode(value)
         : value instanceof ArrayBuffer
           ? new Uint8Array(value)
           : new Uint8Array(await new Response(value).arrayBuffer());
+    const etag = `memory-${this.nextVersion++}`;
     this.objects.set(key, {
       body,
+      etag,
       customMetadata: options.customMetadata ?? {},
       httpMetadata: options.httpMetadata ?? {},
       uploaded: new Date(),
     });
+    return { etag, httpEtag: `"${etag}"` };
   }
 
   async get(key) {
@@ -41,7 +48,8 @@ class MemoryR2Bucket {
     return {
       body: new Response(stored.body).body,
       customMetadata: stored.customMetadata,
-      httpEtag: `"${key}"`,
+      etag: stored.etag,
+      httpEtag: `"${stored.etag}"`,
       size: stored.body.byteLength,
       text: async () => new TextDecoder().decode(stored.body),
       uploaded: stored.uploaded,
@@ -111,7 +119,7 @@ const authorized = (token, init = {}) => ({
   headers: { Authorization: `Bearer ${token}`, ...init.headers },
 });
 
-test("les clients R2 sont partagés et attribuent le créateur puis le dernier éditeur", async () => {
+test("les clients R2 sont partagés, attribués et protégés contre les écrasements", async () => {
   const env = {
     CLIENTS_BUCKET: new MemoryR2Bucket(),
     ADMIN_USERNAME: "admin",
@@ -152,6 +160,7 @@ test("les clients R2 sont partagés et attribuent le créateur puis le dernier �
   const created = await createdResponse.json();
   assert.equal(created.profile.createdBy.username, "admin");
   assert.equal(created.profile.updatedBy.username, "admin");
+  assert.equal(created.profile.revision, 1);
 
   const accountResponse = await call(
     env,
@@ -175,9 +184,11 @@ test("les clients R2 sont partagés et attribuent le créateur puis le dernier �
   const sharedList = await sharedListResponse.json();
   assert.equal(sharedList.profiles.length, 1);
   assert.equal(sharedList.profiles[0].createdBy.username, "admin");
+  assert.equal(sharedList.profiles[0].revision, 1);
 
   const currentResponse = await call(env, `/api/clients/${profile.id}`, authorized(editor.token));
   const current = await currentResponse.json();
+  const staleAdminCopy = structuredClone(current);
   const updatedResponse = await call(
     env,
     `/api/clients/${profile.id}`,
@@ -191,10 +202,38 @@ test("les clients R2 sont partagés et attribuent le créateur puis le dernier �
   const updated = await updatedResponse.json();
   assert.equal(updated.profile.createdBy.username, "admin");
   assert.equal(updated.profile.updatedBy.username, "editeur");
+  assert.equal(updated.profile.revision, 2);
+
+  const stalePhotoResponse = await call(
+    env,
+    `/api/clients/${profile.id}/photo`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "image/webp", "X-Profile-Revision": "1" },
+      body: new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]),
+    }),
+  );
+  assert.equal(stalePhotoResponse.status, 409);
+
+  const conflictResponse = await call(
+    env,
+    `/api/clients/${profile.id}`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...staleAdminCopy, phone: "+213555999999" }),
+    }),
+  );
+  assert.equal(conflictResponse.status, 409);
+  const conflict = await conflictResponse.json();
+  assert.equal(conflict.code, "CLIENT_PROFILE_CONFLICT");
+  assert.equal(conflict.current.revision, 2);
+  assert.equal(conflict.current.updatedBy.username, "editeur");
 
   const finalResponse = await call(env, `/api/clients/${profile.id}`, authorized(admin.token));
   const finalProfile = await finalResponse.json();
   assert.equal(finalProfile.phone, "+213555111111");
+  assert.equal(finalProfile.revision, 2);
   assert.equal(finalProfile.createdBy.username, "admin");
   assert.equal(finalProfile.updatedBy.username, "editeur");
 

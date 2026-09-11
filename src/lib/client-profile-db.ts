@@ -17,6 +17,8 @@ const STORE_NAME = "profiles";
 
 export type ClientProfile = {
   version: 1;
+  /** Révision optimiste attribuée par le serveur. Les anciens profils commencent à 0. */
+  revision?: number;
   id: string;
   name: string;
   email: string;
@@ -44,6 +46,7 @@ export type ClientProfileActor = {
 export type ClientProfileSummary = Pick<
   ClientProfile,
   | "id"
+  | "revision"
   | "name"
   | "email"
   | "phone"
@@ -152,10 +155,26 @@ export type CloudDeletedProfileSummary = {
 
 export type CloudProfileCommit = Pick<
   ClientProfile,
-  "createdAt" | "updatedAt" | "createdBy" | "updatedBy"
+  "revision" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy"
 > & {
   photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
+
+export type CloudProfileConflict = {
+  revision: number;
+  updatedAt: string;
+  updatedBy?: ClientProfileActor;
+};
+
+export class CloudProfileConflictError extends Error {
+  readonly current?: CloudProfileConflict;
+
+  constructor(message: string, current?: CloudProfileConflict) {
+    super(message);
+    this.name = "CloudProfileConflictError";
+    this.current = current;
+  }
+}
 
 function cloudHeaders(token: string, json = false): HeadersInit {
   return {
@@ -165,7 +184,17 @@ function cloudHeaders(token: string, json = false): HeadersInit {
 }
 
 async function cloudResponse<T>(response: Response): Promise<T> {
-  const body = (await response.json().catch(() => ({}))) as { error?: string } & T;
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    code?: string;
+    current?: CloudProfileConflict;
+  } & T;
+  if (response.status === 409 && body.code === "CLIENT_PROFILE_CONFLICT") {
+    throw new CloudProfileConflictError(
+      body.error || "Ce profil a été modifié par un autre utilisateur.",
+      body.current,
+    );
+  }
   if (!response.ok) throw new Error(body.error || `Synchronisation refusée (${response.status}).`);
   return body;
 }
@@ -262,6 +291,7 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
       headers: {
         ...cloudHeaders(token),
         "Content-Type": "image/webp",
+        "X-Profile-Revision": String(profile.revision ?? 0),
       },
       body: blob,
     });
@@ -275,7 +305,10 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
   });
   const result = await cloudResponse<{
     ok: true;
-    profile?: Pick<ClientProfile, "createdAt" | "updatedAt" | "createdBy" | "updatedBy">;
+    profile?: Pick<
+      ClientProfile,
+      "revision" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy"
+    >;
   }>(response);
   if (!photo) {
     const photoResponse = await authenticatedFetch(cloudPhotoUrl(endpoint, profile.id), {
@@ -285,6 +318,7 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
     if (photoResponse.status !== 404) await cloudResponse<{ ok: true }>(photoResponse);
   }
   return {
+    revision: result.profile?.revision ?? cloudProfile.revision ?? 0,
     createdAt: result.profile?.createdAt ?? cloudProfile.createdAt,
     updatedAt: result.profile?.updatedAt ?? cloudProfile.updatedAt,
     createdBy: result.profile?.createdBy ?? cloudProfile.createdBy,
@@ -295,6 +329,7 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
 
 export function applyCloudCommit(profile: ClientProfile, commit: CloudProfileCommit) {
   const committed = structuredClone(profile);
+  committed.revision = commit.revision;
   committed.createdAt = commit.createdAt;
   committed.updatedAt = commit.updatedAt;
   committed.createdBy = commit.createdBy;
@@ -333,15 +368,23 @@ export async function synchronizeClientProfiles(endpoint: string, token: string)
   const localById = new Map(localSummaries.map((profile) => [profile.id, profile]));
   let uploaded = 0;
   let downloaded = 0;
+  let conflicts = 0;
+  const conflictIds: string[] = [];
 
   for (const local of localSummaries) {
     const remote = remoteById.get(local.id);
     if (!remote || local.updatedAt > remote.updatedAt) {
       const profile = await getClientProfile(local.id);
       if (profile) {
-        const commit = await putCloudProfile(endpoint, token, profile);
-        await saveClientProfile(applyCloudCommit(profile, commit));
-        uploaded += 1;
+        try {
+          const commit = await putCloudProfile(endpoint, token, profile);
+          await saveClientProfile(applyCloudCommit(profile, commit));
+          uploaded += 1;
+        } catch (error) {
+          if (!(error instanceof CloudProfileConflictError)) throw error;
+          conflicts += 1;
+          conflictIds.push(profile.id);
+        }
       }
     }
   }
@@ -359,6 +402,8 @@ export async function synchronizeClientProfiles(endpoint: string, token: string)
     uploaded,
     downloaded,
     removed,
+    conflicts,
+    conflictIds,
     total: new Set([...localById.keys(), ...remoteById.keys()]).size,
   };
 }

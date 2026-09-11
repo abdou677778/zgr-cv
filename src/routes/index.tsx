@@ -41,6 +41,9 @@ import {
   UserCog,
   BookOpenText,
   ClipboardList,
+  CloudCheck,
+  CloudOff,
+  TriangleAlert,
 } from "lucide-react";
 import {
   analyzeEuropassCoverage,
@@ -101,7 +104,7 @@ import { AiSettingsDialog } from "@/components/ai-settings-dialog";
 import { AiFieldDialog, type AiFieldRequest } from "@/components/ai-field-dialog";
 import { AiImportAssistant } from "@/components/ai-import-assistant";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "@/lib/ai-types";
-import { ClientDatabaseDialog } from "@/components/client-database-dialog";
+import { ClientDatabaseDialog, type ClientSyncStatus } from "@/components/client-database-dialog";
 import { ClientOrdersDialog } from "@/components/client-orders-dialog";
 import { AdminLogin } from "@/components/admin-login";
 import { AccountSettingsDialog } from "@/components/account-settings-dialog";
@@ -152,6 +155,7 @@ import {
 } from "@/lib/auth-client";
 import {
   applyCloudCommit,
+  CloudProfileConflictError,
   getClientProfile,
   newClientProfileId,
   putCloudProfile,
@@ -503,6 +507,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [activeClientOrder, setActiveClientOrder] = useState<ClientOrderSummary | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [clientSyncStatus, setClientSyncStatus] = useState<ClientSyncStatus>({
+    state: "idle",
+    message: "Aucune synchronisation effectuée dans cette session.",
+  });
   const pdfUrlRef = useRef<string | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const cv = cvByLanguage[language];
@@ -1199,6 +1207,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const saveCurrentClient = async () => {
     if (profileSaving) return;
     setProfileSaving(true);
+    setClientSyncStatus({ state: "syncing", message: "Sauvegarde et synchronisation en cours…" });
     try {
       const now = new Date().toISOString();
       const existing = activeProfileId ? await getClientProfile(activeProfileId) : undefined;
@@ -1210,6 +1219,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       } as const;
       const profile: ClientProfile = {
         version: 1,
+        revision: existing?.revision ?? 0,
         id,
         name: cv.nom_complet.trim() || "Profil sans nom",
         email: cv.email.trim(),
@@ -1242,9 +1252,30 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             if (cv.photo) updateProfilePhoto({ ...cv.photo, r2Key: commit.photoAsset.r2Key });
           }
           await saveClientProfile(profile);
+          setClientSyncStatus({
+            state: "synced",
+            message: `Révision ${profile.revision ?? 0} synchronisée à ${new Date().toLocaleTimeString("fr-DZ")}.`,
+          });
         } catch (error) {
           cloudError = error instanceof Error ? error.message : "synchronisation R2 impossible";
+          if (error instanceof CloudProfileConflictError) {
+            const editor = error.current?.updatedBy?.displayName;
+            setClientSyncStatus({
+              state: "conflict",
+              message: `Conflit avec la révision ${error.current?.revision ?? "cloud"}${editor ? ` modifiée par ${editor}` : ""}. Votre version locale est conservée.`,
+            });
+          } else {
+            setClientSyncStatus({
+              state: "local",
+              message: `Sauvegarde locale conservée. ${cloudError}`,
+            });
+          }
         }
+      } else {
+        setClientSyncStatus({
+          state: "local",
+          message: "Sauvegarde locale uniquement : la session cloud a expiré.",
+        });
       }
       setActiveProfileId(id);
       let orderVersion = "";
@@ -1281,6 +1312,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           : `${existing ? "Profil mis à jour" : "Nouveau profil sauvegardé"} ${cloudSynced ? "localement et dans R2" : "localement"} : ${profile.name} · ID ${id}${orderVersion}`,
       });
     } catch (error) {
+      setClientSyncStatus({
+        state: "local",
+        message: error instanceof Error ? error.message : "Sauvegarde locale impossible.",
+      });
       setImportMessage({
         ok: false,
         text: error instanceof Error ? error.message : "Sauvegarde du profil impossible.",
@@ -1309,6 +1344,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     }));
     setActiveDesignerPresetId(null);
     setActiveProfileId(profile.id);
+    setClientSyncStatus({
+      state: profile.revision ? "synced" : "local",
+      message: profile.revision
+        ? `Profil ouvert depuis la révision serveur ${profile.revision}.`
+        : "Profil ouvert depuis le cache local sans révision serveur.",
+    });
     setActiveClientOrder(null);
     setImportMessage({
       ok: true,
@@ -2129,6 +2170,38 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             >
               <Database className="mr-2 h-4 w-4" /> Base de données
             </Button>
+            {clientSyncStatus.state !== "idle" && (
+              <span
+                role="status"
+                title={clientSyncStatus.message}
+                className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold ${
+                  clientSyncStatus.state === "synced"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : clientSyncStatus.state === "conflict"
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : clientSyncStatus.state === "syncing"
+                        ? "border-sky-200 bg-sky-50 text-sky-700"
+                        : "border-amber-200 bg-amber-50 text-amber-800"
+                }`}
+              >
+                {clientSyncStatus.state === "synced" ? (
+                  <CloudCheck className="h-3.5 w-3.5" />
+                ) : clientSyncStatus.state === "conflict" ? (
+                  <TriangleAlert className="h-3.5 w-3.5" />
+                ) : clientSyncStatus.state === "syncing" ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CloudOff className="h-3.5 w-3.5" />
+                )}
+                {clientSyncStatus.state === "synced"
+                  ? "Synchronisé"
+                  : clientSyncStatus.state === "conflict"
+                    ? "Conflit"
+                    : clientSyncStatus.state === "syncing"
+                      ? "Synchronisation"
+                      : "Local"}
+              </span>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -3461,6 +3534,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         activeProfileId={activeProfileId}
         onOpenProfile={openClientProfile}
         onDownloadPdf={downloadClientProfilePdf}
+        onSyncStatusChange={setClientSyncStatus}
       />
       <ClientOrdersDialog
         open={clientOrdersOpen}

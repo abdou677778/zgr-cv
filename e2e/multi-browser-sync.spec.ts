@@ -132,6 +132,32 @@ class SharedClientApi {
       if (url.pathname === "/api/admin/audit" && method === "GET") {
         return this.respond(route, 200, { entries: [] });
       }
+      const restoreMatch = url.pathname.match(
+        /^\/api\/admin\/backups\/(daily|monthly)\/([^/]+)\/restore$/,
+      );
+      if (restoreMatch && method === "GET") {
+        const period = decodeURIComponent(restoreMatch[2]);
+        return this.respond(route, 200, {
+          backup: {
+            version: 1,
+            day: "2026-09-11",
+            createdAt: "2026-09-11T03:15:00.000Z",
+            profiles: 8,
+            photos: 4,
+            deletions: 1,
+            d1: { available: true, profiles: 8, deletions: 1, systemState: 1 },
+          },
+          summary: {
+            profilesInBackup: 8,
+            added: 1,
+            overwritten: 7,
+            removed: 2,
+            objectsToRestore: 13,
+          },
+          confirmation: `RESTAURER ${period}`,
+          safety: "Un point de récupération est créé automatiquement avant toute modification.",
+        });
+      }
       if (url.pathname === "/api/admin/backups" && method === "GET") {
         return this.respond(route, 200, {
           generatedAt: new Date().toISOString(),
@@ -163,15 +189,32 @@ class SharedClientApi {
               d1: { available: true, profiles: 8, deletions: 1, systemState: 1 },
             },
           ],
+          recentMonthlyBackups: [
+            {
+              version: 1,
+              kind: "monthly",
+              day: "2026-09-11",
+              month: "2026-09",
+              sourceDay: "2026-09-11",
+              createdAt: "2026-09-11T03:15:00.000Z",
+              profiles: 8,
+              photos: 4,
+              deletions: 1,
+              d1: { available: true, profiles: 8, deletions: 1, systemState: 1 },
+            },
+          ],
+          recentRecoveryPoints: [],
           storage: {
             clients: { objects: 12, bytes: 120_000 },
             history: { objects: 24, bytes: 240_000 },
             backups: { objects: 18, bytes: 360_000 },
+            recovery: { objects: 0, bytes: 0 },
             system: { objects: 4, bytes: 8_000 },
             total: { objects: 58, bytes: 728_000 },
           },
           d1: { available: true, profiles: 8, deletions: 1, indexReady: true },
           schedule: { cron: "15 3 * * *", timezone: "UTC", algerTime: "04:15" },
+          retention: { daily: 30, monthly: 12, recoveryPoints: 10 },
         });
       }
       if (url.pathname === "/api/admin/backups" && method === "POST") {
@@ -333,6 +376,15 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await expect(accountSettings.getByText("8 profils", { exact: true })).toBeVisible();
     await accountSettings.getByRole("button", { name: "Sauvegarder maintenant" }).click();
     await expect(accountSettings.getByRole("status")).toContainText("existe déjà");
+    await accountSettings.getByRole("button", { name: "Préparer" }).first().click();
+    await expect(accountSettings.getByText("Restaurer la sauvegarde 2026-09-11")).toBeVisible();
+    const restoreButton = accountSettings.getByRole("button", {
+      name: "Restaurer la base clients",
+    });
+    await expect(restoreButton).toBeDisabled();
+    await accountSettings.getByLabel(/Saisissez exactement/).fill("RESTAURER 2026-09-11");
+    await expect(restoreButton).toBeEnabled();
+    await accountSettings.getByRole("button", { name: "Annuler" }).click();
     await accountSettings.getByRole("button", { name: "Fermer" }).click();
 
     await adminPage.getByRole("button", { name: "Exemple" }).click();

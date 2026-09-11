@@ -57,7 +57,7 @@ class MemoryR2Bucket {
   }
 
   async delete(key) {
-    this.objects.delete(key);
+    for (const item of Array.isArray(key) ? key : [key]) this.objects.delete(item);
   }
 
   async list({ prefix = "" } = {}) {
@@ -305,6 +305,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.ok(
     await env.CLIENTS_BUCKET.get(`backups/daily/${backupDay}/r2/clients/${profile.id}.json`),
   );
+  assert.ok(await env.CLIENTS_BUCKET.get(`backups/monthly/${backupDay.slice(0, 7)}/manifest.json`));
 
   const monitoringResponse = await call(env, "/api/admin/backups", authorized(admin.token));
   assert.equal(monitoringResponse.status, 200);
@@ -313,6 +314,8 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(monitoring.latestStatus.state, "success");
   assert.equal(monitoring.latestBackup.day, backupDay);
   assert.equal(monitoring.recentBackups.length, 1);
+  assert.equal(monitoring.recentMonthlyBackups.length, 1);
+  assert.deepEqual(monitoring.retention, { daily: 30, monthly: 12, recoveryPoints: 10 });
   assert.ok(monitoring.storage.backups.objects >= 3);
   assert.ok(monitoring.storage.history.objects >= 6);
 
@@ -340,6 +343,71 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   const hiddenFromEditor = await call(env, "/api/clients?owner=created", authorized(editor.token));
   assert.equal((await hiddenFromEditor.json()).pagination.total, 0);
 
+  const changedAfterBackupResponse = await call(
+    env,
+    `/api/clients/${profile.id}`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...finalProfile, phone: "+213555777777" }),
+    }),
+  );
+  assert.equal(changedAfterBackupResponse.status, 200);
+
+  const previewRestoreResponse = await call(
+    env,
+    `/api/admin/backups/daily/${backupDay}/restore`,
+    authorized(admin.token),
+  );
+  assert.equal(previewRestoreResponse.status, 200);
+  const previewRestore = await previewRestoreResponse.json();
+  assert.equal(previewRestore.summary.overwritten, 1);
+  assert.equal(previewRestore.confirmation, `RESTAURER ${backupDay}`);
+
+  const refusedRestoreResponse = await call(
+    env,
+    `/api/admin/backups/daily/${backupDay}/restore`,
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmation: "RESTAURER MAINTENANT" }),
+    }),
+  );
+  assert.equal(refusedRestoreResponse.status, 422);
+
+  const restoreBackupResponse = await call(
+    env,
+    `/api/admin/backups/daily/${backupDay}/restore`,
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmation: `RESTAURER ${backupDay}` }),
+    }),
+  );
+  assert.equal(restoreBackupResponse.status, 200);
+  const restoredBackup = await restoreBackupResponse.json();
+  assert.equal(restoredBackup.summary.overwritten, 1);
+  assert.equal(restoredBackup.recoveryPoint.kind, "recovery");
+  const restoredFromBackupResponse = await call(
+    env,
+    `/api/clients/${profile.id}`,
+    authorized(admin.token),
+  );
+  const restoredFromBackup = await restoredFromBackupResponse.json();
+  assert.equal(restoredFromBackup.phone, "+213555000000");
+  assert.ok(restoredFromBackup.revision >= 5);
+  const monitoringAfterRestoreResponse = await call(
+    env,
+    "/api/admin/backups",
+    authorized(admin.token),
+  );
+  const monitoringAfterRestore = await monitoringAfterRestoreResponse.json();
+  assert.equal(monitoringAfterRestore.recentRecoveryPoints.length, 1);
+  assert.equal(
+    monitoringAfterRestore.recentRecoveryPoints[0].period,
+    restoredBackup.recoveryPoint.period,
+  );
+
   const deletedResponse = await call(
     env,
     `/api/clients/${profile.id}`,
@@ -351,4 +419,43 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(emptyList.profiles.length, 0);
   assert.equal(emptyList.deletedProfiles.length, 1);
   assert.equal(emptyList.deletedProfiles[0].deletedBy, "editeur");
+});
+
+test("la conservation limite les sauvegardes quotidiennes et mensuelles", async () => {
+  const bucket = new MemoryR2Bucket();
+  const env = { CLIENTS_BUCKET: bucket };
+  const now = Date.now();
+  for (let index = 1; index <= 35; index += 1) {
+    const day = new Date(now - index * 86_400_000).toISOString().slice(0, 10);
+    await bucket.put(
+      `backups/daily/${day}/manifest.json`,
+      JSON.stringify({ version: 1, day, createdAt: `${day}T03:15:00.000Z`, d1: {} }),
+    );
+  }
+  const current = new Date(now);
+  for (let index = 1; index <= 15; index += 1) {
+    const monthDate = new Date(
+      Date.UTC(current.getUTCFullYear(), current.getUTCMonth() - index, 1),
+    );
+    const month = monthDate.toISOString().slice(0, 7);
+    await bucket.put(
+      `backups/monthly/${month}/manifest.json`,
+      JSON.stringify({ version: 1, kind: "monthly", month, day: `${month}-01`, d1: {} }),
+    );
+  }
+
+  const scheduled = testContext();
+  worker.scheduled({ scheduledTime: now }, env, scheduled.context);
+  await scheduled.settle();
+
+  const daily = await bucket.list({ prefix: "backups/daily/" });
+  const dailyPeriods = new Set(
+    daily.objects.map((object) => object.key.split("/")[2]).filter(Boolean),
+  );
+  const monthly = await bucket.list({ prefix: "backups/monthly/" });
+  const monthlyPeriods = new Set(
+    monthly.objects.map((object) => object.key.split("/")[2]).filter(Boolean),
+  );
+  assert.equal(dailyPeriods.size, 30);
+  assert.equal(monthlyPeriods.size, 12);
 });

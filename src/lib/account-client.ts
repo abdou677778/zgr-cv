@@ -14,13 +14,25 @@ export type AuditEntry = {
 
 export type BackupManifest = {
   version: number;
+  kind?: "monthly";
   day: string;
+  month?: string;
+  sourceDay?: string;
   createdAt: string;
   profiles: number;
   photos: number;
   deletions: number;
   skipped?: boolean;
   d1: { available: boolean; profiles: number; deletions: number; systemState: number };
+};
+
+export type RecoveryPoint = {
+  version: number;
+  kind: "recovery";
+  period: string;
+  createdAt: string;
+  copied: number;
+  createdBy?: { username: string; displayName: string; role: "admin" | "user" };
 };
 
 export type BackupMonitoring = {
@@ -35,8 +47,10 @@ export type BackupMonitoring = {
   };
   latestBackup: BackupManifest | null;
   recentBackups: BackupManifest[];
+  recentMonthlyBackups: BackupManifest[];
+  recentRecoveryPoints: RecoveryPoint[];
   storage: Record<
-    "clients" | "history" | "backups" | "system" | "total",
+    "clients" | "history" | "backups" | "recovery" | "system" | "total",
     { objects: number; bytes: number }
   >;
   d1: {
@@ -47,6 +61,20 @@ export type BackupMonitoring = {
     error?: string;
   };
   schedule: { cron: string; timezone: string; algerTime: string };
+  retention: { daily: number; monthly: number; recoveryPoints: number };
+};
+
+export type BackupRestorePreview = {
+  backup: BackupManifest | RecoveryPoint;
+  summary: {
+    profilesInBackup: number;
+    added: number;
+    overwritten: number;
+    removed: number;
+    objectsToRestore: number;
+  };
+  confirmation: string;
+  safety: string;
 };
 
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -124,4 +152,27 @@ export async function runBackupNow() {
   return apiJson<{ ok: true; backup: BackupManifest }>("/api/admin/backups", {
     method: "POST",
   });
+}
+
+export async function previewBackupRestore(kind: "daily" | "monthly" | "recovery", period: string) {
+  return apiJson<BackupRestorePreview>(
+    `/api/admin/backups/${kind}/${encodeURIComponent(period)}/restore`,
+  );
+}
+
+export async function restoreClientBackup(
+  kind: "daily" | "monthly" | "recovery",
+  period: string,
+  confirmation: string,
+) {
+  return apiJson<{
+    ok: true;
+    backup: BackupManifest | RecoveryPoint;
+    summary: BackupRestorePreview["summary"];
+    recoveryPoint: { kind: "recovery"; period: string; createdAt: string; copied: number };
+    profiles: number;
+  }>(
+    `/api/admin/backups/${kind}/${encodeURIComponent(period)}/restore`,
+    jsonRequest("POST", { confirmation }),
+  );
 }

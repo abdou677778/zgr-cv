@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ComponentProps, type FormEvent } from "react";
 import {
   Activity,
+  ArchiveRestore,
   CheckCircle2,
   CloudCheck,
   DatabaseBackup,
@@ -10,6 +11,7 @@ import {
   KeyRound,
   LoaderCircle,
   RefreshCw,
+  RotateCcw,
   Save,
   ShieldCheck,
   TriangleAlert,
@@ -35,11 +37,14 @@ import {
   getBackupMonitoring,
   listAuditEntries,
   listManagedUsers,
+  previewBackupRestore,
   resetManagedUserPassword,
+  restoreClientBackup,
   runBackupNow,
   updateManagedUser,
   type AuditEntry,
   type BackupMonitoring,
+  type BackupRestorePreview,
   type ManagedUser,
 } from "@/lib/account-client";
 import type { SessionUser } from "@/lib/auth-client";
@@ -56,6 +61,8 @@ const eventLabels: Record<string, string> = {
   client_created: "Client créé",
   client_updated: "Client modifié",
   client_deleted: "Client supprimé",
+  client_version_restored: "Version client restaurée",
+  client_backup_restored: "Base clients restaurée",
 };
 
 function formatDate(value: string | null) {
@@ -108,6 +115,12 @@ export function AccountSettingsDialog({
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [backupMonitoring, setBackupMonitoring] = useState<BackupMonitoring | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<{
+    kind: "daily" | "monthly" | "recovery";
+    period: string;
+  } | null>(null);
+  const [restorePreview, setRestorePreview] = useState<BackupRestorePreview | null>(null);
+  const [restoreConfirmation, setRestoreConfirmation] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -282,6 +295,62 @@ export function AccountSettingsDialog({
     }
   };
 
+  const prepareRestore = async (kind: "daily" | "monthly" | "recovery", period: string) => {
+    setBusy(`preview-${kind}-${period}`);
+    setMessage(null);
+    setRestoreConfirmation("");
+    try {
+      const preview = await previewBackupRestore(kind, period);
+      setRestoreTarget({ kind, period });
+      setRestorePreview(preview);
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Préparation de la restauration impossible.",
+      });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const executeRestore = async () => {
+    if (!restoreTarget || !restorePreview) return;
+    if (restoreConfirmation !== restorePreview.confirmation) {
+      setMessage({ ok: false, text: `Saisissez exactement « ${restorePreview.confirmation} ».` });
+      return;
+    }
+    if (
+      !window.confirm(
+        `Confirmer la restauration de ${restorePreview.summary.profilesInBackup} profil(s) depuis ${restoreTarget.period} ?`,
+      )
+    )
+      return;
+    setBusy("restore-backup");
+    setMessage(null);
+    try {
+      const result = await restoreClientBackup(
+        restoreTarget.kind,
+        restoreTarget.period,
+        restoreConfirmation,
+      );
+      setBackupMonitoring(await getBackupMonitoring());
+      setRestoreTarget(null);
+      setRestorePreview(null);
+      setRestoreConfirmation("");
+      setMessage({
+        ok: true,
+        text: `Base clients restaurée : ${result.profiles} profil(s). Point de récupération créé : ${result.recoveryPoint.period}.`,
+      });
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Restauration impossible.",
+      });
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[94vh] max-w-5xl overflow-y-auto">
@@ -440,12 +509,12 @@ export function AccountSettingsDialog({
                       {
                         label: "Historique",
                         value: formatBytes(backupMonitoring.storage.history.bytes),
-                        detail: `${backupMonitoring.storage.history.objects} versions`,
+                        detail: `${backupMonitoring.storage.history.objects} objets historiques`,
                       },
                       {
                         label: "Sauvegardes",
                         value: formatBytes(backupMonitoring.storage.backups.bytes),
-                        detail: `${backupMonitoring.recentBackups.length} jours affichés`,
+                        detail: `${backupMonitoring.recentBackups.length} quotidiennes · ${backupMonitoring.recentMonthlyBackups.length} mensuelles`,
                       },
                       {
                         label: "Index D1",
@@ -467,15 +536,19 @@ export function AccountSettingsDialog({
                   </div>
 
                   <div className="overflow-hidden rounded-xl border bg-white">
-                    <div className="border-b bg-slate-50 px-4 py-2 text-xs font-semibold">
-                      Sauvegardes récentes
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50 px-4 py-2 text-xs font-semibold">
+                      <span>Sauvegardes quotidiennes récentes</span>
+                      <span className="font-normal text-muted-foreground">
+                        Conservation : {backupMonitoring.retention.daily} quotidiennes ·{" "}
+                        {backupMonitoring.retention.monthly} mensuelles
+                      </span>
                     </div>
                     {backupMonitoring.recentBackups.length ? (
                       <div className="max-h-48 overflow-auto divide-y">
                         {backupMonitoring.recentBackups.map((backup) => (
                           <div
                             key={backup.day}
-                            className="grid gap-1 px-4 py-2 text-xs sm:grid-cols-[110px_1fr_auto] sm:items-center"
+                            className="grid gap-2 px-4 py-2 text-xs sm:grid-cols-[100px_1fr_auto_auto] sm:items-center"
                           >
                             <span className="font-semibold">{backup.day}</span>
                             <span className="text-muted-foreground">
@@ -487,6 +560,20 @@ export function AccountSettingsDialog({
                             >
                               {backup.d1.available ? "D1 inclus" : "D1 absent"}
                             </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={Boolean(busy)}
+                              onClick={() => void prepareRestore("daily", backup.day)}
+                            >
+                              {busy === `preview-daily-${backup.day}` ? (
+                                <LoaderCircle className="mr-1 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <ArchiveRestore className="mr-1 h-3.5 w-3.5" />
+                              )}
+                              Préparer
+                            </Button>
                           </div>
                         ))}
                       </div>
@@ -496,6 +583,139 @@ export function AccountSettingsDialog({
                       </p>
                     )}
                   </div>
+
+                  {backupMonitoring.recentMonthlyBackups.length > 0 && (
+                    <div className="overflow-hidden rounded-xl border bg-white">
+                      <div className="border-b bg-slate-50 px-4 py-2 text-xs font-semibold">
+                        Archives mensuelles
+                      </div>
+                      <div className="max-h-40 overflow-auto divide-y">
+                        {backupMonitoring.recentMonthlyBackups.map((backup) => {
+                          const month = backup.month || backup.day.slice(0, 7);
+                          return (
+                            <div
+                              key={month}
+                              className="grid gap-2 px-4 py-2 text-xs sm:grid-cols-[100px_1fr_auto] sm:items-center"
+                            >
+                              <span className="font-semibold">{month}</span>
+                              <span className="text-muted-foreground">
+                                Issue du {backup.sourceDay || backup.day} · {backup.profiles}{" "}
+                                profils
+                              </span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={Boolean(busy)}
+                                onClick={() => void prepareRestore("monthly", month)}
+                              >
+                                {busy === `preview-monthly-${month}` ? (
+                                  <LoaderCircle className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <ArchiveRestore className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                Préparer
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {backupMonitoring.recentRecoveryPoints.length > 0 && (
+                    <div className="overflow-hidden rounded-xl border border-violet-200 bg-white">
+                      <div className="border-b border-violet-100 bg-violet-50 px-4 py-2 text-xs font-semibold text-violet-900">
+                        Points de récupération automatiques
+                      </div>
+                      <div className="max-h-40 overflow-auto divide-y">
+                        {backupMonitoring.recentRecoveryPoints.map((point) => (
+                          <div
+                            key={point.period}
+                            className="grid gap-2 px-4 py-2 text-xs sm:grid-cols-[190px_1fr_auto] sm:items-center"
+                          >
+                            <span className="font-mono font-semibold">{point.period}</span>
+                            <span className="text-muted-foreground">
+                              {point.copied} objets · créé avant une restauration
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={Boolean(busy)}
+                              onClick={() => void prepareRestore("recovery", point.period)}
+                            >
+                              {busy === `preview-recovery-${point.period}` ? (
+                                <LoaderCircle className="mr-1 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <ArchiveRestore className="mr-1 h-3.5 w-3.5" />
+                              )}
+                              Restaurer ce point
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {restoreTarget && restorePreview && (
+                    <div className="space-y-3 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-red-950">
+                      <div className="flex items-start gap-2">
+                        <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-700" />
+                        <div>
+                          <p className="text-sm font-bold">
+                            Restaurer la sauvegarde {restoreTarget.period}
+                          </p>
+                          <p className="mt-1 text-xs leading-relaxed">
+                            {restorePreview.summary.overwritten} profil(s) seront remplacés,{" "}
+                            {restorePreview.summary.added} ajouté(s) et{" "}
+                            {restorePreview.summary.removed} retiré(s). {restorePreview.safety}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="restore-confirmation" className="text-xs">
+                          Saisissez exactement{" "}
+                          <span className="font-mono font-bold">{restorePreview.confirmation}</span>
+                        </Label>
+                        <Input
+                          id="restore-confirmation"
+                          value={restoreConfirmation}
+                          onChange={(event) => setRestoreConfirmation(event.target.value)}
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          disabled={
+                            Boolean(busy) || restoreConfirmation !== restorePreview.confirmation
+                          }
+                          onClick={() => void executeRestore()}
+                        >
+                          {busy === "restore-backup" ? (
+                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                          )}
+                          Restaurer la base clients
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={Boolean(busy)}
+                          onClick={() => {
+                            setRestoreTarget(null);
+                            setRestorePreview(null);
+                            setRestoreConfirmation("");
+                          }}
+                        >
+                          Annuler
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="flex items-center py-5 text-sm text-muted-foreground">

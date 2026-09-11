@@ -2143,6 +2143,140 @@ async function r2PrefixInventory(env, prefix) {
   return { objects, bytes, manifestKeys };
 }
 
+async function listR2ObjectKeys(env, prefix) {
+  let cursor;
+  const keys = [];
+  do {
+    const page = await env.CLIENTS_BUCKET.list({ prefix, cursor, limit: 1000 });
+    keys.push(...page.objects.map((object) => object.key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return keys;
+}
+
+async function deleteR2ObjectKeys(env, keys) {
+  for (let offset = 0; offset < keys.length; offset += 1000) {
+    await env.CLIENTS_BUCKET.delete(keys.slice(offset, offset + 1000));
+  }
+}
+
+async function copyR2Prefix(env, sourcePrefix, destinationPrefix) {
+  const keys = await listR2ObjectKeys(env, sourcePrefix);
+  let copied = 0;
+  for (const key of keys) {
+    const destinationKey = `${destinationPrefix}${key.slice(sourcePrefix.length)}`;
+    if (await copyR2Object(env, key, destinationKey)) copied += 1;
+  }
+  return copied;
+}
+
+async function createMonthlyBackup(env, dailyRoot, dailyManifest) {
+  const month = dailyManifest.day.slice(0, 7);
+  const monthlyRoot = `backups/monthly/${month}`;
+  const manifestKey = `${monthlyRoot}/manifest.json`;
+  if (await readR2Json(env, manifestKey)) return { month, created: false };
+  await copyR2Prefix(env, `${dailyRoot}/`, `${monthlyRoot}/`);
+  const manifest = {
+    ...dailyManifest,
+    kind: "monthly",
+    month,
+    sourceDay: dailyManifest.day,
+  };
+  await env.CLIENTS_BUCKET.put(manifestKey, JSON.stringify(manifest), {
+    onlyIf: { etagDoesNotMatch: "*" },
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: { month, sourceDay: dailyManifest.day, createdAt: dailyManifest.createdAt },
+  });
+  return { month, created: true };
+}
+
+async function enforceBackupRetention(env, prefix, keep) {
+  const keys = await listR2ObjectKeys(env, prefix);
+  const periods = [
+    ...new Set(keys.map((key) => key.slice(prefix.length).split("/", 1)[0]).filter(Boolean)),
+  ].sort((left, right) => right.localeCompare(left));
+  const expired = periods.slice(keep);
+  const expiredSet = new Set(expired);
+  const keysToDelete = keys.filter((key) =>
+    expiredSet.has(key.slice(prefix.length).split("/", 1)[0]),
+  );
+  await deleteR2ObjectKeys(env, keysToDelete);
+  return {
+    kept: Math.min(periods.length, keep),
+    removedPeriods: expired.length,
+    removedObjects: keysToDelete.length,
+  };
+}
+
+function backupRestoreTarget(pathname) {
+  const match = pathname.match(
+    /^\/api\/admin\/backups\/(daily|monthly|recovery)\/([^/]+)\/restore$/,
+  );
+  if (!match) return null;
+  const kind = match[1];
+  const period = decodeURIComponent(match[2]);
+  if (kind === "daily" && !/^\d{4}-\d{2}-\d{2}$/.test(period)) return null;
+  if (kind === "monthly" && !/^\d{4}-\d{2}$/.test(period)) return null;
+  if (kind === "recovery" && !/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/.test(period)) return null;
+  return { kind, period, root: `backups/${kind}/${period}` };
+}
+
+async function backupRestorePlan(env, target) {
+  const manifest = await readR2Json(env, `${target.root}/manifest.json`);
+  if (!manifest) return null;
+  const [backupKeys, currentIndex] = await Promise.all([
+    listR2ObjectKeys(env, `${target.root}/r2/clients/`),
+    readR2ProfileIndex(env),
+  ]);
+  const backupProfileIds = new Set(
+    backupKeys
+      .filter((key) => key.endsWith(".json") && !key.endsWith(".deleted.json"))
+      .map((key) => key.match(/\/clients\/([^/]+)\.json$/)?.[1])
+      .filter(Boolean),
+  );
+  const currentProfileIds = new Set(currentIndex.profiles.map((profile) => profile.id));
+  return {
+    target,
+    manifest,
+    backupKeys,
+    backupProfileIds,
+    currentProfileIds,
+    summary: {
+      profilesInBackup: backupProfileIds.size,
+      added: [...backupProfileIds].filter((id) => !currentProfileIds.has(id)).length,
+      overwritten: [...backupProfileIds].filter((id) => currentProfileIds.has(id)).length,
+      removed: [...currentProfileIds].filter((id) => !backupProfileIds.has(id)).length,
+      objectsToRestore: backupKeys.length,
+    },
+    confirmation: `RESTAURER ${target.period}`,
+  };
+}
+
+async function createRecoveryPoint(env, actor) {
+  const createdAt = new Date().toISOString();
+  const period = createdAt.replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+  const root = `backups/recovery/${period}`;
+  const copied = await copyR2Prefix(env, "clients/", `${root}/r2/clients/`);
+  const manifest = { version: 1, kind: "recovery", period, createdAt, copied, createdBy: actor };
+  await env.CLIENTS_BUCKET.put(`${root}/manifest.json`, JSON.stringify(manifest), {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: { period, createdAt, createdBy: actor.username },
+  });
+  await enforceBackupRetention(env, "backups/recovery/", 10);
+  return manifest;
+}
+
+async function highestHistoricalRevisions(env) {
+  const keys = await listR2ObjectKeys(env, CLIENT_HISTORY_PREFIX);
+  const revisions = new Map();
+  for (const key of keys) {
+    const match = key.match(/^history\/clients\/([^/]+)\/(\d+)\.json$/);
+    if (!match) continue;
+    revisions.set(match[1], Math.max(revisions.get(match[1]) || 0, Number(match[2]) || 0));
+  }
+  return revisions;
+}
+
 async function readBackupD1Stats(env) {
   if (!env.CLIENTS_DB) return { available: false, profiles: 0, deletions: 0, indexReady: false };
   try {
@@ -2170,18 +2304,146 @@ async function readBackupD1Stats(env) {
   }
 }
 
-async function backupMonitoring(env, origin) {
-  const [clients, history, backups, system, latestStatus, d1] = await Promise.all([
-    r2PrefixInventory(env, "clients/"),
-    r2PrefixInventory(env, CLIENT_HISTORY_PREFIX),
-    r2PrefixInventory(env, DAILY_BACKUP_PREFIX),
-    r2PrefixInventory(env, "system/"),
-    readR2Json(env, BACKUP_STATUS_OBJECT),
-    readBackupD1Stats(env),
+async function previewBackupRestore(env, target, origin) {
+  const plan = await backupRestorePlan(env, target);
+  if (!plan) return json({ error: "Sauvegarde introuvable." }, 404, origin);
+  return json(
+    {
+      backup: plan.manifest,
+      summary: plan.summary,
+      confirmation: plan.confirmation,
+      safety: "Un point de récupération est créé automatiquement avant toute modification.",
+    },
+    200,
+    origin,
+  );
+}
+
+async function restoreClientBackup(request, env, target, actor, origin, ctx) {
+  let payload;
+  try {
+    payload = (await readJson(request, 4_096)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Confirmation de restauration invalide." }, 400, origin);
+    throw error;
+  }
+  const plan = await backupRestorePlan(env, target);
+  if (!plan) return json({ error: "Sauvegarde introuvable." }, 404, origin);
+  if (payload?.confirmation !== plan.confirmation) {
+    return json(
+      { error: `Saisissez exactement « ${plan.confirmation} » pour autoriser la restauration.` },
+      422,
+      origin,
+    );
+  }
+
+  const [currentIndex, historicalRevisions] = await Promise.all([
+    readR2ProfileIndex(env),
+    highestHistoricalRevisions(env),
   ]);
-  const manifestKeys = backups.manifestKeys.sort((left, right) => right.localeCompare(left));
+  const currentRevisions = new Map(
+    currentIndex.profiles.map((profile) => [profile.id, storedProfileRevision(profile)]),
+  );
+  const recoveryPoint = await createRecoveryPoint(env, clientProfileActor(actor));
+  const currentKeys = await listR2ObjectKeys(env, "clients/");
+  await deleteR2ObjectKeys(env, currentKeys);
+  await copyR2Prefix(env, `${target.root}/r2/clients/`, "clients/");
+
+  const now = new Date().toISOString();
+  const editor = clientProfileActor(actor);
+  for (const id of plan.backupProfileIds) {
+    const profileKey = `clients/${id}.json`;
+    const restoredProfile = await readR2Json(env, profileKey);
+    if (!restoredProfile) continue;
+    const nextRevision =
+      Math.max(
+        storedProfileRevision(restoredProfile),
+        currentRevisions.get(id) || 0,
+        historicalRevisions.get(id) || 0,
+      ) + 1;
+    const restored = {
+      ...restoredProfile,
+      id,
+      revision: nextRevision,
+      updatedAt: now,
+      updatedBy: editor,
+      restoredFromBackup: { kind: target.kind, period: target.period },
+    };
+    const raw = JSON.stringify(restored);
+    await env.CLIENTS_BUCKET.put(profileKey, raw, {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: clientProfileMetadata(restored),
+    });
+    await snapshotProfileVersion(env, restored, raw);
+    if (restored.photoAsset?.r2Key) {
+      await snapshotCurrentProfilePhoto(env, id, nextRevision);
+    }
+  }
+
+  for (const id of plan.currentProfileIds) {
+    if (plan.backupProfileIds.has(id)) continue;
+    const tombstoneKey = profileDeletedKey(id);
+    if (await readR2Json(env, tombstoneKey)) continue;
+    await env.CLIENTS_BUCKET.put(
+      tombstoneKey,
+      JSON.stringify({ id, deletedAt: now, deletedBy: actor.username }),
+      {
+        httpMetadata: { contentType: "application/json; charset=utf-8" },
+        customMetadata: { id, deletedAt: now, deletedBy: actor.username },
+      },
+    );
+  }
+
+  const rebuilt = env.CLIENTS_DB ? await rebuildClientProfileIndexData(env) : null;
+  ctx.waitUntil(
+    writeAudit(env, request, "client_backup_restored", actor.username, "success", {
+      kind: target.kind,
+      period: target.period,
+      recoveryPoint: recoveryPoint.period,
+      ...plan.summary,
+    }),
+  );
+  return json(
+    {
+      ok: true,
+      backup: plan.manifest,
+      summary: plan.summary,
+      recoveryPoint,
+      profiles: rebuilt?.profiles.length ?? plan.backupProfileIds.size,
+    },
+    200,
+    origin,
+  );
+}
+
+async function backupMonitoring(env, origin) {
+  const [clients, history, dailyBackups, monthlyBackups, recoveryPoints, system, latestStatus, d1] =
+    await Promise.all([
+      r2PrefixInventory(env, "clients/"),
+      r2PrefixInventory(env, CLIENT_HISTORY_PREFIX),
+      r2PrefixInventory(env, DAILY_BACKUP_PREFIX),
+      r2PrefixInventory(env, "backups/monthly/"),
+      r2PrefixInventory(env, "backups/recovery/"),
+      r2PrefixInventory(env, "system/"),
+      readR2Json(env, BACKUP_STATUS_OBJECT),
+      readBackupD1Stats(env),
+    ]);
+  const manifestKeys = dailyBackups.manifestKeys.sort((left, right) => right.localeCompare(left));
   const recentBackups = (
     await Promise.all(manifestKeys.slice(0, 14).map((key) => readR2Json(env, key)))
+  ).filter(Boolean);
+  const monthlyManifestKeys = monthlyBackups.manifestKeys.sort((left, right) =>
+    right.localeCompare(left),
+  );
+  const recentMonthlyBackups = (
+    await Promise.all(monthlyManifestKeys.slice(0, 12).map((key) => readR2Json(env, key)))
+  ).filter(Boolean);
+  const recoveryManifestKeys = recoveryPoints.manifestKeys.sort((left, right) =>
+    right.localeCompare(left),
+  );
+  const recentRecoveryPoints = (
+    await Promise.all(recoveryManifestKeys.slice(0, 10).map((key) => readR2Json(env, key)))
   ).filter(Boolean);
   const latestBackup = recentBackups[0] || null;
   const alerts = [];
@@ -2221,18 +2483,37 @@ async function backupMonitoring(env, origin) {
       latestStatus,
       latestBackup,
       recentBackups,
+      recentMonthlyBackups,
+      recentRecoveryPoints,
       storage: {
         clients: { objects: clients.objects, bytes: clients.bytes },
         history: { objects: history.objects, bytes: history.bytes },
-        backups: { objects: backups.objects, bytes: backups.bytes },
+        backups: {
+          objects: dailyBackups.objects + monthlyBackups.objects + recoveryPoints.objects,
+          bytes: dailyBackups.bytes + monthlyBackups.bytes + recoveryPoints.bytes,
+        },
+        recovery: { objects: recoveryPoints.objects, bytes: recoveryPoints.bytes },
         system: { objects: system.objects, bytes: system.bytes },
         total: {
-          objects: clients.objects + history.objects + backups.objects + system.objects,
-          bytes: clients.bytes + history.bytes + backups.bytes + system.bytes,
+          objects:
+            clients.objects +
+            history.objects +
+            dailyBackups.objects +
+            monthlyBackups.objects +
+            recoveryPoints.objects +
+            system.objects,
+          bytes:
+            clients.bytes +
+            history.bytes +
+            dailyBackups.bytes +
+            monthlyBackups.bytes +
+            recoveryPoints.bytes +
+            system.bytes,
         },
       },
       d1,
       schedule: { cron: "15 3 * * *", timezone: "UTC", algerTime: "04:15" },
+      retention: { daily: 30, monthly: 12, recoveryPoints: 10 },
     },
     200,
     origin,
@@ -2246,11 +2527,18 @@ async function createDailyBackup(env, scheduledTime = Date.now()) {
   const manifestKey = `${root}/manifest.json`;
   const existing = await readR2Json(env, manifestKey);
   if (existing) {
+    const monthly = await createMonthlyBackup(env, root, existing);
+    const [dailyRetention, monthlyRetention] = await Promise.all([
+      enforceBackupRetention(env, DAILY_BACKUP_PREFIX, 30),
+      enforceBackupRetention(env, "backups/monthly/", 12),
+    ]);
     await recordBackupStatus(env, {
       state: "success",
       day,
       message: "La sauvegarde quotidienne existe déjà.",
       manifest: existing,
+      monthly,
+      retention: { daily: dailyRetention, monthly: monthlyRetention },
     });
     return { ...existing, skipped: true };
   }
@@ -2329,11 +2617,18 @@ async function createDailyBackup(env, scheduledTime = Date.now()) {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
     customMetadata: { day, createdAt, profiles: String(profiles) },
   });
+  const monthly = await createMonthlyBackup(env, root, manifest);
+  const [dailyRetention, monthlyRetention] = await Promise.all([
+    enforceBackupRetention(env, DAILY_BACKUP_PREFIX, 30),
+    enforceBackupRetention(env, "backups/monthly/", 12),
+  ]);
   await recordBackupStatus(env, {
     state: "success",
     day,
     message: "Sauvegarde quotidienne terminée.",
     manifest,
+    monthly,
+    retention: { daily: dailyRetention, monthly: monthlyRetention },
   });
   return manifest;
 }
@@ -2380,6 +2675,13 @@ async function route(request, env, ctx) {
   if (url.pathname.startsWith("/api/admin/")) {
     if (actor.role !== "admin")
       return json({ error: "Droits administrateur requis." }, 403, origin);
+    const restoreTarget = backupRestoreTarget(url.pathname);
+    if (restoreTarget) {
+      if (request.method === "GET") return previewBackupRestore(env, restoreTarget, origin);
+      if (request.method === "POST")
+        return restoreClientBackup(request, env, restoreTarget, actor, origin, ctx);
+      return json({ error: "Méthode non autorisée." }, 405, origin);
+    }
     if (clientOrderPortalPath(url.pathname))
       return proxyClientOrders(request, env, origin, url.pathname);
     if (url.pathname === "/api/admin/users" && request.method === "GET")

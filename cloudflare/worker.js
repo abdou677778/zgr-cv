@@ -2110,13 +2110,150 @@ async function copyR2Object(env, sourceKey, destinationKey) {
   return true;
 }
 
+const BACKUP_STATUS_OBJECT = "system/backups/latest-status.json";
+
+async function recordBackupStatus(env, status) {
+  const checkedAt = new Date().toISOString();
+  const value = { version: 1, checkedAt, ...status };
+  await env.CLIENTS_BUCKET.put(BACKUP_STATUS_OBJECT, JSON.stringify(value), {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: {
+      state: value.state,
+      checkedAt,
+      day: String(value.day || "").slice(0, 10),
+    },
+  });
+  return value;
+}
+
+async function r2PrefixInventory(env, prefix) {
+  let cursor;
+  let objects = 0;
+  let bytes = 0;
+  const manifestKeys = [];
+  do {
+    const page = await env.CLIENTS_BUCKET.list({ prefix, cursor, limit: 1000 });
+    for (const object of page.objects) {
+      objects += 1;
+      bytes += Number(object.size) || 0;
+      if (object.key.endsWith("/manifest.json")) manifestKeys.push(object.key);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return { objects, bytes, manifestKeys };
+}
+
+async function readBackupD1Stats(env) {
+  if (!env.CLIENTS_DB) return { available: false, profiles: 0, deletions: 0, indexReady: false };
+  try {
+    const [profiles, deletions, indexState] = await env.CLIENTS_DB.batch([
+      env.CLIENTS_DB.prepare("SELECT COUNT(*) AS total FROM client_profiles"),
+      env.CLIENTS_DB.prepare("SELECT COUNT(*) AS total FROM client_profile_deletions"),
+      env.CLIENTS_DB.prepare(
+        "SELECT value FROM system_state WHERE key = 'client_index_ready' LIMIT 1",
+      ),
+    ]);
+    return {
+      available: true,
+      profiles: Number(profiles.results?.[0]?.total) || 0,
+      deletions: Number(deletions.results?.[0]?.total) || 0,
+      indexReady: indexState.results?.[0]?.value === "1",
+    };
+  } catch (error) {
+    return {
+      available: false,
+      profiles: 0,
+      deletions: 0,
+      indexReady: false,
+      error: error instanceof Error ? error.message : "D1 indisponible",
+    };
+  }
+}
+
+async function backupMonitoring(env, origin) {
+  const [clients, history, backups, system, latestStatus, d1] = await Promise.all([
+    r2PrefixInventory(env, "clients/"),
+    r2PrefixInventory(env, CLIENT_HISTORY_PREFIX),
+    r2PrefixInventory(env, DAILY_BACKUP_PREFIX),
+    r2PrefixInventory(env, "system/"),
+    readR2Json(env, BACKUP_STATUS_OBJECT),
+    readBackupD1Stats(env),
+  ]);
+  const manifestKeys = backups.manifestKeys.sort((left, right) => right.localeCompare(left));
+  const recentBackups = (
+    await Promise.all(manifestKeys.slice(0, 14).map((key) => readR2Json(env, key)))
+  ).filter(Boolean);
+  const latestBackup = recentBackups[0] || null;
+  const alerts = [];
+  if (!latestBackup) {
+    alerts.push({ level: "critical", message: "Aucune sauvegarde quotidienne disponible." });
+  } else {
+    const ageHours = (Date.now() - Date.parse(latestBackup.createdAt)) / 3_600_000;
+    if (!Number.isFinite(ageHours) || ageHours > 36) {
+      alerts.push({
+        level: "warning",
+        message: "La dernière sauvegarde complète date de plus de 36 heures.",
+      });
+    }
+    if (latestBackup.d1?.available === false) {
+      alerts.push({ level: "warning", message: "Le dernier export n’inclut pas l’index D1." });
+    }
+  }
+  if (latestStatus?.state === "failed") {
+    alerts.push({
+      level: "critical",
+      message: `Dernier essai en échec : ${latestStatus.message || "erreur inconnue"}`,
+    });
+  }
+  if (!d1.available || !d1.indexReady) {
+    alerts.push({ level: "warning", message: "L’index D1 n’est pas prêt ou est indisponible." });
+  }
+  const health = alerts.some((alert) => alert.level === "critical")
+    ? "critical"
+    : alerts.length
+      ? "warning"
+      : "healthy";
+  return json(
+    {
+      generatedAt: new Date().toISOString(),
+      health,
+      alerts,
+      latestStatus,
+      latestBackup,
+      recentBackups,
+      storage: {
+        clients: { objects: clients.objects, bytes: clients.bytes },
+        history: { objects: history.objects, bytes: history.bytes },
+        backups: { objects: backups.objects, bytes: backups.bytes },
+        system: { objects: system.objects, bytes: system.bytes },
+        total: {
+          objects: clients.objects + history.objects + backups.objects + system.objects,
+          bytes: clients.bytes + history.bytes + backups.bytes + system.bytes,
+        },
+      },
+      d1,
+      schedule: { cron: "15 3 * * *", timezone: "UTC", algerTime: "04:15" },
+    },
+    200,
+    origin,
+  );
+}
+
 async function createDailyBackup(env, scheduledTime = Date.now()) {
   const createdAt = new Date(scheduledTime).toISOString();
   const day = createdAt.slice(0, 10);
   const root = `${DAILY_BACKUP_PREFIX}${day}`;
   const manifestKey = `${root}/manifest.json`;
   const existing = await readR2Json(env, manifestKey);
-  if (existing) return { ...existing, skipped: true };
+  if (existing) {
+    await recordBackupStatus(env, {
+      state: "success",
+      day,
+      message: "La sauvegarde quotidienne existe déjà.",
+      manifest: existing,
+    });
+    return { ...existing, skipped: true };
+  }
 
   const index = await readR2ProfileIndex(env);
   let profiles = 0;
@@ -2192,12 +2329,28 @@ async function createDailyBackup(env, scheduledTime = Date.now()) {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
     customMetadata: { day, createdAt, profiles: String(profiles) },
   });
+  await recordBackupStatus(env, {
+    state: "success",
+    day,
+    message: "Sauvegarde quotidienne terminée.",
+    manifest,
+  });
   return manifest;
 }
 
 async function runDailyBackup(env, origin) {
-  const manifest = await createDailyBackup(env);
-  return json({ ok: true, backup: manifest }, 200, origin);
+  try {
+    const manifest = await createDailyBackup(env);
+    return json({ ok: true, backup: manifest }, 200, origin);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erreur inconnue";
+    await recordBackupStatus(env, {
+      state: "failed",
+      day: new Date().toISOString().slice(0, 10),
+      message,
+    });
+    return json({ error: `Sauvegarde impossible : ${message}` }, 500, origin);
+  }
 }
 
 async function route(request, env, ctx) {
@@ -2245,8 +2398,10 @@ async function route(request, env, ctx) {
       return listAudit(env, origin, url.searchParams.get("limit"));
     if (url.pathname === "/api/admin/clients/reindex" && request.method === "POST")
       return rebuildClientProfileIndex(env, origin);
-    if (url.pathname === "/api/admin/backups" && request.method === "POST")
-      return runDailyBackup(env, origin);
+    if (url.pathname === "/api/admin/backups") {
+      if (request.method === "GET") return backupMonitoring(env, origin);
+      if (request.method === "POST") return runDailyBackup(env, origin);
+    }
     if (url.pathname === "/api/admin/ai-keys" && request.method === "GET")
       return aiKeyStatus(env, origin);
     if (url.pathname === "/api/admin/ai-keys" && request.method === "PUT")
@@ -2338,13 +2493,19 @@ export default {
   },
   scheduled(controller, env, ctx) {
     ctx.waitUntil(
-      createDailyBackup(env, controller.scheduledTime).catch((error) => {
+      createDailyBackup(env, controller.scheduledTime).catch(async (error) => {
+        const message = error instanceof Error ? error.message : "unknown";
         console.error(
           JSON.stringify({
             event: "daily_backup_failed",
-            message: error instanceof Error ? error.message : "unknown",
+            message,
           }),
         );
+        await recordBackupStatus(env, {
+          state: "failed",
+          day: new Date(controller.scheduledTime).toISOString().slice(0, 10),
+          message,
+        });
         throw error;
       }),
     );

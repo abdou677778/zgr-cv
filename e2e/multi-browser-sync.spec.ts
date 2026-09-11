@@ -114,9 +114,85 @@ class SharedClientApi {
         : this.respond(route, 401, { error: "Session de test expirée." });
     }
 
-    if (!url.pathname.startsWith("/api/clients")) return route.fallback();
     const user = this.authenticatedUser(route);
     if (!user) return this.respond(route, 401, { error: "Session de test absente." });
+
+    if (url.pathname.startsWith("/api/admin/")) {
+      if (user.role !== "admin")
+        return this.respond(route, 403, { error: "Droits administrateur requis." });
+      if (url.pathname === "/api/admin/users" && method === "GET") {
+        return this.respond(route, 200, {
+          users: Object.values(USERS).map((managedUser) => ({
+            ...managedUser,
+            sessionVersion: 1,
+            isPrimary: managedUser.username === "admin",
+          })),
+        });
+      }
+      if (url.pathname === "/api/admin/audit" && method === "GET") {
+        return this.respond(route, 200, { entries: [] });
+      }
+      if (url.pathname === "/api/admin/backups" && method === "GET") {
+        return this.respond(route, 200, {
+          generatedAt: new Date().toISOString(),
+          health: "healthy",
+          alerts: [],
+          latestStatus: {
+            state: "success",
+            checkedAt: "2026-09-11T04:15:00.000Z",
+            day: "2026-09-11",
+            message: "Sauvegarde quotidienne terminée.",
+          },
+          latestBackup: {
+            version: 1,
+            day: "2026-09-11",
+            createdAt: "2026-09-11T03:15:00.000Z",
+            profiles: 8,
+            photos: 4,
+            deletions: 1,
+            d1: { available: true, profiles: 8, deletions: 1, systemState: 1 },
+          },
+          recentBackups: [
+            {
+              version: 1,
+              day: "2026-09-11",
+              createdAt: "2026-09-11T03:15:00.000Z",
+              profiles: 8,
+              photos: 4,
+              deletions: 1,
+              d1: { available: true, profiles: 8, deletions: 1, systemState: 1 },
+            },
+          ],
+          storage: {
+            clients: { objects: 12, bytes: 120_000 },
+            history: { objects: 24, bytes: 240_000 },
+            backups: { objects: 18, bytes: 360_000 },
+            system: { objects: 4, bytes: 8_000 },
+            total: { objects: 58, bytes: 728_000 },
+          },
+          d1: { available: true, profiles: 8, deletions: 1, indexReady: true },
+          schedule: { cron: "15 3 * * *", timezone: "UTC", algerTime: "04:15" },
+        });
+      }
+      if (url.pathname === "/api/admin/backups" && method === "POST") {
+        return this.respond(route, 200, {
+          ok: true,
+          backup: {
+            version: 1,
+            day: "2026-09-11",
+            createdAt: "2026-09-11T03:15:00.000Z",
+            profiles: 8,
+            photos: 4,
+            deletions: 1,
+            skipped: true,
+            d1: { available: true, profiles: 8, deletions: 1, systemState: 1 },
+          },
+        });
+      }
+      return this.respond(route, 404, { error: "Route administrateur de test inconnue." });
+    }
+
+    if (!url.pathname.startsWith("/api/clients")) return route.fallback();
 
     if (url.pathname === "/api/clients" && method === "GET") {
       const query = (url.searchParams.get("q") || "").trim().toLocaleLowerCase("fr");
@@ -250,6 +326,15 @@ test("deux navigateurs partagent un client et protègent une modification concur
 
   try {
     const adminPage = await connect(adminContext, api, "admin");
+    await adminPage.getByRole("button", { name: "Administrateur E2E" }).click();
+    const accountSettings = adminPage.getByRole("dialog", { name: /Paramètres du compte/ });
+    await expect(accountSettings.getByText("Supervision D1 et R2")).toBeVisible();
+    await expect(accountSettings.getByText("Sauvegardes opérationnelles")).toBeVisible();
+    await expect(accountSettings.getByText("8 profils", { exact: true })).toBeVisible();
+    await accountSettings.getByRole("button", { name: "Sauvegarder maintenant" }).click();
+    await expect(accountSettings.getByRole("status")).toContainText("existe déjà");
+    await accountSettings.getByRole("button", { name: "Fermer" }).click();
+
     await adminPage.getByRole("button", { name: "Exemple" }).click();
     await openPersonalDetails(adminPage);
     await adminPage.getByPlaceholder("Nom complet").fill("Client E2E partagé");

@@ -292,19 +292,40 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(finalProfile.updatedBy.username, "editeur");
 
   const scheduled = testContext();
-  worker.scheduled(
-    { scheduledTime: Date.parse("2026-09-11T03:15:00.000Z") },
-    env,
-    scheduled.context,
-  );
+  const backupTime = Date.now();
+  const backupDay = new Date(backupTime).toISOString().slice(0, 10);
+  worker.scheduled({ scheduledTime: backupTime }, env, scheduled.context);
   await scheduled.settle();
-  const manifestObject = await env.CLIENTS_BUCKET.get("backups/daily/2026-09-11/manifest.json");
+  const manifestObject = await env.CLIENTS_BUCKET.get(`backups/daily/${backupDay}/manifest.json`);
   assert.ok(manifestObject);
   const manifest = JSON.parse(await manifestObject.text());
   assert.equal(manifest.profiles, 1);
   assert.equal(manifest.photos, 1);
   assert.equal(manifest.d1.available, false);
-  assert.ok(await env.CLIENTS_BUCKET.get(`backups/daily/2026-09-11/r2/clients/${profile.id}.json`));
+  assert.ok(
+    await env.CLIENTS_BUCKET.get(`backups/daily/${backupDay}/r2/clients/${profile.id}.json`),
+  );
+
+  const monitoringResponse = await call(env, "/api/admin/backups", authorized(admin.token));
+  assert.equal(monitoringResponse.status, 200);
+  const monitoring = await monitoringResponse.json();
+  assert.equal(monitoring.health, "warning");
+  assert.equal(monitoring.latestStatus.state, "success");
+  assert.equal(monitoring.latestBackup.day, backupDay);
+  assert.equal(monitoring.recentBackups.length, 1);
+  assert.ok(monitoring.storage.backups.objects >= 3);
+  assert.ok(monitoring.storage.history.objects >= 6);
+
+  const forbiddenMonitoring = await call(env, "/api/admin/backups", authorized(editor.token));
+  assert.equal(forbiddenMonitoring.status, 403);
+
+  const repeatedBackupResponse = await call(
+    env,
+    "/api/admin/backups",
+    authorized(admin.token, { method: "POST" }),
+  );
+  assert.equal(repeatedBackupResponse.status, 200);
+  assert.equal((await repeatedBackupResponse.json()).backup.skipped, true);
 
   const searchedResponse = await call(
     env,

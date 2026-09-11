@@ -12,6 +12,43 @@ export type AuditEntry = {
   country: string;
 };
 
+export type BackupManifest = {
+  version: number;
+  day: string;
+  createdAt: string;
+  profiles: number;
+  photos: number;
+  deletions: number;
+  skipped?: boolean;
+  d1: { available: boolean; profiles: number; deletions: number; systemState: number };
+};
+
+export type BackupMonitoring = {
+  generatedAt: string;
+  health: "healthy" | "warning" | "critical";
+  alerts: { level: "warning" | "critical"; message: string }[];
+  latestStatus?: {
+    state: "success" | "failed";
+    checkedAt: string;
+    day: string;
+    message: string;
+  };
+  latestBackup: BackupManifest | null;
+  recentBackups: BackupManifest[];
+  storage: Record<
+    "clients" | "history" | "backups" | "system" | "total",
+    { objects: number; bytes: number }
+  >;
+  d1: {
+    available: boolean;
+    profiles: number;
+    deletions: number;
+    indexReady: boolean;
+    error?: string;
+  };
+  schedule: { cron: string; timezone: string; algerTime: string };
+};
+
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authenticatedFetch(path, init);
   const body = (await response.json().catch(() => ({}))) as T & { error?: string };
@@ -77,4 +114,14 @@ export async function listAuditEntries(limit = 100) {
       `/api/admin/audit?limit=${Math.min(200, Math.max(1, limit))}`,
     )
   ).entries;
+}
+
+export async function getBackupMonitoring() {
+  return apiJson<BackupMonitoring>("/api/admin/backups");
+}
+
+export async function runBackupNow() {
+  return apiJson<{ ok: true; backup: BackupManifest }>("/api/admin/backups", {
+    method: "POST",
+  });
 }

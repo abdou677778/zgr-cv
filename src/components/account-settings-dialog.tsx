@@ -2,12 +2,17 @@ import { useCallback, useEffect, useState, type ComponentProps, type FormEvent }
 import {
   Activity,
   CheckCircle2,
+  CloudCheck,
+  DatabaseBackup,
   Eye,
   EyeOff,
+  HardDrive,
   KeyRound,
   LoaderCircle,
+  RefreshCw,
   Save,
   ShieldCheck,
+  TriangleAlert,
   Trash2,
   UserPlus,
   Users,
@@ -27,11 +32,14 @@ import {
   changeOwnPassword,
   createManagedUser,
   deleteManagedUser,
+  getBackupMonitoring,
   listAuditEntries,
   listManagedUsers,
   resetManagedUserPassword,
+  runBackupNow,
   updateManagedUser,
   type AuditEntry,
+  type BackupMonitoring,
   type ManagedUser,
 } from "@/lib/account-client";
 import type { SessionUser } from "@/lib/auth-client";
@@ -54,6 +62,14 @@ function formatDate(value: string | null) {
   if (!value) return "Jamais";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("fr-FR");
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 o";
+  const units = ["o", "Ko", "Mo", "Go"];
+  const unit = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const amount = value / 1024 ** unit;
+  return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: unit ? 1 : 0 })} ${units[unit]}`;
 }
 
 function PasswordInput({ className, ...props }: ComponentProps<typeof Input>) {
@@ -91,6 +107,7 @@ export function AccountSettingsDialog({
 }) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [backupMonitoring, setBackupMonitoring] = useState<BackupMonitoring | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -108,9 +125,14 @@ export function AccountSettingsDialog({
     setLoading(true);
     setMessage(null);
     try {
-      const [nextUsers, nextAudit] = await Promise.all([listManagedUsers(), listAuditEntries()]);
+      const [nextUsers, nextAudit, nextBackupMonitoring] = await Promise.all([
+        listManagedUsers(),
+        listAuditEntries(),
+        getBackupMonitoring(),
+      ]);
       setUsers(nextUsers);
       setAudit(nextAudit);
+      setBackupMonitoring(nextBackupMonitoring);
     } catch (error) {
       setMessage({
         ok: false,
@@ -233,6 +255,33 @@ export function AccountSettingsDialog({
     }
   };
 
+  const createBackup = async () => {
+    setBusy("backup");
+    setMessage(null);
+    try {
+      const result = await runBackupNow();
+      setBackupMonitoring(await getBackupMonitoring());
+      setMessage({
+        ok: true,
+        text: result.backup.skipped
+          ? `La sauvegarde du ${result.backup.day} existe déjà et reste valide.`
+          : `Sauvegarde du ${result.backup.day} terminée : ${result.backup.profiles} profil(s) et ${result.backup.photos} photo(s).`,
+      });
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Sauvegarde immédiate impossible.",
+      });
+      try {
+        setBackupMonitoring(await getBackupMonitoring());
+      } catch {
+        // Le message d’origine reste plus utile si le service est entièrement indisponible.
+      }
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[94vh] max-w-5xl overflow-y-auto">
@@ -305,6 +354,157 @@ export function AccountSettingsDialog({
 
         {user.role === "admin" && (
           <>
+            <section className="space-y-4 rounded-2xl border border-sky-100 bg-sky-50/40 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <DatabaseBackup className="h-5 w-5 text-sky-700" />
+                  <div>
+                    <h3 className="font-semibold">Supervision D1 et R2</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Sauvegarde automatique quotidienne à 04:15, heure d’Alger.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={loading || Boolean(busy)}
+                    onClick={() => void loadAdminData()}
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                    Actualiser
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={Boolean(busy)}
+                    onClick={() => void createBackup()}
+                  >
+                    {busy === "backup" ? (
+                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <DatabaseBackup className="mr-2 h-4 w-4" />
+                    )}
+                    Sauvegarder maintenant
+                  </Button>
+                </div>
+              </div>
+
+              {backupMonitoring ? (
+                <>
+                  <div
+                    className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${
+                      backupMonitoring.health === "healthy"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                        : backupMonitoring.health === "warning"
+                          ? "border-amber-200 bg-amber-50 text-amber-900"
+                          : "border-red-200 bg-red-50 text-red-900"
+                    }`}
+                  >
+                    {backupMonitoring.health === "healthy" ? (
+                      <CloudCheck className="mt-0.5 h-5 w-5 shrink-0" />
+                    ) : (
+                      <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
+                    )}
+                    <div className="text-xs leading-relaxed">
+                      <p className="font-semibold">
+                        {backupMonitoring.health === "healthy"
+                          ? "Sauvegardes opérationnelles"
+                          : backupMonitoring.health === "warning"
+                            ? "Supervision à vérifier"
+                            : "Action administrateur requise"}
+                      </p>
+                      {backupMonitoring.alerts.length ? (
+                        <ul className="mt-1 list-disc pl-4">
+                          {backupMonitoring.alerts.map((alert) => (
+                            <li key={`${alert.level}-${alert.message}`}>{alert.message}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-1">
+                          La dernière sauvegarde contient R2 et l’index D1, sans alerte active.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      {
+                        label: "Données clients",
+                        value: formatBytes(backupMonitoring.storage.clients.bytes),
+                        detail: `${backupMonitoring.storage.clients.objects} objets R2`,
+                      },
+                      {
+                        label: "Historique",
+                        value: formatBytes(backupMonitoring.storage.history.bytes),
+                        detail: `${backupMonitoring.storage.history.objects} versions`,
+                      },
+                      {
+                        label: "Sauvegardes",
+                        value: formatBytes(backupMonitoring.storage.backups.bytes),
+                        detail: `${backupMonitoring.recentBackups.length} jours affichés`,
+                      },
+                      {
+                        label: "Index D1",
+                        value: `${backupMonitoring.d1.profiles} profils`,
+                        detail: backupMonitoring.d1.indexReady ? "Index prêt" : "Index à vérifier",
+                      },
+                    ].map((metric) => (
+                      <div key={metric.label} className="rounded-xl border bg-white p-3">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <HardDrive className="h-3.5 w-3.5" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wide">
+                            {metric.label}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-lg font-bold text-slate-900">{metric.value}</p>
+                        <p className="text-[11px] text-muted-foreground">{metric.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border bg-white">
+                    <div className="border-b bg-slate-50 px-4 py-2 text-xs font-semibold">
+                      Sauvegardes récentes
+                    </div>
+                    {backupMonitoring.recentBackups.length ? (
+                      <div className="max-h-48 overflow-auto divide-y">
+                        {backupMonitoring.recentBackups.map((backup) => (
+                          <div
+                            key={backup.day}
+                            className="grid gap-1 px-4 py-2 text-xs sm:grid-cols-[110px_1fr_auto] sm:items-center"
+                          >
+                            <span className="font-semibold">{backup.day}</span>
+                            <span className="text-muted-foreground">
+                              {backup.profiles} profils · {backup.photos} photos ·{" "}
+                              {backup.deletions} suppressions
+                            </span>
+                            <span
+                              className={`font-medium ${backup.d1.available ? "text-emerald-700" : "text-amber-700"}`}
+                            >
+                              {backup.d1.available ? "D1 inclus" : "D1 absent"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="px-4 py-5 text-xs text-muted-foreground">
+                        Aucune sauvegarde disponible. Utilisez « Sauvegarder maintenant ».
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center py-5 text-sm text-muted-foreground">
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Chargement de la
+                  supervision…
+                </div>
+              )}
+            </section>
+
             <section className="space-y-4 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5">
               <div className="flex items-center gap-2">
                 <UserPlus className="h-5 w-5 text-indigo-600" />

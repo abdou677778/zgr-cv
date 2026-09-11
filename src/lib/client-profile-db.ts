@@ -153,6 +153,23 @@ export type CloudDeletedProfileSummary = {
   deletedBy: string;
 };
 
+export type CloudProfilePagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+};
+
+export type CloudProfileListOptions = {
+  query?: string;
+  owner?: "all" | "created" | "updated" | "involved";
+  page?: number;
+  pageSize?: number;
+  scope?: "page" | "sync";
+};
+
 export type CloudProfileCommit = Pick<
   ClientProfile,
   "revision" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy"
@@ -234,15 +251,32 @@ function profileForCloud(profile: ClientProfile, photo?: ProfilePhoto): ClientPr
   return next;
 }
 
-export async function listCloudProfiles(endpoint: string, token: string) {
-  const response = await authenticatedFetch(cloudUrl(endpoint), { headers: cloudHeaders(token) });
+export async function listCloudProfiles(
+  endpoint: string,
+  token: string,
+  options: CloudProfileListOptions = {},
+) {
+  const params = new URLSearchParams();
+  if (options.query?.trim()) params.set("q", options.query.trim());
+  if (options.owner && options.owner !== "all") params.set("owner", options.owner);
+  if (options.page) params.set("page", String(options.page));
+  if (options.pageSize) params.set("pageSize", String(options.pageSize));
+  if (options.scope === "sync") params.set("scope", "sync");
+  const query = params.toString();
+  const response = await authenticatedFetch(`${cloudUrl(endpoint)}${query ? `?${query}` : ""}`, {
+    headers: cloudHeaders(token),
+  });
   const body = await cloudResponse<{
     profiles: CloudProfileSummary[];
     deletedProfiles?: CloudDeletedProfileSummary[];
+    pagination?: CloudProfilePagination;
+    indexSource?: "d1" | "r2" | "r2-backfill";
   }>(response);
   return {
     profiles: body.profiles,
     deletedProfiles: body.deletedProfiles ?? [],
+    pagination: body.pagination,
+    indexSource: body.indexSource,
   };
 }
 
@@ -345,7 +379,7 @@ export function applyCloudCommit(profile: ClientProfile, commit: CloudProfileCom
 
 export async function synchronizeClientProfiles(endpoint: string, token: string) {
   const initialLocalSummaries = await listClientProfiles();
-  const remoteIndex = await listCloudProfiles(endpoint, token);
+  const remoteIndex = await listCloudProfiles(endpoint, token, { scope: "sync" });
   const remoteSummaries = remoteIndex.profiles;
   const initialLocalById = new Map(initialLocalSummaries.map((profile) => [profile.id, profile]));
   const remoteById = new Map(remoteSummaries.map((profile) => [profile.id, profile]));

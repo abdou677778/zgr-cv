@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
   Cloud,
   CloudCheck,
   Database,
@@ -27,18 +29,30 @@ import {
   deleteCloudProfile,
   getCloudProfile,
   getClientProfile,
+  listCloudProfiles,
   listClientProfiles,
   putCloudProfile,
   saveClientProfile,
   synchronizeClientProfiles,
   type ClientProfile,
   type ClientProfileSummary,
+  type CloudProfilePagination,
 } from "@/lib/client-profile-db";
 import { CLIENTS_API_ENDPOINT, getAdminSession, type SessionUser } from "@/lib/auth-client";
 
 export type ClientSyncStatus = {
   state: "idle" | "syncing" | "synced" | "local" | "conflict";
   message: string;
+};
+
+const CLIENT_PAGE_SIZE = 20;
+const EMPTY_PAGINATION: CloudProfilePagination = {
+  page: 1,
+  pageSize: CLIENT_PAGE_SIZE,
+  total: 0,
+  totalPages: 1,
+  hasPrevious: false,
+  hasNext: false,
 };
 
 export function ClientDatabaseDialog({
@@ -63,96 +77,180 @@ export function ClientDatabaseDialog({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [conflictIds, setConflictIds] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [ownerFilter, setOwnerFilter] = useState<"all" | "created" | "updated" | "involved">("all");
+  const [pagination, setPagination] = useState<CloudProfilePagination>(EMPTY_PAGINATION);
+  const [indexSource, setIndexSource] = useState<"d1" | "r2" | "r2-backfill" | "local">("local");
+  const pageRequestRef = useRef(0);
 
-  const refresh = useCallback(
-    async (includeCloud = false, automatic = false) => {
-      setBusy(includeCloud ? "cloud" : "refresh");
-      setMessage("");
-      if (includeCloud) {
-        onSyncStatusChange?.({ state: "syncing", message: "Synchronisation en cours…" });
-      }
+  const loadLocalPage = useCallback(async () => {
+    const query = search.trim().toLocaleLowerCase("fr");
+    const username = user.username.toLocaleLowerCase("fr");
+    const matching = (await listClientProfiles()).filter((profile) => {
+      const created = profile.createdBy?.username.toLocaleLowerCase("fr") ?? "";
+      const updated = profile.updatedBy?.username.toLocaleLowerCase("fr") ?? "";
+      if (ownerFilter === "created" && created !== username) return false;
+      if (ownerFilter === "updated" && updated !== username) return false;
+      if (ownerFilter === "involved" && created !== username && updated !== username) return false;
+      if (!query) return true;
+      return [
+        profile.id,
+        profile.name,
+        profile.email,
+        profile.phone,
+        profile.createdBy?.displayName,
+        profile.createdBy?.username,
+        profile.updatedBy?.displayName,
+        profile.updatedBy?.username,
+      ].some((value) =>
+        String(value ?? "")
+          .toLocaleLowerCase("fr")
+          .includes(query),
+      );
+    });
+    const totalPages = Math.max(1, Math.ceil(matching.length / CLIENT_PAGE_SIZE));
+    const resolvedPage = Math.min(page, totalPages);
+    const offset = (resolvedPage - 1) * CLIENT_PAGE_SIZE;
+    setProfiles(matching.slice(offset, offset + CLIENT_PAGE_SIZE));
+    setPagination({
+      page: resolvedPage,
+      pageSize: CLIENT_PAGE_SIZE,
+      total: matching.length,
+      totalPages,
+      hasPrevious: resolvedPage > 1,
+      hasNext: resolvedPage < totalPages,
+    });
+    setIndexSource("local");
+  }, [ownerFilter, page, search, user.username]);
+
+  const loadPage = useCallback(
+    async (automatic = false) => {
+      const requestId = ++pageRequestRef.current;
+      setBusy("page");
+      if (!automatic) setMessage("");
       try {
-        setProfiles(await listClientProfiles());
-        if (!includeCloud) return;
         const token = getAdminSession();
-        if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
-        const result = await synchronizeClientProfiles(CLIENTS_API_ENDPOINT, token);
-        setProfiles(await listClientProfiles());
-        if (result.conflicts) {
-          setConflictIds(result.conflictIds);
-          onSyncStatusChange?.({
-            state: "conflict",
-            message: `${result.conflicts} conflit(s) détecté(s). Les versions locales ont été conservées.`,
-          });
-        } else {
-          setConflictIds([]);
-          onSyncStatusChange?.({
-            state: "synced",
-            message: `Base synchronisée à ${new Date().toLocaleTimeString("fr-DZ")}.`,
-          });
+        if (!token) throw new Error("La session cloud a expiré.");
+        const result = await listCloudProfiles(CLIENTS_API_ENDPOINT, token, {
+          query: search,
+          owner: ownerFilter,
+          page,
+          pageSize: CLIENT_PAGE_SIZE,
+        });
+        if (requestId !== pageRequestRef.current) return;
+        setProfiles(result.profiles);
+        setPagination(result.pagination ?? EMPTY_PAGINATION);
+        setIndexSource(result.indexSource ?? "r2");
+        if (result.pagination && result.pagination.page !== page) {
+          setPage(result.pagination.page);
         }
-        setMessage(
-          result.conflicts
-            ? `Synchronisation partielle : ${result.conflicts} conflit(s) détecté(s). Les versions locales concernées ont été conservées pour éviter tout écrasement.`
-            : automatic
-              ? `Base partagée actualisée : ${result.total} profil(s) disponible(s)${result.removed ? `, ${result.removed} suppression(s) appliquée(s)` : ""}.`
-              : `Synchronisation terminée : ${result.uploaded} envoyé(s), ${result.downloaded} récupéré(s), ${result.removed} supprimé(s), ${result.total} profil(s).`,
-        );
+        onSyncStatusChange?.({
+          state: "synced",
+          message: `Index partagé consulté à ${new Date().toLocaleTimeString("fr-DZ")}.`,
+        });
       } catch (error) {
+        if (requestId !== pageRequestRef.current) return;
+        await loadLocalPage();
         onSyncStatusChange?.({
           state: "local",
           message:
             error instanceof Error
               ? `Mode local : ${error.message}`
-              : "Mode local : base partagée indisponible.",
+              : "Mode local : index partagé indisponible.",
         });
-        setMessage(
-          error instanceof Error
-            ? `Les données locales restent disponibles. ${error.message}`
-            : "Les données locales restent disponibles, mais la base partagée est indisponible.",
-        );
+        if (!automatic) {
+          setMessage(
+            error instanceof Error
+              ? `Affichage du cache local. ${error.message}`
+              : "Affichage du cache local.",
+          );
+        }
       } finally {
-        setBusy("");
+        if (requestId === pageRequestRef.current) setBusy("");
       }
     },
-    [onSyncStatusChange],
+    [loadLocalPage, onSyncStatusChange, ownerFilter, page, search],
   );
 
+  const synchronize = useCallback(async () => {
+    setBusy("cloud");
+    setMessage("");
+    onSyncStatusChange?.({ state: "syncing", message: "Synchronisation complète en cours…" });
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const result = await synchronizeClientProfiles(CLIENTS_API_ENDPOINT, token);
+      await loadPage(true);
+      if (result.conflicts) {
+        setConflictIds(result.conflictIds);
+        const conflictSet = new Set(result.conflictIds);
+        const conflictProfiles = (await listClientProfiles()).filter((profile) =>
+          conflictSet.has(profile.id),
+        );
+        setProfiles((current) => [
+          ...conflictProfiles,
+          ...current.filter((profile) => !conflictSet.has(profile.id)),
+        ]);
+        onSyncStatusChange?.({
+          state: "conflict",
+          message: `${result.conflicts} conflit(s) détecté(s). Les versions locales ont été conservées.`,
+        });
+      } else {
+        setConflictIds([]);
+        onSyncStatusChange?.({
+          state: "synced",
+          message: `Base synchronisée à ${new Date().toLocaleTimeString("fr-DZ")}.`,
+        });
+      }
+      setMessage(
+        result.conflicts
+          ? `Synchronisation partielle : ${result.conflicts} conflit(s) détecté(s). Les versions locales concernées ont été conservées.`
+          : `Synchronisation terminée : ${result.uploaded} envoyé(s), ${result.downloaded} récupéré(s), ${result.removed} supprimé(s), ${result.total} profil(s).`,
+      );
+    } catch (error) {
+      await loadLocalPage();
+      onSyncStatusChange?.({
+        state: "local",
+        message:
+          error instanceof Error
+            ? `Mode local : ${error.message}`
+            : "Mode local : base partagée indisponible.",
+      });
+      setMessage(
+        error instanceof Error
+          ? `Les données locales restent disponibles. ${error.message}`
+          : "Les données locales restent disponibles, mais la base partagée est indisponible.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }, [loadLocalPage, loadPage, onSyncStatusChange]);
+
   useEffect(() => {
-    if (open) void refresh(true, true);
-  }, [open, refresh]);
+    if (!open) return;
+    const timer = window.setTimeout(() => void loadPage(true), search.trim() ? 300 : 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPage, open, search]);
 
-  const filteredProfiles = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("fr");
-    if (!query) return profiles;
-    return profiles.filter((profile) =>
-      [
-        profile.id,
-        profile.name,
-        profile.email,
-        profile.phone,
-        profile.createdBy?.displayName ?? "",
-        profile.createdBy?.username ?? "",
-        profile.updatedBy?.displayName ?? "",
-        profile.updatedBy?.username ?? "",
-      ].some((value) => value.toLocaleLowerCase("fr").includes(query)),
-    );
-  }, [profiles, search]);
-
-  const resolveProfile = async (id: string) => {
-    const local = await getClientProfile(id);
-    if (local) return local;
+  const resolveProfile = async (summary: ClientProfileSummary) => {
+    const local = await getClientProfile(summary.id);
+    if (
+      local &&
+      (local.revision ?? 0) >= (summary.revision ?? 0) &&
+      local.updatedAt >= summary.updatedAt
+    )
+      return local;
     const token = getAdminSession();
     if (!token) throw new Error("Profil local introuvable et session cloud expirée.");
-    const cloud = await getCloudProfile(CLIENTS_API_ENDPOINT, token, id);
+    const cloud = await getCloudProfile(CLIENTS_API_ENDPOINT, token, summary.id);
     await saveClientProfile(cloud);
     return cloud;
   };
 
-  const openProfile = async (id: string) => {
-    setBusy(id);
+  const openProfile = async (summary: ClientProfileSummary) => {
+    setBusy(summary.id);
     try {
-      const profile = await resolveProfile(id);
+      const profile = await resolveProfile(summary);
       onOpenProfile(profile);
       onOpenChange(false);
     } catch (error) {
@@ -162,10 +260,10 @@ export function ClientDatabaseDialog({
     }
   };
 
-  const download = async (id: string) => {
-    setBusy(`pdf:${id}`);
+  const download = async (summary: ClientProfileSummary) => {
+    setBusy(`pdf:${summary.id}`);
     try {
-      const profile = await resolveProfile(id);
+      const profile = await resolveProfile(summary);
       await onDownloadPdf(profile);
       setMessage(`PDF généré pour ${profile.name}.`);
     } catch (error) {
@@ -188,7 +286,7 @@ export function ClientDatabaseDialog({
       if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
       await deleteCloudProfile(CLIENTS_API_ENDPOINT, token, profile.id);
       await deleteClientProfile(profile.id);
-      await refresh(false);
+      await loadPage(true);
       setMessage("Profil supprimé de la base partagée et du cache de ce navigateur.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Suppression impossible.");
@@ -212,7 +310,7 @@ export function ClientDatabaseDialog({
       await saveClientProfile(cloud);
       const remainingConflicts = conflictIds.filter((id) => id !== profile.id);
       setConflictIds(remainingConflicts);
-      setProfiles(await listClientProfiles());
+      await loadPage(true);
       if (activeProfileId === profile.id) onOpenProfile(cloud);
       onSyncStatusChange?.({
         state: remainingConflicts.length ? "conflict" : "synced",
@@ -256,7 +354,7 @@ export function ClientDatabaseDialog({
       await saveClientProfile(committed);
       const remainingConflicts = conflictIds.filter((id) => id !== profile.id);
       setConflictIds(remainingConflicts);
-      setProfiles(await listClientProfiles());
+      await loadPage(true);
       if (activeProfileId === profile.id) onOpenProfile(committed);
       onSyncStatusChange?.({
         state: remainingConflicts.length ? "conflict" : "synced",
@@ -282,9 +380,8 @@ export function ClientDatabaseDialog({
             <Database className="h-5 w-5 text-primary" /> Base de données clients
           </DialogTitle>
           <DialogDescription>
-            Base partagée synchronisée avec Cloudflare R2 et mise en cache dans ce navigateur.
-            Ouvrez un profil, modifiez-le, puis utilisez Sauvegarder pour mettre à jour la même
-            fiche.
+            Recherche et pagination rapides avec Cloudflare D1. Les CV et photos restent stockés
+            dans R2 et sont téléchargés uniquement lorsque vous ouvrez une fiche.
           </DialogDescription>
         </DialogHeader>
 
@@ -295,8 +392,11 @@ export function ClientDatabaseDialog({
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Rechercher par ID, nom, email ou téléphone"
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="ID, nom, email, téléphone ou utilisateur"
                   className="pl-9"
                 />
               </div>
@@ -305,30 +405,48 @@ export function ClientDatabaseDialog({
                 variant="outline"
                 size="icon"
                 aria-label="Actualiser la base"
-                onClick={() => void refresh(true)}
+                onClick={() => void loadPage(false)}
                 disabled={Boolean(busy)}
               >
-                <RefreshCw className={busy === "refresh" ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                <RefreshCw className={busy === "page" ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
               </Button>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <select
+                value={ownerFilter}
+                onChange={(event) => {
+                  setOwnerFilter(event.target.value as "all" | "created" | "updated" | "involved");
+                  setPage(1);
+                }}
+                className="h-9 rounded-md border bg-background px-3 text-xs font-medium shadow-sm outline-none focus:ring-2 focus:ring-ring"
+                aria-label="Filtrer les profils par utilisateur"
+              >
+                <option value="all">Tous les profils</option>
+                <option value="involved">Mes profils associés</option>
+                <option value="created">Créés par moi</option>
+                <option value="updated">Modifiés par moi</option>
+              </select>
+              <span className="text-xs text-muted-foreground">
+                {pagination.total} profil(s) · page {pagination.page}/{pagination.totalPages}
+              </span>
+            </div>
+
             <div className="overflow-hidden rounded-lg border">
-              {filteredProfiles.length === 0 ? (
+              {profiles.length === 0 ? (
                 <div className="p-10 text-center text-sm text-muted-foreground">
-                  {busy === "cloud" ? (
+                  {busy === "cloud" || busy === "page" ? (
                     <span className="inline-flex items-center gap-2">
-                      <LoaderCircle className="h-4 w-4 animate-spin" /> Synchronisation de la base
-                      partagée…
+                      <LoaderCircle className="h-4 w-4 animate-spin" /> Chargement de l’index
+                      clients…
                     </span>
-                  ) : profiles.length ? (
-                    "Aucun profil ne correspond à cette recherche."
                   ) : (
-                    "Aucun profil enregistré dans la base locale ou partagée. Importez ou remplissez un CV, puis cliquez sur Sauvegarder."
+                    "Aucun profil ne correspond à cette recherche ou à ce filtre."
                   )}
                 </div>
               ) : (
                 <div className="divide-y">
-                  {filteredProfiles.map((profile) => (
+                  {profiles.map((profile) => (
                     <article
                       key={profile.id}
                       className={`space-y-3 p-4 ${activeProfileId === profile.id ? "bg-primary/5" : "bg-background"}`}
@@ -376,7 +494,7 @@ export function ClientDatabaseDialog({
                         <Button
                           type="button"
                           size="sm"
-                          onClick={() => void openProfile(profile.id)}
+                          onClick={() => void openProfile(profile)}
                           disabled={Boolean(busy)}
                         >
                           {busy === profile.id && (
@@ -388,7 +506,7 @@ export function ClientDatabaseDialog({
                           type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => void download(profile.id)}
+                          onClick={() => void download(profile)}
                           disabled={Boolean(busy)}
                         >
                           {busy === `pdf:${profile.id}` ? (
@@ -446,19 +564,47 @@ export function ClientDatabaseDialog({
                 </div>
               )}
             </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={Boolean(busy) || !pagination.hasPrevious}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" /> Précédente
+              </Button>
+              <span className="text-xs font-medium text-muted-foreground">
+                Résultats {(pagination.page - 1) * pagination.pageSize + (profiles.length ? 1 : 0)}–
+                {(pagination.page - 1) * pagination.pageSize + profiles.length} sur{" "}
+                {pagination.total}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setPage((current) => current + 1)}
+                disabled={Boolean(busy) || !pagination.hasNext}
+              >
+                Suivante <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
           </section>
 
           <aside className="h-fit space-y-3 rounded-lg border bg-muted/30 p-4">
             <div>
               <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <CloudCheck className="h-4 w-4 text-sky-600" /> Base partagée Cloudflare R2
+                <CloudCheck className="h-4 w-4 text-sky-600" /> Index D1 + stockage R2
               </h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Synchronisation bidirectionnelle avec révision serveur. Une modification concurrente
-                est signalée et conservée localement au lieu d’écraser silencieusement le travail
-                d’un autre utilisateur. Les profils JSON et leurs photos WebP privées sont stockés
-                séparément dans R2.
+                D1 recherche uniquement les métadonnées nécessaires. Le CV JSON et sa photo WebP
+                sont chargés depuis R2 à l’ouverture, avec protection contre les conflits.
               </p>
+              <span className="mt-2 inline-flex rounded-full border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                Source :{" "}
+                {indexSource === "d1" ? "D1" : indexSource === "local" ? "cache local" : "R2"}
+              </span>
             </div>
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
               Connecté comme {user.displayName} ({user.username}). Chaque création et chaque
@@ -467,7 +613,7 @@ export function ClientDatabaseDialog({
             <Button
               type="button"
               className="w-full"
-              onClick={() => void refresh(true)}
+              onClick={() => void synchronize()}
               disabled={Boolean(busy)}
             >
               {busy === "cloud" ? (
@@ -478,8 +624,8 @@ export function ClientDatabaseDialog({
               Synchroniser maintenant
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              La base est actualisée automatiquement à chaque ouverture. Les profils restent
-              chiffrés en transit via HTTPS.
+              L’index est actualisé automatiquement. Utilisez cette synchronisation complète pour
+              envoyer ou récupérer les changements réalisés hors ligne.
             </p>
           </aside>
         </div>

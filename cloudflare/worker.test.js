@@ -237,13 +237,26 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(finalProfile.createdBy.username, "admin");
   assert.equal(finalProfile.updatedBy.username, "editeur");
 
+  const searchedResponse = await call(
+    env,
+    "/api/clients?q=partag&page=1&pageSize=1&owner=updated",
+    authorized(editor.token),
+  );
+  const searched = await searchedResponse.json();
+  assert.equal(searched.profiles.length, 1);
+  assert.equal(searched.pagination.total, 1);
+  assert.equal(searched.pagination.pageSize, 1);
+
+  const hiddenFromEditor = await call(env, "/api/clients?owner=created", authorized(editor.token));
+  assert.equal((await hiddenFromEditor.json()).pagination.total, 0);
+
   const deletedResponse = await call(
     env,
     `/api/clients/${profile.id}`,
     authorized(editor.token, { method: "DELETE" }),
   );
   assert.equal(deletedResponse.status, 200);
-  const emptyListResponse = await call(env, "/api/clients", authorized(admin.token));
+  const emptyListResponse = await call(env, "/api/clients?scope=sync", authorized(admin.token));
   const emptyList = await emptyListResponse.json();
   assert.equal(emptyList.profiles.length, 0);
   assert.equal(emptyList.deletedProfiles.length, 1);

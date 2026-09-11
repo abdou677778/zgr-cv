@@ -888,33 +888,163 @@ async function maintainClientProfileIndex(env, operation) {
   }
 }
 
-async function readD1ProfileIndex(env) {
-  const [profilesResult, deletionsResult] = await env.CLIENTS_DB.batch([
-    env.CLIENTS_DB.prepare("SELECT * FROM client_profiles ORDER BY updated_at DESC LIMIT 5000"),
-    env.CLIENTS_DB.prepare(
-      "SELECT id, deleted_at, deleted_by FROM client_profile_deletions ORDER BY deleted_at DESC LIMIT 5000",
-    ),
-  ]);
+function clientProfileListOptions(searchParams) {
+  const scope = searchParams?.get("scope") === "sync" ? "sync" : "page";
+  const requestedPage = Number(searchParams?.get("page") || 1);
+  const requestedPageSize = Number(searchParams?.get("pageSize") || 20);
+  const owner = ["created", "updated", "involved"].includes(searchParams?.get("owner"))
+    ? searchParams.get("owner")
+    : "all";
   return {
-    profiles: (profilesResult.results || []).map(d1ProfileSummary),
-    deletedProfiles: (deletionsResult.results || []).map((row) => ({
-      id: row.id,
-      deletedAt: row.deleted_at,
-      deletedBy: row.deleted_by,
-    })),
+    scope,
+    query: String(searchParams?.get("q") || "")
+      .trim()
+      .slice(0, 120),
+    owner,
+    page: Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+    pageSize:
+      Number.isSafeInteger(requestedPageSize) && requestedPageSize > 0
+        ? Math.min(requestedPageSize, 100)
+        : 20,
   };
 }
 
-async function listProfiles(env, origin, ctx) {
+function clientProfileMatches(profile, options, username) {
+  const createdUsername = profile.createdBy?.username || "";
+  const updatedUsername = profile.updatedBy?.username || "";
+  if (options.owner === "created" && createdUsername !== username) return false;
+  if (options.owner === "updated" && updatedUsername !== username) return false;
+  if (options.owner === "involved" && createdUsername !== username && updatedUsername !== username)
+    return false;
+  if (!options.query) return true;
+  const query = options.query.toLocaleLowerCase("fr");
+  return [
+    profile.id,
+    profile.name,
+    profile.email,
+    profile.phone,
+    profile.createdBy?.username,
+    profile.createdBy?.displayName,
+    profile.updatedBy?.username,
+    profile.updatedBy?.displayName,
+  ].some((value) =>
+    String(value || "")
+      .toLocaleLowerCase("fr")
+      .includes(query),
+  );
+}
+
+function paginateR2ProfileIndex(index, options, username) {
+  if (options.scope === "sync") return index;
+  const filtered = index.profiles.filter((profile) =>
+    clientProfileMatches(profile, options, username),
+  );
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / options.pageSize));
+  const page = Math.min(options.page, totalPages);
+  const offset = (page - 1) * options.pageSize;
+  return {
+    profiles: filtered.slice(offset, offset + options.pageSize),
+    deletedProfiles: [],
+    pagination: {
+      page,
+      pageSize: options.pageSize,
+      total,
+      totalPages,
+      hasPrevious: page > 1,
+      hasNext: page < totalPages,
+    },
+  };
+}
+
+async function readD1ProfileIndex(env, options, username) {
+  if (options.scope === "sync") {
+    const [profilesResult, deletionsResult] = await env.CLIENTS_DB.batch([
+      env.CLIENTS_DB.prepare("SELECT * FROM client_profiles ORDER BY updated_at DESC LIMIT 5000"),
+      env.CLIENTS_DB.prepare(
+        "SELECT id, deleted_at, deleted_by FROM client_profile_deletions ORDER BY deleted_at DESC LIMIT 5000",
+      ),
+    ]);
+    return {
+      profiles: (profilesResult.results || []).map(d1ProfileSummary),
+      deletedProfiles: (deletionsResult.results || []).map((row) => ({
+        id: row.id,
+        deletedAt: row.deleted_at,
+        deletedBy: row.deleted_by,
+      })),
+    };
+  }
+
+  const clauses = [];
+  const bindings = [];
+  if (options.query) {
+    const escapedQuery = options.query
+      .replaceAll("\\", "\\\\")
+      .replaceAll("%", "\\%")
+      .replaceAll("_", "\\_");
+    const like = `%${escapedQuery}%`;
+    clauses.push(`(
+      id LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR
+      phone LIKE ? ESCAPE '\\' OR created_by_username LIKE ? ESCAPE '\\' OR
+      created_by_display_name LIKE ? ESCAPE '\\' OR updated_by_username LIKE ? ESCAPE '\\' OR
+      updated_by_display_name LIKE ? ESCAPE '\\'
+    )`);
+    bindings.push(like, like, like, like, like, like, like, like);
+  }
+  if (options.owner === "created") {
+    clauses.push("created_by_username = ?");
+    bindings.push(username);
+  } else if (options.owner === "updated") {
+    clauses.push("updated_by_username = ?");
+    bindings.push(username);
+  } else if (options.owner === "involved") {
+    clauses.push("(created_by_username = ? OR updated_by_username = ?)");
+    bindings.push(username, username);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const countStatement = env.CLIENTS_DB.prepare(
+    `SELECT COUNT(*) AS total FROM client_profiles ${where}`,
+  ).bind(...bindings);
+  const count = await countStatement.first();
+  const total = Number(count?.total) || 0;
+  const totalPages = Math.max(1, Math.ceil(total / options.pageSize));
+  const page = Math.min(options.page, totalPages);
+  const offset = (page - 1) * options.pageSize;
+  const result = await env.CLIENTS_DB.prepare(
+    `SELECT * FROM client_profiles ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+  )
+    .bind(...bindings, options.pageSize, offset)
+    .all();
+  return {
+    profiles: (result.results || []).map(d1ProfileSummary),
+    deletedProfiles: [],
+    pagination: {
+      page,
+      pageSize: options.pageSize,
+      total,
+      totalPages,
+      hasPrevious: page > 1,
+      hasNext: page < totalPages,
+    },
+  };
+}
+
+async function listProfiles(env, origin, ctx, actor, searchParams) {
+  const options = clientProfileListOptions(searchParams);
+  const username = normalizeUsername(actor?.username) || "unknown";
   if (env.CLIENTS_DB) {
     try {
       if (await clientIndexReady(env)) {
-        const result = await readD1ProfileIndex(env);
+        const result = await readD1ProfileIndex(env, options, username);
         return json({ ...result, indexSource: "d1" }, 200, origin);
       }
       const r2Index = await readR2ProfileIndex(env);
       ctx?.waitUntil(rebuildClientProfileIndexData(env, r2Index));
-      return json({ ...r2Index, indexSource: "r2-backfill" }, 200, origin);
+      return json(
+        { ...paginateR2ProfileIndex(r2Index, options, username), indexSource: "r2-backfill" },
+        200,
+        origin,
+      );
     } catch (error) {
       console.error(
         JSON.stringify({
@@ -924,7 +1054,14 @@ async function listProfiles(env, origin, ctx) {
       );
     }
   }
-  return json({ ...(await readR2ProfileIndex(env)), indexSource: "r2" }, 200, origin);
+  return json(
+    {
+      ...paginateR2ProfileIndex(await readR2ProfileIndex(env), options, username),
+      indexSource: "r2",
+    },
+    200,
+    origin,
+  );
 }
 
 async function rebuildClientProfileIndexData(env, existingIndex) {
@@ -1781,7 +1918,7 @@ async function route(request, env, ctx) {
     return generateAi(request, env, origin);
 
   if (url.pathname === "/api/clients" && request.method === "GET")
-    return listProfiles(env, origin, ctx);
+    return listProfiles(env, origin, ctx, actor, url.searchParams);
   const photoId = profilePhotoId(url.pathname);
   if (photoId) {
     if (request.method === "GET") return getProfilePhoto(env, photoId, origin);

@@ -13,7 +13,6 @@ import {
 import { DOCUMENT_LANGUAGES, languageInfo, type DocumentLanguage } from "./document-language";
 import { DEFAULT_TEMPLATE_COLORS, type TemplateColorMap, type ThemeTemplateId } from "./pdf-theme";
 import type { TemplateDesignerSettings, TemplateDesignerSettingsMap } from "./template-designer";
-import { strToU8, zipSync } from "fflate";
 
 export type DocumentKind = "cv" | "cover-letter" | "advises";
 export type { PdfTemplateId } from "./document-templates";
@@ -122,6 +121,7 @@ export async function createCurrentTemplateMultilingualZip(
   accentColor?: string,
   designerSettings?: TemplateDesignerSettings,
 ) {
+  const { strToU8, zipSync } = await import("fflate");
   const files: Record<string, Uint8Array> = {};
   const languages = isArabicCvTemplate(templateId)
     ? DOCUMENT_LANGUAGES.filter((language) => language.id === "ar")
@@ -155,6 +155,7 @@ export async function createCompletePackZip(
   templateColors: TemplateColorMap = DEFAULT_TEMPLATE_COLORS,
   designerSettings: TemplateDesignerSettingsMap = {},
 ) {
+  const { strToU8, zipSync } = await import("fflate");
   const entries = DOCUMENT_LANGUAGES.flatMap((language) =>
     packEntries(language.id).map((entry) => ({ ...entry, language: language.id })),
   );

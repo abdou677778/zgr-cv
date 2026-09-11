@@ -10,7 +10,6 @@ import type {
 } from "./cv-types";
 import { type DocumentLanguage } from "./document-language";
 import { emptyCV, emptyEuropassProfile, newId } from "./cv-types";
-import { strToU8, zipSync } from "fflate";
 import { processProfilePhoto, profilePhotoDataUrlForPdf } from "./profile-photo";
 
 const ISO_639_2: Record<string, string> = {
@@ -576,6 +575,7 @@ export async function downloadEuropassMultilingualZip(
   documents: Partial<Record<DocumentLanguage, CV>>,
   baseCv: CV,
 ) {
+  const { strToU8, zipSync } = await import("fflate");
   const files: Record<string, Uint8Array> = {};
   const languages: DocumentLanguage[] = ["fr", "en", "es", "de", "it", "zh", "ar"];
 

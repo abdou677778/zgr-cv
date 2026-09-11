@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -100,15 +102,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { AiSettingsDialog } from "@/components/ai-settings-dialog";
-import { AiFieldDialog, type AiFieldRequest } from "@/components/ai-field-dialog";
-import { AiImportAssistant } from "@/components/ai-import-assistant";
+import type { AiFieldRequest } from "@/components/ai-field-dialog";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "@/lib/ai-types";
-import { ClientDatabaseDialog, type ClientSyncStatus } from "@/components/client-database-dialog";
-import { ClientOrdersDialog } from "@/components/client-orders-dialog";
+import type { ClientSyncStatus } from "@/components/client-database-dialog";
 import { AdminLogin } from "@/components/admin-login";
-import { AccountSettingsDialog } from "@/components/account-settings-dialog";
-import { PromptMasterDialog } from "@/components/prompt-master-dialog";
 import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
 import { ProfilePhotoField } from "@/components/profile-photo-field";
 import {
@@ -163,6 +160,35 @@ import {
   type ClientProfile,
 } from "@/lib/client-profile-db";
 import { importClientOrderJson, type ClientOrderSummary } from "@/lib/client-orders";
+
+const AiSettingsDialog = lazy(async () => {
+  const module = await import("@/components/ai-settings-dialog");
+  return { default: module.AiSettingsDialog };
+});
+const AiFieldDialog = lazy(async () => {
+  const module = await import("@/components/ai-field-dialog");
+  return { default: module.AiFieldDialog };
+});
+const AiImportAssistant = lazy(async () => {
+  const module = await import("@/components/ai-import-assistant");
+  return { default: module.AiImportAssistant };
+});
+const ClientDatabaseDialog = lazy(async () => {
+  const module = await import("@/components/client-database-dialog");
+  return { default: module.ClientDatabaseDialog };
+});
+const ClientOrdersDialog = lazy(async () => {
+  const module = await import("@/components/client-orders-dialog");
+  return { default: module.ClientOrdersDialog };
+});
+const AccountSettingsDialog = lazy(async () => {
+  const module = await import("@/components/account-settings-dialog");
+  return { default: module.AccountSettingsDialog };
+});
+const PromptMasterDialog = lazy(async () => {
+  const module = await import("@/components/prompt-master-dialog");
+  return { default: module.PromptMasterDialog };
+});
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -3488,61 +3514,77 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           </section>
         )}
       </main>
-      <AiSettingsDialog
-        open={aiSettingsOpen}
-        onOpenChange={setAiSettingsOpen}
-        value={aiSettings}
-        onSave={setAiSettings}
-        canManageKeys={user.role === "admin"}
-      />
-      <PromptMasterDialog open={promptMasterOpen} onOpenChange={setPromptMasterOpen} />
-      <AccountSettingsDialog
-        open={accountSettingsOpen}
-        onOpenChange={setAccountSettingsOpen}
-        user={user}
-        onSessionInvalidated={onLogout}
-      />
-      <AiFieldDialog
-        request={aiFieldRequest}
-        language={language}
-        cv={cv}
-        settings={aiSettings}
-        onSettingsChange={setAiSettings}
-        onClose={() => setAiFieldRequest(null)}
-        onOpenSettings={() => setAiSettingsOpen(true)}
-      />
-      <AiImportAssistant
-        open={aiAssistantOpen}
-        onOpenChange={setAiAssistantOpen}
-        language={language}
-        settings={aiSettings}
-        onSettingsChange={setAiSettings}
-        onOpenSettings={() => setAiSettingsOpen(true)}
-        onApply={(mappedCv) => {
-          setCv({ ...mappedCv, photo: cv.photo });
-          setHiddenElements({});
-          setImportMessage({
-            ok: true,
-            text: `Assistant IA : données réparties dans le formulaire ${language.toUpperCase()}.`,
-          });
-        }}
-      />
-      <ClientDatabaseDialog
-        open={clientDatabaseOpen}
-        onOpenChange={setClientDatabaseOpen}
-        user={user}
-        activeProfileId={activeProfileId}
-        onOpenProfile={openClientProfile}
-        onDownloadPdf={downloadClientProfilePdf}
-        onSyncStatusChange={setClientSyncStatus}
-      />
-      <ClientOrdersDialog
-        open={clientOrdersOpen}
-        onOpenChange={setClientOrdersOpen}
-        onOpenJson={openClientOrderJson}
-        activeOrderId={activeClientOrder?.id}
-        onCreateCurrentDeliverable={createCurrentOrderDeliverable}
-      />
+      <Suspense fallback={null}>
+        {aiSettingsOpen ? (
+          <AiSettingsDialog
+            open={aiSettingsOpen}
+            onOpenChange={setAiSettingsOpen}
+            value={aiSettings}
+            onSave={setAiSettings}
+            canManageKeys={user.role === "admin"}
+          />
+        ) : null}
+        {promptMasterOpen ? (
+          <PromptMasterDialog open={promptMasterOpen} onOpenChange={setPromptMasterOpen} />
+        ) : null}
+        {accountSettingsOpen ? (
+          <AccountSettingsDialog
+            open={accountSettingsOpen}
+            onOpenChange={setAccountSettingsOpen}
+            user={user}
+            onSessionInvalidated={onLogout}
+          />
+        ) : null}
+        {aiFieldRequest ? (
+          <AiFieldDialog
+            request={aiFieldRequest}
+            language={language}
+            cv={cv}
+            settings={aiSettings}
+            onSettingsChange={setAiSettings}
+            onClose={() => setAiFieldRequest(null)}
+            onOpenSettings={() => setAiSettingsOpen(true)}
+          />
+        ) : null}
+        {aiAssistantOpen ? (
+          <AiImportAssistant
+            open={aiAssistantOpen}
+            onOpenChange={setAiAssistantOpen}
+            language={language}
+            settings={aiSettings}
+            onSettingsChange={setAiSettings}
+            onOpenSettings={() => setAiSettingsOpen(true)}
+            onApply={(mappedCv) => {
+              setCv({ ...mappedCv, photo: cv.photo });
+              setHiddenElements({});
+              setImportMessage({
+                ok: true,
+                text: `Assistant IA : données réparties dans le formulaire ${language.toUpperCase()}.`,
+              });
+            }}
+          />
+        ) : null}
+        {clientDatabaseOpen ? (
+          <ClientDatabaseDialog
+            open={clientDatabaseOpen}
+            onOpenChange={setClientDatabaseOpen}
+            user={user}
+            activeProfileId={activeProfileId}
+            onOpenProfile={openClientProfile}
+            onDownloadPdf={downloadClientProfilePdf}
+            onSyncStatusChange={setClientSyncStatus}
+          />
+        ) : null}
+        {clientOrdersOpen ? (
+          <ClientOrdersDialog
+            open={clientOrdersOpen}
+            onOpenChange={setClientOrdersOpen}
+            onOpenJson={openClientOrderJson}
+            activeOrderId={activeClientOrder?.id}
+            onCreateCurrentDeliverable={createCurrentOrderDeliverable}
+          />
+        ) : null}
+      </Suspense>
     </div>
   );
 }
@@ -3815,12 +3857,10 @@ function PdfPreview({
       try {
         const [pdfjs, workerModule] = await Promise.all([
           import("pdfjs-dist"),
-          import("pdfjs-dist/build/pdf.worker.min.mjs?raw"),
+          import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
         ]);
         if (!pdfWorkerUrl) {
-          pdfWorkerUrl = URL.createObjectURL(
-            new Blob([workerModule.default], { type: "text/javascript" }),
-          );
+          pdfWorkerUrl = workerModule.default;
         }
         pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 

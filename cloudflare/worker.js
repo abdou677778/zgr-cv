@@ -11,6 +11,8 @@ const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 const USERS_PREFIX = "system/users/";
 const AUDIT_PREFIX = "system/audit/";
 const AI_KEYS_OBJECT = "system/secrets/ai-keys.enc.json";
+const CLIENT_HISTORY_PREFIX = "history/clients/";
+const DAILY_BACKUP_PREFIX = "backups/daily/";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -641,8 +643,29 @@ function profilePhotoId(pathname) {
   return ID_PATTERN.test(id) ? id : null;
 }
 
+function profileVersionsId(pathname) {
+  const match = pathname.match(/^\/api\/clients\/([^/]+)\/versions$/);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]).toUpperCase();
+  return ID_PATTERN.test(id) ? id : null;
+}
+
+function profileVersionRestore(pathname) {
+  const match = pathname.match(/^\/api\/clients\/([^/]+)\/versions\/(\d+)\/restore$/);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]).toUpperCase();
+  const revision = Number(match[2]);
+  return ID_PATTERN.test(id) && Number.isSafeInteger(revision) && revision > 0
+    ? { id, revision }
+    : null;
+}
+
 const profilePhotoKey = (id) => `clients/${id}/photo.webp`;
 const profileDeletedKey = (id) => `clients/${id}.deleted.json`;
+const profileVersionKey = (id, revision) =>
+  `${CLIENT_HISTORY_PREFIX}${id}/${String(revision).padStart(8, "0")}.json`;
+const profileVersionPhotoKey = (id, revision) =>
+  `${CLIENT_HISTORY_PREFIX}${id}/${String(revision).padStart(8, "0")}.webp`;
 
 function isWebp(buffer) {
   if (buffer.byteLength < 12) return false;
@@ -690,6 +713,9 @@ async function putProfilePhoto(request, env, id, origin) {
     return json({ error: "La photo WebP dépasse 150 Ko." }, 413, origin);
   }
   if (!isWebp(buffer)) return json({ error: "Le fichier WebP est invalide." }, 422, origin);
+  if (currentProfile && expectedRevision > 0) {
+    await snapshotCurrentProfilePhoto(env, id, expectedRevision);
+  }
   const updatedAt = new Date().toISOString();
   const key = profilePhotoKey(id);
   await env.CLIENTS_BUCKET.put(key, buffer, {
@@ -1167,6 +1193,237 @@ function profileConflict(origin, profile) {
   );
 }
 
+function clientProfileMetadata(profile) {
+  const creator = storedProfileActor(profile.createdBy);
+  const editor = storedProfileActor(profile.updatedBy);
+  return {
+    id: profile.id,
+    revision: String(storedProfileRevision(profile)),
+    name: String(profile.name || "Profil sans nom").slice(0, 180),
+    email: String(profile.email || "").slice(0, 180),
+    phone: String(profile.phone || "").slice(0, 80),
+    language: String(profile.language || "fr").slice(0, 8),
+    createdAt: String(profile.createdAt || profile.updatedAt || "").slice(0, 40),
+    updatedAt: String(profile.updatedAt || "").slice(0, 40),
+    hasPhoto: profile.photoAsset?.r2Key ? "true" : "false",
+    ...(creator
+      ? {
+          createdByUsername: creator.username,
+          createdByDisplayName: creator.displayName,
+          createdByRole: creator.role,
+        }
+      : {}),
+    ...(editor
+      ? {
+          updatedByUsername: editor.username,
+          updatedByDisplayName: editor.displayName,
+          updatedByRole: editor.role,
+        }
+      : {}),
+    ...(Number.isSafeInteger(profile.restoredFromRevision)
+      ? { restoredFromRevision: String(profile.restoredFromRevision) }
+      : {}),
+  };
+}
+
+async function snapshotProfileVersion(env, profile, raw = JSON.stringify(profile)) {
+  const revision = storedProfileRevision(profile);
+  if (!revision) return;
+  await env.CLIENTS_BUCKET.put(profileVersionKey(profile.id, revision), raw, {
+    onlyIf: { etagDoesNotMatch: "*" },
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: clientProfileMetadata(profile),
+  });
+}
+
+async function snapshotCurrentProfilePhoto(env, id, revision) {
+  if (!Number.isSafeInteger(revision) || revision < 1) return false;
+  const currentPhoto = await env.CLIENTS_BUCKET.get(profilePhotoKey(id));
+  if (!currentPhoto) return false;
+  const photoBytes = await new Response(currentPhoto.body).arrayBuffer();
+  const stored = await env.CLIENTS_BUCKET.put(profileVersionPhotoKey(id, revision), photoBytes, {
+    onlyIf: { etagDoesNotMatch: "*" },
+    httpMetadata: { contentType: "image/webp" },
+    customMetadata: {
+      id,
+      revision: String(revision),
+      updatedAt: currentPhoto.customMetadata?.updatedAt || new Date().toISOString(),
+      size: String(photoBytes.byteLength),
+    },
+  });
+  return Boolean(stored);
+}
+
+async function ensureCurrentProfileSnapshot(env, id) {
+  const object = await env.CLIENTS_BUCKET.get(`clients/${id}.json`);
+  if (!object) return null;
+  let profile;
+  try {
+    profile = JSON.parse(await object.text());
+  } catch {
+    return null;
+  }
+  await snapshotProfileVersion(env, profile);
+  if (profile.photoAsset?.r2Key) {
+    await snapshotCurrentProfilePhoto(env, id, storedProfileRevision(profile));
+  }
+  return profile;
+}
+
+async function listProfileVersions(env, id, origin) {
+  const current = await ensureCurrentProfileSnapshot(env, id);
+  if (!current) return json({ error: "Profil introuvable." }, 404, origin);
+  const versions = [];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix: `${CLIENT_HISTORY_PREFIX}${id}/`,
+      cursor,
+      include: ["customMetadata"],
+      limit: 500,
+    });
+    for (const object of page.objects) {
+      if (!object.key.endsWith(".json")) continue;
+      const metadata = object.customMetadata || {};
+      const revision = Number(metadata.revision || object.key.match(/(\d+)\.json$/)?.[1]);
+      if (!Number.isSafeInteger(revision) || revision < 1) continue;
+      versions.push({
+        revision,
+        updatedAt: metadata.updatedAt || object.uploaded.toISOString(),
+        updatedBy: metadata.updatedByUsername
+          ? {
+              username: metadata.updatedByUsername,
+              displayName: metadata.updatedByDisplayName || metadata.updatedByUsername,
+              role: metadata.updatedByRole === "admin" ? "admin" : "user",
+            }
+          : undefined,
+        restoredFromRevision: Number(metadata.restoredFromRevision) || undefined,
+        hasPhoto: metadata.hasPhoto === "true",
+        size: object.size,
+      });
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  versions.sort((left, right) => right.revision - left.revision);
+  return json({ id, currentRevision: storedProfileRevision(current), versions }, 200, origin);
+}
+
+async function restoreProfileVersion(request, env, target, actor, origin, ctx) {
+  let value;
+  try {
+    value = (await readJson(request, 4_096)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Requête de restauration invalide." }, 400, origin);
+    throw error;
+  }
+  const expectedRevision = Number(value?.expectedRevision);
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+    return json({ error: "Révision courante attendue invalide." }, 422, origin);
+  }
+  const profileKey = `clients/${target.id}.json`;
+  const currentObject = await env.CLIENTS_BUCKET.get(profileKey);
+  if (!currentObject) return json({ error: "Profil introuvable." }, 404, origin);
+  let current;
+  try {
+    current = JSON.parse(await currentObject.text());
+  } catch {
+    return json({ error: "Le profil partagé existant est illisible." }, 500, origin);
+  }
+  if (storedProfileRevision(current) !== expectedRevision) return profileConflict(origin, current);
+  const historicalObject = await env.CLIENTS_BUCKET.get(
+    profileVersionKey(target.id, target.revision),
+  );
+  if (!historicalObject) return json({ error: "Cette version n’existe plus." }, 404, origin);
+  let historical;
+  try {
+    historical = JSON.parse(await historicalObject.text());
+  } catch {
+    return json({ error: "Cette version historique est illisible." }, 500, origin);
+  }
+  const historicalPhoto = historical.photoAsset?.r2Key
+    ? await env.CLIENTS_BUCKET.get(profileVersionPhotoKey(target.id, target.revision))
+    : null;
+  if (historical.photoAsset?.r2Key && !historicalPhoto) {
+    return json(
+      { error: "La photo liée à cette version historique est indisponible." },
+      409,
+      origin,
+    );
+  }
+  await snapshotProfileVersion(env, current);
+  if (current.photoAsset?.r2Key) {
+    await snapshotCurrentProfilePhoto(env, target.id, expectedRevision);
+  }
+  const now = new Date().toISOString();
+  const editor = clientProfileActor(actor);
+  const restored = {
+    ...historical,
+    id: target.id,
+    revision: expectedRevision + 1,
+    restoredFromRevision: target.revision,
+    createdAt: current.createdAt || historical.createdAt || now,
+    createdBy: storedProfileActor(current.createdBy) || storedProfileActor(historical.createdBy),
+    updatedAt: now,
+    updatedBy: editor,
+  };
+  const storedRaw = JSON.stringify(restored);
+  const storedObject = await env.CLIENTS_BUCKET.put(profileKey, storedRaw, {
+    onlyIf: { etagMatches: currentObject.etag },
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: clientProfileMetadata(restored),
+  });
+  if (!storedObject) {
+    return profileConflict(origin, await readR2Json(env, profileKey));
+  }
+
+  if (restored.photoAsset?.r2Key) {
+    await env.CLIENTS_BUCKET.put(
+      profilePhotoKey(target.id),
+      await new Response(historicalPhoto.body).arrayBuffer(),
+      {
+        httpMetadata: { contentType: "image/webp" },
+        customMetadata: {
+          id: target.id,
+          updatedAt: now,
+          size: String(historicalPhoto.size),
+        },
+      },
+    );
+    await snapshotCurrentProfilePhoto(env, target.id, restored.revision);
+  } else {
+    await env.CLIENTS_BUCKET.delete(profilePhotoKey(target.id));
+  }
+  await snapshotProfileVersion(env, restored, storedRaw);
+  await maintainClientProfileIndex(env, () =>
+    upsertClientProfileIndex(env, restored, storedObject.size),
+  );
+  await env.CLIENTS_BUCKET.delete(profileDeletedKey(target.id));
+  ctx.waitUntil(
+    writeAudit(env, request, "client_version_restored", actor.username, "success", {
+      clientId: target.id,
+      restoredFromRevision: target.revision,
+      revision: restored.revision,
+    }),
+  );
+  return json(
+    {
+      ok: true,
+      id: target.id,
+      restoredFromRevision: target.revision,
+      profile: {
+        revision: restored.revision,
+        createdAt: restored.createdAt,
+        updatedAt: restored.updatedAt,
+        createdBy: restored.createdBy,
+        updatedBy: restored.updatedBy,
+      },
+    },
+    200,
+    origin,
+  );
+}
+
 async function putProfile(request, env, id, actor, origin, ctx) {
   let parsed;
   try {
@@ -1239,30 +1496,15 @@ async function putProfile(request, env, id, actor, origin, ctx) {
   };
   const storedRaw = JSON.stringify(storedProfile);
 
+  if (previous) {
+    await snapshotProfileVersion(env, previous);
+    if (previous.photoAsset?.r2Key) await snapshotCurrentProfilePhoto(env, id, currentRevision);
+  }
+
   const storedObject = await env.CLIENTS_BUCKET.put(profileKey, storedRaw, {
     onlyIf: previousObject ? { etagMatches: previousObject.etag } : { etagDoesNotMatch: "*" },
     httpMetadata: { contentType: "application/json; charset=utf-8" },
-    customMetadata: {
-      id,
-      revision: String(storedProfile.revision),
-      name: storedProfile.name.slice(0, 180),
-      email: String(storedProfile.email || "").slice(0, 180),
-      phone: String(storedProfile.phone || "").slice(0, 80),
-      language: String(storedProfile.language || "fr").slice(0, 8),
-      createdAt: storedProfile.createdAt.slice(0, 40),
-      updatedAt: storedProfile.updatedAt.slice(0, 40),
-      hasPhoto: storedProfile.photoAsset?.r2Key ? "true" : "false",
-      ...(creator
-        ? {
-            createdByUsername: creator.username,
-            createdByDisplayName: creator.displayName,
-            createdByRole: creator.role,
-          }
-        : {}),
-      updatedByUsername: editor.username,
-      updatedByDisplayName: editor.displayName,
-      updatedByRole: editor.role,
-    },
+    customMetadata: clientProfileMetadata(storedProfile),
   });
   if (!storedObject) {
     const latest = await readR2Json(env, profileKey);
@@ -1274,6 +1516,10 @@ async function putProfile(request, env, id, actor, origin, ctx) {
       }),
     );
     return profileConflict(origin, latest);
+  }
+  await snapshotProfileVersion(env, storedProfile, storedRaw);
+  if (storedProfile.photoAsset?.r2Key) {
+    await snapshotCurrentProfilePhoto(env, id, storedProfile.revision);
   }
   await maintainClientProfileIndex(env, () =>
     upsertClientProfileIndex(env, storedProfile, storedObject.size),
@@ -1853,6 +2099,107 @@ async function proxyClientOrders(request, env, origin, pathname) {
   return new Response(response.body, { status: response.status, headers: responseHeaders });
 }
 
+async function copyR2Object(env, sourceKey, destinationKey) {
+  const source = await env.CLIENTS_BUCKET.get(sourceKey);
+  if (!source) return false;
+  const bytes = await new Response(source.body).arrayBuffer();
+  await env.CLIENTS_BUCKET.put(destinationKey, bytes, {
+    httpMetadata: source.httpMetadata,
+    customMetadata: source.customMetadata,
+  });
+  return true;
+}
+
+async function createDailyBackup(env, scheduledTime = Date.now()) {
+  const createdAt = new Date(scheduledTime).toISOString();
+  const day = createdAt.slice(0, 10);
+  const root = `${DAILY_BACKUP_PREFIX}${day}`;
+  const manifestKey = `${root}/manifest.json`;
+  const existing = await readR2Json(env, manifestKey);
+  if (existing) return { ...existing, skipped: true };
+
+  const index = await readR2ProfileIndex(env);
+  let profiles = 0;
+  let photos = 0;
+  let deletions = 0;
+  for (const profile of index.profiles) {
+    if (
+      await copyR2Object(env, `clients/${profile.id}.json`, `${root}/r2/clients/${profile.id}.json`)
+    ) {
+      profiles += 1;
+    }
+    if (
+      profile.hasPhoto &&
+      (await copyR2Object(
+        env,
+        profilePhotoKey(profile.id),
+        `${root}/r2/clients/${profile.id}/photo.webp`,
+      ))
+    ) {
+      photos += 1;
+    }
+  }
+  for (const deleted of index.deletedProfiles) {
+    if (
+      await copyR2Object(
+        env,
+        profileDeletedKey(deleted.id),
+        `${root}/r2/clients/${deleted.id}.deleted.json`,
+      )
+    ) {
+      deletions += 1;
+    }
+  }
+
+  let d1 = { available: false, profiles: 0, deletions: 0, systemState: 0 };
+  if (env.CLIENTS_DB) {
+    try {
+      const [profileRows, deletionRows, stateRows] = await env.CLIENTS_DB.batch([
+        env.CLIENTS_DB.prepare("SELECT * FROM client_profiles ORDER BY id"),
+        env.CLIENTS_DB.prepare("SELECT * FROM client_profile_deletions ORDER BY id"),
+        env.CLIENTS_DB.prepare("SELECT * FROM system_state ORDER BY key"),
+      ]);
+      const exportData = {
+        exportedAt: createdAt,
+        clientProfiles: profileRows.results || [],
+        clientProfileDeletions: deletionRows.results || [],
+        systemState: stateRows.results || [],
+      };
+      d1 = {
+        available: true,
+        profiles: exportData.clientProfiles.length,
+        deletions: exportData.clientProfileDeletions.length,
+        systemState: exportData.systemState.length,
+      };
+      await env.CLIENTS_BUCKET.put(`${root}/d1/index.json`, JSON.stringify(exportData), {
+        httpMetadata: { contentType: "application/json; charset=utf-8" },
+        customMetadata: { createdAt, day },
+      });
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "daily_backup_d1_failed",
+          day,
+          message: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    }
+  }
+
+  const manifest = { version: 1, day, createdAt, profiles, photos, deletions, d1 };
+  await env.CLIENTS_BUCKET.put(manifestKey, JSON.stringify(manifest), {
+    onlyIf: { etagDoesNotMatch: "*" },
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: { day, createdAt, profiles: String(profiles) },
+  });
+  return manifest;
+}
+
+async function runDailyBackup(env, origin) {
+  const manifest = await createDailyBackup(env);
+  return json({ ok: true, backup: manifest }, 200, origin);
+}
+
 async function route(request, env, ctx) {
   const url = new URL(request.url);
   const origin = allowedOrigin(request, env);
@@ -1898,6 +2245,8 @@ async function route(request, env, ctx) {
       return listAudit(env, origin, url.searchParams.get("limit"));
     if (url.pathname === "/api/admin/clients/reindex" && request.method === "POST")
       return rebuildClientProfileIndex(env, origin);
+    if (url.pathname === "/api/admin/backups" && request.method === "POST")
+      return runDailyBackup(env, origin);
     if (url.pathname === "/api/admin/ai-keys" && request.method === "GET")
       return aiKeyStatus(env, origin);
     if (url.pathname === "/api/admin/ai-keys" && request.method === "PUT")
@@ -1919,11 +2268,27 @@ async function route(request, env, ctx) {
 
   if (url.pathname === "/api/clients" && request.method === "GET")
     return listProfiles(env, origin, ctx, actor, url.searchParams);
+  const restoreTarget = profileVersionRestore(url.pathname);
+  if (restoreTarget) {
+    if (request.method === "POST")
+      return restoreProfileVersion(request, env, restoreTarget, actor, origin, ctx);
+    return json({ error: "Méthode non autorisée." }, 405, origin);
+  }
+  const versionsId = profileVersionsId(url.pathname);
+  if (versionsId) {
+    if (request.method === "GET") return listProfileVersions(env, versionsId, origin);
+    return json({ error: "Méthode non autorisée." }, 405, origin);
+  }
   const photoId = profilePhotoId(url.pathname);
   if (photoId) {
     if (request.method === "GET") return getProfilePhoto(env, photoId, origin);
     if (request.method === "PUT") return putProfilePhoto(request, env, photoId, origin);
     if (request.method === "DELETE") {
+      const current = await readR2Json(env, `clients/${photoId}.json`);
+      if (current) {
+        await snapshotProfileVersion(env, current);
+        await snapshotCurrentProfilePhoto(env, photoId, storedProfileRevision(current));
+      }
       await env.CLIENTS_BUCKET.delete(profilePhotoKey(photoId));
       return json({ ok: true, id: photoId }, 200, origin);
     }
@@ -1935,6 +2300,7 @@ async function route(request, env, ctx) {
   if (request.method === "PUT") return putProfile(request, env, id, actor, origin, ctx);
   if (request.method === "DELETE") {
     const deletedAt = new Date().toISOString();
+    await ensureCurrentProfileSnapshot(env, id);
     await Promise.all([
       env.CLIENTS_BUCKET.delete(`clients/${id}.json`),
       env.CLIENTS_BUCKET.delete(profilePhotoKey(id)),
@@ -1969,5 +2335,18 @@ export default {
       );
       return json({ error: "Erreur interne du service." }, 500, allowedOrigin(request, env));
     });
+  },
+  scheduled(controller, env, ctx) {
+    ctx.waitUntil(
+      createDailyBackup(env, controller.scheduledTime).catch((error) => {
+        console.error(
+          JSON.stringify({
+            event: "daily_backup_failed",
+            message: error instanceof Error ? error.message : "unknown",
+          }),
+        );
+        throw error;
+      }),
+    );
   },
 };

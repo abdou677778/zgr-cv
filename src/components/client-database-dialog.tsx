@@ -7,9 +7,11 @@ import {
   Database,
   Download,
   ExternalLink,
+  History,
   LoaderCircle,
   PencilLine,
   RefreshCw,
+  RotateCcw,
   Search,
   Trash2,
   UserRoundPlus,
@@ -29,14 +31,17 @@ import {
   deleteCloudProfile,
   getCloudProfile,
   getClientProfile,
+  listCloudProfileVersions,
   listCloudProfiles,
   listClientProfiles,
   putCloudProfile,
+  restoreCloudProfileVersion,
   saveClientProfile,
   synchronizeClientProfiles,
   type ClientProfile,
   type ClientProfileSummary,
   type CloudProfilePagination,
+  type CloudProfileVersion,
 } from "@/lib/client-profile-db";
 import { CLIENTS_API_ENDPOINT, getAdminSession, type SessionUser } from "@/lib/auth-client";
 
@@ -81,6 +86,8 @@ export function ClientDatabaseDialog({
   const [ownerFilter, setOwnerFilter] = useState<"all" | "created" | "updated" | "involved">("all");
   const [pagination, setPagination] = useState<CloudProfilePagination>(EMPTY_PAGINATION);
   const [indexSource, setIndexSource] = useState<"d1" | "r2" | "r2-backfill" | "local">("local");
+  const [historyProfileId, setHistoryProfileId] = useState<string | null>(null);
+  const [historyVersions, setHistoryVersions] = useState<CloudProfileVersion[]>([]);
   const pageRequestRef = useRef(0);
 
   const loadLocalPage = useCallback(async () => {
@@ -372,6 +379,67 @@ export function ClientDatabaseDialog({
     }
   };
 
+  const toggleHistory = async (profile: ClientProfileSummary) => {
+    if (historyProfileId === profile.id) {
+      setHistoryProfileId(null);
+      setHistoryVersions([]);
+      return;
+    }
+    setBusy(`history:${profile.id}`);
+    setMessage("");
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const result = await listCloudProfileVersions(CLIENTS_API_ENDPOINT, token, profile.id);
+      setHistoryProfileId(profile.id);
+      setHistoryVersions(result.versions);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Historique impossible à charger.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const restoreVersion = async (profile: ClientProfileSummary, revision: number) => {
+    if (
+      !confirm(
+        `Restaurer la révision ${revision} de « ${profile.name} » ? La version actuelle restera dans l’historique.`,
+      )
+    )
+      return;
+    setBusy(`restore:${profile.id}:${revision}`);
+    setMessage("");
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const restored = await restoreCloudProfileVersion(
+        CLIENTS_API_ENDPOINT,
+        token,
+        profile.id,
+        revision,
+        profile.revision ?? 0,
+      );
+      const cloud = await getCloudProfile(CLIENTS_API_ENDPOINT, token, profile.id);
+      await saveClientProfile(cloud);
+      if (activeProfileId === profile.id) onOpenProfile(cloud);
+      const history = await listCloudProfileVersions(CLIENTS_API_ENDPOINT, token, profile.id);
+      setHistoryVersions(history.versions);
+      await loadPage(true);
+      onSyncStatusChange?.({
+        state: "synced",
+        message: `Révision ${revision} restaurée comme nouvelle révision ${restored.profile.revision}.`,
+      });
+      setMessage(
+        `Révision ${revision} restaurée. La version partagée est maintenant la révision ${restored.profile.revision}.`,
+      );
+    } catch (error) {
+      await loadPage(true);
+      setMessage(error instanceof Error ? error.message : "Restauration impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
@@ -518,6 +586,20 @@ export function ClientDatabaseDialog({
                         </Button>
                         <Button
                           type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void toggleHistory(profile)}
+                          disabled={Boolean(busy)}
+                        >
+                          {busy === `history:${profile.id}` ? (
+                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <History className="mr-2 h-4 w-4" />
+                          )}
+                          Historique
+                        </Button>
+                        <Button
+                          type="button"
                           size="icon"
                           variant="ghost"
                           aria-label={`Supprimer ${profile.name}`}
@@ -527,6 +609,58 @@ export function ClientDatabaseDialog({
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
+                      {historyProfileId === profile.id && (
+                        <div className="rounded-md border bg-slate-50 p-3">
+                          <p className="text-xs font-semibold text-slate-800">
+                            Historique des révisions
+                          </p>
+                          <div className="mt-2 space-y-2">
+                            {historyVersions.map((version) => {
+                              const current = version.revision === (profile.revision ?? 0);
+                              return (
+                                <div
+                                  key={version.revision}
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-3 py-2 text-xs"
+                                >
+                                  <div>
+                                    <span className="font-semibold">
+                                      Révision {version.revision}
+                                    </span>
+                                    {current && (
+                                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                                        Actuelle
+                                      </span>
+                                    )}
+                                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                      {new Date(version.updatedAt).toLocaleString("fr-DZ")} ·{" "}
+                                      {version.updatedBy?.displayName || "Auteur non enregistré"}
+                                      {version.restoredFromRevision
+                                        ? ` · restaurée depuis la révision ${version.restoredFromRevision}`
+                                        : ""}
+                                    </p>
+                                  </div>
+                                  {!current && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => void restoreVersion(profile, version.revision)}
+                                      disabled={Boolean(busy)}
+                                    >
+                                      {busy === `restore:${profile.id}:${version.revision}` ? (
+                                        <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                                      )}
+                                      Restaurer
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                       {conflictIds.includes(profile.id) && (
                         <div className="rounded-md border border-red-200 bg-red-50 p-3">
                           <p className="text-xs font-semibold text-red-800">

@@ -146,7 +146,24 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
     documentKind: "cv",
     templateId: "canadian-v1",
     templateColors: {},
+    photoAsset: {
+      mimeType: "image/webp",
+      width: 1,
+      height: 1,
+      size: 12,
+      r2Key: "clients/ZGR-20260906-ABC123/photo.webp",
+    },
   };
+  const initialPhotoResponse = await call(
+    env,
+    `/api/clients/${profile.id}/photo`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "image/webp", "X-Profile-Revision": "0" },
+      body: new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]),
+    }),
+  );
+  assert.equal(initialPhotoResponse.status, 200);
   const createdResponse = await call(
     env,
     `/api/clients/${profile.id}`,
@@ -230,12 +247,64 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(conflict.current.revision, 2);
   assert.equal(conflict.current.updatedBy.username, "editeur");
 
+  const versionsResponse = await call(
+    env,
+    `/api/clients/${profile.id}/versions`,
+    authorized(editor.token),
+  );
+  assert.equal(versionsResponse.status, 200);
+  const versions = await versionsResponse.json();
+  assert.deepEqual(
+    versions.versions.map((version) => version.revision),
+    [2, 1],
+  );
+
+  const restoredResponse = await call(
+    env,
+    `/api/clients/${profile.id}/versions/1/restore`,
+    authorized(editor.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision: 2 }),
+    }),
+  );
+  assert.equal(restoredResponse.status, 200);
+  const restored = await restoredResponse.json();
+  assert.equal(restored.profile.revision, 3);
+  assert.equal(restored.profile.updatedBy.username, "editeur");
+
+  const staleRestoreResponse = await call(
+    env,
+    `/api/clients/${profile.id}/versions/2/restore`,
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision: 2 }),
+    }),
+  );
+  assert.equal(staleRestoreResponse.status, 409);
+
   const finalResponse = await call(env, `/api/clients/${profile.id}`, authorized(admin.token));
   const finalProfile = await finalResponse.json();
-  assert.equal(finalProfile.phone, "+213555111111");
-  assert.equal(finalProfile.revision, 2);
+  assert.equal(finalProfile.phone, "+213555000000");
+  assert.equal(finalProfile.revision, 3);
   assert.equal(finalProfile.createdBy.username, "admin");
   assert.equal(finalProfile.updatedBy.username, "editeur");
+
+  const scheduled = testContext();
+  worker.scheduled(
+    { scheduledTime: Date.parse("2026-09-11T03:15:00.000Z") },
+    env,
+    scheduled.context,
+  );
+  await scheduled.settle();
+  const manifestObject = await env.CLIENTS_BUCKET.get("backups/daily/2026-09-11/manifest.json");
+  assert.ok(manifestObject);
+  const manifest = JSON.parse(await manifestObject.text());
+  assert.equal(manifest.profiles, 1);
+  assert.equal(manifest.photos, 1);
+  assert.equal(manifest.d1.available, false);
+  assert.ok(await env.CLIENTS_BUCKET.get(`backups/daily/2026-09-11/r2/clients/${profile.id}.json`));
 
   const searchedResponse = await call(
     env,

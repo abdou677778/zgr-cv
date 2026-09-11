@@ -177,6 +177,15 @@ export type CloudProfileCommit = Pick<
   photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
 
+export type CloudProfileVersion = {
+  revision: number;
+  updatedAt: string;
+  updatedBy?: ClientProfileActor;
+  restoredFromRevision?: number;
+  hasPhoto?: boolean;
+  size?: number;
+};
+
 export type CloudProfileConflict = {
   revision: number;
   updatedAt: string;
@@ -306,6 +315,41 @@ export async function getCloudProfile(endpoint: string, token: string, id: strin
   profile.photoAsset = photoAsset;
   for (const cv of Object.values(profile.cvByLanguage)) cv.photo = structuredClone(hydrated);
   return profile;
+}
+
+export async function listCloudProfileVersions(endpoint: string, token: string, id: string) {
+  const response = await authenticatedFetch(`${cloudUrl(endpoint, id)}/versions`, {
+    headers: cloudHeaders(token),
+    cache: "no-store",
+  });
+  return cloudResponse<{
+    id: string;
+    currentRevision: number;
+    versions: CloudProfileVersion[];
+  }>(response);
+}
+
+export async function restoreCloudProfileVersion(
+  endpoint: string,
+  token: string,
+  id: string,
+  revision: number,
+  expectedRevision: number,
+) {
+  const response = await authenticatedFetch(
+    `${cloudUrl(endpoint, id)}/versions/${revision}/restore`,
+    {
+      method: "POST",
+      headers: cloudHeaders(token, true),
+      body: JSON.stringify({ expectedRevision }),
+    },
+  );
+  return cloudResponse<{
+    ok: true;
+    id: string;
+    restoredFromRevision: number;
+    profile: CloudProfileCommit;
+  }>(response);
 }
 
 export async function deleteCloudProfile(endpoint: string, token: string, id: string) {

@@ -22,7 +22,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: TypeScript, lint, tests, SPA build, bundle budget and Worker validation
+      - name: Install Chromium for end-to-end tests
+        run: npx playwright install --with-deps chromium
+      - name: TypeScript, lint, unit and browser tests, build, bundle and Worker validation
         run: npm run quality
         env:
           VITE_ZGR_API_URL: https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/api/clients

@@ -11,13 +11,14 @@
     "check:worker": "wrangler deploy --config wrangler.worker.jsonc --dry-run",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src cloudflare/worker.js --max-warnings 8",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
+    "lint": "eslint src cloudflare/worker.js e2e playwright.config.ts --max-warnings 8",
     "test": "npm run test:unit && npm run test:worker",
     "test:unit": "tsx --test \"src/lib/*.test.ts\"",
     "test:worker": "node --test cloudflare/worker.test.js",
+    "test:e2e": "playwright test",
     "check:bundle": "node scripts/check-bundle-size.mjs",
-    "quality": "npm run typecheck && npm run lint && npm test && npm run build:spa && npm run check:bundle && npm run check:worker",
+    "quality": "npm run typecheck && npm run lint && npm test && npm run build:spa && npm run check:bundle && npm run check:worker && npm run test:e2e",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -80,6 +81,7 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "^2.5.2",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.16.5",
     "@types/pdfmake": "^0.3.3",
     "@types/react": "^19.2.0",

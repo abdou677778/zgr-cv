@@ -24,6 +24,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install Chromium for end-to-end tests
+        run: npx playwright install --with-deps chromium
       - name: Validate and build application
         run: npm run quality
         env:

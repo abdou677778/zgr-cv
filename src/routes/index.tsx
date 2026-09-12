@@ -153,11 +153,18 @@ import {
 import {
   applyCloudCommit,
   CloudProfileConflictError,
+  flushCloudProfileQueue,
   getClientProfile,
+  getWorkspaceDraft,
+  listQueuedCloudProfiles,
   newClientProfileId,
   putCloudProfile,
+  queueCloudProfile,
+  removeQueuedCloudProfile,
   saveClientProfile,
+  saveWorkspaceDraft,
   type ClientProfile,
+  type WorkspaceDraft,
 } from "@/lib/client-profile-db";
 import { importClientOrderJson, type ClientOrderSummary } from "@/lib/client-orders";
 
@@ -214,6 +221,34 @@ const SECTION_APPEARANCE_STORAGE_KEY = "zgr-cv-section-appearance-v1";
 const TEMPLATE_DESIGNER_STORAGE_KEY = "zgr-cv-template-designer-v1";
 const TEMPLATE_DESIGNER_PRESETS_STORAGE_KEY = "zgr-cv-template-designer-presets-v1";
 const PDF_GENERATION_TIMEOUT_MS = 90_000;
+
+type WorkspaceDraftPayload = {
+  activeProfileId: string | null;
+  language: DocumentLanguage;
+  cvByLanguage: Record<DocumentLanguage, CV>;
+  hiddenElements: HiddenCvElements;
+  documentKind: DocumentKind;
+  templateId: PdfTemplateId;
+  templateColors: TemplateColorMap;
+  templateDesignerSettings: TemplateDesignerSettingsMap;
+  designerPresets: DesignerPreset[];
+  activeDesignerPresetId: string | null;
+  sectionAppearance: SectionAppearanceMap;
+};
+
+const workspaceFingerprint = (payload: WorkspaceDraftPayload) =>
+  JSON.stringify({
+    language: payload.language,
+    cvByLanguage: payload.cvByLanguage,
+    hiddenElements: payload.hiddenElements,
+    documentKind: payload.documentKind,
+    templateId: payload.templateId,
+    templateColors: payload.templateColors,
+    templateDesignerSettings: payload.templateDesignerSettings,
+    designerPresets: payload.designerPresets,
+    activeDesignerPresetId: payload.activeDesignerPresetId,
+    sectionAppearance: payload.sectionAppearance,
+  });
 
 async function pdfWithDeadline<T>(operation: Promise<T>) {
   let timeoutId = 0;
@@ -537,9 +572,49 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     state: "idle",
     message: "Aucune synchronisation effectuée dans cette session.",
   });
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null>(null);
+  const [baselineFingerprint, setBaselineFingerprint] = useState<string | null>(null);
+  const [pendingCloudCount, setPendingCloudCount] = useState(0);
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
   const pdfUrlRef = useRef<string | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
+  const resetBaselineRef = useRef(false);
+  const queueFlushRef = useRef(false);
   const cv = cvByLanguage[language];
+  const draftPayload = useMemo<WorkspaceDraftPayload>(
+    () => ({
+      activeProfileId,
+      language,
+      cvByLanguage,
+      hiddenElements,
+      documentKind,
+      templateId,
+      templateColors,
+      templateDesignerSettings,
+      designerPresets,
+      activeDesignerPresetId,
+      sectionAppearance,
+    }),
+    [
+      activeDesignerPresetId,
+      activeProfileId,
+      cvByLanguage,
+      designerPresets,
+      documentKind,
+      hiddenElements,
+      language,
+      sectionAppearance,
+      templateColors,
+      templateDesignerSettings,
+      templateId,
+    ],
+  );
+  const draftFingerprint = useMemo(() => workspaceFingerprint(draftPayload), [draftPayload]);
+  const hasUnsavedChanges =
+    baselineFingerprint !== null && baselineFingerprint !== draftFingerprint;
   const baseTemplates = getTemplates(documentKind, documentKind === "cv" ? language : undefined);
   const availableBaseTemplateIds = new Set(baseTemplates.map((template) => String(template.id)));
   const visibleDesignerPresets =
@@ -623,6 +698,43 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       return { ...current, [language]: next };
     });
 
+  const flushPendingCloud = useCallback(async () => {
+    if (queueFlushRef.current || typeof navigator === "undefined" || !navigator.onLine) return;
+    const token = getAdminSession();
+    if (!token) return;
+    queueFlushRef.current = true;
+    try {
+      const result = await flushCloudProfileQueue(CLIENTS_API_ENDPOINT, token);
+      setPendingCloudCount(result.pending);
+      if (result.conflicts) {
+        setClientSyncStatus({
+          state: "conflict",
+          message: `${result.conflicts} sauvegarde(s) en attente nécessitent une résolution manuelle.`,
+        });
+      } else if (result.failed) {
+        setClientSyncStatus({
+          state: "local",
+          message: `${result.pending} sauvegarde(s) restent dans la file hors ligne.`,
+        });
+      } else if (result.uploaded) {
+        setClientSyncStatus({
+          state: "synced",
+          message: `${result.uploaded} sauvegarde(s) hors ligne synchronisée(s) automatiquement.`,
+        });
+      }
+    } catch (error) {
+      setClientSyncStatus({
+        state: "local",
+        message:
+          error instanceof Error
+            ? `File hors ligne conservée : ${error.message}`
+            : "File hors ligne conservée.",
+      });
+    } finally {
+      queueFlushRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     const availableTemplates = getTemplates(
       documentKind,
@@ -656,6 +768,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   }, [isEuropassTemplate, previewVisible]);
 
   useEffect(() => {
+    let cancelled = false;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -791,8 +904,59 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     } catch (error) {
       console.warn("Les données locales du CV n’ont pas pu être chargées.", error);
     }
-    setLoaded(true);
-  }, []);
+    void getWorkspaceDraft<WorkspaceDraftPayload>(user.username)
+      .then((draft) => {
+        if (cancelled || !draft || draft.version !== 1 || !draft.payload) return;
+        const payload = draft.payload;
+        const restored = { ...sampleCVByLanguage };
+        for (const item of DOCUMENT_LANGUAGES) {
+          const stored = payload.cvByLanguage?.[item.id];
+          if (stored) restored[item.id] = importCvJson(stored, "auto").cv;
+        }
+        setCvByLanguage(restored);
+        if (DOCUMENT_LANGUAGES.some((item) => item.id === payload.language)) {
+          setLanguage(payload.language);
+        }
+        setHiddenElements(structuredClone(payload.hiddenElements || {}));
+        if (
+          getDocumentKinds(payload.language || "fr").some(
+            (kind) => kind.id === payload.documentKind,
+          )
+        ) {
+          setDocumentKind(payload.documentKind);
+        }
+        if (payload.templateId) setTemplateId(payload.templateId);
+        setTemplateColors({ ...DEFAULT_TEMPLATE_COLORS, ...payload.templateColors });
+        setTemplateDesignerSettings(
+          Object.fromEntries(
+            Object.entries(payload.templateDesignerSettings || {}).map(([id, settings]) => [
+              id,
+              normalizeTemplateDesignerSettings(settings),
+            ]),
+          ) as TemplateDesignerSettingsMap,
+        );
+        setDesignerPresets(normalizeDesignerPresets(payload.designerPresets));
+        setActiveDesignerPresetId(payload.activeDesignerPresetId || null);
+        setSectionAppearance(normalizeSectionAppearance(payload.sectionAppearance));
+        setActiveProfileId(
+          payload.activeProfileId && /^ZGR-\d{8}-[A-Z0-9]{6,12}$/.test(payload.activeProfileId)
+            ? payload.activeProfileId
+            : null,
+        );
+        setBaselineFingerprint(draft.baselineFingerprint || draft.fingerprint);
+        setLastDraftSavedAt(draft.savedAt);
+        setDraftState("saved");
+      })
+      .catch((error) => {
+        console.warn("Le brouillon unifié n’a pas pu être restauré.", error);
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user.username]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -863,6 +1027,83 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       console.warn("Les réglages Designer n’ont pas pu être sauvegardés localement.", error);
     }
   }, [designerPresets, loaded, templateDesignerSettings]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    if (resetBaselineRef.current) {
+      resetBaselineRef.current = false;
+      setBaselineFingerprint(draftFingerprint);
+      return;
+    }
+    if (baselineFingerprint === null) setBaselineFingerprint(draftFingerprint);
+  }, [baselineFingerprint, draftFingerprint, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    setDraftState("saving");
+    const timer = window.setTimeout(() => {
+      const savedAt = new Date().toISOString();
+      const draft: WorkspaceDraft<WorkspaceDraftPayload> = {
+        username: user.username,
+        version: 1,
+        savedAt,
+        fingerprint: draftFingerprint,
+        baselineFingerprint: baselineFingerprint ?? draftFingerprint,
+        payload: draftPayload,
+      };
+      void saveWorkspaceDraft(draft)
+        .then(() => {
+          setLastDraftSavedAt(savedAt);
+          setDraftState("saved");
+        })
+        .catch((error) => {
+          console.warn("Le brouillon automatique n’a pas pu être sauvegardé.", error);
+          setDraftState("error");
+        });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [baselineFingerprint, draftFingerprint, draftPayload, loaded, user.username]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    let active = true;
+    const refreshCount = () =>
+      void listQueuedCloudProfiles()
+        .then((entries) => {
+          if (active) setPendingCloudCount(entries.length);
+        })
+        .catch(() => undefined);
+    const handleOnline = () => {
+      setOnline(true);
+      void flushPendingCloud();
+    };
+    const handleOffline = () => setOnline(false);
+    refreshCount();
+    if (navigator.onLine) void flushPendingCloud();
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      active = false;
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [flushPendingCloud, loaded]);
+
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (draftState !== "saving" && draftState !== "error") return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [draftState]);
+
+  useEffect(() => {
+    if (!loaded || !online || pendingCloudCount === 0) return;
+    const timer = window.setTimeout(() => void flushPendingCloud(), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [flushPendingCloud, loaded, online, pendingCloudCount]);
 
   useEffect(() => {
     if (isEuropassTemplate) {
@@ -1261,8 +1502,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         templateId,
         templateColors: structuredClone(templateColors),
         templateDesign: structuredClone(designerSettings),
+        sectionAppearance: structuredClone(sectionAppearance),
       };
       await saveClientProfile(profile);
+      setBaselineFingerprint(draftFingerprint);
       let cloudError = "";
       let cloudSynced = false;
       const token = getAdminSession();
@@ -1278,6 +1521,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             if (cv.photo) updateProfilePhoto({ ...cv.photo, r2Key: commit.photoAsset.r2Key });
           }
           await saveClientProfile(profile);
+          await removeQueuedCloudProfile(profile.id);
+          setPendingCloudCount((await listQueuedCloudProfiles()).length);
           setClientSyncStatus({
             state: "synced",
             message: `Révision ${profile.revision ?? 0} synchronisée à ${new Date().toLocaleTimeString("fr-DZ")}.`,
@@ -1291,16 +1536,20 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               message: `Conflit avec la révision ${error.current?.revision ?? "cloud"}${editor ? ` modifiée par ${editor}` : ""}. Votre version locale est conservée.`,
             });
           } else {
+            await queueCloudProfile(profile, cloudError);
+            setPendingCloudCount((await listQueuedCloudProfiles()).length);
             setClientSyncStatus({
               state: "local",
-              message: `Sauvegarde locale conservée. ${cloudError}`,
+              message: `Sauvegarde locale ajoutée à la file hors ligne. ${cloudError}`,
             });
           }
         }
       } else {
+        await queueCloudProfile(profile, "Session cloud indisponible.");
+        setPendingCloudCount((await listQueuedCloudProfiles()).length);
         setClientSyncStatus({
           state: "local",
-          message: "Sauvegarde locale uniquement : la session cloud a expiré.",
+          message: "Sauvegarde locale placée dans la file : la session cloud a expiré.",
         });
       }
       setActiveProfileId(id);
@@ -1368,7 +1617,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       ...current,
       [profile.templateId]: normalizeTemplateDesignerSettings(profile.templateDesign),
     }));
+    if (profile.sectionAppearance) {
+      setSectionAppearance(normalizeSectionAppearance(profile.sectionAppearance));
+    }
     setActiveDesignerPresetId(null);
+    resetBaselineRef.current = true;
     setActiveProfileId(profile.id);
     setClientSyncStatus({
       state: profile.revision ? "synced" : "local",
@@ -2188,6 +2441,48 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               )}
               {activeProfileId ? "Sauvegarder" : "Sauvegarder client"}
             </Button>
+            <span
+              role="status"
+              title={
+                pendingCloudCount
+                  ? `${pendingCloudCount} sauvegarde(s) locale(s) seront envoyées automatiquement au retour du cloud.`
+                  : draftState === "error"
+                    ? "Le brouillon automatique n’a pas pu être enregistré."
+                    : lastDraftSavedAt
+                      ? `Brouillon local enregistré à ${new Date(lastDraftSavedAt).toLocaleTimeString("fr-DZ")}.`
+                      : "Initialisation du brouillon automatique."
+              }
+              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold ${
+                draftState === "error"
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : pendingCloudCount || !online || hasUnsavedChanges
+                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                    : draftState === "saving"
+                      ? "border-sky-200 bg-sky-50 text-sky-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {draftState === "error" ? (
+                <TriangleAlert className="h-3.5 w-3.5" />
+              ) : pendingCloudCount || !online ? (
+                <CloudOff className="h-3.5 w-3.5" />
+              ) : draftState === "saving" ? (
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CircleCheck className="h-3.5 w-3.5" />
+              )}
+              {draftState === "error"
+                ? "Erreur brouillon"
+                : pendingCloudCount
+                  ? `${pendingCloudCount} cloud en attente`
+                  : !online
+                    ? "Hors ligne"
+                    : draftState === "saving"
+                      ? "Sauvegarde auto"
+                      : hasUnsavedChanges
+                        ? "Modifications en attente"
+                        : "Travail enregistré"}
+            </span>
             <Button
               variant="outline"
               size="sm"

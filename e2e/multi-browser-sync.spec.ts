@@ -60,6 +60,7 @@ function tokenFor(username: string) {
 class SharedClientApi {
   readonly profiles = new Map<string, StoredProfile>();
   readonly sessions = new Map<string, TestUser>();
+  readonly offlineUsers = new Set<string>();
   private revisionClock = 0;
 
   private async respond(route: Route, status: number, body: unknown) {
@@ -237,6 +238,10 @@ class SharedClientApi {
 
     if (!url.pathname.startsWith("/api/clients")) return route.fallback();
 
+    if (method === "PUT" && this.offlineUsers.has(user.username)) {
+      return this.respond(route, 503, { error: "Cloud temporairement indisponible." });
+    }
+
     if (url.pathname === "/api/clients" && method === "GET") {
       const query = (url.searchParams.get("q") || "").trim().toLocaleLowerCase("fr");
       const owner = url.searchParams.get("owner") || "all";
@@ -369,6 +374,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
 
   try {
     const adminPage = await connect(adminContext, api, "admin");
+    await expect(adminPage.getByText("Travail enregistré")).toBeVisible();
     await adminPage.getByRole("button", { name: "Administrateur E2E" }).click();
     const accountSettings = adminPage.getByRole("dialog", { name: /Paramètres du compte/ });
     await expect(accountSettings.getByText("Supervision D1 et R2")).toBeVisible();
@@ -399,6 +405,12 @@ test("deux navigateurs partagent un client et protègent une modification concur
       adminPage.getByText(/Nouveau profil sauvegardé localement et dans R2/),
     ).toBeVisible();
     expect(api.profiles.get(profileId)?.createdBy.username).toBe("admin");
+    await expect(adminPage.getByText("Travail enregistré")).toBeVisible();
+    await adminPage.reload();
+    await expect(adminPage.getByRole("button", { name: "Sauvegarder", exact: true })).toBeVisible();
+    await openPersonalDetails(adminPage);
+    await expect(adminPage.getByPlaceholder("Nom complet")).toHaveValue("Client E2E partagé");
+    await expect(adminPage.getByPlaceholder("+1 514 000 0000")).toHaveValue("+213 555 100 100");
 
     const editorPage = await connect(editorContext, api, "editeur");
     await editorPage.getByRole("button", { name: "Base de données", exact: true }).click();
@@ -418,16 +430,26 @@ test("deux navigateurs partagent un client et protègent une modification concur
     expect(api.profiles.get(profileId)?.phone).toBe("+213 555 200 200");
     expect(api.profiles.get(profileId)?.updatedBy.username).toBe("editeur");
 
+    api.offlineUsers.add("editeur");
+    await editorPage.getByPlaceholder("+1 514 000 0000").fill("+213 555 300 300");
+    await editorPage.getByRole("button", { name: "Sauvegarder", exact: true }).click();
+    await expect(editorPage.getByText("1 cloud en attente")).toBeVisible();
+    api.offlineUsers.delete("editeur");
+    await editorPage.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => api.profiles.get(profileId)?.revision).toBe(3);
+    await expect(editorPage.getByText("1 cloud en attente")).toBeHidden();
+    expect(api.profiles.get(profileId)?.phone).toBe("+213 555 300 300");
+
     await adminPage.getByPlaceholder("+1 514 000 0000").fill("+213 555 999 999");
     await adminPage.getByRole("button", { name: "Sauvegarder", exact: true }).click();
     const conflictStatus = adminPage.getByRole("status").filter({ hasText: /^Conflit$/ });
     await expect(conflictStatus).toBeVisible();
     await expect(conflictStatus).toHaveAttribute(
       "title",
-      /Conflit avec la révision 2 modifiée par Éditeur E2E/,
+      /Conflit avec la révision 3 modifiée par Éditeur E2E/,
     );
-    expect(api.profiles.get(profileId)?.phone).toBe("+213 555 200 200");
-    expect(api.profiles.get(profileId)?.revision).toBe(2);
+    expect(api.profiles.get(profileId)?.phone).toBe("+213 555 300 300");
+    expect(api.profiles.get(profileId)?.revision).toBe(3);
   } finally {
     await adminContext.close();
     await editorContext.close();

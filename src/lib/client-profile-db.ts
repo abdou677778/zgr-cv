@@ -12,8 +12,10 @@ import {
 import { authenticatedFetch } from "./auth-client";
 
 const DB_NAME = "zgr-cv-clients";
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const STORE_NAME = "profiles";
+const QUEUE_STORE_NAME = "pendingCloudProfiles";
+const DRAFT_STORE_NAME = "workspaceDrafts";
 
 export type ClientProfile = {
   version: 1;
@@ -34,6 +36,7 @@ export type ClientProfile = {
   templateId: PdfTemplateId;
   templateColors: TemplateColorMap;
   templateDesign?: TemplateDesignerSettings;
+  sectionAppearance?: Record<string, { title: string; icon: string }>;
   photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
 
@@ -74,6 +77,13 @@ async function openDatabase() {
       store.createIndex("name", "name", { unique: false });
       store.createIndex("updatedAt", "updatedAt", { unique: false });
     }
+    if (!database.objectStoreNames.contains(QUEUE_STORE_NAME)) {
+      const queue = database.createObjectStore(QUEUE_STORE_NAME, { keyPath: "id" });
+      queue.createIndex("queuedAt", "queuedAt", { unique: false });
+    }
+    if (!database.objectStoreNames.contains(DRAFT_STORE_NAME)) {
+      database.createObjectStore(DRAFT_STORE_NAME, { keyPath: "username" });
+    }
   };
   return asPromise(request);
 }
@@ -81,11 +91,12 @@ async function openDatabase() {
 async function withStore<T>(
   mode: IDBTransactionMode,
   operation: (store: IDBObjectStore) => IDBRequest<T>,
+  storeName = STORE_NAME,
 ) {
   const database = await openDatabase();
   try {
-    const transaction = database.transaction(STORE_NAME, mode);
-    const result = await asPromise(operation(transaction.objectStore(STORE_NAME)));
+    const transaction = database.transaction(storeName, mode);
+    const result = await asPromise(operation(transaction.objectStore(storeName)));
     await new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onerror = () =>
@@ -129,6 +140,7 @@ export async function listClientProfiles(): Promise<ClientProfileSummary[]> {
         hiddenElements: _hidden,
         templateColors: _colors,
         templateDesign: _design,
+        sectionAppearance: _sectionAppearance,
         photoAsset,
         ...summary
       }) => ({
@@ -143,6 +155,70 @@ export async function listClientProfiles(): Promise<ClientProfileSummary[]> {
 
 export async function deleteClientProfile(id: string) {
   await withStore("readwrite", (store) => store.delete(id));
+}
+
+export type QueuedCloudProfile = {
+  id: string;
+  profile: ClientProfile;
+  queuedAt: string;
+  attempts: number;
+  lastError?: string;
+};
+
+export async function queueCloudProfile(profile: ClientProfile, lastError?: string) {
+  const current = await withStore<QueuedCloudProfile | undefined>(
+    "readonly",
+    (store) => store.get(profile.id),
+    QUEUE_STORE_NAME,
+  );
+  const entry: QueuedCloudProfile = {
+    id: profile.id,
+    profile: structuredClone(profile),
+    queuedAt: current?.queuedAt ?? new Date().toISOString(),
+    attempts: current?.attempts ?? 0,
+    lastError: lastError?.slice(0, 500),
+  };
+  await withStore("readwrite", (store) => store.put(entry), QUEUE_STORE_NAME);
+  return entry;
+}
+
+export async function listQueuedCloudProfiles() {
+  const entries = await withStore<QueuedCloudProfile[]>(
+    "readonly",
+    (store) => store.getAll(),
+    QUEUE_STORE_NAME,
+  );
+  return entries.sort((left, right) => left.queuedAt.localeCompare(right.queuedAt));
+}
+
+export async function removeQueuedCloudProfile(id: string) {
+  await withStore("readwrite", (store) => store.delete(id), QUEUE_STORE_NAME);
+}
+
+export type WorkspaceDraft<T = unknown> = {
+  username: string;
+  version: 1;
+  savedAt: string;
+  fingerprint: string;
+  baselineFingerprint: string;
+  payload: T;
+};
+
+export async function saveWorkspaceDraft<T>(draft: WorkspaceDraft<T>) {
+  await withStore("readwrite", (store) => store.put(structuredClone(draft)), DRAFT_STORE_NAME);
+  return draft;
+}
+
+export async function getWorkspaceDraft<T>(username: string) {
+  return withStore<WorkspaceDraft<T> | undefined>(
+    "readonly",
+    (store) => store.get(username),
+    DRAFT_STORE_NAME,
+  );
+}
+
+export async function deleteWorkspaceDraft(username: string) {
+  await withStore("readwrite", (store) => store.delete(username), DRAFT_STORE_NAME);
 }
 
 export type CloudProfileSummary = ClientProfileSummary & { size?: number };
@@ -419,6 +495,51 @@ export function applyCloudCommit(profile: ClientProfile, commit: CloudProfileCom
     }
   }
   return committed;
+}
+
+export async function flushCloudProfileQueue(endpoint: string, token: string) {
+  const entries = await listQueuedCloudProfiles();
+  let uploaded = 0;
+  let conflicts = 0;
+  let failed = 0;
+  const committedProfiles: ClientProfile[] = [];
+  for (const entry of entries) {
+    const local = (await getClientProfile(entry.id)) ?? entry.profile;
+    try {
+      const commit = await putCloudProfile(endpoint, token, local);
+      const committed = applyCloudCommit(local, commit);
+      await saveClientProfile(committed);
+      await removeQueuedCloudProfile(entry.id);
+      committedProfiles.push(committed);
+      uploaded += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Synchronisation cloud impossible.";
+      await withStore(
+        "readwrite",
+        (store) =>
+          store.put({
+            ...entry,
+            profile: structuredClone(local),
+            attempts: entry.attempts + 1,
+            lastError: message.slice(0, 500),
+          }),
+        QUEUE_STORE_NAME,
+      );
+      if (error instanceof CloudProfileConflictError) {
+        conflicts += 1;
+        continue;
+      }
+      failed += 1;
+      break;
+    }
+  }
+  return {
+    uploaded,
+    conflicts,
+    failed,
+    pending: (await listQueuedCloudProfiles()).length,
+    committedProfiles,
+  };
 }
 
 export async function synchronizeClientProfiles(endpoint: string, token: string) {

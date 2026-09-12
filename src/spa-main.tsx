@@ -2,12 +2,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Index from "./routes/index";
+import { startObservability } from "./lib/observability";
 import { registerPwa } from "./lib/pwa-client";
 import "./styles.css";
 
 const queryClient = new QueryClient();
 
 void registerPwa();
+startObservability();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

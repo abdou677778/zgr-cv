@@ -2,6 +2,7 @@ const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
 const MAX_ACCOUNT_BYTES = 16_384;
 const MAX_AI_BYTES = 120_000;
+const MAX_TELEMETRY_BYTES = 16_384;
 const MAX_PHOTO_BYTES = 150 * 1024;
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 // Cloudflare Workers currently rejects PBKDF2 iteration counts above 100,000.
@@ -13,6 +14,20 @@ const AUDIT_PREFIX = "system/audit/";
 const AI_KEYS_OBJECT = "system/secrets/ai-keys.enc.json";
 const CLIENT_HISTORY_PREFIX = "history/clients/";
 const DAILY_BACKUP_PREFIX = "backups/daily/";
+const TELEMETRY_KINDS = new Set(["web_vital", "javascript_error", "api_failure", "sync_failure"]);
+const TELEMETRY_NAMES = new Set([
+  "LCP",
+  "CLS",
+  "INP",
+  "FCP",
+  "TTFB",
+  "window_error",
+  "unhandled_rejection",
+  "http_error",
+  "network_error",
+  "sync_error",
+]);
+const TELEMETRY_RATINGS = new Set(["good", "needs-improvement", "poor", "error"]);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -330,6 +345,170 @@ async function readJson(request, maxBytes) {
   } catch {
     throw new Response(null, { status: 400 });
   }
+}
+
+function normalizedTelemetryEvent(value, actor, createdAt) {
+  if (!value || typeof value !== "object") return null;
+  const kind = TELEMETRY_KINDS.has(value.kind) ? value.kind : null;
+  const name = TELEMETRY_NAMES.has(value.name) ? value.name : null;
+  const rating = TELEMETRY_RATINGS.has(value.rating) ? value.rating : null;
+  if (!kind || !name || !rating) return null;
+  const numericValue = Number(value.value);
+  const status = Number(value.status);
+  const route =
+    typeof value.route === "string" && /^\/api\/[a-z:/_-]{1,100}$/i.test(value.route)
+      ? value.route.slice(0, 120)
+      : null;
+  const buildId =
+    typeof value.buildId === "string" && /^[a-z0-9_-]{1,80}$/i.test(value.buildId)
+      ? value.buildId
+      : null;
+  return {
+    id: crypto.randomUUID(),
+    kind,
+    name,
+    value: Number.isFinite(numericValue) ? Math.max(0, Math.min(numericValue, 120_000)) : null,
+    rating,
+    status: Number.isInteger(status) && status >= 0 && status <= 599 ? status : null,
+    route,
+    buildId,
+    role: actor.role === "admin" ? "admin" : "user",
+    createdAt,
+  };
+}
+
+async function recordOperationalEvents(request, env, actor, origin, ctx) {
+  let payload;
+  try {
+    payload = (await readJson(request, MAX_TELEMETRY_BYTES)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Métriques techniques invalides." }, error.status, origin);
+    throw error;
+  }
+  const createdAt = new Date().toISOString();
+  const candidates = Array.isArray(payload?.events) ? payload.events.slice(0, 20) : [];
+  const events = candidates
+    .map((event) => normalizedTelemetryEvent(event, actor, createdAt))
+    .filter(Boolean);
+  if (!events.length) return json({ error: "Aucune métrique technique valide." }, 422, origin);
+  if (!env.CLIENTS_DB) return json({ ok: true, stored: 0, available: false }, 202, origin);
+
+  await env.CLIENTS_DB.batch(
+    events.map((event) =>
+      env.CLIENTS_DB.prepare(
+        `INSERT INTO operational_events
+          (id, kind, name, value, rating, status, route, build_id, role, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        event.id,
+        event.kind,
+        event.name,
+        event.value,
+        event.rating,
+        event.status,
+        event.route,
+        event.buildId,
+        event.role,
+        event.createdAt,
+      ),
+    ),
+  );
+  ctx.waitUntil(
+    env.CLIENTS_DB.prepare("DELETE FROM operational_events WHERE created_at < ?")
+      .bind(new Date(Date.now() - 30 * 86_400_000).toISOString())
+      .run(),
+  );
+  return json({ ok: true, stored: events.length, available: true }, 202, origin);
+}
+
+function percentile(values, ratio) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.max(0, Math.ceil(sorted.length * ratio) - 1)];
+}
+
+async function operationalMonitoring(env, origin) {
+  const empty = {
+    generatedAt: new Date().toISOString(),
+    available: false,
+    health: "collecting",
+    retentionDays: 30,
+    last24h: { events: 0, javascriptErrors: 0, apiFailures: 0, syncFailures: 0 },
+    vitals: [],
+    daily: [],
+    privacy: "Aucun nom, CV, courriel, téléphone, adresse IP ou contenu client n’est enregistré.",
+  };
+  if (!env.CLIENTS_DB) return json(empty, 200, origin);
+  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  let rows;
+  try {
+    const result = await env.CLIENTS_DB.prepare(
+      `SELECT kind, name, value, rating, status, route, build_id, created_at
+       FROM operational_events WHERE created_at >= ? ORDER BY created_at DESC LIMIT 5000`,
+    )
+      .bind(since)
+      .all();
+    rows = result.results || [];
+  } catch (error) {
+    return json(
+      {
+        ...empty,
+        error: error instanceof Error ? "Table de supervision indisponible." : "D1 indisponible.",
+      },
+      200,
+      origin,
+    );
+  }
+
+  const last24hCutoff = new Date(Date.now() - 86_400_000).toISOString();
+  const last24hRows = rows.filter((row) => row.created_at >= last24hCutoff);
+  const last24h = {
+    events: last24hRows.length,
+    javascriptErrors: last24hRows.filter((row) => row.kind === "javascript_error").length,
+    apiFailures: last24hRows.filter((row) => row.kind === "api_failure").length,
+    syncFailures: last24hRows.filter((row) => row.kind === "sync_failure").length,
+  };
+  const vitals = ["LCP", "INP", "CLS", "FCP", "TTFB"].map((name) => {
+    const matching = last24hRows.filter(
+      (row) => row.kind === "web_vital" && row.name === name && Number.isFinite(Number(row.value)),
+    );
+    const values = matching.map((row) => Number(row.value));
+    return {
+      name,
+      samples: values.length,
+      p75: percentile(values, 0.75),
+      average: values.length
+        ? Math.round((values.reduce((total, value) => total + value, 0) / values.length) * 100) /
+          100
+        : null,
+      poor: matching.filter((row) => row.rating === "poor").length,
+    };
+  });
+  const days = Array.from({ length: 7 }, (_, offset) =>
+    new Date(Date.now() - (6 - offset) * 86_400_000).toISOString().slice(0, 10),
+  );
+  const daily = days.map((day) => {
+    const matching = rows.filter((row) => String(row.created_at).startsWith(day));
+    return {
+      day,
+      events: matching.length,
+      errors: matching.filter((row) => row.kind !== "web_vital").length,
+    };
+  });
+  const failures = last24h.javascriptErrors + last24h.apiFailures + last24h.syncFailures;
+  const vitalSamples = vitals.reduce((total, vital) => total + vital.samples, 0);
+  const poorVitals = vitals.reduce((total, vital) => total + vital.poor, 0);
+  const poorRatio = vitalSamples ? poorVitals / vitalSamples : 0;
+  const health =
+    last24h.events === 0
+      ? "collecting"
+      : failures >= 20 || poorRatio >= 0.4
+        ? "critical"
+        : failures >= 5 || poorRatio >= 0.15
+          ? "warning"
+          : "healthy";
+  return json({ ...empty, available: true, health, last24h, vitals, daily }, 200, origin);
 }
 
 async function login(request, env, origin, ctx) {
@@ -2698,6 +2877,8 @@ async function route(request, env, ctx) {
       return deleteUser(request, env, actor, username, origin, ctx);
     if (url.pathname === "/api/admin/audit" && request.method === "GET")
       return listAudit(env, origin, url.searchParams.get("limit"));
+    if (url.pathname === "/api/admin/monitoring" && request.method === "GET")
+      return operationalMonitoring(env, origin);
     if (url.pathname === "/api/admin/clients/reindex" && request.method === "POST")
       return rebuildClientProfileIndex(env, origin);
     if (url.pathname === "/api/admin/backups") {
@@ -2722,6 +2903,9 @@ async function route(request, env, ctx) {
   }
   if (url.pathname === "/api/ai/generate" && request.method === "POST")
     return generateAi(request, env, origin);
+
+  if (url.pathname === "/api/telemetry" && request.method === "POST")
+    return recordOperationalEvents(request, env, actor, origin, ctx);
 
   if (url.pathname === "/api/clients" && request.method === "GET")
     return listProfiles(env, origin, ctx, actor, url.searchParams);

@@ -154,6 +154,7 @@ import {
 } from "@/lib/client-profile-db";
 import { importClientOrderJson, type ClientOrderSummary } from "@/lib/client-orders";
 import { activatePwaUpdate, promptPwaInstall, usePwaStatus } from "@/lib/pwa-client";
+import { reportSyncFailure } from "@/lib/observability";
 
 const AiSettingsDialog = lazy(async () => {
   const module = await import("@/components/ai-settings-dialog");
@@ -719,6 +720,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           message: `${result.conflicts} sauvegarde(s) en attente nécessitent une résolution manuelle.`,
         });
       } else if (result.failed) {
+        reportSyncFailure();
         setClientSyncStatus({
           state: "local",
           message: `${result.pending} sauvegarde(s) restent dans la file hors ligne.`,
@@ -1545,6 +1547,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               message: `Conflit avec la révision ${error.current?.revision ?? "cloud"}${editor ? ` modifiée par ${editor}` : ""}. Votre version locale est conservée.`,
             });
           } else {
+            reportSyncFailure();
             await queueCloudProfile(profile, cloudError);
             setPendingCloudCount((await listQueuedCloudProfiles()).length);
             setClientSyncStatus({
@@ -1554,6 +1557,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           }
         }
       } else {
+        reportSyncFailure();
         await queueCloudProfile(profile, "Session cloud indisponible.");
         setPendingCloudCount((await listQueuedCloudProfiles()).length);
         setClientSyncStatus({

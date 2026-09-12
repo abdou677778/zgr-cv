@@ -35,6 +35,7 @@ import {
   createManagedUser,
   deleteManagedUser,
   getBackupMonitoring,
+  getOperationalMonitoring,
   listAuditEntries,
   listManagedUsers,
   previewBackupRestore,
@@ -46,6 +47,7 @@ import {
   type BackupMonitoring,
   type BackupRestorePreview,
   type ManagedUser,
+  type OperationalMonitoring,
 } from "@/lib/account-client";
 import type { SessionUser } from "@/lib/auth-client";
 
@@ -77,6 +79,12 @@ function formatBytes(value: number) {
   const unit = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
   const amount = value / 1024 ** unit;
   return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: unit ? 1 : 0 })} ${units[unit]}`;
+}
+
+function formatVital(name: string, value: number | null) {
+  if (value === null) return "—";
+  if (name === "CLS") return value.toLocaleString("fr-FR", { maximumFractionDigits: 3 });
+  return `${Math.round(value).toLocaleString("fr-FR")} ms`;
 }
 
 function PasswordInput({ className, ...props }: ComponentProps<typeof Input>) {
@@ -115,6 +123,9 @@ export function AccountSettingsDialog({
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [backupMonitoring, setBackupMonitoring] = useState<BackupMonitoring | null>(null);
+  const [operationalMonitoring, setOperationalMonitoring] = useState<OperationalMonitoring | null>(
+    null,
+  );
   const [restoreTarget, setRestoreTarget] = useState<{
     kind: "daily" | "monthly" | "recovery";
     period: string;
@@ -138,14 +149,17 @@ export function AccountSettingsDialog({
     setLoading(true);
     setMessage(null);
     try {
-      const [nextUsers, nextAudit, nextBackupMonitoring] = await Promise.all([
-        listManagedUsers(),
-        listAuditEntries(),
-        getBackupMonitoring(),
-      ]);
+      const [nextUsers, nextAudit, nextBackupMonitoring, nextOperationalMonitoring] =
+        await Promise.all([
+          listManagedUsers(),
+          listAuditEntries(),
+          getBackupMonitoring(),
+          getOperationalMonitoring(),
+        ]);
       setUsers(nextUsers);
       setAudit(nextAudit);
       setBackupMonitoring(nextBackupMonitoring);
+      setOperationalMonitoring(nextOperationalMonitoring);
     } catch (error) {
       setMessage({
         ok: false,
@@ -423,6 +437,119 @@ export function AccountSettingsDialog({
 
         {user.role === "admin" && (
           <>
+            <section className="space-y-4 rounded-2xl border border-violet-100 bg-violet-50/35 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-violet-700" />
+                  <div>
+                    <h3 className="font-semibold">Santé de l’application</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Performances réelles et incidents techniques des dernières 24 heures.
+                    </p>
+                  </div>
+                </div>
+                {operationalMonitoring && (
+                  <span
+                    className={
+                      operationalMonitoring.health === "healthy"
+                        ? "rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                        : operationalMonitoring.health === "critical"
+                          ? "rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700"
+                          : operationalMonitoring.health === "warning"
+                            ? "rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800"
+                            : "rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600"
+                    }
+                  >
+                    {operationalMonitoring.health === "healthy"
+                      ? "Fonctionnement sain"
+                      : operationalMonitoring.health === "critical"
+                        ? "Action requise"
+                        : operationalMonitoring.health === "warning"
+                          ? "À surveiller"
+                          : "Collecte en cours"}
+                  </span>
+                )}
+              </div>
+
+              {operationalMonitoring ? (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      {
+                        label: "Mesures reçues",
+                        value: operationalMonitoring.last24h.events,
+                        tone: "text-slate-900",
+                      },
+                      {
+                        label: "Erreurs JavaScript",
+                        value: operationalMonitoring.last24h.javascriptErrors,
+                        tone: operationalMonitoring.last24h.javascriptErrors
+                          ? "text-red-700"
+                          : "text-emerald-700",
+                      },
+                      {
+                        label: "Échecs API",
+                        value: operationalMonitoring.last24h.apiFailures,
+                        tone: operationalMonitoring.last24h.apiFailures
+                          ? "text-amber-700"
+                          : "text-emerald-700",
+                      },
+                      {
+                        label: "Échecs synchronisation",
+                        value: operationalMonitoring.last24h.syncFailures,
+                        tone: operationalMonitoring.last24h.syncFailures
+                          ? "text-amber-700"
+                          : "text-emerald-700",
+                      },
+                    ].map((metric) => (
+                      <div key={metric.label} className="rounded-xl border bg-white p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          {metric.label}
+                        </p>
+                        <p className={`mt-2 text-2xl font-bold ${metric.tone}`}>{metric.value}</p>
+                        <p className="text-[11px] text-muted-foreground">sur 24 heures</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border bg-white">
+                    <div className="border-b bg-slate-50 px-4 py-2 text-xs font-semibold">
+                      Web Vitals réels — 75e percentile
+                    </div>
+                    <div className="grid grid-cols-2 divide-x sm:grid-cols-5">
+                      {operationalMonitoring.vitals.map((vital) => (
+                        <div key={vital.name} className="px-3 py-3 text-center">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-violet-700">
+                            {vital.name}
+                          </p>
+                          <p className="mt-1 text-sm font-bold text-slate-900">
+                            {formatVital(vital.name, vital.p75)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {vital.samples} échantillon{vital.samples === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="flex items-start gap-2 rounded-lg border border-violet-100 bg-white/80 px-3 py-2 text-[11px] leading-relaxed text-slate-600">
+                    <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-700" />
+                    <span>
+                      {operationalMonitoring.privacy}
+                      <span className="block">
+                        Conservation automatique : {operationalMonitoring.retentionDays} jours.
+                      </span>
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 rounded-xl border bg-white px-4 py-5 text-sm text-muted-foreground">
+                  <LoaderCircle className="h-4 w-4 animate-spin" /> Chargement des mesures…
+                </div>
+              )}
+            </section>
+
             <section className="space-y-4 rounded-2xl border border-sky-100 bg-sky-50/40 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">

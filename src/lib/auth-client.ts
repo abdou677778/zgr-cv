@@ -26,6 +26,29 @@ function requestTarget(path: string) {
   return /^https?:\/\//i.test(path) ? path : apiUrl(path);
 }
 
+function operationalRoute(path: string) {
+  try {
+    return new URL(requestTarget(path)).pathname
+      .replace(/^(\/api\/clients)\/[^/]+/, "$1/:id")
+      .replace(/^(\/api\/admin\/users)\/[^/]+/, "$1/:username")
+      .replace(/^(\/api\/admin\/ai-keys)\/[^/]+/, "$1/:id")
+      .replace(/^(\/api\/admin\/backups)\/(daily|monthly|recovery)\/[^/]+/, "$1/:kind/:period")
+      .replace(/\/versions\/\d+/, "/versions/:version")
+      .slice(0, 120);
+  } catch {
+    return "/api/unknown";
+  }
+}
+
+function announceApiFailure(path: string, status: number, name: "http_error" | "network_error") {
+  if (typeof window === "undefined" || operationalRoute(path) === "/api/telemetry") return;
+  window.dispatchEvent(
+    new CustomEvent("zgr-api-failure", {
+      detail: { route: operationalRoute(path), status, name },
+    }),
+  );
+}
+
 function apiNetworkError(failure: unknown) {
   const message = failure instanceof Error ? failure.message : "";
   if (
@@ -94,6 +117,7 @@ function isSessionUser(value: unknown): value is SessionUser {
 async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: number) {
   const roots = [...new Set([API_ROOT, CLOUD_API_ROOT].filter(Boolean))];
   let lastFailure: unknown;
+  let lastStatus = 0;
   for (let attempt = 0; attempt < AUTH_NETWORK_ATTEMPTS; attempt += 1) {
     for (const root of roots) {
       const controller = new AbortController();
@@ -113,6 +137,7 @@ async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: n
         // Authentication errors are definitive and must be shown immediately.
         // Only transient server failures should move to the next attempt/root.
         if (response.status < 500) return response;
+        lastStatus = response.status;
         lastFailure = new Error(`Service temporairement indisponible (${response.status}).`);
       } catch (failure) {
         lastFailure = failure;
@@ -124,6 +149,7 @@ async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: n
       await new Promise((resolve) => window.setTimeout(resolve, 650));
     }
   }
+  announceApiFailure(path, lastStatus, lastStatus ? "http_error" : "network_error");
   throw lastFailure instanceof Error
     ? lastFailure
     : new Error("Le service d’authentification n’est pas joignable.");
@@ -275,7 +301,10 @@ export async function authenticatedFetch(path: string, init: RequestInit = {}) {
         signal: controller.signal,
       });
       if (response.status === 401) clearAdminSession();
-      if (response.status < 500 || attempt + 1 === attempts) return response;
+      if (response.status < 500 || attempt + 1 === attempts) {
+        if (response.status >= 500) announceApiFailure(path, response.status, "http_error");
+        return response;
+      }
       lastFailure = new Error(`Service temporairement indisponible (${response.status}).`);
     } catch (failure) {
       if (init.signal?.aborted) throw failure;
@@ -288,5 +317,6 @@ export async function authenticatedFetch(path: string, init: RequestInit = {}) {
       await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)));
   }
 
+  announceApiFailure(path, 0, "network_error");
   throw apiNetworkError(lastFailure);
 }

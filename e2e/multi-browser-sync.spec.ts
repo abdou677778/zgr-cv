@@ -118,6 +118,11 @@ class SharedClientApi {
     const user = this.authenticatedUser(route);
     if (!user) return this.respond(route, 401, { error: "Session de test absente." });
 
+    if (url.pathname === "/api/telemetry" && method === "POST") {
+      const events = (request.postDataJSON() as { events?: unknown[] }).events || [];
+      return this.respond(route, 202, { ok: true, stored: events.length, available: true });
+    }
+
     if (url.pathname.startsWith("/api/admin/")) {
       if (user.role !== "admin")
         return this.respond(route, 403, { error: "Droits administrateur requis." });
@@ -132,6 +137,25 @@ class SharedClientApi {
       }
       if (url.pathname === "/api/admin/audit" && method === "GET") {
         return this.respond(route, 200, { entries: [] });
+      }
+      if (url.pathname === "/api/admin/monitoring" && method === "GET") {
+        return this.respond(route, 200, {
+          generatedAt: new Date().toISOString(),
+          available: true,
+          health: "healthy",
+          retentionDays: 30,
+          last24h: { events: 24, javascriptErrors: 0, apiFailures: 0, syncFailures: 0 },
+          vitals: [
+            { name: "LCP", samples: 5, p75: 1_420, average: 1_310, poor: 0 },
+            { name: "INP", samples: 4, p75: 110, average: 95, poor: 0 },
+            { name: "CLS", samples: 5, p75: 0.03, average: 0.02, poor: 0 },
+            { name: "FCP", samples: 5, p75: 780, average: 720, poor: 0 },
+            { name: "TTFB", samples: 5, p75: 190, average: 175, poor: 0 },
+          ],
+          daily: [],
+          privacy:
+            "Aucun nom, CV, courriel, téléphone, adresse IP ou contenu client n’est enregistré.",
+        });
       }
       const restoreMatch = url.pathname.match(
         /^\/api\/admin\/backups\/(daily|monthly)\/([^/]+)\/restore$/,
@@ -417,6 +441,9 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await expect(adminPage.getByText("Travail enregistré")).toBeVisible();
     await adminPage.getByRole("button", { name: "Administrateur E2E" }).click();
     const accountSettings = adminPage.getByRole("dialog", { name: /Paramètres du compte/ });
+    await expect(accountSettings.getByText("Santé de l’application")).toBeVisible();
+    await expect(accountSettings.getByText("Fonctionnement sain")).toBeVisible();
+    await expect(accountSettings.getByText("Web Vitals réels — 75e percentile")).toBeVisible();
     await expect(accountSettings.getByText("Supervision D1 et R2")).toBeVisible();
     await expect(accountSettings.getByText("Sauvegardes opérationnelles")).toBeVisible();
     await expect(accountSettings.getByText("8 profils", { exact: true })).toBeVisible();

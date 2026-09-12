@@ -77,6 +77,29 @@ export type BackupRestorePreview = {
   safety: string;
 };
 
+export type OperationalMonitoring = {
+  generatedAt: string;
+  available: boolean;
+  health: "healthy" | "warning" | "critical" | "collecting";
+  retentionDays: number;
+  last24h: {
+    events: number;
+    javascriptErrors: number;
+    apiFailures: number;
+    syncFailures: number;
+  };
+  vitals: Array<{
+    name: "LCP" | "INP" | "CLS" | "FCP" | "TTFB";
+    samples: number;
+    p75: number | null;
+    average: number | null;
+    poor: number;
+  }>;
+  daily: Array<{ day: string; events: number; errors: number }>;
+  privacy: string;
+  error?: string;
+};
+
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authenticatedFetch(path, init);
   const body = (await response.json().catch(() => ({}))) as T & { error?: string };
@@ -146,6 +169,10 @@ export async function listAuditEntries(limit = 100) {
 
 export async function getBackupMonitoring() {
   return apiJson<BackupMonitoring>("/api/admin/backups");
+}
+
+export async function getOperationalMonitoring() {
+  return apiJson<OperationalMonitoring>("/api/admin/monitoring");
 }
 
 export async function runBackupNow() {

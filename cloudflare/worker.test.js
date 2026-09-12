@@ -75,6 +75,50 @@ class MemoryR2Bucket {
   }
 }
 
+class MemoryTelemetryD1 {
+  rows = [];
+
+  prepare(sql) {
+    const database = this;
+    return {
+      values: [],
+      bind(...values) {
+        this.values = values;
+        return this;
+      },
+      async run() {
+        if (sql.includes("INSERT INTO operational_events")) {
+          const [id, kind, name, value, rating, status, route, buildId, role, createdAt] =
+            this.values;
+          database.rows.push({
+            id,
+            kind,
+            name,
+            value,
+            rating,
+            status,
+            route,
+            build_id: buildId,
+            role,
+            created_at: createdAt,
+          });
+        } else if (sql.includes("DELETE FROM operational_events")) {
+          const [cutoff] = this.values;
+          database.rows = database.rows.filter((row) => row.created_at >= cutoff);
+        }
+        return { success: true };
+      },
+      async all() {
+        return { results: structuredClone(database.rows) };
+      },
+    };
+  }
+
+  async batch(statements) {
+    return Promise.all(statements.map((statement) => statement.run()));
+  }
+}
+
 function testContext() {
   const pending = [];
   return {
@@ -419,6 +463,61 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(emptyList.profiles.length, 0);
   assert.equal(emptyList.deletedProfiles.length, 1);
   assert.equal(emptyList.deletedProfiles[0].deletedBy, "editeur");
+});
+
+test("la supervision agrège uniquement des métriques techniques anonymes", async () => {
+  const env = {
+    CLIENTS_BUCKET: new MemoryR2Bucket(),
+    CLIENTS_DB: new MemoryTelemetryD1(),
+    ADMIN_USERNAME: "admin",
+    ADMIN_PASSWORD: "mot-de-passe-admin-test",
+    SESSION_SECRET: "secret-de-session-de-test-suffisamment-long-1234567890",
+    ALLOWED_ORIGINS: "http://127.0.0.1:8080",
+  };
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const telemetryResponse = await call(
+    env,
+    "/api/telemetry",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        events: [
+          {
+            kind: "web_vital",
+            name: "LCP",
+            value: 1_450,
+            rating: "good",
+            buildId: "test-build",
+            email: "personnel@example.com",
+          },
+          {
+            kind: "api_failure",
+            name: "http_error",
+            rating: "error",
+            status: 503,
+            route: "/api/clients/:id",
+            message: "Contenu confidentiel qui ne doit pas être stocké",
+          },
+        ],
+      }),
+    }),
+  );
+  assert.equal(telemetryResponse.status, 202);
+  assert.equal((await telemetryResponse.json()).stored, 2);
+  assert.equal(env.CLIENTS_DB.rows.length, 2);
+  assert.equal("email" in env.CLIENTS_DB.rows[0], false);
+  assert.equal("message" in env.CLIENTS_DB.rows[1], false);
+
+  const monitoringResponse = await call(env, "/api/admin/monitoring", authorized(admin.token));
+  assert.equal(monitoringResponse.status, 200);
+  const monitoring = await monitoringResponse.json();
+  assert.equal(monitoring.available, true);
+  assert.equal(monitoring.last24h.events, 2);
+  assert.equal(monitoring.last24h.apiFailures, 1);
+  assert.equal(monitoring.vitals.find((vital) => vital.name === "LCP").p75, 1_450);
+  assert.equal(JSON.stringify(monitoring).includes("personnel@example.com"), false);
+  assert.match(monitoring.privacy, /Aucun nom/);
 });
 
 test("la conservation limite les sauvegardes quotidiennes et mensuelles", async () => {

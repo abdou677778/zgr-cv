@@ -5,6 +5,7 @@ const MAX_AI_BYTES = 120_000;
 const MAX_TELEMETRY_BYTES = 16_384;
 const MAX_PHOTO_BYTES = 150 * 1024;
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+const TRASH_RETENTION_DAYS = 30;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 6;
 const LOGIN_BLOCK_MS = 15 * 60 * 1000;
@@ -1169,6 +1170,10 @@ function profileVersionRestore(pathname) {
 
 const profilePhotoKey = (id) => `clients/${id}/photo.webp`;
 const profileDeletedKey = (id) => `clients/${id}.deleted.json`;
+const trashProfilePrefix = (id) => `trash/clients/${id}/`;
+const trashProfileKey = (id) => `${trashProfilePrefix(id)}profile.json`;
+const trashPhotoKey = (id) => `${trashProfilePrefix(id)}photo.webp`;
+const trashManifestKey = (id) => `${trashProfilePrefix(id)}manifest.json`;
 const profileVersionKey = (id, revision) =>
   `${CLIENT_HISTORY_PREFIX}${id}/${String(revision).padStart(8, "0")}.json`;
 const profileVersionPhotoKey = (id, revision) =>
@@ -1775,6 +1780,195 @@ async function ensureCurrentProfileSnapshot(env, id) {
     await snapshotCurrentProfilePhoto(env, id, storedProfileRevision(profile));
   }
   return profile;
+}
+
+async function archiveClientInTrash(env, profile, actor, deletedAt) {
+  const id = profile.id;
+  const expiresAt = new Date(
+    Date.parse(deletedAt) + TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const photo = await env.CLIENTS_BUCKET.get(profilePhotoKey(id));
+  const photoBytes = photo ? await new Response(photo.body).arrayBuffer() : null;
+  const deletedBy = clientProfileActor(actor);
+  const manifest = {
+    version: 1,
+    id,
+    name: String(profile.name || "Profil sans nom").slice(0, 180),
+    deletedAt,
+    expiresAt,
+    deletedBy,
+    revision: storedProfileRevision(profile),
+    hasPhoto: Boolean(photoBytes),
+  };
+  const writes = [
+    env.CLIENTS_BUCKET.put(trashProfileKey(id), JSON.stringify(profile), {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: clientProfileMetadata(profile),
+    }),
+    env.CLIENTS_BUCKET.put(trashManifestKey(id), JSON.stringify(manifest), {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: {
+        id,
+        name: manifest.name,
+        deletedAt,
+        expiresAt,
+        deletedByUsername: deletedBy.username,
+        deletedByDisplayName: deletedBy.displayName,
+        deletedByRole: deletedBy.role,
+        revision: String(manifest.revision),
+        hasPhoto: manifest.hasPhoto ? "true" : "false",
+      },
+    }),
+  ];
+  if (photoBytes) {
+    writes.push(
+      env.CLIENTS_BUCKET.put(trashPhotoKey(id), photoBytes, {
+        httpMetadata: { contentType: "image/webp" },
+        customMetadata: {
+          id,
+          deletedAt,
+          size: String(photoBytes.byteLength),
+        },
+      }),
+    );
+  }
+  await Promise.all(writes);
+  return manifest;
+}
+
+async function readTrashManifests(env) {
+  const items = [];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix: "trash/clients/",
+      cursor,
+      include: ["customMetadata"],
+      limit: 500,
+    });
+    for (const object of page.objects) {
+      if (!object.key.endsWith("/manifest.json")) continue;
+      const metadata = object.customMetadata || {};
+      const id = metadata.id || object.key.split("/")[2];
+      if (!ID_PATTERN.test(id)) continue;
+      items.push({
+        id,
+        name: metadata.name || "Profil sans nom",
+        deletedAt: metadata.deletedAt || object.uploaded.toISOString(),
+        expiresAt: metadata.expiresAt || object.uploaded.toISOString(),
+        deletedBy: {
+          username: metadata.deletedByUsername || "unknown",
+          displayName: metadata.deletedByDisplayName || metadata.deletedByUsername || "Profil",
+          role: normalizeAccountRole(metadata.deletedByRole),
+        },
+        revision: Number(metadata.revision) || 0,
+        hasPhoto: metadata.hasPhoto === "true",
+      });
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return items.sort((left, right) => right.deletedAt.localeCompare(left.deletedAt));
+}
+
+async function listTrash(env, origin) {
+  const items = await readTrashManifests(env);
+  return json({ items, retentionDays: TRASH_RETENTION_DAYS }, 200, origin);
+}
+
+async function purgeTrashData(env, id) {
+  const keys = [trashManifestKey(id), trashProfileKey(id), trashPhotoKey(id)];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix: `${CLIENT_HISTORY_PREFIX}${id}/`,
+      cursor,
+      limit: 500,
+    });
+    keys.push(...page.objects.map((object) => object.key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  for (let offset = 0; offset < keys.length; offset += 500)
+    await env.CLIENTS_BUCKET.delete(keys.slice(offset, offset + 500));
+  return keys.length;
+}
+
+async function restoreTrashProfile(request, env, id, actor, origin, ctx) {
+  const [manifest, archived, active] = await Promise.all([
+    readR2Json(env, trashManifestKey(id)),
+    readR2Json(env, trashProfileKey(id)),
+    readR2Json(env, `clients/${id}.json`),
+  ]);
+  if (!manifest || !archived)
+    return json({ error: "Ce profil n’est plus disponible dans la corbeille." }, 404, origin);
+  if (active) return json({ error: "Un profil actif utilise déjà cet identifiant." }, 409, origin);
+  const archivedPhoto = manifest.hasPhoto ? await env.CLIENTS_BUCKET.get(trashPhotoKey(id)) : null;
+  if (manifest.hasPhoto && !archivedPhoto)
+    return json(
+      { error: "La photo archivée est manquante. Restauration interrompue." },
+      409,
+      origin,
+    );
+  const now = new Date().toISOString();
+  const restored = {
+    ...archived,
+    revision: storedProfileRevision(archived) + 1,
+    updatedAt: now,
+    updatedBy: clientProfileActor(actor),
+    restoredFromTrash: true,
+  };
+  const raw = JSON.stringify(restored);
+  const photoBytes = archivedPhoto ? await new Response(archivedPhoto.body).arrayBuffer() : null;
+  if (photoBytes) {
+    await env.CLIENTS_BUCKET.put(profilePhotoKey(id), photoBytes, {
+      httpMetadata: { contentType: "image/webp" },
+      customMetadata: { id, updatedAt: now, size: String(photoBytes.byteLength) },
+    });
+  }
+  const stored = await env.CLIENTS_BUCKET.put(`clients/${id}.json`, raw, {
+    onlyIf: { etagDoesNotMatch: "*" },
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: clientProfileMetadata(restored),
+  });
+  if (!stored) return json({ error: "Le profil a déjà été restauré." }, 409, origin);
+  await Promise.all([
+    snapshotProfileVersion(env, restored, raw),
+    env.CLIENTS_BUCKET.delete([
+      trashManifestKey(id),
+      trashProfileKey(id),
+      trashPhotoKey(id),
+      profileDeletedKey(id),
+    ]),
+  ]);
+  await maintainClientProfileIndex(env, () => upsertClientProfileIndex(env, restored, stored.size));
+  ctx.waitUntil(
+    writeAudit(env, request, "client_trash_restored", actor.username, "success", {
+      clientId: id,
+      revision: restored.revision,
+    }),
+  );
+  return json({ ok: true, profile: restored }, 200, origin);
+}
+
+async function purgeTrashProfile(request, env, id, actor, origin, ctx, confirmation) {
+  const manifest = await readR2Json(env, trashManifestKey(id));
+  if (!manifest)
+    return json({ error: "Ce profil n’est plus disponible dans la corbeille." }, 404, origin);
+  const expected = `SUPPRIMER ${id}`;
+  if (confirmation !== expected)
+    return json({ error: `Confirmation requise : ${expected}` }, 422, origin);
+  const deletedObjects = await purgeTrashData(env, id);
+  ctx.waitUntil(
+    writeAudit(env, request, "client_trash_purged", actor.username, "success", {
+      clientId: id,
+      deletedObjects,
+    }),
+  );
+  return json({ ok: true, id, deletedObjects }, 200, origin);
+}
+
+function trashProfileRoute(pathname) {
+  const match = pathname.match(/^\/api\/admin\/trash\/(ZGR-\d{8}-[A-Z0-9]{6,12})(\/restore)?$/);
+  return match ? { id: match[1], restore: Boolean(match[2]) } : null;
 }
 
 async function listProfileVersions(env, id, origin) {
@@ -3191,6 +3385,35 @@ async function cleanupSecurityState(env, scheduledTime = Date.now()) {
   return { expiredSessions: expiredKeys.length };
 }
 
+async function cleanupExpiredTrash(env, scheduledTime = Date.now()) {
+  const items = await readTrashManifests(env);
+  let purged = 0;
+  for (const item of items) {
+    if (Date.parse(item.expiresAt) > Number(scheduledTime)) continue;
+    try {
+      await purgeTrashData(env, item.id);
+      purged += 1;
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "trash_cleanup_failed",
+          clientId: item.id,
+          message: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    }
+  }
+  if (purged)
+    console.log(
+      JSON.stringify({
+        event: "trash_cleanup_completed",
+        purged,
+        retentionDays: TRASH_RETENTION_DAYS,
+      }),
+    );
+  return { purged };
+}
+
 async function route(request, env, ctx) {
   const url = new URL(request.url);
   const origin = allowedOrigin(request, env);
@@ -3226,6 +3449,21 @@ async function route(request, env, ctx) {
   if (url.pathname.startsWith("/api/admin/")) {
     if (actor.role !== "admin")
       return json({ error: "Droits administrateur requis." }, 403, origin);
+    if (url.pathname === "/api/admin/trash" && request.method === "GET")
+      return listTrash(env, origin);
+    const trashTarget = trashProfileRoute(url.pathname);
+    if (trashTarget?.restore && request.method === "POST")
+      return restoreTrashProfile(request, env, trashTarget.id, actor, origin, ctx);
+    if (trashTarget && !trashTarget.restore && request.method === "DELETE")
+      return purgeTrashProfile(
+        request,
+        env,
+        trashTarget.id,
+        actor,
+        origin,
+        ctx,
+        url.searchParams.get("confirmation"),
+      );
     const restoreTarget = backupRestoreTarget(url.pathname);
     if (restoreTarget) {
       if (request.method === "GET") return previewBackupRestore(env, restoreTarget, origin);
@@ -3341,16 +3579,28 @@ async function route(request, env, ctx) {
         origin,
       );
     const deletedAt = new Date().toISOString();
-    await ensureCurrentProfileSnapshot(env, id);
+    const current = await ensureCurrentProfileSnapshot(env, id);
+    if (!current) return json({ error: "Profil introuvable." }, 404, origin);
+    const trash = await archiveClientInTrash(env, current, actor, deletedAt);
     await Promise.all([
       env.CLIENTS_BUCKET.delete(`clients/${id}.json`),
       env.CLIENTS_BUCKET.delete(profilePhotoKey(id)),
       env.CLIENTS_BUCKET.put(
         profileDeletedKey(id),
-        JSON.stringify({ id, deletedAt, deletedBy: actor.username }),
+        JSON.stringify({
+          id,
+          deletedAt,
+          deletedBy: actor.username,
+          trashExpiresAt: trash.expiresAt,
+        }),
         {
           httpMetadata: { contentType: "application/json; charset=utf-8" },
-          customMetadata: { id, deletedAt, deletedBy: actor.username },
+          customMetadata: {
+            id,
+            deletedAt,
+            deletedBy: actor.username,
+            trashExpiresAt: trash.expiresAt,
+          },
         },
       ),
     ]);
@@ -3360,7 +3610,7 @@ async function route(request, env, ctx) {
     ctx.waitUntil(
       writeAudit(env, request, "client_deleted", actor.username, "success", { clientId: id }),
     );
-    return json({ ok: true, id }, 200, origin);
+    return json({ ok: true, id, trash }, 200, origin);
   }
   return json({ error: "Méthode non autorisée." }, 405, origin);
 }
@@ -3396,5 +3646,6 @@ export default {
       }),
     );
     ctx.waitUntil(cleanupSecurityState(env, controller.scheduledTime));
+    ctx.waitUntil(cleanupExpiredTrash(env, controller.scheduledTime));
   },
 };

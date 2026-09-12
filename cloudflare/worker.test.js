@@ -651,6 +651,65 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
     authorized(admin.token, { method: "DELETE" }),
   );
   assert.equal(deletedResponse.status, 200);
+  const trashResponse = await call(env, "/api/admin/trash", authorized(admin.token));
+  assert.equal(trashResponse.status, 200);
+  const trash = await trashResponse.json();
+  assert.equal(trash.retentionDays, 30);
+  assert.equal(trash.items.length, 1);
+  assert.equal(trash.items[0].id, profile.id);
+  assert.equal(trash.items[0].hasPhoto, true);
+  assert.ok(await env.CLIENTS_BUCKET.get(`trash/clients/${profile.id}/profile.json`));
+  assert.ok(await env.CLIENTS_BUCKET.get(`trash/clients/${profile.id}/photo.webp`));
+
+  const restoredTrashResponse = await call(
+    env,
+    `/api/admin/trash/${profile.id}/restore`,
+    authorized(admin.token, { method: "POST" }),
+  );
+  assert.equal(restoredTrashResponse.status, 200);
+  const restoredTrash = await restoredTrashResponse.json();
+  assert.equal(restoredTrash.profile.id, profile.id);
+  assert.equal(restoredTrash.profile.updatedBy.username, "admin");
+  assert.equal(
+    (
+      await call(env, "/api/admin/trash", authorized(admin.token)).then((response) =>
+        response.json(),
+      )
+    ).items.length,
+    0,
+  );
+
+  const deletedAgainResponse = await call(
+    env,
+    `/api/clients/${profile.id}`,
+    authorized(admin.token, { method: "DELETE" }),
+  );
+  assert.equal(deletedAgainResponse.status, 200);
+  const refusedPurge = await call(
+    env,
+    `/api/admin/trash/${profile.id}?confirmation=incorrecte`,
+    authorized(admin.token, { method: "DELETE" }),
+  );
+  assert.equal(refusedPurge.status, 422);
+  const purgeConfirmation = encodeURIComponent(`SUPPRIMER ${profile.id}`);
+  const purgedResponse = await call(
+    env,
+    `/api/admin/trash/${profile.id}?confirmation=${purgeConfirmation}`,
+    authorized(admin.token, { method: "DELETE" }),
+  );
+  assert.equal(purgedResponse.status, 200);
+  assert.equal(
+    (
+      await call(env, "/api/admin/trash", authorized(admin.token)).then((response) =>
+        response.json(),
+      )
+    ).items.length,
+    0,
+  );
+  const remainingHistory = await env.CLIENTS_BUCKET.list({
+    prefix: `history/clients/${profile.id}/`,
+  });
+  assert.equal(remainingHistory.objects.length, 0);
   const emptyListResponse = await call(env, "/api/clients?scope=sync", authorized(admin.token));
   const emptyList = await emptyListResponse.json();
   assert.equal(emptyList.profiles.length, 0);
@@ -711,6 +770,40 @@ test("la supervision agrège uniquement des métriques techniques anonymes", asy
   assert.equal(monitoring.vitals.find((vital) => vital.name === "LCP").p75, 1_450);
   assert.equal(JSON.stringify(monitoring).includes("personnel@example.com"), false);
   assert.match(monitoring.privacy, /Aucun nom/);
+});
+
+test("la corbeille expirée est purgée automatiquement sans retirer le marqueur de suppression", async () => {
+  const bucket = new MemoryR2Bucket();
+  const env = { CLIENTS_BUCKET: bucket };
+  const id = "ZGR-20260901-TRASH1";
+  const scheduledTime = Date.now();
+  const deletedAt = new Date(scheduledTime - 31 * 86_400_000).toISOString();
+  const expiresAt = new Date(scheduledTime - 86_400_000).toISOString();
+  await Promise.all([
+    bucket.put(`trash/clients/${id}/manifest.json`, JSON.stringify({ id, deletedAt, expiresAt }), {
+      customMetadata: {
+        id,
+        name: "Client expiré",
+        deletedAt,
+        expiresAt,
+        deletedByUsername: "admin",
+        deletedByDisplayName: "Administrateur",
+        deletedByRole: "admin",
+      },
+    }),
+    bucket.put(`trash/clients/${id}/profile.json`, JSON.stringify({ id, name: "Client expiré" })),
+    bucket.put(`history/clients/${id}/00000001.json`, JSON.stringify({ id, revision: 1 })),
+    bucket.put(`clients/${id}.deleted.json`, JSON.stringify({ id, deletedAt })),
+  ]);
+
+  const scheduled = testContext();
+  worker.scheduled({ scheduledTime }, env, scheduled.context);
+  await scheduled.settle();
+
+  assert.equal(await bucket.get(`trash/clients/${id}/manifest.json`), null);
+  assert.equal(await bucket.get(`trash/clients/${id}/profile.json`), null);
+  assert.equal(await bucket.get(`history/clients/${id}/00000001.json`), null);
+  assert.ok(await bucket.get(`clients/${id}.deleted.json`));
 });
 
 test("la conservation limite les sauvegardes quotidiennes et mensuelles", async () => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArchiveRestore,
   ChevronLeft,
   ChevronRight,
   Cloud,
@@ -33,8 +34,11 @@ import {
   getClientProfile,
   listCloudProfileVersions,
   listCloudProfiles,
+  listCloudTrash,
   listClientProfiles,
   putCloudProfile,
+  purgeCloudTrashProfile,
+  restoreCloudTrashProfile,
   restoreCloudProfileVersion,
   saveClientProfile,
   synchronizeClientProfiles,
@@ -42,6 +46,7 @@ import {
   type ClientProfileSummary,
   type CloudProfilePagination,
   type CloudProfileVersion,
+  type TrashedClientProfile,
 } from "@/lib/client-profile-db";
 import { CLIENTS_API_ENDPOINT, getAdminSession, type SessionUser } from "@/lib/auth-client";
 
@@ -88,11 +93,28 @@ export function ClientDatabaseDialog({
   const [indexSource, setIndexSource] = useState<"d1" | "r2" | "r2-backfill" | "local">("local");
   const [historyProfileId, setHistoryProfileId] = useState<string | null>(null);
   const [historyVersions, setHistoryVersions] = useState<CloudProfileVersion[]>([]);
+  const [trashItems, setTrashItems] = useState<TrashedClientProfile[]>([]);
+  const [trashRetentionDays, setTrashRetentionDays] = useState(30);
+  const [trashLoading, setTrashLoading] = useState(false);
   const pageRequestRef = useRef(0);
   const canWrite = user.permissions.clientsWrite;
   const canDelete = user.permissions.clientsDelete;
   const canRestore = user.permissions.clientsRestore;
   const canDownload = user.permissions.clientsDownload;
+
+  const loadTrash = useCallback(async () => {
+    if (!canDelete) return;
+    setTrashLoading(true);
+    try {
+      const trash = await listCloudTrash();
+      setTrashItems(trash.items);
+      setTrashRetentionDays(trash.retentionDays);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Chargement de la corbeille impossible.");
+    } finally {
+      setTrashLoading(false);
+    }
+  }, [canDelete]);
 
   const loadLocalPage = useCallback(async () => {
     const query = search.trim().toLocaleLowerCase("fr");
@@ -250,6 +272,10 @@ export function ClientDatabaseDialog({
     return () => window.clearTimeout(timer);
   }, [loadPage, open, search]);
 
+  useEffect(() => {
+    if (open && canDelete) void loadTrash();
+  }, [canDelete, loadTrash, open]);
+
   const resolveProfile = async (summary: ClientProfileSummary) => {
     const local = await getClientProfile(summary.id);
     if (
@@ -297,9 +323,7 @@ export function ClientDatabaseDialog({
       return;
     }
     if (
-      !confirm(
-        `Supprimer définitivement « ${profile.name} » (${profile.id}) de la base partagée et de tous les navigateurs ?`,
-      )
+      !confirm(`Déplacer « ${profile.name} » (${profile.id}) dans la corbeille pendant 30 jours ?`)
     )
       return;
     setBusy(`delete:${profile.id}`);
@@ -308,10 +332,45 @@ export function ClientDatabaseDialog({
       if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
       await deleteCloudProfile(CLIENTS_API_ENDPOINT, token, profile.id);
       await deleteClientProfile(profile.id);
-      await loadPage(true);
-      setMessage("Profil supprimé de la base partagée et du cache de ce navigateur.");
+      await Promise.all([loadPage(true), loadTrash()]);
+      setMessage("Profil placé dans la corbeille pour 30 jours et retiré des navigateurs.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Suppression impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const restoreFromTrash = async (item: TrashedClientProfile) => {
+    if (!confirm(`Restaurer « ${item.name} » dans la base clients active ?`)) return;
+    setBusy(`trash-restore:${item.id}`);
+    setMessage("");
+    try {
+      const result = await restoreCloudTrashProfile(item.id);
+      await saveClientProfile(result.profile);
+      await Promise.all([loadPage(true), loadTrash()]);
+      setMessage(`« ${item.name} » a été restauré avec une nouvelle révision.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Restauration impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const purgeFromTrash = async (item: TrashedClientProfile) => {
+    const expected = `SUPPRIMER ${item.id}`;
+    const confirmation = window.prompt(
+      `Cette action efface définitivement le CV, sa photo et son historique. Saisissez exactement :\n${expected}`,
+    );
+    if (confirmation === null) return;
+    setBusy(`trash-purge:${item.id}`);
+    setMessage("");
+    try {
+      await purgeCloudTrashProfile(item.id, confirmation);
+      await loadTrash();
+      setMessage(`Les données archivées de « ${item.name} » ont été supprimées définitivement.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Suppression définitive impossible.");
     } finally {
       setBusy("");
     }
@@ -800,6 +859,84 @@ export function ClientDatabaseDialog({
                 ? "L’index est actualisé automatiquement. Cette synchronisation envoie ou récupère les changements réalisés hors ligne."
                 : "L’actualisation récupère l’index cloud sans envoyer les données locales de cet appareil."}
             </p>
+            {canDelete && (
+              <section className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-amber-950">
+                    <ArchiveRestore className="h-4 w-4" /> Corbeille sécurisée
+                  </h3>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                    {trashItems.length}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-amber-900">
+                  Conservation pendant {trashRetentionDays} jours. Après ce délai, le CV, sa photo
+                  et son historique sont automatiquement purgés.
+                </p>
+                {trashLoading ? (
+                  <p className="flex items-center gap-2 rounded-md bg-white px-3 py-3 text-xs text-slate-600">
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Chargement…
+                  </p>
+                ) : trashItems.length ? (
+                  <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {trashItems.map((item) => {
+                      const daysRemaining = Math.max(
+                        0,
+                        Math.ceil((Date.parse(item.expiresAt) - Date.now()) / 86_400_000),
+                      );
+                      return (
+                        <article key={item.id} className="rounded-md border bg-white p-3">
+                          <p className="truncate text-xs font-semibold" title={item.name}>
+                            {item.name}
+                          </p>
+                          <p className="mt-0.5 font-mono text-[9px] text-slate-500">{item.id}</p>
+                          <p className="mt-1 text-[10px] text-slate-600">
+                            Supprimé par {item.deletedBy.displayName} · purge dans {daysRemaining} j
+                          </p>
+                          <div className="mt-2 flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 flex-1 text-[11px]"
+                              disabled={Boolean(busy)}
+                              onClick={() => void restoreFromTrash(item)}
+                            >
+                              {busy === `trash-restore:${item.id}` ? (
+                                <LoaderCircle className="mr-1 h-3 w-3 animate-spin" />
+                              ) : (
+                                <RotateCcw className="mr-1 h-3 w-3" />
+                              )}
+                              Restaurer
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-red-600"
+                              aria-label={`Supprimer définitivement ${item.name}`}
+                              title="Supprimer définitivement"
+                              disabled={Boolean(busy)}
+                              onClick={() => void purgeFromTrash(item)}
+                            >
+                              {busy === `trash-purge:${item.id}` ? (
+                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="rounded-md bg-white px-3 py-3 text-center text-xs text-slate-500">
+                    La corbeille est vide.
+                  </p>
+                )}
+              </section>
+            )}
           </aside>
         </div>
 

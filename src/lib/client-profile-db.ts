@@ -60,6 +60,16 @@ export type ClientProfileSummary = Pick<
   | "language"
 > & { hasPhoto?: boolean };
 
+export type TrashedClientProfile = {
+  id: string;
+  name: string;
+  deletedAt: string;
+  expiresAt: string;
+  deletedBy: ClientProfileActor;
+  revision: number;
+  hasPhoto: boolean;
+};
+
 const asPromise = <T>(request: IDBRequest<T>) =>
   new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -434,6 +444,27 @@ export async function deleteCloudProfile(endpoint: string, token: string, id: st
     headers: cloudHeaders(token),
   });
   await cloudResponse<{ ok: true; id: string }>(response);
+}
+
+export async function listCloudTrash() {
+  const response = await authenticatedFetch("/api/admin/trash");
+  return cloudResponse<{ items: TrashedClientProfile[]; retentionDays: number }>(response);
+}
+
+export async function restoreCloudTrashProfile(id: string) {
+  const response = await authenticatedFetch(`/api/admin/trash/${encodeURIComponent(id)}/restore`, {
+    method: "POST",
+  });
+  return cloudResponse<{ ok: true; profile: ClientProfile }>(response);
+}
+
+export async function purgeCloudTrashProfile(id: string, confirmation: string) {
+  const query = new URLSearchParams({ confirmation });
+  const response = await authenticatedFetch(
+    `/api/admin/trash/${encodeURIComponent(id)}?${query.toString()}`,
+    { method: "DELETE" },
+  );
+  return cloudResponse<{ ok: true; id: string; deletedObjects: number }>(response);
 }
 
 export async function putCloudProfile(endpoint: string, token: string, profile: ClientProfile) {

@@ -80,6 +80,8 @@ const eventLabels: Record<string, string> = {
   client_created: "Client créé",
   client_updated: "Client modifié",
   client_deleted: "Client supprimé",
+  client_trash_restored: "Client restauré depuis la corbeille",
+  client_trash_purged: "Client supprimé définitivement",
   client_version_restored: "Version client restaurée",
   client_backup_restored: "Base clients restaurée",
 };

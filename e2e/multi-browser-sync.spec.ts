@@ -152,6 +152,9 @@ class SharedClientApi {
     if (url.pathname.startsWith("/api/admin/")) {
       if (user.role !== "admin")
         return this.respond(route, 403, { error: "Droits administrateur requis." });
+      if (url.pathname === "/api/admin/trash" && method === "GET") {
+        return this.respond(route, 200, { items: [], retentionDays: 30 });
+      }
       if (url.pathname === "/api/admin/users" && method === "GET") {
         return this.respond(route, 200, {
           users: Object.values(USERS).map((managedUser) => ({
@@ -519,6 +522,11 @@ test("deux navigateurs partagent un client et protègent une modification concur
       adminPage.getByText(/Nouveau profil sauvegardé localement et dans R2/),
     ).toBeVisible();
     expect(api.profiles.get(profileId)?.createdBy.username).toBe("admin");
+    await adminPage.getByRole("button", { name: "Base de données", exact: true }).click();
+    const adminDatabase = adminPage.getByRole("dialog", { name: /Base de données clients/ });
+    await expect(adminDatabase.getByText("Corbeille sécurisée")).toBeVisible();
+    await expect(adminDatabase.getByText("La corbeille est vide.")).toBeVisible();
+    await adminDatabase.getByRole("button", { name: "Close" }).click();
     await expect(adminPage.getByText("Travail enregistré")).toBeVisible();
     await adminPage.reload();
     await expect(adminPage.getByRole("button", { name: "Sauvegarder", exact: true })).toBeVisible();

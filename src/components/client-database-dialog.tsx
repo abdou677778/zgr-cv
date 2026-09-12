@@ -10,12 +10,16 @@ import {
   ExternalLink,
   GitCompareArrows,
   History,
+  LockKeyhole,
   LoaderCircle,
   PencilLine,
   RefreshCw,
   RotateCcw,
   Search,
+  Send,
+  ShieldCheck,
   Trash2,
+  UnlockKeyhole,
   UserRoundPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,11 +48,13 @@ import {
   restoreCloudProfileVersion,
   saveClientProfile,
   synchronizeClientProfiles,
+  updateCloudProfileWorkflow,
   type ClientProfile,
   type ClientProfileSummary,
   type CloudProfilePagination,
   type CloudProfileVersion,
   type TrashedClientProfile,
+  type ClientWorkflowStatus,
 } from "@/lib/client-profile-db";
 import { CLIENTS_API_ENDPOINT, getAdminSession, type SessionUser } from "@/lib/auth-client";
 
@@ -126,6 +132,7 @@ const COMPARISON_LABELS: Record<string, string> = {
   name: "Nom du profil",
   phone: "Téléphone du profil",
   language: "Langue active",
+  workflowStatus: "Statut de validation",
 };
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -146,12 +153,35 @@ const COMPARISON_IGNORED_FIELDS = new Set([
   "updatedBy",
   "restoredFromRevision",
   "restoredFromTrash",
+  "workflowUpdatedAt",
+  "workflowUpdatedBy",
   "photoAsset",
   "photo",
   "dataUrl",
   "id",
 ]);
 const COMPARISON_ROOT_IGNORED_FIELDS = new Set(["name", "email", "phone"]);
+
+const WORKFLOW_LABELS: Record<
+  ClientWorkflowStatus,
+  { label: string; classes: string; description: string }
+> = {
+  draft: {
+    label: "Brouillon",
+    classes: "border-slate-200 bg-slate-100 text-slate-700",
+    description: "Modifiable par les éditeurs.",
+  },
+  review: {
+    label: "À valider",
+    classes: "border-amber-200 bg-amber-100 text-amber-800",
+    description: "En attente de validation administrateur.",
+  },
+  approved: {
+    label: "Validé",
+    classes: "border-emerald-200 bg-emerald-100 text-emerald-800",
+    description: "Verrouillé contre les modifications.",
+  },
+};
 
 function comparisonLabel(key: string) {
   if (LANGUAGE_LABELS[key]) return LANGUAGE_LABELS[key];
@@ -163,6 +193,8 @@ function comparisonLabel(key: string) {
 function comparisonText(value: unknown) {
   if (value === null || value === undefined || value === "") return "Vide";
   if (typeof value === "boolean") return value ? "Oui" : "Non";
+  if (typeof value === "string" && value in WORKFLOW_LABELS)
+    return WORKFLOW_LABELS[value as ClientWorkflowStatus].label;
   return String(value)
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
@@ -558,6 +590,49 @@ export function ClientDatabaseDialog({
     }
   };
 
+  const changeWorkflow = async (profile: ClientProfileSummary, status: ClientWorkflowStatus) => {
+    const action =
+      status === "review"
+        ? "soumettre ce CV à validation"
+        : status === "approved"
+          ? "valider et verrouiller ce CV"
+          : "repasser ce CV en brouillon";
+    if (!confirm(`Voulez-vous ${action} pour « ${profile.name} » ?`)) return;
+    setBusy(`workflow:${profile.id}:${status}`);
+    setMessage("");
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const result = await updateCloudProfileWorkflow(
+        CLIENTS_API_ENDPOINT,
+        token,
+        profile.id,
+        status,
+        profile.revision ?? 0,
+      );
+      await saveClientProfile(result.profile);
+      if (activeProfileId === profile.id) onOpenProfile(result.profile);
+      if (historyProfileId === profile.id) {
+        const history = await listCloudProfileVersions(CLIENTS_API_ENDPOINT, token, profile.id);
+        setHistoryVersions(history.versions);
+        setProfileComparison(null);
+      }
+      await loadPage(true);
+      setMessage(
+        status === "review"
+          ? `« ${profile.name} » est maintenant en attente de validation.`
+          : status === "approved"
+            ? `« ${profile.name} » est validé et verrouillé.`
+            : `« ${profile.name} » est de nouveau modifiable en brouillon.`,
+      );
+    } catch (error) {
+      await loadPage(true);
+      setMessage(error instanceof Error ? error.message : "Changement de statut impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const acceptCloudVersion = async (profile: ClientProfileSummary) => {
     if (
       !confirm(
@@ -819,329 +894,425 @@ export function ClientDatabaseDialog({
                 </div>
               ) : (
                 <div className="divide-y">
-                  {profiles.map((profile) => (
-                    <article
-                      key={profile.id}
-                      className={`space-y-3 p-4 ${activeProfileId === profile.id ? "bg-primary/5" : "bg-background"}`}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <h3 className="font-semibold">{profile.name || "Profil sans nom"}</h3>
-                          <p className="font-mono text-xs text-muted-foreground">{profile.id}</p>
-                          <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                            Révision serveur {profile.revision ?? 0}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {profile.email || profile.phone || "Coordonnées non renseignées"} · Mis
-                            à jour {new Date(profile.updatedAt).toLocaleString("fr-DZ")}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
-                            <span className="inline-flex items-center gap-1.5">
-                              <UserRoundPlus className="h-3.5 w-3.5 text-emerald-600" />
-                              Créé par {profile.createdBy?.displayName || "non enregistré"}
-                              {profile.createdBy?.username
-                                ? ` (${profile.createdBy.username})`
-                                : ""}
-                            </span>
-                            <span className="inline-flex items-center gap-1.5">
-                              <PencilLine className="h-3.5 w-3.5 text-violet-600" />
-                              Modifié par {profile.updatedBy?.displayName || "non enregistré"}
-                              {profile.updatedBy?.username
-                                ? ` (${profile.updatedBy.username})`
-                                : ""}
-                            </span>
+                  {profiles.map((profile) => {
+                    const workflowStatus = profile.workflowStatus ?? "draft";
+                    const workflow = WORKFLOW_LABELS[workflowStatus];
+                    const locked = workflowStatus === "approved";
+                    return (
+                      <article
+                        key={profile.id}
+                        className={`space-y-3 p-4 ${activeProfileId === profile.id ? "bg-primary/5" : "bg-background"}`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <h3 className="font-semibold">{profile.name || "Profil sans nom"}</h3>
+                            <p className="font-mono text-xs text-muted-foreground">{profile.id}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                                Révision serveur {profile.revision ?? 0}
+                              </span>
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${workflow.classes}`}
+                                title={workflow.description}
+                              >
+                                {locked ? (
+                                  <LockKeyhole className="h-2.5 w-2.5" />
+                                ) : workflowStatus === "review" ? (
+                                  <Send className="h-2.5 w-2.5" />
+                                ) : null}
+                                {workflow.label}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {profile.email || profile.phone || "Coordonnées non renseignées"} ·
+                              Mis à jour {new Date(profile.updatedAt).toLocaleString("fr-DZ")}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                              <span className="inline-flex items-center gap-1.5">
+                                <UserRoundPlus className="h-3.5 w-3.5 text-emerald-600" />
+                                Créé par {profile.createdBy?.displayName || "non enregistré"}
+                                {profile.createdBy?.username
+                                  ? ` (${profile.createdBy.username})`
+                                  : ""}
+                              </span>
+                              <span className="inline-flex items-center gap-1.5">
+                                <PencilLine className="h-3.5 w-3.5 text-violet-600" />
+                                Modifié par {profile.updatedBy?.displayName || "non enregistré"}
+                                {profile.updatedBy?.username
+                                  ? ` (${profile.updatedBy.username})`
+                                  : ""}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                        {activeProfileId === profile.id && (
-                          <span className="rounded-full bg-primary px-2 py-1 text-[11px] text-primary-foreground">
-                            Profil ouvert
-                          </span>
-                        )}
-                        {profile.hasPhoto && (
-                          <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700">
-                            Photo WebP
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => void openProfile(profile)}
-                          disabled={Boolean(busy)}
-                        >
-                          {busy === profile.id && (
-                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          {activeProfileId === profile.id && (
+                            <span className="rounded-full bg-primary px-2 py-1 text-[11px] text-primary-foreground">
+                              Profil ouvert
+                            </span>
                           )}
-                          <ExternalLink className="mr-2 h-4 w-4" />{" "}
-                          {canWrite ? "Ouvrir et modifier" : "Ouvrir en lecture"}
-                        </Button>
-                        {canDownload && (
+                          {profile.hasPhoto && (
+                            <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700">
+                              Photo WebP
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
-                            onClick={() => void download(profile)}
+                            onClick={() => void openProfile(profile)}
                             disabled={Boolean(busy)}
                           >
-                            {busy === `pdf:${profile.id}` ? (
+                            {busy === profile.id && (
                               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Download className="mr-2 h-4 w-4" />
                             )}
-                            Télécharger PDF
+                            <ExternalLink className="mr-2 h-4 w-4" />{" "}
+                            {canWrite && !locked ? "Ouvrir et modifier" : "Ouvrir en lecture"}
                           </Button>
-                        )}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void toggleHistory(profile)}
-                          disabled={Boolean(busy)}
-                        >
-                          {busy === `history:${profile.id}` ? (
-                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <History className="mr-2 h-4 w-4" />
-                          )}
-                          Historique
-                        </Button>
-                        {canDelete && (
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Supprimer ${profile.name}`}
-                            onClick={() => void remove(profile)}
-                            disabled={Boolean(busy)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
-                      </div>
-                      {historyProfileId === profile.id && (
-                        <section className="space-y-3 rounded-md border bg-slate-50 p-3">
-                          <div>
-                            <p className="text-xs font-semibold text-slate-800">
-                              Timeline des modifications
-                            </p>
-                            <p className="mt-0.5 text-[11px] text-muted-foreground">
-                              Consultez l’auteur de chaque version et comparez précisément les
-                              changements.
-                            </p>
-                          </div>
-
-                          {historyVersions.length > 1 && (
-                            <div className="rounded-md border bg-white p-3">
-                              <p className="flex items-center gap-2 text-xs font-semibold text-slate-800">
-                                <GitCompareArrows className="h-3.5 w-3.5 text-primary" /> Comparer
-                                deux révisions
-                              </p>
-                              <div className="mt-2 grid items-end gap-2 sm:grid-cols-[1fr_auto_1fr_auto]">
-                                <label className="space-y-1 text-[10px] font-medium text-slate-600">
-                                  Version de départ
-                                  <select
-                                    aria-label="Version de départ"
-                                    className="h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground"
-                                    value={comparisonFrom}
-                                    onChange={(event) => {
-                                      setComparisonFrom(Number(event.target.value));
-                                      setProfileComparison(null);
-                                    }}
-                                  >
-                                    {historyVersions.map((version) => (
-                                      <option key={version.revision} value={version.revision}>
-                                        Révision {version.revision}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <span className="hidden pb-2 text-slate-400 sm:block">→</span>
-                                <label className="space-y-1 text-[10px] font-medium text-slate-600">
-                                  Version d’arrivée
-                                  <select
-                                    aria-label="Version d’arrivée"
-                                    className="h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground"
-                                    value={comparisonTo}
-                                    onChange={(event) => {
-                                      setComparisonTo(Number(event.target.value));
-                                      setProfileComparison(null);
-                                    }}
-                                  >
-                                    {historyVersions.map((version) => (
-                                      <option key={version.revision} value={version.revision}>
-                                        Révision {version.revision}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-8"
-                                  disabled={Boolean(busy) || comparisonFrom === comparisonTo}
-                                  onClick={() => void compareHistoryVersions(profile)}
-                                >
-                                  {busy === `compare:${profile.id}` ? (
-                                    <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <GitCompareArrows className="mr-1.5 h-3.5 w-3.5" />
-                                  )}
-                                  Comparer
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-
-                          {profileComparison && (
-                            <section
-                              aria-label="Résultat de la comparaison"
-                              className="rounded-md border border-sky-200 bg-sky-50/70 p-3"
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-xs font-semibold text-sky-950">
-                                  Révision {profileComparison.fromRevision} → révision{" "}
-                                  {profileComparison.toRevision}
-                                </p>
-                                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-sky-800">
-                                  {profileComparison.differences.length} changement(s)
-                                </span>
-                              </div>
-                              {profileComparison.differences.length ? (
-                                <div className="mt-2 max-h-80 space-y-2 overflow-y-auto pr-1">
-                                  {profileComparison.differences.map((difference) => (
-                                    <article
-                                      key={difference.key}
-                                      className="rounded border bg-white p-2"
-                                    >
-                                      <p className="text-[10px] font-semibold text-slate-700">
-                                        {difference.label}
-                                      </p>
-                                      <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
-                                        <div className="rounded bg-red-50 px-2 py-1.5">
-                                          <span className="text-[9px] font-bold uppercase tracking-wide text-red-700">
-                                            Avant
-                                          </span>
-                                          <p className="mt-0.5 whitespace-pre-wrap break-words text-[10px] text-slate-700">
-                                            {difference.before}
-                                          </p>
-                                        </div>
-                                        <div className="rounded bg-emerald-50 px-2 py-1.5">
-                                          <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-700">
-                                            Après
-                                          </span>
-                                          <p className="mt-0.5 whitespace-pre-wrap break-words text-[10px] text-slate-700">
-                                            {difference.after}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </article>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="mt-2 rounded bg-white px-3 py-2 text-xs text-slate-600">
-                                  Aucun changement de contenu détecté entre ces deux versions.
-                                </p>
-                              )}
-                            </section>
-                          )}
-
-                          <div className="space-y-0">
-                            {historyVersions.map((version, index) => {
-                              const current = version.revision === (profile.revision ?? 0);
-                              const oldest = index === historyVersions.length - 1;
-                              const eventName = oldest
-                                ? "Création du client"
-                                : version.restoredFromRevision
-                                  ? `Restauration de la révision ${version.restoredFromRevision}`
-                                  : "Modification du client";
-                              return (
-                                <div
-                                  key={version.revision}
-                                  className="relative border-l-2 border-slate-200 pb-3 pl-4 last:pb-0"
-                                >
-                                  <span
-                                    className={`absolute -left-[5px] top-1 h-2 w-2 rounded-full ring-2 ring-slate-50 ${current ? "bg-emerald-500" : "bg-slate-400"}`}
-                                  />
-                                  <div className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-3 py-2 text-xs">
-                                    <div>
-                                      <span className="font-semibold">
-                                        Révision {version.revision}
-                                      </span>
-                                      {current && (
-                                        <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                                          Actuelle
-                                        </span>
-                                      )}
-                                      <p className="mt-0.5 text-[10px] font-medium text-slate-600">
-                                        {eventName}
-                                      </p>
-                                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                        {new Date(version.updatedAt).toLocaleString("fr-DZ")} ·{" "}
-                                        {version.updatedBy?.displayName || "Auteur non enregistré"}
-                                      </p>
-                                    </div>
-                                    {!current && canRestore && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          void restoreVersion(profile, version.revision)
-                                        }
-                                        disabled={Boolean(busy)}
-                                      >
-                                        {busy === `restore:${profile.id}:${version.revision}` ? (
-                                          <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                          <RotateCcw className="mr-2 h-3.5 w-3.5" />
-                                        )}
-                                        Restaurer
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      )}
-                      {conflictIds.includes(profile.id) && (
-                        <div className="rounded-md border border-red-200 bg-red-50 p-3">
-                          <p className="text-xs font-semibold text-red-800">
-                            Conflit détecté : aucun changement n’a été écrasé.
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
+                          {canDownload && (
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={() => void acceptCloudVersion(profile)}
+                              onClick={() => void download(profile)}
                               disabled={Boolean(busy)}
                             >
-                              {busy === `cloud-version:${profile.id}` && (
+                              {busy === `pdf:${profile.id}` ? (
                                 <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="mr-2 h-4 w-4" />
                               )}
-                              Utiliser la version partagée
+                              Télécharger PDF
                             </Button>
-                            {canWrite && (
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleHistory(profile)}
+                            disabled={Boolean(busy)}
+                          >
+                            {busy === `history:${profile.id}` ? (
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <History className="mr-2 h-4 w-4" />
+                            )}
+                            Historique
+                          </Button>
+                          {canWrite && workflowStatus === "draft" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void changeWorkflow(profile, "review")}
+                              disabled={Boolean(busy)}
+                            >
+                              {busy === `workflow:${profile.id}:review` ? (
+                                <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Send className="mr-2 h-3.5 w-3.5" />
+                              )}
+                              Soumettre
+                            </Button>
+                          )}
+                          {canWrite && workflowStatus === "review" && user.role !== "admin" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void changeWorkflow(profile, "draft")}
+                              disabled={Boolean(busy)}
+                            >
+                              <UnlockKeyhole className="mr-2 h-3.5 w-3.5" /> Retirer de la
+                              validation
+                            </Button>
+                          )}
+                          {user.role === "admin" && workflowStatus === "review" && (
+                            <>
                               <Button
                                 type="button"
                                 size="sm"
-                                onClick={() => void publishLocalVersion(profile)}
+                                onClick={() => void changeWorkflow(profile, "approved")}
                                 disabled={Boolean(busy)}
                               >
-                                {busy === `publish-local:${profile.id}` && (
+                                {busy === `workflow:${profile.id}:approved` ? (
+                                  <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                                )}
+                                Valider
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void changeWorkflow(profile, "draft")}
+                                disabled={Boolean(busy)}
+                              >
+                                <UnlockKeyhole className="mr-2 h-3.5 w-3.5" /> Repasser en brouillon
+                              </Button>
+                            </>
+                          )}
+                          {user.role === "admin" && workflowStatus === "approved" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void changeWorkflow(profile, "draft")}
+                              disabled={Boolean(busy)}
+                            >
+                              {busy === `workflow:${profile.id}:draft` ? (
+                                <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <UnlockKeyhole className="mr-2 h-3.5 w-3.5" />
+                              )}
+                              Rouvrir
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Supprimer ${profile.name}`}
+                              onClick={() => void remove(profile)}
+                              disabled={Boolean(busy)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                        {historyProfileId === profile.id && (
+                          <section className="space-y-3 rounded-md border bg-slate-50 p-3">
+                            <div>
+                              <p className="text-xs font-semibold text-slate-800">
+                                Timeline des modifications
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                Consultez l’auteur de chaque version et comparez précisément les
+                                changements.
+                              </p>
+                            </div>
+
+                            {historyVersions.length > 1 && (
+                              <div className="rounded-md border bg-white p-3">
+                                <p className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                                  <GitCompareArrows className="h-3.5 w-3.5 text-primary" /> Comparer
+                                  deux révisions
+                                </p>
+                                <div className="mt-2 grid items-end gap-2 sm:grid-cols-[1fr_auto_1fr_auto]">
+                                  <label className="space-y-1 text-[10px] font-medium text-slate-600">
+                                    Version de départ
+                                    <select
+                                      aria-label="Version de départ"
+                                      className="h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground"
+                                      value={comparisonFrom}
+                                      onChange={(event) => {
+                                        setComparisonFrom(Number(event.target.value));
+                                        setProfileComparison(null);
+                                      }}
+                                    >
+                                      {historyVersions.map((version) => (
+                                        <option key={version.revision} value={version.revision}>
+                                          Révision {version.revision}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <span className="hidden pb-2 text-slate-400 sm:block">→</span>
+                                  <label className="space-y-1 text-[10px] font-medium text-slate-600">
+                                    Version d’arrivée
+                                    <select
+                                      aria-label="Version d’arrivée"
+                                      className="h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground"
+                                      value={comparisonTo}
+                                      onChange={(event) => {
+                                        setComparisonTo(Number(event.target.value));
+                                        setProfileComparison(null);
+                                      }}
+                                    >
+                                      {historyVersions.map((version) => (
+                                        <option key={version.revision} value={version.revision}>
+                                          Révision {version.revision}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-8"
+                                    disabled={Boolean(busy) || comparisonFrom === comparisonTo}
+                                    onClick={() => void compareHistoryVersions(profile)}
+                                  >
+                                    {busy === `compare:${profile.id}` ? (
+                                      <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <GitCompareArrows className="mr-1.5 h-3.5 w-3.5" />
+                                    )}
+                                    Comparer
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
+                            {profileComparison && (
+                              <section
+                                aria-label="Résultat de la comparaison"
+                                className="rounded-md border border-sky-200 bg-sky-50/70 p-3"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-sky-950">
+                                    Révision {profileComparison.fromRevision} → révision{" "}
+                                    {profileComparison.toRevision}
+                                  </p>
+                                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-sky-800">
+                                    {profileComparison.differences.length} changement(s)
+                                  </span>
+                                </div>
+                                {profileComparison.differences.length ? (
+                                  <div className="mt-2 max-h-80 space-y-2 overflow-y-auto pr-1">
+                                    {profileComparison.differences.map((difference) => (
+                                      <article
+                                        key={difference.key}
+                                        className="rounded border bg-white p-2"
+                                      >
+                                        <p className="text-[10px] font-semibold text-slate-700">
+                                          {difference.label}
+                                        </p>
+                                        <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                                          <div className="rounded bg-red-50 px-2 py-1.5">
+                                            <span className="text-[9px] font-bold uppercase tracking-wide text-red-700">
+                                              Avant
+                                            </span>
+                                            <p className="mt-0.5 whitespace-pre-wrap break-words text-[10px] text-slate-700">
+                                              {difference.before}
+                                            </p>
+                                          </div>
+                                          <div className="rounded bg-emerald-50 px-2 py-1.5">
+                                            <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                                              Après
+                                            </span>
+                                            <p className="mt-0.5 whitespace-pre-wrap break-words text-[10px] text-slate-700">
+                                              {difference.after}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </article>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="mt-2 rounded bg-white px-3 py-2 text-xs text-slate-600">
+                                    Aucun changement de contenu détecté entre ces deux versions.
+                                  </p>
+                                )}
+                              </section>
+                            )}
+
+                            <div className="space-y-0">
+                              {historyVersions.map((version, index) => {
+                                const current = version.revision === (profile.revision ?? 0);
+                                const oldest = index === historyVersions.length - 1;
+                                const olderStatus = historyVersions[index + 1]?.workflowStatus;
+                                const eventName = oldest
+                                  ? "Création du client"
+                                  : version.restoredFromRevision
+                                    ? `Restauration de la révision ${version.restoredFromRevision}`
+                                    : version.workflowStatus !== olderStatus
+                                      ? version.workflowStatus === "approved"
+                                        ? "CV validé et verrouillé"
+                                        : version.workflowStatus === "review"
+                                          ? "CV soumis à validation"
+                                          : "CV repassé en brouillon"
+                                      : "Modification du client";
+                                return (
+                                  <div
+                                    key={version.revision}
+                                    className="relative border-l-2 border-slate-200 pb-3 pl-4 last:pb-0"
+                                  >
+                                    <span
+                                      className={`absolute -left-[5px] top-1 h-2 w-2 rounded-full ring-2 ring-slate-50 ${current ? "bg-emerald-500" : "bg-slate-400"}`}
+                                    />
+                                    <div className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-3 py-2 text-xs">
+                                      <div>
+                                        <span className="font-semibold">
+                                          Révision {version.revision}
+                                        </span>
+                                        {current && (
+                                          <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                                            Actuelle
+                                          </span>
+                                        )}
+                                        <p className="mt-0.5 text-[10px] font-medium text-slate-600">
+                                          {eventName}
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                          {new Date(version.updatedAt).toLocaleString("fr-DZ")} ·{" "}
+                                          {version.updatedBy?.displayName ||
+                                            "Auteur non enregistré"}
+                                        </p>
+                                      </div>
+                                      {!current && canRestore && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() =>
+                                            void restoreVersion(profile, version.revision)
+                                          }
+                                          disabled={Boolean(busy)}
+                                        >
+                                          {busy === `restore:${profile.id}:${version.revision}` ? (
+                                            <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                          ) : (
+                                            <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                                          )}
+                                          Restaurer
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </section>
+                        )}
+                        {conflictIds.includes(profile.id) && (
+                          <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                            <p className="text-xs font-semibold text-red-800">
+                              Conflit détecté : aucun changement n’a été écrasé.
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void acceptCloudVersion(profile)}
+                                disabled={Boolean(busy)}
+                              >
+                                {busy === `cloud-version:${profile.id}` && (
                                   <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                                 )}
-                                Publier ma version locale
+                                Utiliser la version partagée
                               </Button>
-                            )}
+                              {canWrite && !locked && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => void publishLocalVersion(profile)}
+                                  disabled={Boolean(busy)}
+                                >
+                                  {busy === `publish-local:${profile.id}` && (
+                                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                                  )}
+                                  Publier ma version locale
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </article>
-                  ))}
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </div>

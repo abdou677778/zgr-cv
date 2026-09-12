@@ -20,6 +20,7 @@ import {
   Download,
   RotateCcw,
   LoaderCircle,
+  LockKeyhole,
   Upload,
   Languages,
   Archive,
@@ -139,7 +140,9 @@ import {
 import {
   applyCloudCommit,
   CloudProfileConflictError,
+  CloudProfileLockedError,
   flushCloudProfileQueue,
+  getCloudProfile,
   getClientProfile,
   getWorkspaceDraft,
   listQueuedCloudProfiles,
@@ -150,6 +153,7 @@ import {
   saveClientProfile,
   saveWorkspaceDraft,
   type ClientProfile,
+  type ClientWorkflowStatus,
   type WorkspaceDraft,
 } from "@/lib/client-profile-db";
 import { importClientOrderJson, type ClientOrderSummary } from "@/lib/client-orders";
@@ -574,6 +578,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [clientDatabaseOpen, setClientDatabaseOpen] = useState(false);
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [activeProfileWorkflowStatus, setActiveProfileWorkflowStatus] =
+    useState<ClientWorkflowStatus>("draft");
   const [activeClientOrder, setActiveClientOrder] = useState<ClientOrderSummary | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [clientSyncStatus, setClientSyncStatus] = useState<ClientSyncStatus>({
@@ -593,6 +599,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const queueFlushRef = useRef(false);
   const cv = cvByLanguage[language];
   const canWriteClients = user.permissions.clientsWrite;
+  const profileEditingLocked =
+    Boolean(activeProfileId) && activeProfileWorkflowStatus === "approved";
   const draftPayload = useMemo<WorkspaceDraftPayload>(
     () => ({
       activeProfileId,
@@ -716,7 +724,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try {
       const result = await flushCloudProfileQueue(CLIENTS_API_ENDPOINT, token);
       setPendingCloudCount(result.pending);
-      if (result.conflicts) {
+      if (result.locked) {
+        setClientSyncStatus({
+          state: "synced",
+          message: `${result.locked} CV validé(s) ont été rechargés en lecture seule ; les changements hors ligne n’ont pas été publiés.`,
+        });
+      } else if (result.conflicts) {
         setClientSyncStatus({
           state: "conflict",
           message: `${result.conflicts} sauvegarde(s) en attente nécessitent une résolution manuelle.`,
@@ -745,6 +758,22 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       queueFlushRef.current = false;
     }
   }, [canWriteClients]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeProfileId) {
+      setActiveProfileWorkflowStatus("draft");
+      return () => {
+        cancelled = true;
+      };
+    }
+    void getClientProfile(activeProfileId).then((profile) => {
+      if (!cancelled) setActiveProfileWorkflowStatus(profile?.workflowStatus ?? "draft");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfileId]);
 
   useEffect(() => {
     const availableTemplates = getTemplates(
@@ -1492,6 +1521,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       });
       return;
     }
+    if (profileEditingLocked) {
+      setClientSyncStatus({
+        state: "synced",
+        message: "Ce CV validé est verrouillé. Un administrateur doit le rouvrir en brouillon.",
+      });
+      return;
+    }
     if (profileSaving) return;
     setProfileSaving(true);
     setClientSyncStatus({ state: "syncing", message: "Sauvegarde et synchronisation en cours…" });
@@ -1515,6 +1551,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         updatedAt: now,
         createdBy: existing?.createdBy ?? actor,
         updatedBy: actor,
+        workflowStatus: existing?.workflowStatus ?? "draft",
+        workflowUpdatedAt: existing?.workflowUpdatedAt ?? now,
+        workflowUpdatedBy: existing?.workflowUpdatedBy ?? actor,
         language,
         cvByLanguage: structuredClone(cvByLanguage),
         hiddenElements: structuredClone(hiddenElements),
@@ -1549,7 +1588,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           });
         } catch (error) {
           cloudError = error instanceof Error ? error.message : "synchronisation R2 impossible";
-          if (error instanceof CloudProfileConflictError) {
+          if (error instanceof CloudProfileLockedError) {
+            const shared = await getCloudProfile(CLIENTS_API_ENDPOINT, token, profile.id);
+            await saveClientProfile(shared);
+            await removeQueuedCloudProfile(profile.id);
+            setPendingCloudCount((await listQueuedCloudProfiles()).length);
+            openClientProfile(shared);
+            setClientSyncStatus({
+              state: "synced",
+              message: "La version validée a été rechargée. Elle est verrouillée en lecture seule.",
+            });
+          } else if (error instanceof CloudProfileConflictError) {
             const editor = error.current?.updatedBy?.displayName;
             setClientSyncStatus({
               state: "conflict",
@@ -1645,6 +1694,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setActiveDesignerPresetId(null);
     resetBaselineRef.current = true;
     setActiveProfileId(profile.id);
+    setActiveProfileWorkflowStatus(profile.workflowStatus ?? "draft");
     setClientSyncStatus({
       state: profile.revision ? "synced" : "local",
       message: profile.revision
@@ -2459,14 +2509,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               variant="outline"
               size="sm"
               className="border-emerald-200 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100"
-              disabled={profileSaving || !canWriteClients}
+              disabled={profileSaving || !canWriteClients || profileEditingLocked}
               onClick={() => void saveCurrentClient()}
               title={
                 !canWriteClients
                   ? "Mode lecture seule : sauvegarde cloud interdite"
-                  : activeProfileId
-                    ? `Mettre à jour ${activeProfileId}`
-                    : "Créer un profil client"
+                  : profileEditingLocked
+                    ? "CV validé : rouvrez-le en brouillon depuis la base pour le modifier"
+                    : activeProfileId
+                      ? `Mettre à jour ${activeProfileId}`
+                      : "Créer un profil client"
               }
             >
               {profileSaving ? (
@@ -2816,6 +2868,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           suppressions, restaurations et fonctions IA sont désactivées.
         </div>
       )}
+      {profileEditingLocked && (
+        <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-xs font-medium text-emerald-900">
+          <LockKeyhole className="mr-1.5 inline h-3.5 w-3.5" /> CV validé et verrouillé. Il reste
+          consultable et téléchargeable ; un administrateur doit le rouvrir en brouillon pour le
+          modifier.
+        </div>
+      )}
 
       <main
         className={`mx-auto grid min-w-0 gap-6 px-4 py-7 ${
@@ -2828,13 +2887,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       >
         {/* Form */}
         <section
+          aria-disabled={profileEditingLocked}
           className={`zgr-editor-panel min-w-0 space-y-3 rounded-3xl border border-slate-200 bg-slate-100/75 p-3 sm:p-4 ${
             previewVisible && previewFocusMode
               ? "lg:hidden"
               : previewVisible
                 ? ""
                 : "lg:mx-auto lg:w-full lg:max-w-5xl"
-          }`}
+          } ${profileEditingLocked ? "pointer-events-none select-none opacity-65" : ""}`}
         >
           <CvSectionPanel
             id="personal"

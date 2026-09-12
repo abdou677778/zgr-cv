@@ -743,6 +743,161 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(emptyList.deletedProfiles[0].deletedBy, "admin");
 });
 
+test("le workflow verrouille un CV validé jusqu’à sa réouverture par un administrateur", async () => {
+  const env = {
+    CLIENTS_BUCKET: new MemoryR2Bucket(),
+    ADMIN_USERNAME: "admin",
+    ADMIN_PASSWORD: "mot-de-passe-admin-test",
+    SESSION_SECRET: "secret-de-session-de-test-suffisamment-long-1234567890",
+    ALLOWED_ORIGINS: "http://127.0.0.1:8080",
+  };
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const profile = {
+    version: 1,
+    id: "ZGR-20260912-WFLOW1",
+    revision: 0,
+    name: "Client Workflow",
+    email: "workflow@example.com",
+    phone: "+213555400000",
+    createdAt: "2026-09-12T08:00:00.000Z",
+    updatedAt: "2026-09-12T08:00:00.000Z",
+    language: "fr",
+    cvByLanguage: { fr: { nom_complet: "Client Workflow", telephone: "+213555400000" } },
+    hiddenElements: {},
+    documentKind: "cv",
+    templateId: "canadian-v1",
+    templateColors: {},
+  };
+  const createdResponse = await call(
+    env,
+    `/api/clients/${profile.id}`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    }),
+  );
+  assert.equal(createdResponse.status, 200);
+  const created = await createdResponse.json();
+  assert.equal(created.profile.workflowStatus, "draft");
+  assert.equal(created.profile.revision, 1);
+
+  const accountResponse = await call(
+    env,
+    "/api/admin/users",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "workflow-editor",
+        displayName: "Éditeur Workflow",
+        password: "mot-de-passe-workflow",
+        role: "editor",
+      }),
+    }),
+  );
+  assert.equal(accountResponse.status, 201);
+  const editor = await login(env, "workflow-editor", "mot-de-passe-workflow");
+
+  const submittedResponse = await call(
+    env,
+    `/api/clients/${profile.id}/workflow`,
+    authorized(editor.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "review", expectedRevision: 1 }),
+    }),
+  );
+  assert.equal(submittedResponse.status, 200);
+  const submitted = await submittedResponse.json();
+  assert.equal(submitted.profile.workflowStatus, "review");
+  assert.equal(submitted.profile.workflowUpdatedBy.username, "workflow-editor");
+  assert.equal(submitted.profile.revision, 2);
+
+  const forbiddenApproval = await call(
+    env,
+    `/api/clients/${profile.id}/workflow`,
+    authorized(editor.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "approved", expectedRevision: 2 }),
+    }),
+  );
+  assert.equal(forbiddenApproval.status, 403);
+
+  const approvedResponse = await call(
+    env,
+    `/api/clients/${profile.id}/workflow`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "approved", expectedRevision: 2 }),
+    }),
+  );
+  assert.equal(approvedResponse.status, 200);
+  const approved = await approvedResponse.json();
+  assert.equal(approved.profile.workflowStatus, "approved");
+  assert.equal(approved.profile.revision, 3);
+
+  const lockedUpdate = await call(
+    env,
+    `/api/clients/${profile.id}`,
+    authorized(editor.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...approved.profile, phone: "+213555499999" }),
+    }),
+  );
+  assert.equal(lockedUpdate.status, 423);
+  assert.equal((await lockedUpdate.json()).code, "CLIENT_PROFILE_LOCKED");
+  const lockedPhoto = await call(
+    env,
+    `/api/clients/${profile.id}/photo`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "image/webp", "X-Profile-Revision": "3" },
+      body: new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]),
+    }),
+  );
+  assert.equal(lockedPhoto.status, 423);
+  const lockedRestore = await call(
+    env,
+    `/api/clients/${profile.id}/versions/1/restore`,
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision: 3 }),
+    }),
+  );
+  assert.equal(lockedRestore.status, 423);
+
+  const reopenedResponse = await call(
+    env,
+    `/api/clients/${profile.id}/workflow`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "draft", expectedRevision: 3 }),
+    }),
+  );
+  assert.equal(reopenedResponse.status, 200);
+  const reopened = await reopenedResponse.json();
+  assert.equal(reopened.profile.workflowStatus, "draft");
+  assert.equal(reopened.profile.revision, 4);
+
+  const editableAgain = await call(
+    env,
+    `/api/clients/${profile.id}`,
+    authorized(editor.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...reopened.profile, phone: "+213555411111" }),
+    }),
+  );
+  assert.equal(editableAgain.status, 200);
+  assert.equal((await editableAgain.json()).profile.revision, 5);
+});
+
 test("la supervision agrège uniquement des métriques techniques anonymes", async () => {
   const env = {
     CLIENTS_BUCKET: new MemoryR2Bucket(),

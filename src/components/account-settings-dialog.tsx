@@ -82,6 +82,10 @@ const eventLabels: Record<string, string> = {
   client_deleted: "Client supprimé",
   client_trash_restored: "Client restauré depuis la corbeille",
   client_trash_purged: "Client supprimé définitivement",
+  client_workflow_submitted: "CV soumis à validation",
+  client_workflow_approved: "CV validé et verrouillé",
+  client_workflow_reopened: "CV rouvert en brouillon",
+  client_workflow_withdrawn: "Validation du CV retirée",
   client_version_restored: "Version client restaurée",
   client_backup_restored: "Base clients restaurée",
 };

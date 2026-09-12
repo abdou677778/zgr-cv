@@ -21,6 +21,9 @@ type StoredProfile = Record<string, unknown> & {
   updatedAt: string;
   createdBy: Pick<TestUser, "username" | "displayName" | "role">;
   updatedBy: Pick<TestUser, "username" | "displayName" | "role">;
+  workflowStatus?: "draft" | "review" | "approved";
+  workflowUpdatedAt?: string;
+  workflowUpdatedBy?: Pick<TestUser, "username" | "displayName" | "role">;
 };
 
 const USERS: Record<string, TestUser> = {
@@ -99,6 +102,9 @@ class SharedClientApi {
       updatedAt: profile.updatedAt,
       createdBy: profile.createdBy,
       updatedBy: profile.updatedBy,
+      workflowStatus: profile.workflowStatus ?? "draft",
+      workflowUpdatedAt: profile.workflowUpdatedAt,
+      workflowUpdatedBy: profile.workflowUpdatedBy,
       language: profile.language,
       hasPhoto: false,
     };
@@ -364,6 +370,7 @@ class SharedClientApi {
           revision: version.revision,
           updatedAt: version.updatedAt,
           updatedBy: version.updatedBy,
+          workflowStatus: version.workflowStatus ?? "draft",
           hasPhoto: false,
         }));
       return this.respond(route, 200, {
@@ -371,6 +378,59 @@ class SharedClientApi {
         currentRevision: profile.revision,
         versions,
       });
+    }
+
+    const workflowMatch = url.pathname.match(/^\/api\/clients\/([^/]+)\/workflow$/);
+    if (workflowMatch && method === "PUT") {
+      const id = decodeURIComponent(workflowMatch[1]);
+      const current = this.profiles.get(id);
+      if (!current) return this.respond(route, 404, { error: "Profil de test introuvable." });
+      const input = request.postDataJSON() as {
+        status?: "draft" | "review" | "approved";
+        expectedRevision?: number;
+      };
+      if (input.expectedRevision !== current.revision) {
+        return this.respond(route, 409, {
+          error: "Ce profil a été modifié dans une autre session.",
+          code: "CLIENT_PROFILE_CONFLICT",
+          current: {
+            revision: current.revision,
+            updatedAt: current.updatedAt,
+            updatedBy: current.updatedBy,
+          },
+        });
+      }
+      if (!input.status) return this.respond(route, 422, { error: "Statut invalide." });
+      const currentStatus = current.workflowStatus ?? "draft";
+      const adminTransition =
+        user.role === "admin" &&
+        ((currentStatus === "draft" && input.status === "review") ||
+          (currentStatus === "review" &&
+            (input.status === "draft" || input.status === "approved")) ||
+          (currentStatus === "approved" && input.status === "draft"));
+      const editorTransition =
+        user.role === "editor" &&
+        ((currentStatus === "draft" && input.status === "review") ||
+          (currentStatus === "review" && input.status === "draft"));
+      if (!adminTransition && !editorTransition) {
+        return this.respond(route, 403, { error: "Droits administrateur requis." });
+      }
+      this.revisionClock += 1;
+      const timestamp = new Date(Date.UTC(2026, 8, 11, 9, 0, this.revisionClock)).toISOString();
+      const updated: StoredProfile = {
+        ...structuredClone(current),
+        revision: current.revision + 1,
+        updatedAt: timestamp,
+        updatedBy: actor(user),
+        workflowStatus: input.status,
+        workflowUpdatedAt: timestamp,
+        workflowUpdatedBy: actor(user),
+      };
+      this.profiles.set(id, updated);
+      const versions = this.profileVersions.get(id) || new Map<number, StoredProfile>();
+      versions.set(updated.revision, structuredClone(updated));
+      this.profileVersions.set(id, versions);
+      return this.respond(route, 200, { ok: true, id, profile: updated });
     }
 
     const match = url.pathname.match(/^\/api\/clients\/([^/]+)(?:\/(photo))?$/);
@@ -392,6 +452,18 @@ class SharedClientApi {
     if (method === "PUT") {
       const candidate = request.postDataJSON() as StoredProfile;
       const current = this.profiles.get(id);
+      if ((current?.workflowStatus ?? "draft") === "approved") {
+        return this.respond(route, 423, {
+          error: "Ce CV est validé et verrouillé.",
+          code: "CLIENT_PROFILE_LOCKED",
+          current: {
+            revision: current?.revision,
+            updatedAt: current?.updatedAt,
+            updatedBy: current?.updatedBy,
+            workflowStatus: "approved",
+          },
+        });
+      }
       if (current && Number(candidate.revision || 0) !== current.revision) {
         return this.respond(route, 409, {
           error: "Ce profil a été modifié dans une autre session.",
@@ -413,6 +485,9 @@ class SharedClientApi {
         updatedAt: timestamp,
         createdBy: current?.createdBy || actor(user),
         updatedBy: actor(user),
+        workflowStatus: current?.workflowStatus ?? candidate.workflowStatus ?? "draft",
+        workflowUpdatedAt: current?.workflowUpdatedAt ?? timestamp,
+        workflowUpdatedBy: current?.workflowUpdatedBy ?? actor(user),
       };
       this.profiles.set(id, committed);
       const versions = this.profileVersions.get(id) || new Map<number, StoredProfile>();
@@ -426,6 +501,9 @@ class SharedClientApi {
           updatedAt: committed.updatedAt,
           createdBy: committed.createdBy,
           updatedBy: committed.updatedBy,
+          workflowStatus: committed.workflowStatus,
+          workflowUpdatedAt: committed.workflowUpdatedAt,
+          workflowUpdatedBy: committed.workflowUpdatedBy,
         },
       });
     }
@@ -621,6 +699,50 @@ test("deux navigateurs partagent un client et protègent une modification concur
     );
     expect(api.profiles.get(profileId)?.phone).toBe("+213 555 300 300");
     expect(api.profiles.get(profileId)?.revision).toBe(3);
+
+    await editorPage.getByRole("button", { name: "Base de données", exact: true }).click();
+    const editorWorkflowDatabase = editorPage.getByRole("dialog", {
+      name: /Base de données clients/,
+    });
+    const editorWorkflowRow = editorWorkflowDatabase
+      .locator("article")
+      .filter({ hasText: "Client E2E partagé" });
+    await expect(editorWorkflowRow.getByText("Brouillon", { exact: true })).toBeVisible();
+    editorPage.once("dialog", (dialog) => dialog.accept());
+    await editorWorkflowRow.getByRole("button", { name: "Soumettre" }).click();
+    await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("review");
+    await expect(editorWorkflowRow.getByText("À valider", { exact: true })).toBeVisible();
+    await editorWorkflowDatabase.getByRole("button", { name: "Close" }).click();
+
+    await adminPage.getByRole("button", { name: "Base de données", exact: true }).click();
+    const adminWorkflowDatabase = adminPage.getByRole("dialog", {
+      name: /Base de données clients/,
+    });
+    const adminWorkflowRow = adminWorkflowDatabase
+      .locator("article")
+      .filter({ hasText: "Client E2E partagé" });
+    await expect(adminWorkflowRow.getByText("À valider", { exact: true })).toBeVisible();
+    adminPage.once("dialog", (dialog) => dialog.accept());
+    await adminWorkflowRow.getByRole("button", { name: "Valider" }).click();
+    await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("approved");
+    await expect(adminWorkflowRow.getByText("Validé", { exact: true })).toBeVisible();
+    await adminWorkflowDatabase.getByRole("button", { name: "Close" }).click();
+
+    await editorPage.getByPlaceholder("+1 514 000 0000").fill("+213 555 888 888");
+    await editorPage.getByRole("button", { name: "Sauvegarder", exact: true }).click();
+    await expect(editorPage.getByText(/CV validé et verrouillé/).first()).toBeVisible();
+    await expect(
+      editorPage.getByRole("button", { name: "Sauvegarder", exact: true }),
+    ).toBeDisabled();
+    expect(api.profiles.get(profileId)?.phone).toBe("+213 555 300 300");
+
+    await adminPage.getByRole("button", { name: "Base de données", exact: true }).click();
+    const reopenDatabase = adminPage.getByRole("dialog", { name: /Base de données clients/ });
+    const reopenRow = reopenDatabase.locator("article").filter({ hasText: "Client E2E partagé" });
+    adminPage.once("dialog", (dialog) => dialog.accept());
+    await reopenRow.getByRole("button", { name: "Rouvrir" }).click();
+    await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("draft");
+    await expect(reopenRow.getByText("Brouillon", { exact: true })).toBeVisible();
   } finally {
     await adminContext.close();
     await editorContext.close();

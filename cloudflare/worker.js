@@ -117,6 +117,10 @@ function normalizeAccountRole(value) {
   return value === "user" ? "editor" : "viewer";
 }
 
+function normalizeClientWorkflowStatus(value) {
+  return value === "review" || value === "approved" ? value : "draft";
+}
+
 function rolePermissions(role) {
   const normalized = normalizeAccountRole(role);
   return {
@@ -1178,6 +1182,13 @@ function profileVersionId(pathname) {
     : null;
 }
 
+function profileWorkflowId(pathname) {
+  const match = pathname.match(/^\/api\/clients\/([^/]+)\/workflow$/);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]).toUpperCase();
+  return ID_PATTERN.test(id) ? id : null;
+}
+
 const profilePhotoKey = (id) => `clients/${id}/photo.webp`;
 const profileDeletedKey = (id) => `clients/${id}.deleted.json`;
 const trashProfilePrefix = (id) => `trash/clients/${id}/`;
@@ -1279,6 +1290,16 @@ async function readR2ProfileIndex(env) {
         createdAt: metadata.createdAt || object.uploaded.toISOString(),
         updatedAt: metadata.updatedAt || object.uploaded.toISOString(),
         language: metadata.language || "fr",
+        workflowStatus: normalizeClientWorkflowStatus(metadata.workflowStatus),
+        workflowUpdatedAt: metadata.workflowUpdatedAt || undefined,
+        workflowUpdatedBy: metadata.workflowUpdatedByUsername
+          ? {
+              username: metadata.workflowUpdatedByUsername,
+              displayName:
+                metadata.workflowUpdatedByDisplayName || metadata.workflowUpdatedByUsername,
+              role: normalizeAccountRole(metadata.workflowUpdatedByRole),
+            }
+          : undefined,
         size: object.size,
         hasPhoto: metadata.hasPhoto === "true",
         createdBy: metadata.createdByUsername
@@ -1308,8 +1329,10 @@ const CLIENT_PROFILE_INDEX_UPSERT = `
   INSERT INTO client_profiles (
     id, revision, name, email, phone, language, created_at, updated_at, size, has_photo,
     created_by_username, created_by_display_name, created_by_role,
-    updated_by_username, updated_by_display_name, updated_by_role
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    updated_by_username, updated_by_display_name, updated_by_role,
+    workflow_status, workflow_updated_at,
+    workflow_updated_by_username, workflow_updated_by_display_name, workflow_updated_by_role
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     revision = excluded.revision,
     name = excluded.name,
@@ -1325,12 +1348,18 @@ const CLIENT_PROFILE_INDEX_UPSERT = `
     created_by_role = excluded.created_by_role,
     updated_by_username = excluded.updated_by_username,
     updated_by_display_name = excluded.updated_by_display_name,
-    updated_by_role = excluded.updated_by_role
+    updated_by_role = excluded.updated_by_role,
+    workflow_status = excluded.workflow_status,
+    workflow_updated_at = excluded.workflow_updated_at,
+    workflow_updated_by_username = excluded.workflow_updated_by_username,
+    workflow_updated_by_display_name = excluded.workflow_updated_by_display_name,
+    workflow_updated_by_role = excluded.workflow_updated_by_role
 `;
 
 function profileIndexBindings(profile, size = 0) {
   const createdBy = storedProfileActor(profile.createdBy);
   const updatedBy = storedProfileActor(profile.updatedBy);
+  const workflowUpdatedBy = storedProfileActor(profile.workflowUpdatedBy);
   return [
     profile.id,
     storedProfileRevision(profile),
@@ -1348,6 +1377,11 @@ function profileIndexBindings(profile, size = 0) {
     updatedBy?.username ?? null,
     updatedBy?.displayName ?? null,
     updatedBy?.role ?? null,
+    normalizeClientWorkflowStatus(profile.workflowStatus),
+    typeof profile.workflowUpdatedAt === "string" ? profile.workflowUpdatedAt.slice(0, 40) : null,
+    workflowUpdatedBy?.username ?? null,
+    workflowUpdatedBy?.displayName ?? null,
+    workflowUpdatedBy?.role ?? null,
   ];
 }
 
@@ -1371,6 +1405,9 @@ function d1ProfileSummary(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     language: row.language || "fr",
+    workflowStatus: normalizeClientWorkflowStatus(row.workflow_status),
+    workflowUpdatedAt: row.workflow_updated_at || undefined,
+    workflowUpdatedBy: d1Actor(row, "workflow_updated"),
     size: Number(row.size) || 0,
     hasPhoto: Number(row.has_photo) === 1,
     createdBy: d1Actor(row, "created"),
@@ -1715,9 +1752,30 @@ function profileConflict(origin, profile) {
   );
 }
 
+function profileLocked(origin, profile) {
+  return json(
+    {
+      error:
+        "Ce CV est validé et verrouillé. Un administrateur doit le repasser en brouillon avant toute modification.",
+      code: "CLIENT_PROFILE_LOCKED",
+      current: profile
+        ? {
+            revision: storedProfileRevision(profile),
+            updatedAt: typeof profile.updatedAt === "string" ? profile.updatedAt : "",
+            updatedBy: storedProfileActor(profile.updatedBy),
+            workflowStatus: normalizeClientWorkflowStatus(profile.workflowStatus),
+          }
+        : undefined,
+    },
+    423,
+    origin,
+  );
+}
+
 function clientProfileMetadata(profile) {
   const creator = storedProfileActor(profile.createdBy);
   const editor = storedProfileActor(profile.updatedBy);
+  const workflowEditor = storedProfileActor(profile.workflowUpdatedBy);
   return {
     id: profile.id,
     revision: String(storedProfileRevision(profile)),
@@ -1728,6 +1786,8 @@ function clientProfileMetadata(profile) {
     createdAt: String(profile.createdAt || profile.updatedAt || "").slice(0, 40),
     updatedAt: String(profile.updatedAt || "").slice(0, 40),
     hasPhoto: profile.photoAsset?.r2Key ? "true" : "false",
+    workflowStatus: normalizeClientWorkflowStatus(profile.workflowStatus),
+    workflowUpdatedAt: String(profile.workflowUpdatedAt || "").slice(0, 40),
     ...(creator
       ? {
           createdByUsername: creator.username,
@@ -1744,6 +1804,13 @@ function clientProfileMetadata(profile) {
       : {}),
     ...(Number.isSafeInteger(profile.restoredFromRevision)
       ? { restoredFromRevision: String(profile.restoredFromRevision) }
+      : {}),
+    ...(workflowEditor
+      ? {
+          workflowUpdatedByUsername: workflowEditor.username,
+          workflowUpdatedByDisplayName: workflowEditor.displayName,
+          workflowUpdatedByRole: workflowEditor.role,
+        }
       : {}),
   };
 }
@@ -2009,6 +2076,7 @@ async function listProfileVersions(env, id, origin) {
             }
           : undefined,
         restoredFromRevision: Number(metadata.restoredFromRevision) || undefined,
+        workflowStatus: normalizeClientWorkflowStatus(metadata.workflowStatus),
         hasPhoto: metadata.hasPhoto === "true",
         size: object.size,
       });
@@ -2057,6 +2125,8 @@ async function restoreProfileVersion(request, env, target, actor, origin, ctx) {
   } catch {
     return json({ error: "Le profil partagé existant est illisible." }, 500, origin);
   }
+  if (normalizeClientWorkflowStatus(current.workflowStatus) === "approved")
+    return profileLocked(origin, current);
   if (storedProfileRevision(current) !== expectedRevision) return profileConflict(origin, current);
   const historicalObject = await env.CLIENTS_BUCKET.get(
     profileVersionKey(target.id, target.revision),
@@ -2093,6 +2163,9 @@ async function restoreProfileVersion(request, env, target, actor, origin, ctx) {
     createdBy: storedProfileActor(current.createdBy) || storedProfileActor(historical.createdBy),
     updatedAt: now,
     updatedBy: editor,
+    workflowStatus: normalizeClientWorkflowStatus(current.workflowStatus),
+    workflowUpdatedAt: current.workflowUpdatedAt,
+    workflowUpdatedBy: storedProfileActor(current.workflowUpdatedBy),
   };
   const storedRaw = JSON.stringify(restored);
   const storedObject = await env.CLIENTS_BUCKET.put(profileKey, storedRaw, {
@@ -2151,6 +2224,97 @@ async function restoreProfileVersion(request, env, target, actor, origin, ctx) {
   );
 }
 
+async function updateProfileWorkflow(request, env, id, actor, origin, ctx) {
+  let value;
+  try {
+    value = (await readJson(request, 4_096)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json({ error: "Changement de statut invalide." }, 400, origin);
+    throw error;
+  }
+  const targetStatus = value?.status;
+  const expectedRevision = Number(value?.expectedRevision);
+  if (!["draft", "review", "approved"].includes(targetStatus))
+    return json({ error: "Statut de validation invalide." }, 422, origin);
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)
+    return json({ error: "Révision courante attendue invalide." }, 422, origin);
+
+  const profileKey = `clients/${id}.json`;
+  const currentObject = await env.CLIENTS_BUCKET.get(profileKey);
+  if (!currentObject) return json({ error: "Profil introuvable." }, 404, origin);
+  let current;
+  try {
+    current = JSON.parse(await currentObject.text());
+  } catch {
+    return json({ error: "Le profil partagé existant est illisible." }, 500, origin);
+  }
+  if (storedProfileRevision(current) !== expectedRevision) return profileConflict(origin, current);
+  const currentStatus = normalizeClientWorkflowStatus(current.workflowStatus);
+  if (currentStatus === targetStatus)
+    return json({ ok: true, id, unchanged: true, profile: current }, 200, origin);
+
+  const role = normalizeAccountRole(actor.role);
+  const adminTransition =
+    role === "admin" &&
+    ((currentStatus === "draft" && targetStatus === "review") ||
+      (currentStatus === "review" && (targetStatus === "draft" || targetStatus === "approved")) ||
+      (currentStatus === "approved" && targetStatus === "draft"));
+  const editorTransition =
+    role === "editor" &&
+    ((currentStatus === "draft" && targetStatus === "review") ||
+      (currentStatus === "review" && targetStatus === "draft"));
+  if (!adminTransition && !editorTransition)
+    return json(
+      { error: "Cette transition de validation n’est pas autorisée pour votre rôle." },
+      403,
+      origin,
+    );
+
+  const now = new Date().toISOString();
+  const workflowEditor = clientProfileActor(actor);
+  const updated = {
+    ...current,
+    revision: expectedRevision + 1,
+    updatedAt: now,
+    updatedBy: workflowEditor,
+    workflowStatus: targetStatus,
+    workflowUpdatedAt: now,
+    workflowUpdatedBy: workflowEditor,
+  };
+  const raw = JSON.stringify(updated);
+  await snapshotProfileVersion(env, current);
+  if (current.photoAsset?.r2Key) await snapshotCurrentProfilePhoto(env, id, expectedRevision);
+  const storedObject = await env.CLIENTS_BUCKET.put(profileKey, raw, {
+    onlyIf: { etagMatches: currentObject.etag },
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: clientProfileMetadata(updated),
+  });
+  if (!storedObject) return profileConflict(origin, await readR2Json(env, profileKey));
+  await snapshotProfileVersion(env, updated, raw);
+  if (updated.photoAsset?.r2Key) await snapshotCurrentProfilePhoto(env, id, updated.revision);
+  await maintainClientProfileIndex(env, () =>
+    upsertClientProfileIndex(env, updated, storedObject.size),
+  );
+  const event =
+    targetStatus === "approved"
+      ? "client_workflow_approved"
+      : targetStatus === "review"
+        ? "client_workflow_submitted"
+        : currentStatus === "approved"
+          ? "client_workflow_reopened"
+          : "client_workflow_withdrawn";
+  ctx.waitUntil(
+    writeAudit(env, request, event, actor.username, "success", {
+      clientId: id,
+      from: currentStatus,
+      to: targetStatus,
+      revision: updated.revision,
+    }),
+  );
+  return json({ ok: true, id, profile: updated }, 200, origin);
+}
+
 async function putProfile(request, env, id, actor, origin, ctx) {
   let parsed;
   try {
@@ -2192,6 +2356,8 @@ async function putProfile(request, env, id, actor, origin, ctx) {
       return json({ error: "Le profil partagé existant est illisible." }, 500, origin);
     }
   }
+  if (previous && normalizeClientWorkflowStatus(previous.workflowStatus) === "approved")
+    return profileLocked(origin, previous);
   const expectedRevision = storedProfileRevision(profile);
   const currentRevision = storedProfileRevision(previous);
   if ((previous && expectedRevision !== currentRevision) || (!previous && expectedRevision !== 0)) {
@@ -2208,6 +2374,9 @@ async function putProfile(request, env, id, actor, origin, ctx) {
   const now = new Date().toISOString();
   const editor = clientProfileActor(actor);
   const creator = previous ? storedProfileActor(previous.createdBy) : editor;
+  const workflowStatus = previous
+    ? normalizeClientWorkflowStatus(previous.workflowStatus)
+    : "draft";
   const storedProfile = {
     ...profile,
     revision: currentRevision + 1,
@@ -2220,6 +2389,9 @@ async function putProfile(request, env, id, actor, origin, ctx) {
     updatedAt: now,
     createdBy: creator,
     updatedBy: editor,
+    workflowStatus,
+    workflowUpdatedAt: previous?.workflowUpdatedAt || now,
+    workflowUpdatedBy: storedProfileActor(previous?.workflowUpdatedBy) || creator,
   };
   const storedRaw = JSON.stringify(storedProfile);
 
@@ -2274,6 +2446,9 @@ async function putProfile(request, env, id, actor, origin, ctx) {
         updatedAt: storedProfile.updatedAt,
         createdBy: storedProfile.createdBy,
         updatedBy: storedProfile.updatedBy,
+        workflowStatus: storedProfile.workflowStatus,
+        workflowUpdatedAt: storedProfile.workflowUpdatedAt,
+        workflowUpdatedBy: storedProfile.workflowUpdatedBy,
       },
     },
     200,
@@ -3550,6 +3725,13 @@ async function route(request, env, ctx) {
 
   if (url.pathname === "/api/clients" && request.method === "GET")
     return listProfiles(env, origin, ctx, actor, url.searchParams);
+  const workflowId = profileWorkflowId(url.pathname);
+  if (workflowId) {
+    if (request.method !== "PUT") return json({ error: "Méthode non autorisée." }, 405, origin);
+    if (!permissions.clientsWrite)
+      return json({ error: "Votre rôle est limité à la lecture." }, 403, origin);
+    return updateProfileWorkflow(request, env, workflowId, actor, origin, ctx);
+  }
   const restoreTarget = profileVersionRestore(url.pathname);
   if (restoreTarget) {
     if (request.method === "POST") {
@@ -3579,12 +3761,17 @@ async function route(request, env, ctx) {
     if (request.method === "PUT") {
       if (!permissions.clientsWrite)
         return json({ error: "Votre rôle est limité à la lecture." }, 403, origin);
+      const current = await readR2Json(env, `clients/${photoId}.json`);
+      if (current && normalizeClientWorkflowStatus(current.workflowStatus) === "approved")
+        return profileLocked(origin, current);
       return putProfilePhoto(request, env, photoId, origin);
     }
     if (request.method === "DELETE") {
       if (!permissions.clientsWrite)
         return json({ error: "Votre rôle est limité à la lecture." }, 403, origin);
       const current = await readR2Json(env, `clients/${photoId}.json`);
+      if (current && normalizeClientWorkflowStatus(current.workflowStatus) === "approved")
+        return profileLocked(origin, current);
       if (current) {
         await snapshotProfileVersion(env, current);
         await snapshotCurrentProfilePhoto(env, photoId, storedProfileRevision(current));

@@ -29,6 +29,9 @@ export type ClientProfile = {
   updatedAt: string;
   createdBy?: ClientProfileActor;
   updatedBy?: ClientProfileActor;
+  workflowStatus?: ClientWorkflowStatus;
+  workflowUpdatedAt?: string;
+  workflowUpdatedBy?: ClientProfileActor;
   language: DocumentLanguage;
   cvByLanguage: Record<DocumentLanguage, CV>;
   hiddenElements: HiddenCvElements;
@@ -46,6 +49,8 @@ export type ClientProfileActor = {
   role: AccountRole;
 };
 
+export type ClientWorkflowStatus = "draft" | "review" | "approved";
+
 export type ClientProfileSummary = Pick<
   ClientProfile,
   | "id"
@@ -57,6 +62,9 @@ export type ClientProfileSummary = Pick<
   | "updatedAt"
   | "createdBy"
   | "updatedBy"
+  | "workflowStatus"
+  | "workflowUpdatedAt"
+  | "workflowUpdatedBy"
   | "language"
 > & { hasPhoto?: boolean };
 
@@ -258,7 +266,14 @@ export type CloudProfileListOptions = {
 
 export type CloudProfileCommit = Pick<
   ClientProfile,
-  "revision" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy"
+  | "revision"
+  | "createdAt"
+  | "updatedAt"
+  | "createdBy"
+  | "updatedBy"
+  | "workflowStatus"
+  | "workflowUpdatedAt"
+  | "workflowUpdatedBy"
 > & {
   photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
@@ -268,6 +283,7 @@ export type CloudProfileVersion = {
   updatedAt: string;
   updatedBy?: ClientProfileActor;
   restoredFromRevision?: number;
+  workflowStatus?: ClientWorkflowStatus;
   hasPhoto?: boolean;
   size?: number;
 };
@@ -288,6 +304,19 @@ export class CloudProfileConflictError extends Error {
   }
 }
 
+export class CloudProfileLockedError extends Error {
+  readonly current?: CloudProfileConflict & { workflowStatus?: ClientWorkflowStatus };
+
+  constructor(
+    message: string,
+    current?: CloudProfileConflict & { workflowStatus?: ClientWorkflowStatus },
+  ) {
+    super(message);
+    this.name = "CloudProfileLockedError";
+    this.current = current;
+  }
+}
+
 function cloudHeaders(token: string, json = false): HeadersInit {
   return {
     ...(json ? { "Content-Type": "application/json" } : {}),
@@ -299,13 +328,16 @@ async function cloudResponse<T>(response: Response): Promise<T> {
   const body = (await response.json().catch(() => ({}))) as {
     error?: string;
     code?: string;
-    current?: CloudProfileConflict;
+    current?: CloudProfileConflict & { workflowStatus?: ClientWorkflowStatus };
   } & T;
   if (response.status === 409 && body.code === "CLIENT_PROFILE_CONFLICT") {
     throw new CloudProfileConflictError(
       body.error || "Ce profil a été modifié par un autre utilisateur.",
       body.current,
     );
+  }
+  if (response.status === 423 && body.code === "CLIENT_PROFILE_LOCKED") {
+    throw new CloudProfileLockedError(body.error || "Ce CV validé est verrouillé.", body.current);
   }
   if (!response.ok) throw new Error(body.error || `Synchronisation refusée (${response.status}).`);
   return body;
@@ -428,6 +460,23 @@ export async function getCloudProfileVersion(
   return cloudResponse<{ id: string; revision: number; profile: ClientProfile }>(response);
 }
 
+export async function updateCloudProfileWorkflow(
+  endpoint: string,
+  token: string,
+  id: string,
+  status: ClientWorkflowStatus,
+  expectedRevision: number,
+) {
+  const response = await authenticatedFetch(`${cloudUrl(endpoint, id)}/workflow`, {
+    method: "PUT",
+    headers: cloudHeaders(token, true),
+    body: JSON.stringify({ status, expectedRevision }),
+  });
+  return cloudResponse<{ ok: true; id: string; unchanged?: boolean; profile: ClientProfile }>(
+    response,
+  );
+}
+
 export async function restoreCloudProfileVersion(
   endpoint: string,
   token: string,
@@ -505,7 +554,14 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
     ok: true;
     profile?: Pick<
       ClientProfile,
-      "revision" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy"
+      | "revision"
+      | "createdAt"
+      | "updatedAt"
+      | "createdBy"
+      | "updatedBy"
+      | "workflowStatus"
+      | "workflowUpdatedAt"
+      | "workflowUpdatedBy"
     >;
   }>(response);
   if (!photo) {
@@ -521,6 +577,9 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
     updatedAt: result.profile?.updatedAt ?? cloudProfile.updatedAt,
     createdBy: result.profile?.createdBy ?? cloudProfile.createdBy,
     updatedBy: result.profile?.updatedBy ?? cloudProfile.updatedBy,
+    workflowStatus: result.profile?.workflowStatus ?? cloudProfile.workflowStatus ?? "draft",
+    workflowUpdatedAt: result.profile?.workflowUpdatedAt ?? cloudProfile.workflowUpdatedAt,
+    workflowUpdatedBy: result.profile?.workflowUpdatedBy ?? cloudProfile.workflowUpdatedBy,
     photoAsset: cloudProfile.photoAsset,
   } satisfies CloudProfileCommit;
 }
@@ -532,6 +591,9 @@ export function applyCloudCommit(profile: ClientProfile, commit: CloudProfileCom
   committed.updatedAt = commit.updatedAt;
   committed.createdBy = commit.createdBy;
   committed.updatedBy = commit.updatedBy;
+  committed.workflowStatus = commit.workflowStatus;
+  committed.workflowUpdatedAt = commit.workflowUpdatedAt;
+  committed.workflowUpdatedBy = commit.workflowUpdatedBy;
   committed.photoAsset = commit.photoAsset;
   if (commit.photoAsset?.r2Key) {
     for (const cv of Object.values(committed.cvByLanguage)) {
@@ -545,6 +607,7 @@ export async function flushCloudProfileQueue(endpoint: string, token: string) {
   const entries = await listQueuedCloudProfiles();
   let uploaded = 0;
   let conflicts = 0;
+  let locked = 0;
   let failed = 0;
   const committedProfiles: ClientProfile[] = [];
   for (const entry of entries) {
@@ -558,6 +621,14 @@ export async function flushCloudProfileQueue(endpoint: string, token: string) {
       uploaded += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Synchronisation cloud impossible.";
+      if (error instanceof CloudProfileLockedError) {
+        const shared = await getCloudProfile(endpoint, token, entry.id);
+        await saveClientProfile(shared);
+        await removeQueuedCloudProfile(entry.id);
+        committedProfiles.push(shared);
+        locked += 1;
+        continue;
+      }
       await withStore(
         "readwrite",
         (store) =>
@@ -580,6 +651,7 @@ export async function flushCloudProfileQueue(endpoint: string, token: string) {
   return {
     uploaded,
     conflicts,
+    locked,
     failed,
     pending: (await listQueuedCloudProfiles()).length,
     committedProfiles,
@@ -624,6 +696,11 @@ export async function synchronizeClientProfiles(endpoint: string, token: string)
           await saveClientProfile(applyCloudCommit(profile, commit));
           uploaded += 1;
         } catch (error) {
+          if (error instanceof CloudProfileLockedError) {
+            await saveClientProfile(await getCloudProfile(endpoint, token, profile.id));
+            downloaded += 1;
+            continue;
+          }
           if (!(error instanceof CloudProfileConflictError)) throw error;
           conflicts += 1;
           conflictIds.push(profile.id);

@@ -14,6 +14,7 @@ export interface ClientOrderSummary {
   clientName: string;
   email: string;
   phone: string;
+  facebookUrl: string;
   language: string;
   notes: string;
   services: string[];
@@ -151,6 +152,36 @@ export async function downloadClientOrderFile(orderId: string, file: ClientOrder
   );
   if (!response.ok) await responseJson(response);
   await saveResponseBlob(response, file.originalName);
+}
+
+export async function addClientOrderSourceFile(orderId: string, file: File) {
+  const data = new FormData();
+  data.append("file", file);
+  const response = await authenticatedFetch(
+    `/api/admin/client-orders/${encodeURIComponent(orderId)}/files`,
+    { method: "POST", body: data },
+  );
+  return responseJson<{ file: ClientOrderFile }>(response).then((body) => body.file);
+}
+
+export async function deleteClientOrderSourceFile(orderId: string, fileId: string) {
+  const response = await authenticatedFetch(
+    `/api/admin/client-orders/${encodeURIComponent(orderId)}/files/${encodeURIComponent(fileId)}`,
+    { method: "DELETE" },
+  );
+  return responseJson<{ deleted: true }>(response);
+}
+
+export async function updateClientOrderFacebook(orderId: string, facebookUrl: string) {
+  const response = await authenticatedFetch(
+    `/api/admin/client-orders/${encodeURIComponent(orderId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ facebookUrl }),
+    },
+  );
+  return responseJson<{ facebookUrl: string; updatedAt: string }>(response);
 }
 
 export async function importClientOrderJson(orderId: string, file: File) {

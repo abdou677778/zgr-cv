@@ -1,4 +1,4 @@
-CREATE TABLE `deliverables` (
+CREATE TABLE IF NOT EXISTS `deliverables` (
 	`id` text PRIMARY KEY NOT NULL,
 	`order_id` text NOT NULL,
 	`service` text DEFAULT 'AUTRE' NOT NULL,
@@ -11,9 +11,9 @@ CREATE TABLE `deliverables` (
 	FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `idx_deliverables_storage_key` ON `deliverables` (`storage_key`);--> statement-breakpoint
-CREATE INDEX `idx_deliverables_order_created` ON `deliverables` (`order_id`,`created_at`);--> statement-breakpoint
-CREATE TABLE `deliveries` (
+CREATE UNIQUE INDEX IF NOT EXISTS `idx_deliverables_storage_key` ON `deliverables` (`storage_key`);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `idx_deliverables_order_created` ON `deliverables` (`order_id`,`created_at`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `deliveries` (
 	`id` text PRIMARY KEY NOT NULL,
 	`order_id` text NOT NULL,
 	`version_number` integer NOT NULL,
@@ -24,5 +24,5 @@ CREATE TABLE `deliveries` (
 	FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `idx_deliveries_order_version` ON `deliveries` (`order_id`,`version_number`);--> statement-breakpoint
-CREATE INDEX `idx_deliveries_order_created` ON `deliveries` (`order_id`,`created_at`);
+CREATE UNIQUE INDEX IF NOT EXISTS `idx_deliveries_order_version` ON `deliveries` (`order_id`,`version_number`);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `idx_deliveries_order_created` ON `deliveries` (`order_id`,`created_at`);

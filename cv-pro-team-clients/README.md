@@ -7,9 +7,10 @@ Portail séparé de ZGR CV pour recevoir les commandes et leurs documents. L’a
 1. Créer un lien client dans ZGR CV.
 2. Le client sélectionne les services, ajoute ses consignes et transfère ses fichiers.
 3. La commande apparaît dans ZGR CV, triée par date.
-4. Télécharger le **Pack IA ZIP** contenant le brief, les sources et le prompt maître.
-5. Importer le JSON produit par l’IA. Chaque import crée une version conservée.
-6. Ouvrir cette version directement dans le générateur ZGR CV.
+4. Compléter au besoin le lien Facebook et ajouter manuellement tout fichier utile au dossier.
+5. Télécharger le **Pack IA ZIP** contenant le brief, les sources et le prompt maître.
+6. Importer le JSON produit par l’IA. Chaque import crée une version conservée.
+7. Ouvrir cette version directement dans le générateur ZGR CV.
 
 ## Stockage
 
@@ -45,4 +46,4 @@ npx tsc --noEmit
 npm run build
 ```
 
-Les fichiers sont limités à 100 Mo chacun, 50 fichiers et 500 Mo par commande. Les formats acceptés sont PDF, DOC/DOCX, JPG/JPEG, PNG, WebP et HEIC/HEIF.
+Les fichiers sont limités à 100 Mo chacun, 50 fichiers et 500 Mo par commande. Le formulaire client accepte PDF, DOC/DOCX, JPG/JPEG, PNG, WebP et HEIC/HEIF. L’équipe peut ensuite joindre manuellement tout autre type de fichier depuis ZGR CV ; le téléchargement reste forcé en pièce jointe privée.

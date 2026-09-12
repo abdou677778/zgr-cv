@@ -14,6 +14,7 @@ export const orders = sqliteTable(
     clientName: text('client_name').notNull(),
     email: text('email').notNull(),
     phone: text('phone').notNull().default(''),
+    facebookUrl: text('facebook_url').notNull().default(''),
     language: text('language').notNull().default('fr'),
     notes: text('notes').notNull().default(''),
     servicesJson: text('services_json').notNull(),

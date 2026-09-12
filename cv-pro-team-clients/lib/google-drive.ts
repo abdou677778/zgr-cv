@@ -312,6 +312,7 @@ export async function syncOrderToDrive(orderId: string) {
       `CLIENT : ${order.clientName}`,
       `EMAIL : ${order.email}`,
       `TÉLÉPHONE : ${order.phone || 'Non renseigné'}`,
+      `FACEBOOK : ${order.facebookUrl || 'Non renseigné'}`,
       `LANGUE : ${order.language}`,
       `SERVICES : ${order.services.join(', ')}`,
       '',

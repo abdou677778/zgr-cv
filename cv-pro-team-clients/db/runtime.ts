@@ -7,6 +7,7 @@ const statements = [
     client_name TEXT NOT NULL,
     email TEXT NOT NULL,
     phone TEXT NOT NULL DEFAULT '',
+    facebook_url TEXT NOT NULL DEFAULT '',
     language TEXT NOT NULL DEFAULT 'fr',
     notes TEXT NOT NULL DEFAULT '',
     services_json TEXT NOT NULL,

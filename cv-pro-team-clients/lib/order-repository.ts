@@ -6,6 +6,7 @@ export interface StoredOrder {
   clientName: string;
   email: string;
   phone: string;
+  facebookUrl: string;
   language: string;
   notes: string;
   services: string[];
@@ -77,6 +78,7 @@ function mapOrder(row: D1Row): StoredOrder {
     clientName: String(row.client_name),
     email: String(row.email),
     phone: textValue(row.phone),
+    facebookUrl: textValue(row.facebook_url),
     language: textValue(row.language, 'fr'),
     notes: textValue(row.notes),
     services: JSON.parse(textValue(row.services_json, '[]')),

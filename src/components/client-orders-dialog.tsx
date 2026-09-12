@@ -6,16 +6,19 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Facebook,
   FileJson,
   FileText,
   FolderOpen,
   LoaderCircle,
   Link2,
   PackageOpen,
+  Paperclip,
   RefreshCw,
   Search,
   Send,
   Share2,
+  Trash2,
   Upload,
 } from "lucide-react";
 
@@ -30,7 +33,9 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   createClientInvitation,
+  addClientOrderSourceFile,
   addClientOrderDeliverable,
+  deleteClientOrderSourceFile,
   downloadClientOrderFile,
   downloadClientOrderDeliverable,
   downloadClientOrderJson,
@@ -41,6 +46,7 @@ import {
   publishClientOrderDelivery,
   readClientOrderJson,
   syncClientOrderDrive,
+  updateClientOrderFacebook,
   type ClientOrderDetail,
   type ClientOrderDeliverable,
   type ClientOrderFile,
@@ -88,6 +94,9 @@ const EVENT_LABELS: Record<string, string> = {
   DRIVE_SYNC_FAILED: "Échec de la synchronisation Drive",
   DELIVERABLE_ADDED: "Livrable final ajouté",
   DELIVERY_PUBLISHED: "Livraison client publiée",
+  CLIENT_DETAILS_UPDATED: "Informations client mises à jour",
+  MANUAL_FILE_UPLOADED: "Document ajouté manuellement",
+  MANUAL_FILE_DELETED: "Document manuel supprimé",
 };
 
 function formatBytes(value: number) {
@@ -129,6 +138,7 @@ export function ClientOrdersDialog({
 }) {
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const deliverableInputRef = useRef<HTMLInputElement>(null);
+  const sourceInputRef = useRef<HTMLInputElement>(null);
   const [orders, setOrders] = useState<ClientOrderSummary[]>([]);
   const [detail, setDetail] = useState<ClientOrderDetail | null>(null);
   const [search, setSearch] = useState("");
@@ -138,6 +148,7 @@ export function ClientOrdersDialog({
   const [inviteUrl, setInviteUrl] = useState("");
   const [selectedDeliverables, setSelectedDeliverables] = useState<string[]>([]);
   const [deliverableService, setDeliverableService] = useState("AUTRE");
+  const [facebookUrl, setFacebookUrl] = useState("");
 
   const createInvitation = async () => {
     setBusy("invite");
@@ -194,7 +205,8 @@ export function ClientOrdersDialog({
   useEffect(() => {
     setSelectedDeliverables([]);
     setDeliverableService(firstOrderService);
-  }, [detail?.order.id, firstOrderService]);
+    setFacebookUrl(detail?.order.facebookUrl || "");
+  }, [detail?.order.facebookUrl, detail?.order.id, firstOrderService]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
@@ -250,6 +262,73 @@ export function ClientOrdersDialog({
       await downloadClientOrderFile(detail.order.id, file);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Téléchargement impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const addSourceFiles = async (files: File[]) => {
+    if (!detail || !files.length) return;
+    setBusy("source-upload");
+    setMessage("");
+    let addedCount = 0;
+    try {
+      for (const file of files) {
+        await addClientOrderSourceFile(detail.order.id, file);
+        addedCount += 1;
+      }
+      await refresh();
+      setMessage(
+        `${files.length} document${files.length > 1 ? "s" : ""} ajouté${
+          files.length > 1 ? "s" : ""
+        } manuellement au dossier de ${detail.order.clientName}.`,
+      );
+    } catch (error) {
+      if (addedCount) await refresh();
+      const reason = error instanceof Error ? error.message : "Ajout du document impossible.";
+      setMessage(
+        addedCount
+          ? `${addedCount} fichier${addedCount > 1 ? "s ont" : " a"} été ajouté${
+              addedCount > 1 ? "s" : ""
+            }. Envoi interrompu : ${reason}`
+          : reason,
+      );
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const deleteSourceFile = async (file: ClientOrderFile) => {
+    if (!detail || file.category !== "AJOUT_MANUEL") return;
+    if (!window.confirm(`Supprimer définitivement « ${file.originalName} » du dossier client ?`)) {
+      return;
+    }
+    setBusy(`file-delete:${file.id}`);
+    setMessage("");
+    try {
+      await deleteClientOrderSourceFile(detail.order.id, file.id);
+      await refresh();
+      setMessage(`Document supprimé : ${file.originalName}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Suppression impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const saveFacebook = async () => {
+    if (!detail) return;
+    setBusy("facebook-save");
+    setMessage("");
+    try {
+      const result = await updateClientOrderFacebook(detail.order.id, facebookUrl);
+      setFacebookUrl(result.facebookUrl);
+      await refresh();
+      setMessage(
+        result.facebookUrl ? "Lien Facebook du client enregistré." : "Lien Facebook supprimé.",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
       setBusy("");
     }
@@ -437,6 +516,17 @@ export function ClientOrdersDialog({
             if (files.length) void addDeliverables(files);
           }}
         />
+        <input
+          ref={sourceInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            const files = [...(event.target.files ?? [])];
+            event.target.value = "";
+            if (files.length) void addSourceFiles(files);
+          }}
+        />
 
         <div className="grid min-h-[620px] gap-4 lg:grid-cols-[23rem_minmax(0,1fr)]">
           <aside className="space-y-3 rounded-xl border bg-slate-50/80 p-3">
@@ -567,6 +657,52 @@ export function ClientOrdersDialog({
                         {detail.order.phone ? ` · ${detail.order.phone}` : ""} · Reçue{" "}
                         {new Date(detail.order.createdAt).toLocaleString("fr-DZ")}
                       </p>
+                      <div className="mt-3 flex max-w-2xl flex-wrap items-center gap-2">
+                        <div className="relative min-w-[16rem] flex-1">
+                          <Facebook className="absolute left-3 top-2.5 h-4 w-4 text-blue-700" />
+                          <Input
+                            type="url"
+                            inputMode="url"
+                            value={facebookUrl}
+                            onChange={(event) => setFacebookUrl(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                void saveFacebook();
+                              }
+                            }}
+                            placeholder="Lien Facebook du client"
+                            aria-label="Lien Facebook du client"
+                            className="h-9 bg-white pl-9 text-xs"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void saveFacebook()}
+                          disabled={Boolean(busy)}
+                        >
+                          {busy === "facebook-save" ? (
+                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Facebook className="mr-2 h-4 w-4" />
+                          )}
+                          Enregistrer
+                        </Button>
+                        {detail.order.facebookUrl && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              window.open(detail.order.facebookUrl, "_blank", "noopener,noreferrer")
+                            }
+                          >
+                            <ExternalLink className="mr-2 h-4 w-4" /> Ouvrir
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -647,11 +783,35 @@ export function ClientOrdersDialog({
 
                 <div className="grid gap-4 xl:grid-cols-2">
                   <section className="rounded-xl border bg-white p-4">
-                    <h3 className="flex items-center gap-2 font-bold">
-                      <FileText className="h-4 w-4 text-blue-600" /> Documents sources ·{" "}
-                      {detail.files.length}
-                    </h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="flex items-center gap-2 font-bold">
+                        <FileText className="h-4 w-4 text-blue-600" /> Documents sources ·{" "}
+                        {detail.files.length}
+                      </h3>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => sourceInputRef.current?.click()}
+                        disabled={Boolean(busy)}
+                      >
+                        {busy === "source-upload" ? (
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Paperclip className="mr-2 h-4 w-4" />
+                        )}
+                        Ajouter des fichiers
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                      Tous types de fichiers · 100 Mo maximum par fichier · stockage privé.
+                    </p>
                     <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+                      {detail.files.length === 0 && (
+                        <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+                          Aucun document source. Ajoutez les fichiers reçus du client.
+                        </div>
+                      )}
                       {detail.files.map((file) => (
                         <div
                           key={file.id}
@@ -663,19 +823,37 @@ export function ClientOrdersDialog({
                               {file.category.replaceAll("_", " ")} · {formatBytes(file.sizeBytes)}
                             </p>
                           </div>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Télécharger ${file.originalName}`}
-                            onClick={() => void downloadFile(file)}
-                            disabled={Boolean(busy)}
-                          >
-                            {busy === `file:${file.id}` ? (
-                              <LoaderCircle className="animate-spin" />
-                            ) : (
-                              <Download />
+                          <div className="flex shrink-0 items-center">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Télécharger ${file.originalName}`}
+                              onClick={() => void downloadFile(file)}
+                              disabled={Boolean(busy)}
+                            >
+                              {busy === `file:${file.id}` ? (
+                                <LoaderCircle className="animate-spin" />
+                              ) : (
+                                <Download />
+                              )}
+                            </Button>
+                            {file.category === "AJOUT_MANUEL" && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                                aria-label={`Supprimer ${file.originalName}`}
+                                onClick={() => void deleteSourceFile(file)}
+                                disabled={Boolean(busy)}
+                              >
+                                {busy === `file-delete:${file.id}` ? (
+                                  <LoaderCircle className="animate-spin" />
+                                ) : (
+                                  <Trash2 />
+                                )}
+                              </Button>
                             )}
-                          </Button>
+                          </div>
                         </div>
                       ))}
                     </div>

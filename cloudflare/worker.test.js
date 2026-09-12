@@ -817,6 +817,17 @@ test("un responsable de validation peut valider puis rouvrir un CV sans être ad
   assert.equal(submitted.profile.workflowUpdatedBy.username, "workflow-editor");
   assert.equal(submitted.profile.revision, 2);
 
+  const reviewQueueResponse = await call(
+    env,
+    "/api/clients?status=review&page=1&pageSize=1",
+    authorized(editorBeforeGrant.token),
+  );
+  assert.equal(reviewQueueResponse.status, 200);
+  const reviewQueue = await reviewQueueResponse.json();
+  assert.equal(reviewQueue.profiles.length, 1);
+  assert.equal(reviewQueue.profiles[0].id, profile.id);
+  assert.deepEqual(reviewQueue.workflowCounts, { all: 1, draft: 0, review: 1, approved: 0 });
+
   const forbiddenApproval = await call(
     env,
     `/api/clients/${profile.id}/workflow`,
@@ -853,20 +864,48 @@ test("un responsable de validation peut valider puis rouvrir un CV sans être ad
   const editor = await login(env, "workflow-editor", "mot-de-passe-workflow");
   assert.equal(editor.user.permissions.clientsApprove, true);
 
+  const validatorsResponse = await call(
+    env,
+    "/api/clients/workflow-validators",
+    authorized(editor.token),
+  );
+  assert.equal(validatorsResponse.status, 200);
+  const validators = await validatorsResponse.json();
+  assert.equal(
+    validators.validators.some((validator) => validator.username === "workflow-editor"),
+    true,
+  );
+
+  const assignmentResponse = await call(
+    env,
+    `/api/clients/${profile.id}/workflow/assignment`,
+    authorized(editor.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision: 2, assigneeUsername: "workflow-editor" }),
+    }),
+  );
+  assert.equal(assignmentResponse.status, 200);
+  const assignment = await assignmentResponse.json();
+  assert.equal(assignment.profile.workflowAssignee.username, "workflow-editor");
+  assert.equal(assignment.profile.workflowAssignedBy.username, "workflow-editor");
+  assert.equal(assignment.profile.revision, 3);
+
   const approvedResponse = await call(
     env,
     `/api/clients/${profile.id}/workflow`,
     authorized(editor.token, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "approved", expectedRevision: 2 }),
+      body: JSON.stringify({ status: "approved", expectedRevision: 3 }),
     }),
   );
   assert.equal(approvedResponse.status, 200);
   const approved = await approvedResponse.json();
   assert.equal(approved.profile.workflowStatus, "approved");
   assert.equal(approved.profile.workflowUpdatedBy.username, "workflow-editor");
-  assert.equal(approved.profile.revision, 3);
+  assert.equal(approved.profile.revision, 4);
+  assert.equal(approved.profile.workflowAssignee.username, "workflow-editor");
 
   const lockedUpdate = await call(
     env,
@@ -884,7 +923,7 @@ test("un responsable de validation peut valider puis rouvrir un CV sans être ad
     `/api/clients/${profile.id}/photo`,
     authorized(admin.token, {
       method: "PUT",
-      headers: { "Content-Type": "image/webp", "X-Profile-Revision": "3" },
+      headers: { "Content-Type": "image/webp", "X-Profile-Revision": "4" },
       body: new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]),
     }),
   );
@@ -895,7 +934,7 @@ test("un responsable de validation peut valider puis rouvrir un CV sans être ad
     authorized(admin.token, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expectedRevision: 3 }),
+      body: JSON.stringify({ expectedRevision: 4 }),
     }),
   );
   assert.equal(lockedRestore.status, 423);
@@ -906,7 +945,7 @@ test("un responsable de validation peut valider puis rouvrir un CV sans être ad
     authorized(editor.token, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "draft", expectedRevision: 3 }),
+      body: JSON.stringify({ status: "draft", expectedRevision: 4 }),
     }),
   );
   assert.equal(missingCommentResponse.status, 422);
@@ -919,7 +958,7 @@ test("un responsable de validation peut valider puis rouvrir un CV sans être ad
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         status: "draft",
-        expectedRevision: 3,
+        expectedRevision: 4,
         comment: "Corriger le numéro de téléphone avant validation.",
       }),
     }),
@@ -927,7 +966,7 @@ test("un responsable de validation peut valider puis rouvrir un CV sans être ad
   assert.equal(reopenedResponse.status, 200);
   const reopened = await reopenedResponse.json();
   assert.equal(reopened.profile.workflowStatus, "draft");
-  assert.equal(reopened.profile.revision, 4);
+  assert.equal(reopened.profile.revision, 5);
   assert.equal(
     reopened.profile.workflowComment,
     "Corriger le numéro de téléphone avant validation.",
@@ -945,10 +984,17 @@ test("un responsable de validation peut valider puis rouvrir un CV sans être ad
   );
   assert.equal(editableAgain.status, 200);
   const editedAgain = await editableAgain.json();
-  assert.equal(editedAgain.profile.revision, 5);
+  assert.equal(editedAgain.profile.revision, 6);
   const stored = await env.CLIENTS_BUCKET.get(`clients/${profile.id}.json`);
   const storedProfile = JSON.parse(await stored.text());
   assert.equal(storedProfile.workflowComment, "Corriger le numéro de téléphone avant validation.");
+  const storedMetadata = env.CLIENTS_BUCKET.objects.get(
+    `clients/${profile.id}.json`,
+  ).customMetadata;
+  assert.ok(
+    new TextEncoder().encode(JSON.stringify(storedMetadata)).byteLength < 2_048,
+    "Les métadonnées R2 doivent rester sous la limite de sécurité de 2 Kio.",
+  );
 });
 
 test("la supervision agrège uniquement des métriques techniques anonymes", async () => {

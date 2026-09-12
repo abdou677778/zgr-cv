@@ -145,6 +145,7 @@ import {
   getCloudProfile,
   getClientProfile,
   getWorkspaceDraft,
+  listCloudProfiles,
   listQueuedCloudProfiles,
   newClientProfileId,
   putCloudProfile,
@@ -153,6 +154,7 @@ import {
   saveClientProfile,
   saveWorkspaceDraft,
   type ClientProfile,
+  type ClientWorkflowCounts,
   type ClientWorkflowStatus,
   type WorkspaceDraft,
 } from "@/lib/client-profile-db";
@@ -576,6 +578,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [promptMasterOpen, setPromptMasterOpen] = useState(false);
   const [aiFieldRequest, setAiFieldRequest] = useState<AiFieldRequest | null>(null);
   const [clientDatabaseOpen, setClientDatabaseOpen] = useState(false);
+  const [workflowCounts, setWorkflowCounts] = useState<ClientWorkflowCounts>({
+    all: 0,
+    draft: 0,
+    review: 0,
+    approved: 0,
+  });
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [activeProfileWorkflowStatus, setActiveProfileWorkflowStatus] =
@@ -606,6 +614,34 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const canWriteClients = user.permissions.clientsWrite;
   const profileEditingLocked =
     Boolean(activeProfileId) && activeProfileWorkflowStatus === "approved";
+
+  const refreshWorkflowCounts = useCallback(async () => {
+    if (!user.permissions.clientsApprove) return;
+    const token = getAdminSession();
+    if (!token) return;
+    try {
+      const result = await listCloudProfiles(CLIENTS_API_ENDPOINT, token, {
+        status: "review",
+        page: 1,
+        pageSize: 1,
+      });
+      setWorkflowCounts(result.workflowCounts);
+    } catch {
+      // The database dialog surfaces connection errors; the header keeps its last known counter.
+    }
+  }, [user.permissions.clientsApprove]);
+
+  useEffect(() => {
+    if (!user.permissions.clientsApprove) return;
+    void refreshWorkflowCounts();
+    const timer = window.setInterval(() => void refreshWorkflowCounts(), 60_000);
+    const refreshOnFocus = () => void refreshWorkflowCounts();
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [refreshWorkflowCounts, user.permissions.clientsApprove]);
   const draftPayload = useMemo<WorkspaceDraftPayload>(
     () => ({
       activeProfileId,
@@ -1575,6 +1611,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         workflowComment: existing?.workflowComment,
         workflowCommentAt: existing?.workflowCommentAt,
         workflowCommentBy: existing?.workflowCommentBy,
+        workflowAssignee: existing?.workflowAssignee,
+        workflowAssignedAt: existing?.workflowAssignedAt,
+        workflowAssignedBy: existing?.workflowAssignedBy,
         language,
         cvByLanguage: structuredClone(cvByLanguage),
         hiddenElements: structuredClone(hiddenElements),
@@ -2607,6 +2646,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               onClick={() => setClientDatabaseOpen(true)}
             >
               <Database className="mr-2 h-4 w-4" /> Base de données
+              {user.permissions.clientsApprove && workflowCounts.review > 0 && (
+                <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {workflowCounts.review > 99 ? "99+" : workflowCounts.review}
+                </span>
+              )}
             </Button>
             {pwa.installAvailable && !pwa.installed && (
               <Button
@@ -4062,6 +4106,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             onOpenProfile={openClientProfile}
             onDownloadPdf={downloadClientProfilePdf}
             onSyncStatusChange={setClientSyncStatus}
+            onWorkflowCountsChange={setWorkflowCounts}
           />
         ) : null}
         {clientOrdersOpen ? (

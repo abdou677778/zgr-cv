@@ -135,6 +135,11 @@ function rolePermissions(role, workflowManager = false) {
   };
 }
 
+function canManageWorkflow(user) {
+  const role = normalizeAccountRole(user?.role);
+  return role === "admin" || (role === "editor" && user?.workflowManager === true);
+}
+
 function randomBase64Url(size) {
   return encodeBase64Url(crypto.getRandomValues(new Uint8Array(size)));
 }
@@ -917,6 +922,39 @@ async function listUsers(env, origin) {
   return json({ users }, 200, origin);
 }
 
+async function listWorkflowValidators(env, origin, actor) {
+  if (!canManageWorkflow(actor)) return json({ error: "Droit de validation requis." }, 403, origin);
+  const validators = [];
+  const adminUsername = normalizeUsername(env.ADMIN_USERNAME || "admin");
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix: USERS_PREFIX,
+      cursor,
+      include: ["customMetadata"],
+      limit: 500,
+    });
+    for (const object of page.objects) {
+      const metadata = object.customMetadata || {};
+      const role = normalizeAccountRole(metadata.role);
+      const workflowManager =
+        role === "admin" || (role === "editor" && metadata.workflowManager === "true");
+      if (metadata.active === "false" || !workflowManager) continue;
+      validators.push({
+        username: metadata.username || "",
+        displayName: metadata.displayName || metadata.username || "Responsable",
+        role,
+      });
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  if (!validators.some((validator) => validator.username === adminUsername)) {
+    validators.unshift(clientProfileActor(bootstrapAdmin(env)));
+  }
+  validators.sort((left, right) => left.displayName.localeCompare(right.displayName, "fr"));
+  return json({ validators }, 200, origin);
+}
+
 function validPassword(password) {
   return typeof password === "string" && password.length >= 10 && password.length <= 200;
 }
@@ -1211,6 +1249,13 @@ function profileWorkflowId(pathname) {
   return ID_PATTERN.test(id) ? id : null;
 }
 
+function profileWorkflowAssignmentId(pathname) {
+  const match = pathname.match(/^\/api\/clients\/([^/]+)\/workflow\/assignment$/);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]).toUpperCase();
+  return ID_PATTERN.test(id) ? id : null;
+}
+
 const profilePhotoKey = (id) => `clients/${id}/photo.webp`;
 const profileDeletedKey = (id) => `clients/${id}.deleted.json`;
 const trashProfilePrefix = (id) => `trash/clients/${id}/`;
@@ -1332,6 +1377,23 @@ async function readR2ProfileIndex(env) {
               role: normalizeAccountRole(metadata.workflowCommentByRole),
             }
           : undefined,
+        workflowAssignee: metadata.workflowAssigneeUsername
+          ? {
+              username: metadata.workflowAssigneeUsername,
+              displayName:
+                metadata.workflowAssigneeDisplayName || metadata.workflowAssigneeUsername,
+              role: normalizeAccountRole(metadata.workflowAssigneeRole),
+            }
+          : undefined,
+        workflowAssignedAt: metadata.workflowAssignedAt || undefined,
+        workflowAssignedBy: metadata.workflowAssignedByUsername
+          ? {
+              username: metadata.workflowAssignedByUsername,
+              displayName:
+                metadata.workflowAssignedByDisplayName || metadata.workflowAssignedByUsername,
+              role: normalizeAccountRole(metadata.workflowAssignedByRole),
+            }
+          : undefined,
         size: object.size,
         hasPhoto: metadata.hasPhoto === "true",
         createdBy: metadata.createdByUsername
@@ -1365,8 +1427,11 @@ const CLIENT_PROFILE_INDEX_UPSERT = `
     workflow_status, workflow_updated_at,
     workflow_updated_by_username, workflow_updated_by_display_name, workflow_updated_by_role,
     workflow_comment, workflow_comment_at,
-    workflow_comment_by_username, workflow_comment_by_display_name, workflow_comment_by_role
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    workflow_comment_by_username, workflow_comment_by_display_name, workflow_comment_by_role,
+    workflow_assignee_username, workflow_assignee_display_name, workflow_assignee_role,
+    workflow_assigned_at,
+    workflow_assigned_by_username, workflow_assigned_by_display_name, workflow_assigned_by_role
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     revision = excluded.revision,
     name = excluded.name,
@@ -1392,7 +1457,14 @@ const CLIENT_PROFILE_INDEX_UPSERT = `
     workflow_comment_at = excluded.workflow_comment_at,
     workflow_comment_by_username = excluded.workflow_comment_by_username,
     workflow_comment_by_display_name = excluded.workflow_comment_by_display_name,
-    workflow_comment_by_role = excluded.workflow_comment_by_role
+    workflow_comment_by_role = excluded.workflow_comment_by_role,
+    workflow_assignee_username = excluded.workflow_assignee_username,
+    workflow_assignee_display_name = excluded.workflow_assignee_display_name,
+    workflow_assignee_role = excluded.workflow_assignee_role,
+    workflow_assigned_at = excluded.workflow_assigned_at,
+    workflow_assigned_by_username = excluded.workflow_assigned_by_username,
+    workflow_assigned_by_display_name = excluded.workflow_assigned_by_display_name,
+    workflow_assigned_by_role = excluded.workflow_assigned_by_role
 `;
 
 function profileIndexBindings(profile, size = 0) {
@@ -1400,6 +1472,8 @@ function profileIndexBindings(profile, size = 0) {
   const updatedBy = storedProfileActor(profile.updatedBy);
   const workflowUpdatedBy = storedProfileActor(profile.workflowUpdatedBy);
   const workflowCommentBy = storedProfileActor(profile.workflowCommentBy);
+  const workflowAssignee = storedProfileActor(profile.workflowAssignee);
+  const workflowAssignedBy = storedProfileActor(profile.workflowAssignedBy);
   return [
     profile.id,
     storedProfileRevision(profile),
@@ -1427,6 +1501,13 @@ function profileIndexBindings(profile, size = 0) {
     workflowCommentBy?.username ?? null,
     workflowCommentBy?.displayName ?? null,
     workflowCommentBy?.role ?? null,
+    workflowAssignee?.username ?? null,
+    workflowAssignee?.displayName ?? null,
+    workflowAssignee?.role ?? null,
+    typeof profile.workflowAssignedAt === "string" ? profile.workflowAssignedAt.slice(0, 40) : null,
+    workflowAssignedBy?.username ?? null,
+    workflowAssignedBy?.displayName ?? null,
+    workflowAssignedBy?.role ?? null,
   ];
 }
 
@@ -1437,6 +1518,16 @@ function d1Actor(row, prefix) {
     username,
     displayName: row[`${prefix}_by_display_name`] || username,
     role: normalizeAccountRole(row[`${prefix}_by_role`]),
+  };
+}
+
+function d1WorkflowAssignee(row) {
+  const username = row.workflow_assignee_username;
+  if (!username) return undefined;
+  return {
+    username,
+    displayName: row.workflow_assignee_display_name || username,
+    role: normalizeAccountRole(row.workflow_assignee_role),
   };
 }
 
@@ -1456,6 +1547,9 @@ function d1ProfileSummary(row) {
     workflowComment: row.workflow_comment || undefined,
     workflowCommentAt: row.workflow_comment_at || undefined,
     workflowCommentBy: d1Actor(row, "workflow_comment"),
+    workflowAssignee: d1WorkflowAssignee(row),
+    workflowAssignedAt: row.workflow_assigned_at || undefined,
+    workflowAssignedBy: d1Actor(row, "workflow_assigned"),
     size: Number(row.size) || 0,
     hasPhoto: Number(row.has_photo) === 1,
     createdBy: d1Actor(row, "created"),
@@ -1528,12 +1622,16 @@ function clientProfileListOptions(searchParams) {
   const owner = ["created", "updated", "involved"].includes(searchParams?.get("owner"))
     ? searchParams.get("owner")
     : "all";
+  const status = ["draft", "review", "approved"].includes(searchParams?.get("status"))
+    ? searchParams.get("status")
+    : "all";
   return {
     scope,
     query: String(searchParams?.get("q") || "")
       .trim()
       .slice(0, 120),
     owner,
+    status,
     page: Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
     pageSize:
       Number.isSafeInteger(requestedPageSize) && requestedPageSize > 0
@@ -1548,6 +1646,11 @@ function clientProfileMatches(profile, options, username) {
   if (options.owner === "created" && createdUsername !== username) return false;
   if (options.owner === "updated" && updatedUsername !== username) return false;
   if (options.owner === "involved" && createdUsername !== username && updatedUsername !== username)
+    return false;
+  if (
+    options.status !== "all" &&
+    normalizeClientWorkflowStatus(profile.workflowStatus) !== options.status
+  )
     return false;
   if (!options.query) return true;
   const query = options.query.toLocaleLowerCase("fr");
@@ -1565,6 +1668,13 @@ function clientProfileMatches(profile, options, username) {
       .toLocaleLowerCase("fr")
       .includes(query),
   );
+}
+
+function workflowCounts(profiles) {
+  const counts = { all: profiles.length, draft: 0, review: 0, approved: 0 };
+  for (const profile of profiles)
+    counts[normalizeClientWorkflowStatus(profile.workflowStatus)] += 1;
+  return counts;
 }
 
 function paginateR2ProfileIndex(index, options, username) {
@@ -1587,6 +1697,7 @@ function paginateR2ProfileIndex(index, options, username) {
       hasPrevious: page > 1,
       hasNext: page < totalPages,
     },
+    workflowCounts: workflowCounts(index.profiles),
   };
 }
 
@@ -1634,6 +1745,10 @@ async function readD1ProfileIndex(env, options, username) {
     clauses.push("(created_by_username = ? OR updated_by_username = ?)");
     bindings.push(username, username);
   }
+  if (options.status !== "all") {
+    clauses.push("workflow_status = ?");
+    bindings.push(options.status);
+  }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const countStatement = env.CLIENTS_DB.prepare(
     `SELECT COUNT(*) AS total FROM client_profiles ${where}`,
@@ -1648,6 +1763,15 @@ async function readD1ProfileIndex(env, options, username) {
   )
     .bind(...bindings, options.pageSize, offset)
     .all();
+  const workflowCountResult = await env.CLIENTS_DB.prepare(
+    "SELECT workflow_status, COUNT(*) AS total FROM client_profiles GROUP BY workflow_status",
+  ).all();
+  const counts = { all: 0, draft: 0, review: 0, approved: 0 };
+  for (const row of workflowCountResult.results || []) {
+    const status = normalizeClientWorkflowStatus(row.workflow_status);
+    counts[status] += Number(row.total) || 0;
+    counts.all += Number(row.total) || 0;
+  }
   return {
     profiles: (result.results || []).map(d1ProfileSummary),
     deletedProfiles: [],
@@ -1659,6 +1783,7 @@ async function readD1ProfileIndex(env, options, username) {
       hasPrevious: page > 1,
       hasNext: page < totalPages,
     },
+    workflowCounts: counts,
   };
 }
 
@@ -1825,6 +1950,7 @@ function clientProfileMetadata(profile) {
   const editor = storedProfileActor(profile.updatedBy);
   const workflowEditor = storedProfileActor(profile.workflowUpdatedBy);
   const workflowCommentBy = storedProfileActor(profile.workflowCommentBy);
+  const workflowAssignee = storedProfileActor(profile.workflowAssignee);
   return {
     id: profile.id,
     revision: String(storedProfileRevision(profile)),
@@ -1868,6 +1994,13 @@ function clientProfileMetadata(profile) {
           workflowCommentByUsername: workflowCommentBy.username,
           workflowCommentByDisplayName: workflowCommentBy.displayName,
           workflowCommentByRole: workflowCommentBy.role,
+        }
+      : {}),
+    ...(workflowAssignee
+      ? {
+          workflowAssigneeUsername: workflowAssignee.username,
+          workflowAssigneeDisplayName: workflowAssignee.displayName,
+          workflowAssigneeRole: workflowAssignee.role,
         }
       : {}),
   };
@@ -2135,6 +2268,14 @@ async function listProfileVersions(env, id, origin) {
           : undefined,
         restoredFromRevision: Number(metadata.restoredFromRevision) || undefined,
         workflowStatus: normalizeClientWorkflowStatus(metadata.workflowStatus),
+        workflowAssignee: metadata.workflowAssigneeUsername
+          ? {
+              username: metadata.workflowAssigneeUsername,
+              displayName:
+                metadata.workflowAssigneeDisplayName || metadata.workflowAssigneeUsername,
+              role: normalizeAccountRole(metadata.workflowAssigneeRole),
+            }
+          : undefined,
         hasPhoto: metadata.hasPhoto === "true",
         size: object.size,
       });
@@ -2227,6 +2368,9 @@ async function restoreProfileVersion(request, env, target, actor, origin, ctx) {
     workflowComment: current.workflowComment,
     workflowCommentAt: current.workflowCommentAt,
     workflowCommentBy: storedProfileActor(current.workflowCommentBy),
+    workflowAssignee: storedProfileActor(current.workflowAssignee),
+    workflowAssignedAt: current.workflowAssignedAt,
+    workflowAssignedBy: storedProfileActor(current.workflowAssignedBy),
   };
   const storedRaw = JSON.stringify(restored);
   const storedObject = await env.CLIENTS_BUCKET.put(profileKey, storedRaw, {
@@ -2363,6 +2507,13 @@ async function updateProfileWorkflow(request, env, id, actor, origin, ctx) {
             workflowCommentBy: undefined,
           }
         : {}),
+    ...(targetStatus === "review" && currentStatus === "draft"
+      ? {
+          workflowAssignee: undefined,
+          workflowAssignedAt: undefined,
+          workflowAssignedBy: undefined,
+        }
+      : {}),
   };
   const raw = JSON.stringify(updated);
   await snapshotProfileVersion(env, current);
@@ -2393,6 +2544,91 @@ async function updateProfileWorkflow(request, env, id, actor, origin, ctx) {
       to: targetStatus,
       revision: updated.revision,
       comment: targetStatus === "draft" && managesWorkflow ? comment : undefined,
+    }),
+  );
+  return json({ ok: true, id, profile: updated }, 200, origin);
+}
+
+async function updateProfileWorkflowAssignment(request, env, id, actor, origin, ctx) {
+  if (!canManageWorkflow(actor))
+    return json({ error: "Droit de validation requis pour attribuer un CV." }, 403, origin);
+  let value;
+  try {
+    value = (await readJson(request, 4_096)).value;
+  } catch (error) {
+    if (error instanceof Response) return json({ error: "Attribution invalide." }, 400, origin);
+    throw error;
+  }
+  const expectedRevision = Number(value?.expectedRevision);
+  const assigneeUsername = normalizeUsername(value?.assigneeUsername);
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)
+    return json({ error: "Révision courante attendue invalide." }, 422, origin);
+
+  let assignee;
+  if (assigneeUsername) {
+    const account =
+      (await getStoredUser(env, assigneeUsername)) ||
+      (assigneeUsername === normalizeUsername(env.ADMIN_USERNAME || "admin")
+        ? bootstrapAdmin(env)
+        : null);
+    if (!account || account.active === false || !canManageWorkflow(account))
+      return json(
+        { error: "Le responsable sélectionné n’est pas autorisé à valider." },
+        422,
+        origin,
+      );
+    assignee = clientProfileActor(account);
+  }
+
+  const profileKey = `clients/${id}.json`;
+  const currentObject = await env.CLIENTS_BUCKET.get(profileKey);
+  if (!currentObject) return json({ error: "Profil introuvable." }, 404, origin);
+  let current;
+  try {
+    current = JSON.parse(await currentObject.text());
+  } catch {
+    return json({ error: "Le profil partagé existant est illisible." }, 500, origin);
+  }
+  if (storedProfileRevision(current) !== expectedRevision) return profileConflict(origin, current);
+  if (normalizeClientWorkflowStatus(current.workflowStatus) !== "review")
+    return json(
+      { error: "Seuls les CV en attente de validation peuvent être attribués." },
+      422,
+      origin,
+    );
+  if ((current.workflowAssignee?.username || "") === (assignee?.username || ""))
+    return json({ ok: true, id, unchanged: true, profile: current }, 200, origin);
+
+  const now = new Date().toISOString();
+  const workflowEditor = clientProfileActor(actor);
+  const updated = {
+    ...current,
+    revision: expectedRevision + 1,
+    updatedAt: now,
+    updatedBy: workflowEditor,
+    workflowAssignee: assignee,
+    workflowAssignedAt: assignee ? now : undefined,
+    workflowAssignedBy: assignee ? workflowEditor : undefined,
+  };
+  const raw = JSON.stringify(updated);
+  await snapshotProfileVersion(env, current);
+  if (current.photoAsset?.r2Key) await snapshotCurrentProfilePhoto(env, id, expectedRevision);
+  const storedObject = await env.CLIENTS_BUCKET.put(profileKey, raw, {
+    onlyIf: { etagMatches: currentObject.etag },
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: clientProfileMetadata(updated),
+  });
+  if (!storedObject) return profileConflict(origin, await readR2Json(env, profileKey));
+  await snapshotProfileVersion(env, updated, raw);
+  if (updated.photoAsset?.r2Key) await snapshotCurrentProfilePhoto(env, id, updated.revision);
+  await maintainClientProfileIndex(env, () =>
+    upsertClientProfileIndex(env, updated, storedObject.size),
+  );
+  ctx.waitUntil(
+    writeAudit(env, request, "client_workflow_assigned", actor.username, "success", {
+      clientId: id,
+      assignee: assignee?.username || null,
+      revision: updated.revision,
     }),
   );
   return json({ ok: true, id, profile: updated }, 200, origin);
@@ -2478,6 +2714,9 @@ async function putProfile(request, env, id, actor, origin, ctx) {
     workflowComment: previous?.workflowComment,
     workflowCommentAt: previous?.workflowCommentAt,
     workflowCommentBy: storedProfileActor(previous?.workflowCommentBy),
+    workflowAssignee: storedProfileActor(previous?.workflowAssignee),
+    workflowAssignedAt: previous?.workflowAssignedAt,
+    workflowAssignedBy: storedProfileActor(previous?.workflowAssignedBy),
   };
   const storedRaw = JSON.stringify(storedProfile);
 
@@ -2535,6 +2774,12 @@ async function putProfile(request, env, id, actor, origin, ctx) {
         workflowStatus: storedProfile.workflowStatus,
         workflowUpdatedAt: storedProfile.workflowUpdatedAt,
         workflowUpdatedBy: storedProfile.workflowUpdatedBy,
+        workflowComment: storedProfile.workflowComment,
+        workflowCommentAt: storedProfile.workflowCommentAt,
+        workflowCommentBy: storedProfile.workflowCommentBy,
+        workflowAssignee: storedProfile.workflowAssignee,
+        workflowAssignedAt: storedProfile.workflowAssignedAt,
+        workflowAssignedBy: storedProfile.workflowAssignedBy,
       },
     },
     200,
@@ -3811,6 +4056,13 @@ async function route(request, env, ctx) {
 
   if (url.pathname === "/api/clients" && request.method === "GET")
     return listProfiles(env, origin, ctx, actor, url.searchParams);
+  if (url.pathname === "/api/clients/workflow-validators" && request.method === "GET")
+    return listWorkflowValidators(env, origin, actor);
+  const workflowAssignmentId = profileWorkflowAssignmentId(url.pathname);
+  if (workflowAssignmentId) {
+    if (request.method !== "PUT") return json({ error: "Méthode non autorisée." }, 405, origin);
+    return updateProfileWorkflowAssignment(request, env, workflowAssignmentId, actor, origin, ctx);
+  }
   const workflowId = profileWorkflowId(url.pathname);
   if (workflowId) {
     if (request.method !== "PUT") return json({ error: "Méthode non autorisée." }, 405, origin);

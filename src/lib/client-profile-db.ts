@@ -35,6 +35,9 @@ export type ClientProfile = {
   workflowComment?: string;
   workflowCommentAt?: string;
   workflowCommentBy?: ClientProfileActor;
+  workflowAssignee?: ClientProfileActor;
+  workflowAssignedAt?: string;
+  workflowAssignedBy?: ClientProfileActor;
   language: DocumentLanguage;
   cvByLanguage: Record<DocumentLanguage, CV>;
   hiddenElements: HiddenCvElements;
@@ -71,6 +74,9 @@ export type ClientProfileSummary = Pick<
   | "workflowComment"
   | "workflowCommentAt"
   | "workflowCommentBy"
+  | "workflowAssignee"
+  | "workflowAssignedAt"
+  | "workflowAssignedBy"
   | "language"
 > & { hasPhoto?: boolean };
 
@@ -262,9 +268,12 @@ export type CloudProfilePagination = {
   hasNext: boolean;
 };
 
+export type ClientWorkflowCounts = Record<"all" | ClientWorkflowStatus, number>;
+
 export type CloudProfileListOptions = {
   query?: string;
   owner?: "all" | "created" | "updated" | "involved";
+  status?: "all" | ClientWorkflowStatus;
   page?: number;
   pageSize?: number;
   scope?: "page" | "sync";
@@ -280,6 +289,12 @@ export type CloudProfileCommit = Pick<
   | "workflowStatus"
   | "workflowUpdatedAt"
   | "workflowUpdatedBy"
+  | "workflowComment"
+  | "workflowCommentAt"
+  | "workflowCommentBy"
+  | "workflowAssignee"
+  | "workflowAssignedAt"
+  | "workflowAssignedBy"
 > & {
   photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
@@ -290,6 +305,7 @@ export type CloudProfileVersion = {
   updatedBy?: ClientProfileActor;
   restoredFromRevision?: number;
   workflowStatus?: ClientWorkflowStatus;
+  workflowAssignee?: ClientProfileActor;
   hasPhoto?: boolean;
   size?: number;
 };
@@ -392,6 +408,7 @@ export async function listCloudProfiles(
   const params = new URLSearchParams();
   if (options.query?.trim()) params.set("q", options.query.trim());
   if (options.owner && options.owner !== "all") params.set("owner", options.owner);
+  if (options.status && options.status !== "all") params.set("status", options.status);
   if (options.page) params.set("page", String(options.page));
   if (options.pageSize) params.set("pageSize", String(options.pageSize));
   if (options.scope === "sync") params.set("scope", "sync");
@@ -404,13 +421,29 @@ export async function listCloudProfiles(
     deletedProfiles?: CloudDeletedProfileSummary[];
     pagination?: CloudProfilePagination;
     indexSource?: "d1" | "r2" | "r2-backfill";
+    workflowCounts?: ClientWorkflowCounts;
   }>(response);
   return {
     profiles: body.profiles,
     deletedProfiles: body.deletedProfiles ?? [],
     pagination: body.pagination,
     indexSource: body.indexSource,
+    workflowCounts: body.workflowCounts ?? {
+      all: body.profiles.length,
+      draft: body.profiles.filter((profile) => (profile.workflowStatus ?? "draft") === "draft")
+        .length,
+      review: body.profiles.filter((profile) => profile.workflowStatus === "review").length,
+      approved: body.profiles.filter((profile) => profile.workflowStatus === "approved").length,
+    },
   };
+}
+
+export async function listWorkflowValidators(endpoint: string, token: string) {
+  const response = await authenticatedFetch(`${cloudUrl(endpoint)}/workflow-validators`, {
+    headers: cloudHeaders(token),
+    cache: "no-store",
+  });
+  return cloudResponse<{ validators: ClientProfileActor[] }>(response);
 }
 
 export async function getCloudProfile(endpoint: string, token: string, id: string) {
@@ -478,6 +511,23 @@ export async function updateCloudProfileWorkflow(
     method: "PUT",
     headers: cloudHeaders(token, true),
     body: JSON.stringify({ status, expectedRevision, comment }),
+  });
+  return cloudResponse<{ ok: true; id: string; unchanged?: boolean; profile: ClientProfile }>(
+    response,
+  );
+}
+
+export async function updateCloudProfileWorkflowAssignment(
+  endpoint: string,
+  token: string,
+  id: string,
+  expectedRevision: number,
+  assigneeUsername: string,
+) {
+  const response = await authenticatedFetch(`${cloudUrl(endpoint, id)}/workflow/assignment`, {
+    method: "PUT",
+    headers: cloudHeaders(token, true),
+    body: JSON.stringify({ expectedRevision, assigneeUsername }),
   });
   return cloudResponse<{ ok: true; id: string; unchanged?: boolean; profile: ClientProfile }>(
     response,
@@ -569,6 +619,12 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
       | "workflowStatus"
       | "workflowUpdatedAt"
       | "workflowUpdatedBy"
+      | "workflowComment"
+      | "workflowCommentAt"
+      | "workflowCommentBy"
+      | "workflowAssignee"
+      | "workflowAssignedAt"
+      | "workflowAssignedBy"
     >;
   }>(response);
   if (!photo) {
@@ -587,6 +643,12 @@ export async function putCloudProfile(endpoint: string, token: string, profile: 
     workflowStatus: result.profile?.workflowStatus ?? cloudProfile.workflowStatus ?? "draft",
     workflowUpdatedAt: result.profile?.workflowUpdatedAt ?? cloudProfile.workflowUpdatedAt,
     workflowUpdatedBy: result.profile?.workflowUpdatedBy ?? cloudProfile.workflowUpdatedBy,
+    workflowComment: result.profile?.workflowComment ?? cloudProfile.workflowComment,
+    workflowCommentAt: result.profile?.workflowCommentAt ?? cloudProfile.workflowCommentAt,
+    workflowCommentBy: result.profile?.workflowCommentBy ?? cloudProfile.workflowCommentBy,
+    workflowAssignee: result.profile?.workflowAssignee ?? cloudProfile.workflowAssignee,
+    workflowAssignedAt: result.profile?.workflowAssignedAt ?? cloudProfile.workflowAssignedAt,
+    workflowAssignedBy: result.profile?.workflowAssignedBy ?? cloudProfile.workflowAssignedBy,
     photoAsset: cloudProfile.photoAsset,
   } satisfies CloudProfileCommit;
 }
@@ -601,6 +663,12 @@ export function applyCloudCommit(profile: ClientProfile, commit: CloudProfileCom
   committed.workflowStatus = commit.workflowStatus;
   committed.workflowUpdatedAt = commit.workflowUpdatedAt;
   committed.workflowUpdatedBy = commit.workflowUpdatedBy;
+  committed.workflowComment = commit.workflowComment;
+  committed.workflowCommentAt = commit.workflowCommentAt;
+  committed.workflowCommentBy = commit.workflowCommentBy;
+  committed.workflowAssignee = commit.workflowAssignee;
+  committed.workflowAssignedAt = commit.workflowAssignedAt;
+  committed.workflowAssignedBy = commit.workflowAssignedBy;
   committed.photoAsset = commit.photoAsset;
   if (commit.photoAsset?.r2Key) {
     for (const cv of Object.values(committed.cvByLanguage)) {

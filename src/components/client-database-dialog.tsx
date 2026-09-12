@@ -42,6 +42,7 @@ import {
   listCloudProfileVersions,
   listCloudProfiles,
   listCloudTrash,
+  listWorkflowValidators,
   listClientProfiles,
   putCloudProfile,
   purgeCloudTrashProfile,
@@ -50,8 +51,11 @@ import {
   saveClientProfile,
   synchronizeClientProfiles,
   updateCloudProfileWorkflow,
+  updateCloudProfileWorkflowAssignment,
   type ClientProfile,
+  type ClientProfileActor,
   type ClientProfileSummary,
+  type ClientWorkflowCounts,
   type CloudProfilePagination,
   type CloudProfileVersion,
   type TrashedClientProfile,
@@ -135,6 +139,7 @@ const COMPARISON_LABELS: Record<string, string> = {
   language: "Langue active",
   workflowStatus: "Statut de validation",
   workflowComment: "Commentaire de validation",
+  workflowAssignee: "Responsable de validation",
 };
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -159,6 +164,8 @@ const COMPARISON_IGNORED_FIELDS = new Set([
   "workflowUpdatedBy",
   "workflowCommentAt",
   "workflowCommentBy",
+  "workflowAssignedAt",
+  "workflowAssignedBy",
   "photoAsset",
   "photo",
   "dataUrl",
@@ -288,6 +295,7 @@ export function ClientDatabaseDialog({
   onOpenProfile,
   onDownloadPdf,
   onSyncStatusChange,
+  onWorkflowCountsChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -296,6 +304,7 @@ export function ClientDatabaseDialog({
   onOpenProfile: (profile: ClientProfile) => void;
   onDownloadPdf: (profile: ClientProfile) => Promise<void>;
   onSyncStatusChange?: (status: ClientSyncStatus) => void;
+  onWorkflowCountsChange?: (counts: ClientWorkflowCounts) => void;
 }) {
   const [profiles, setProfiles] = useState<ClientProfileSummary[]>([]);
   const [search, setSearch] = useState("");
@@ -304,6 +313,14 @@ export function ClientDatabaseDialog({
   const [conflictIds, setConflictIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [ownerFilter, setOwnerFilter] = useState<"all" | "created" | "updated" | "involved">("all");
+  const [workflowFilter, setWorkflowFilter] = useState<"all" | ClientWorkflowStatus>("all");
+  const [workflowCounts, setWorkflowCounts] = useState<ClientWorkflowCounts>({
+    all: 0,
+    draft: 0,
+    review: 0,
+    approved: 0,
+  });
+  const [validators, setValidators] = useState<ClientProfileActor[]>([]);
   const [pagination, setPagination] = useState<CloudProfilePagination>(EMPTY_PAGINATION);
   const [indexSource, setIndexSource] = useState<"d1" | "r2" | "r2-backfill" | "local">("local");
   const [historyProfileId, setHistoryProfileId] = useState<string | null>(null);
@@ -338,12 +355,24 @@ export function ClientDatabaseDialog({
   const loadLocalPage = useCallback(async () => {
     const query = search.trim().toLocaleLowerCase("fr");
     const username = user.username.toLocaleLowerCase("fr");
-    const matching = (await listClientProfiles()).filter((profile) => {
+    const localProfiles = await listClientProfiles();
+    const counts: ClientWorkflowCounts = {
+      all: localProfiles.length,
+      draft: localProfiles.filter((profile) => (profile.workflowStatus ?? "draft") === "draft")
+        .length,
+      review: localProfiles.filter((profile) => profile.workflowStatus === "review").length,
+      approved: localProfiles.filter((profile) => profile.workflowStatus === "approved").length,
+    };
+    setWorkflowCounts(counts);
+    onWorkflowCountsChange?.(counts);
+    const matching = localProfiles.filter((profile) => {
       const created = profile.createdBy?.username.toLocaleLowerCase("fr") ?? "";
       const updated = profile.updatedBy?.username.toLocaleLowerCase("fr") ?? "";
       if (ownerFilter === "created" && created !== username) return false;
       if (ownerFilter === "updated" && updated !== username) return false;
       if (ownerFilter === "involved" && created !== username && updated !== username) return false;
+      if (workflowFilter !== "all" && (profile.workflowStatus ?? "draft") !== workflowFilter)
+        return false;
       if (!query) return true;
       return [
         profile.id,
@@ -373,7 +402,7 @@ export function ClientDatabaseDialog({
       hasNext: resolvedPage < totalPages,
     });
     setIndexSource("local");
-  }, [ownerFilter, page, search, user.username]);
+  }, [onWorkflowCountsChange, ownerFilter, page, search, user.username, workflowFilter]);
 
   const loadPage = useCallback(
     async (automatic = false) => {
@@ -386,6 +415,7 @@ export function ClientDatabaseDialog({
         const result = await listCloudProfiles(CLIENTS_API_ENDPOINT, token, {
           query: search,
           owner: ownerFilter,
+          status: workflowFilter,
           page,
           pageSize: CLIENT_PAGE_SIZE,
         });
@@ -393,6 +423,8 @@ export function ClientDatabaseDialog({
         setProfiles(result.profiles);
         setPagination(result.pagination ?? EMPTY_PAGINATION);
         setIndexSource(result.indexSource ?? "r2");
+        setWorkflowCounts(result.workflowCounts);
+        onWorkflowCountsChange?.(result.workflowCounts);
         if (result.pagination && result.pagination.page !== page) {
           setPage(result.pagination.page);
         }
@@ -421,8 +453,30 @@ export function ClientDatabaseDialog({
         if (requestId === pageRequestRef.current) setBusy("");
       }
     },
-    [loadLocalPage, onSyncStatusChange, ownerFilter, page, search],
+    [
+      loadLocalPage,
+      onSyncStatusChange,
+      onWorkflowCountsChange,
+      ownerFilter,
+      page,
+      search,
+      workflowFilter,
+    ],
   );
+
+  const loadValidators = useCallback(async () => {
+    if (!canApprove) return;
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré.");
+      const result = await listWorkflowValidators(CLIENTS_API_ENDPOINT, token);
+      setValidators(result.validators);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Chargement des responsables impossible.",
+      );
+    }
+  }, [canApprove]);
 
   const synchronize = useCallback(async () => {
     if (!canWrite) {
@@ -494,6 +548,10 @@ export function ClientDatabaseDialog({
   useEffect(() => {
     if (open && canDelete) void loadTrash();
   }, [canDelete, loadTrash, open]);
+
+  useEffect(() => {
+    if (open && canApprove) void loadValidators();
+  }, [canApprove, loadValidators, open]);
 
   const resolveProfile = async (summary: ClientProfileSummary) => {
     const local = await getClientProfile(summary.id);
@@ -645,6 +703,35 @@ export function ClientDatabaseDialog({
     } catch (error) {
       await loadPage(true);
       setMessage(error instanceof Error ? error.message : "Changement de statut impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const assignWorkflow = async (profile: ClientProfileSummary, assigneeUsername: string) => {
+    setBusy(`assignment:${profile.id}`);
+    setMessage("");
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const result = await updateCloudProfileWorkflowAssignment(
+        CLIENTS_API_ENDPOINT,
+        token,
+        profile.id,
+        profile.revision ?? 0,
+        assigneeUsername,
+      );
+      await saveClientProfile(result.profile);
+      if (activeProfileId === profile.id) onOpenProfile(result.profile);
+      await loadPage(true);
+      setMessage(
+        assigneeUsername
+          ? `« ${profile.name} » a été attribué à ${result.profile.workflowAssignee?.displayName || assigneeUsername}.`
+          : `L’attribution de « ${profile.name} » a été retirée.`,
+      );
+    } catch (error) {
+      await loadPage(true);
+      setMessage(error instanceof Error ? error.message : "Attribution impossible.");
     } finally {
       setBusy("");
     }
@@ -852,6 +939,49 @@ export function ClientDatabaseDialog({
 
         <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
           <section className="space-y-3">
+            <div
+              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+              aria-label="Tableau de validation"
+            >
+              {(
+                [
+                  ["all", "Tous", "border-slate-200 bg-slate-50 text-slate-700"],
+                  ["draft", "Brouillons", "border-slate-200 bg-white text-slate-700"],
+                  ["review", "À valider", "border-amber-200 bg-amber-50 text-amber-900"],
+                  ["approved", "Validés", "border-emerald-200 bg-emerald-50 text-emerald-900"],
+                ] as const
+              ).map(([status, label, classes]) => (
+                <button
+                  key={status}
+                  type="button"
+                  className={`rounded-xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${classes} ${workflowFilter === status ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                  aria-pressed={workflowFilter === status}
+                  onClick={() => {
+                    setWorkflowFilter(status);
+                    setPage(1);
+                  }}
+                >
+                  <span className="block text-2xl font-black leading-none">
+                    {workflowCounts[status]}
+                  </span>
+                  <span className="mt-1 block text-[11px] font-bold uppercase tracking-wide">
+                    {label}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {canApprove && workflowCounts.review > 0 && (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
+                <MessageSquareWarning className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                <span>
+                  <strong>{workflowCounts.review} CV en attente de validation.</strong> Ouvrez le
+                  filtre « À valider », attribuez chaque dossier puis validez-le ou renvoyez-le avec
+                  vos corrections.
+                </span>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -939,6 +1069,12 @@ export function ClientDatabaseDialog({
                                 ) : null}
                                 {workflow.label}
                               </span>
+                              {profile.workflowAssignee && (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-800">
+                                  <UserRoundPlus className="h-2.5 w-2.5" />
+                                  Responsable : {profile.workflowAssignee.displayName}
+                                </span>
+                              )}
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">
                               {profile.email || profile.phone || "Coordonnées non renseignées"} ·
@@ -988,6 +1124,34 @@ export function ClientDatabaseDialog({
                             </span>
                           )}
                         </div>
+                        {workflowStatus === "review" && canApprove && (
+                          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 p-2.5">
+                            <label
+                              className="text-xs font-semibold text-indigo-950"
+                              htmlFor={`workflow-assignee-${profile.id}`}
+                            >
+                              Attribuer la validation
+                            </label>
+                            <select
+                              id={`workflow-assignee-${profile.id}`}
+                              aria-label={`Responsable de validation pour ${profile.name}`}
+                              className="h-8 min-w-52 flex-1 rounded-md border border-indigo-200 bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-indigo-300"
+                              value={profile.workflowAssignee?.username || ""}
+                              disabled={Boolean(busy)}
+                              onChange={(event) => void assignWorkflow(profile, event.target.value)}
+                            >
+                              <option value="">Non attribué</option>
+                              {validators.map((validator) => (
+                                <option key={validator.username} value={validator.username}>
+                                  {validator.displayName} ({validator.username})
+                                </option>
+                              ))}
+                            </select>
+                            {busy === `assignment:${profile.id}` && (
+                              <LoaderCircle className="h-4 w-4 animate-spin text-indigo-700" />
+                            )}
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
@@ -1246,6 +1410,8 @@ export function ClientDatabaseDialog({
                                 const current = version.revision === (profile.revision ?? 0);
                                 const oldest = index === historyVersions.length - 1;
                                 const olderStatus = historyVersions[index + 1]?.workflowStatus;
+                                const olderAssignee =
+                                  historyVersions[index + 1]?.workflowAssignee?.username;
                                 const eventName = oldest
                                   ? "Création du client"
                                   : version.restoredFromRevision
@@ -1256,7 +1422,11 @@ export function ClientDatabaseDialog({
                                         : version.workflowStatus === "review"
                                           ? "CV soumis à validation"
                                           : "CV repassé en brouillon"
-                                      : "Modification du client";
+                                      : version.workflowAssignee?.username !== olderAssignee
+                                        ? version.workflowAssignee
+                                          ? `Validation attribuée à ${version.workflowAssignee.displayName}`
+                                          : "Attribution de validation retirée"
+                                        : "Modification du client";
                                 return (
                                   <div
                                     key={version.revision}

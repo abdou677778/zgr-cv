@@ -28,6 +28,9 @@ type StoredProfile = Record<string, unknown> & {
   workflowComment?: string;
   workflowCommentAt?: string;
   workflowCommentBy?: Pick<TestUser, "username" | "displayName" | "role">;
+  workflowAssignee?: Pick<TestUser, "username" | "displayName" | "role">;
+  workflowAssignedAt?: string;
+  workflowAssignedBy?: Pick<TestUser, "username" | "displayName" | "role">;
 };
 
 const USERS: Record<string, TestUser> = {
@@ -133,6 +136,9 @@ class SharedClientApi {
       workflowComment: profile.workflowComment,
       workflowCommentAt: profile.workflowCommentAt,
       workflowCommentBy: profile.workflowCommentBy,
+      workflowAssignee: profile.workflowAssignee,
+      workflowAssignedAt: profile.workflowAssignedAt,
+      workflowAssignedBy: profile.workflowAssignedBy,
       language: profile.language,
       hasPhoto: false,
     };
@@ -337,7 +343,16 @@ class SharedClientApi {
     if (url.pathname === "/api/clients" && method === "GET") {
       const query = (url.searchParams.get("q") || "").trim().toLocaleLowerCase("fr");
       const owner = url.searchParams.get("owner") || "all";
-      const profiles = [...this.profiles.values()]
+      const status = url.searchParams.get("status") || "all";
+      const allProfiles = [...this.profiles.values()];
+      const workflowCounts = {
+        all: allProfiles.length,
+        draft: allProfiles.filter((profile) => (profile.workflowStatus ?? "draft") === "draft")
+          .length,
+        review: allProfiles.filter((profile) => profile.workflowStatus === "review").length,
+        approved: allProfiles.filter((profile) => profile.workflowStatus === "approved").length,
+      };
+      const profiles = allProfiles
         .filter((profile) => {
           if (owner === "created" && profile.createdBy.username !== user.username) return false;
           if (owner === "updated" && profile.updatedBy.username !== user.username) return false;
@@ -347,6 +362,7 @@ class SharedClientApi {
             profile.updatedBy.username !== user.username
           )
             return false;
+          if (status !== "all" && (profile.workflowStatus ?? "draft") !== status) return false;
           return (
             !query ||
             [profile.id, profile.name, profile.email, profile.phone]
@@ -378,6 +394,17 @@ class SharedClientApi {
           hasNext: page < totalPages,
         },
         indexSource: "d1",
+        workflowCounts,
+      });
+    }
+
+    if (url.pathname === "/api/clients/workflow-validators" && method === "GET") {
+      if (user.role !== "admin" && user.workflowManager !== true)
+        return this.respond(route, 403, { error: "Droit de validation requis." });
+      return this.respond(route, 200, {
+        validators: Object.values(USERS)
+          .filter((candidate) => candidate.role === "admin" || candidate.workflowManager === true)
+          .map(actor),
       });
     }
 
@@ -403,6 +430,7 @@ class SharedClientApi {
           updatedAt: version.updatedAt,
           updatedBy: version.updatedBy,
           workflowStatus: version.workflowStatus ?? "draft",
+          workflowAssignee: version.workflowAssignee,
           hasPhoto: false,
         }));
       return this.respond(route, 200, {
@@ -410,6 +438,54 @@ class SharedClientApi {
         currentRevision: profile.revision,
         versions,
       });
+    }
+
+    const assignmentMatch = url.pathname.match(/^\/api\/clients\/([^/]+)\/workflow\/assignment$/);
+    if (assignmentMatch && method === "PUT") {
+      const id = decodeURIComponent(assignmentMatch[1]);
+      const current = this.profiles.get(id);
+      if (!current) return this.respond(route, 404, { error: "Profil de test introuvable." });
+      if (user.role !== "admin" && user.workflowManager !== true)
+        return this.respond(route, 403, { error: "Droit de validation requis." });
+      const input = request.postDataJSON() as {
+        expectedRevision?: number;
+        assigneeUsername?: string;
+      };
+      if (input.expectedRevision !== current.revision) {
+        return this.respond(route, 409, {
+          error: "Ce profil a été modifié dans une autre session.",
+          code: "CLIENT_PROFILE_CONFLICT",
+          current: {
+            revision: current.revision,
+            updatedAt: current.updatedAt,
+            updatedBy: current.updatedBy,
+          },
+        });
+      }
+      if ((current.workflowStatus ?? "draft") !== "review")
+        return this.respond(route, 422, { error: "CV non attribuable." });
+      const assignee = input.assigneeUsername ? USERS[input.assigneeUsername] : undefined;
+      if (
+        input.assigneeUsername &&
+        (!assignee || (assignee.role !== "admin" && assignee.workflowManager !== true))
+      )
+        return this.respond(route, 422, { error: "Responsable non autorisé." });
+      this.revisionClock += 1;
+      const timestamp = new Date(Date.UTC(2026, 8, 11, 9, 0, this.revisionClock)).toISOString();
+      const updated: StoredProfile = {
+        ...structuredClone(current),
+        revision: current.revision + 1,
+        updatedAt: timestamp,
+        updatedBy: actor(user),
+        workflowAssignee: assignee ? actor(assignee) : undefined,
+        workflowAssignedAt: assignee ? timestamp : undefined,
+        workflowAssignedBy: assignee ? actor(user) : undefined,
+      };
+      this.profiles.set(id, updated);
+      const versions = this.profileVersions.get(id) || new Map<number, StoredProfile>();
+      versions.set(updated.revision, structuredClone(updated));
+      this.profileVersions.set(id, versions);
+      return this.respond(route, 200, { ok: true, id, profile: updated });
     }
 
     const workflowMatch = url.pathname.match(/^\/api\/clients\/([^/]+)\/workflow$/);
@@ -475,6 +551,13 @@ class SharedClientApi {
                 workflowCommentBy: undefined,
               }
             : {}),
+        ...(input.status === "review" && currentStatus === "draft"
+          ? {
+              workflowAssignee: undefined,
+              workflowAssignedAt: undefined,
+              workflowAssignedBy: undefined,
+            }
+          : {}),
       };
       this.profiles.set(id, updated);
       const versions = this.profileVersions.get(id) || new Map<number, StoredProfile>();
@@ -762,6 +845,14 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await editorWorkflowRow.getByRole("button", { name: "Soumettre" }).click();
     await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("review");
     await expect(editorWorkflowRow.getByText("À valider", { exact: true })).toBeVisible();
+    await expect(editorWorkflowDatabase.getByRole("button", { name: /1 À valider/ })).toBeVisible();
+    await editorWorkflowRow
+      .getByLabel("Responsable de validation pour Client E2E partagé")
+      .selectOption("editeur");
+    await expect
+      .poll(() => api.profiles.get(profileId)?.workflowAssignee?.username)
+      .toBe("editeur");
+    await expect(editorWorkflowRow.getByText(/Responsable : Éditeur E2E/)).toBeVisible();
     editorPage.once("dialog", (dialog) => dialog.accept());
     await editorWorkflowRow.getByRole("button", { name: "Valider" }).click();
     await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("approved");

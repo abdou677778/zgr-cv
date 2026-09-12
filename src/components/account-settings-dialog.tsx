@@ -86,6 +86,7 @@ const eventLabels: Record<string, string> = {
   client_workflow_approved: "CV validé et verrouillé",
   client_workflow_reopened: "CV rouvert en brouillon",
   client_workflow_withdrawn: "Validation du CV retirée",
+  client_workflow_assigned: "Responsable de validation attribué",
   client_version_restored: "Version client restaurée",
   client_backup_restored: "Base clients restaurée",
 };

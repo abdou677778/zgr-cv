@@ -131,6 +131,7 @@ export async function createManagedUser(input: {
   displayName: string;
   password: string;
   role: AccountRole;
+  workflowManager: boolean;
 }) {
   return (await apiJson<{ user: ManagedUser }>("/api/admin/users", jsonRequest("POST", input)))
     .user;
@@ -138,7 +139,12 @@ export async function createManagedUser(input: {
 
 export async function updateManagedUser(
   username: string,
-  input: { displayName: string; active: boolean; role: AccountRole },
+  input: {
+    displayName: string;
+    active: boolean;
+    role: AccountRole;
+    workflowManager: boolean;
+  },
 ) {
   return (
     await apiJson<{ user: ManagedUser }>(

@@ -9,6 +9,7 @@ type TestUser = {
   updatedAt: string;
   lastLoginAt: string;
   loginCount: number;
+  workflowManager?: boolean;
 };
 
 type StoredProfile = Record<string, unknown> & {
@@ -24,6 +25,9 @@ type StoredProfile = Record<string, unknown> & {
   workflowStatus?: "draft" | "review" | "approved";
   workflowUpdatedAt?: string;
   workflowUpdatedBy?: Pick<TestUser, "username" | "displayName" | "role">;
+  workflowComment?: string;
+  workflowCommentAt?: string;
+  workflowCommentBy?: Pick<TestUser, "username" | "displayName" | "role">;
 };
 
 const USERS: Record<string, TestUser> = {
@@ -36,6 +40,7 @@ const USERS: Record<string, TestUser> = {
     updatedAt: "2026-09-11T08:00:00.000Z",
     lastLoginAt: "2026-09-11T08:00:00.000Z",
     loginCount: 1,
+    workflowManager: true,
   },
   editeur: {
     username: "editeur",
@@ -46,6 +51,7 @@ const USERS: Record<string, TestUser> = {
     updatedAt: "2026-09-11T08:00:00.000Z",
     lastLoginAt: "2026-09-11T08:00:00.000Z",
     loginCount: 1,
+    workflowManager: true,
   },
   lecteur: {
     username: "lecteur",
@@ -61,6 +67,25 @@ const USERS: Record<string, TestUser> = {
 
 function actor(user: TestUser) {
   return { username: user.username, displayName: user.displayName, role: user.role };
+}
+
+function publicTestUser(user: TestUser) {
+  const canEdit = user.role === "admin" || user.role === "editor";
+  const clientsApprove = user.role === "admin" || user.workflowManager === true;
+  return {
+    ...user,
+    workflowManager: clientsApprove,
+    permissions: {
+      clientsRead: true,
+      clientsWrite: canEdit,
+      clientsApprove,
+      clientsDelete: user.role === "admin",
+      clientsRestore: user.role === "admin",
+      clientsDownload: true,
+      aiUse: canEdit,
+      manageUsers: user.role === "admin",
+    },
+  };
 }
 
 function tokenFor(username: string) {
@@ -105,6 +130,9 @@ class SharedClientApi {
       workflowStatus: profile.workflowStatus ?? "draft",
       workflowUpdatedAt: profile.workflowUpdatedAt,
       workflowUpdatedBy: profile.workflowUpdatedBy,
+      workflowComment: profile.workflowComment,
+      workflowCommentAt: profile.workflowCommentAt,
+      workflowCommentBy: profile.workflowCommentBy,
       language: profile.language,
       hasPhoto: false,
     };
@@ -122,13 +150,17 @@ class SharedClientApi {
       if (!user) return this.respond(route, 401, { error: "Identifiants de test invalides." });
       const token = tokenFor(user.username);
       this.sessions.set(token, user);
-      return this.respond(route, 200, { token, user, expiresAt: Date.now() + 3_600_000 });
+      return this.respond(route, 200, {
+        token,
+        user: publicTestUser(user),
+        expiresAt: Date.now() + 3_600_000,
+      });
     }
 
     if (url.pathname === "/api/auth/session" && method === "GET") {
       const user = this.authenticatedUser(route);
       return user
-        ? this.respond(route, 200, { ok: true, user })
+        ? this.respond(route, 200, { ok: true, user: publicTestUser(user) })
         : this.respond(route, 401, { error: "Session de test expirée." });
     }
 
@@ -165,7 +197,7 @@ class SharedClientApi {
       if (url.pathname === "/api/admin/users" && method === "GET") {
         return this.respond(route, 200, {
           users: Object.values(USERS).map((managedUser) => ({
-            ...managedUser,
+            ...publicTestUser(managedUser),
             sessionVersion: 1,
             isPrimary: managedUser.username === "admin",
           })),
@@ -388,6 +420,7 @@ class SharedClientApi {
       const input = request.postDataJSON() as {
         status?: "draft" | "review" | "approved";
         expectedRevision?: number;
+        comment?: string;
       };
       if (input.expectedRevision !== current.revision) {
         return this.respond(route, 409, {
@@ -402,8 +435,9 @@ class SharedClientApi {
       }
       if (!input.status) return this.respond(route, 422, { error: "Statut invalide." });
       const currentStatus = current.workflowStatus ?? "draft";
-      const adminTransition =
-        user.role === "admin" &&
+      const managesWorkflow = user.role === "admin" || user.workflowManager === true;
+      const managerTransition =
+        managesWorkflow &&
         ((currentStatus === "draft" && input.status === "review") ||
           (currentStatus === "review" &&
             (input.status === "draft" || input.status === "approved")) ||
@@ -412,8 +446,11 @@ class SharedClientApi {
         user.role === "editor" &&
         ((currentStatus === "draft" && input.status === "review") ||
           (currentStatus === "review" && input.status === "draft"));
-      if (!adminTransition && !editorTransition) {
+      if (!managerTransition && !editorTransition) {
         return this.respond(route, 403, { error: "Droits administrateur requis." });
+      }
+      if (input.status === "draft" && managesWorkflow && !input.comment?.trim()) {
+        return this.respond(route, 422, { error: "Commentaire obligatoire." });
       }
       this.revisionClock += 1;
       const timestamp = new Date(Date.UTC(2026, 8, 11, 9, 0, this.revisionClock)).toISOString();
@@ -425,6 +462,19 @@ class SharedClientApi {
         workflowStatus: input.status,
         workflowUpdatedAt: timestamp,
         workflowUpdatedBy: actor(user),
+        ...(input.status === "draft" && managesWorkflow
+          ? {
+              workflowComment: input.comment?.trim(),
+              workflowCommentAt: timestamp,
+              workflowCommentBy: actor(user),
+            }
+          : input.status === "approved"
+            ? {
+                workflowComment: undefined,
+                workflowCommentAt: undefined,
+                workflowCommentBy: undefined,
+              }
+            : {}),
       };
       this.profiles.set(id, updated);
       const versions = this.profileVersions.get(id) || new Map<number, StoredProfile>();
@@ -712,37 +762,32 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await editorWorkflowRow.getByRole("button", { name: "Soumettre" }).click();
     await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("review");
     await expect(editorWorkflowRow.getByText("À valider", { exact: true })).toBeVisible();
+    editorPage.once("dialog", (dialog) => dialog.accept());
+    await editorWorkflowRow.getByRole("button", { name: "Valider" }).click();
+    await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("approved");
+    await expect(editorWorkflowRow.getByText("Validé", { exact: true })).toBeVisible();
     await editorWorkflowDatabase.getByRole("button", { name: "Close" }).click();
 
-    await adminPage.getByRole("button", { name: "Base de données", exact: true }).click();
-    const adminWorkflowDatabase = adminPage.getByRole("dialog", {
-      name: /Base de données clients/,
-    });
-    const adminWorkflowRow = adminWorkflowDatabase
-      .locator("article")
-      .filter({ hasText: "Client E2E partagé" });
-    await expect(adminWorkflowRow.getByText("À valider", { exact: true })).toBeVisible();
-    adminPage.once("dialog", (dialog) => dialog.accept());
-    await adminWorkflowRow.getByRole("button", { name: "Valider" }).click();
-    await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("approved");
-    await expect(adminWorkflowRow.getByText("Validé", { exact: true })).toBeVisible();
-    await adminWorkflowDatabase.getByRole("button", { name: "Close" }).click();
-
-    await editorPage.getByPlaceholder("+1 514 000 0000").fill("+213 555 888 888");
-    await editorPage.getByRole("button", { name: "Sauvegarder", exact: true }).click();
     await expect(editorPage.getByText(/CV validé et verrouillé/).first()).toBeVisible();
     await expect(
       editorPage.getByRole("button", { name: "Sauvegarder", exact: true }),
     ).toBeDisabled();
     expect(api.profiles.get(profileId)?.phone).toBe("+213 555 300 300");
 
-    await adminPage.getByRole("button", { name: "Base de données", exact: true }).click();
-    const reopenDatabase = adminPage.getByRole("dialog", { name: /Base de données clients/ });
+    await editorPage.getByRole("button", { name: "Base de données", exact: true }).click();
+    const reopenDatabase = editorPage.getByRole("dialog", { name: /Base de données clients/ });
     const reopenRow = reopenDatabase.locator("article").filter({ hasText: "Client E2E partagé" });
-    adminPage.once("dialog", (dialog) => dialog.accept());
+    editorPage.once("dialog", async (dialog) => {
+      await dialog.accept("Mettre à jour les coordonnées du client.");
+    });
     await reopenRow.getByRole("button", { name: "Rouvrir" }).click();
     await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("draft");
     await expect(reopenRow.getByText("Brouillon", { exact: true })).toBeVisible();
+    await expect(reopenRow.getByText(/Mettre à jour les coordonnées du client\./)).toBeVisible();
+    await reopenDatabase.getByRole("button", { name: "Close" }).click();
+    await editorPage.getByPlaceholder("+1 514 000 0000").fill("+213 555 888 888");
+    await editorPage.getByRole("button", { name: "Sauvegarder", exact: true }).click();
+    await expect.poll(() => api.profiles.get(profileId)?.phone).toBe("+213 555 888 888");
   } finally {
     await adminContext.close();
     await editorContext.close();

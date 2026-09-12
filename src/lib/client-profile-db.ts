@@ -32,6 +32,9 @@ export type ClientProfile = {
   workflowStatus?: ClientWorkflowStatus;
   workflowUpdatedAt?: string;
   workflowUpdatedBy?: ClientProfileActor;
+  workflowComment?: string;
+  workflowCommentAt?: string;
+  workflowCommentBy?: ClientProfileActor;
   language: DocumentLanguage;
   cvByLanguage: Record<DocumentLanguage, CV>;
   hiddenElements: HiddenCvElements;
@@ -65,6 +68,9 @@ export type ClientProfileSummary = Pick<
   | "workflowStatus"
   | "workflowUpdatedAt"
   | "workflowUpdatedBy"
+  | "workflowComment"
+  | "workflowCommentAt"
+  | "workflowCommentBy"
   | "language"
 > & { hasPhoto?: boolean };
 
@@ -466,11 +472,12 @@ export async function updateCloudProfileWorkflow(
   id: string,
   status: ClientWorkflowStatus,
   expectedRevision: number,
+  comment?: string,
 ) {
   const response = await authenticatedFetch(`${cloudUrl(endpoint, id)}/workflow`, {
     method: "PUT",
     headers: cloudHeaders(token, true),
-    body: JSON.stringify({ status, expectedRevision }),
+    body: JSON.stringify({ status, expectedRevision, comment }),
   });
   return cloudResponse<{ ok: true; id: string; unchanged?: boolean; profile: ClientProfile }>(
     response,

@@ -163,6 +163,7 @@ export function AccountSettingsDialog({
     displayName: "",
     password: "",
     role: "editor" as AccountRole,
+    workflowManager: false,
   });
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const [ownPassword, setOwnPassword] = useState({ current: "", next: "", confirm: "" });
@@ -292,7 +293,13 @@ export function AccountSettingsDialog({
     setMessage(null);
     try {
       await createManagedUser(newUser);
-      setNewUser({ username: "", displayName: "", password: "", role: "editor" });
+      setNewUser({
+        username: "",
+        displayName: "",
+        password: "",
+        role: "editor",
+        workflowManager: false,
+      });
       setMessage({ ok: true, text: "Le nouveau profil peut maintenant se connecter." });
       await loadAdminData();
     } catch (error) {
@@ -313,6 +320,7 @@ export function AccountSettingsDialog({
         displayName: profile.displayName,
         active: profile.active,
         role: profile.role,
+        workflowManager: profile.workflowManager,
       });
       setUsers((current) =>
         current.map((item) => (item.username === profile.username ? updated : item)),
@@ -1078,9 +1086,15 @@ export function AccountSettingsDialog({
                     id="new-user-role"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                     value={newUser.role}
-                    onChange={(event) =>
-                      setNewUser({ ...newUser, role: event.target.value as AccountRole })
-                    }
+                    onChange={(event) => {
+                      const role = event.target.value as AccountRole;
+                      setNewUser({
+                        ...newUser,
+                        role,
+                        workflowManager:
+                          role === "admin" || (role === "editor" && newUser.workflowManager),
+                      });
+                    }}
                   >
                     <option value="editor">Éditeur — créer et modifier</option>
                     <option value="viewer">Lecture seule — consulter</option>
@@ -1098,10 +1112,23 @@ export function AccountSettingsDialog({
                     required
                   />
                 </div>
-                <Button
-                  className="md:col-span-2 md:w-fit xl:col-span-4"
-                  disabled={busy === "create"}
-                >
+                <label className="flex min-h-10 items-center gap-2 rounded-md border border-indigo-200 bg-white px-3 text-sm xl:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={newUser.role === "admin" || newUser.workflowManager}
+                    disabled={newUser.role !== "editor"}
+                    onChange={(event) =>
+                      setNewUser({ ...newUser, workflowManager: event.target.checked })
+                    }
+                  />
+                  <span>
+                    <strong>Responsable de validation</strong>
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      — peut valider, déverrouiller et renvoyer un CV en brouillon
+                    </span>
+                  </span>
+                </label>
+                <Button className="md:col-span-2 md:w-fit" disabled={busy === "create"}>
                   {busy === "create" ? (
                     <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
@@ -1152,6 +1179,11 @@ export function AccountSettingsDialog({
                                   Principal
                                 </span>
                               )}
+                              {profile.permissions.clientsApprove && !profile.isPrimary && (
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                                  Validation
+                                </span>
+                              )}
                             </div>
                             <p className="mt-1 text-[11px] text-muted-foreground">
                               Dernière connexion : {formatDate(profile.lastLoginAt)} ·{" "}
@@ -1179,18 +1211,22 @@ export function AccountSettingsDialog({
                               className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60"
                               value={profile.role}
                               disabled={isProtected}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const role = event.target.value as AccountRole;
                                 setUsers((current) =>
                                   current.map((item) =>
                                     item.username === profile.username
                                       ? {
                                           ...item,
-                                          role: event.target.value as AccountRole,
+                                          role,
+                                          workflowManager:
+                                            role === "admin" ||
+                                            (role === "editor" && item.workflowManager),
                                         }
                                       : item,
                                   ),
-                                )
-                              }
+                                );
+                              }}
                             >
                               <option value="editor">Éditeur</option>
                               <option value="viewer">Lecture seule</option>
@@ -1244,6 +1280,31 @@ export function AccountSettingsDialog({
                             )}
                           </div>
                         </div>
+                        <label className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm">
+                          <input
+                            className="mt-0.5"
+                            type="checkbox"
+                            checked={profile.role === "admin" || profile.workflowManager}
+                            disabled={isProtected || profile.role !== "editor"}
+                            onChange={(event) =>
+                              setUsers((current) =>
+                                current.map((item) =>
+                                  item.username === profile.username
+                                    ? { ...item, workflowManager: event.target.checked }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                          <span>
+                            <strong>Responsable de validation</strong>
+                            <span className="block text-xs leading-relaxed text-muted-foreground">
+                              Peut valider et verrouiller un CV, puis le déverrouiller ou le
+                              renvoyer en brouillon avec un commentaire. Ce droit ne donne pas accès
+                              à la gestion des utilisateurs.
+                            </span>
+                          </span>
+                        </label>
                         <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-end">
                           <div className="min-w-0 flex-1 space-y-1.5">
                             <Label className="text-xs">

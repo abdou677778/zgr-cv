@@ -12,6 +12,7 @@ import {
   History,
   LockKeyhole,
   LoaderCircle,
+  MessageSquareWarning,
   PencilLine,
   RefreshCw,
   RotateCcw,
@@ -133,6 +134,7 @@ const COMPARISON_LABELS: Record<string, string> = {
   phone: "Téléphone du profil",
   language: "Langue active",
   workflowStatus: "Statut de validation",
+  workflowComment: "Commentaire de validation",
 };
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -155,6 +157,8 @@ const COMPARISON_IGNORED_FIELDS = new Set([
   "restoredFromTrash",
   "workflowUpdatedAt",
   "workflowUpdatedBy",
+  "workflowCommentAt",
+  "workflowCommentBy",
   "photoAsset",
   "photo",
   "dataUrl",
@@ -174,7 +178,7 @@ const WORKFLOW_LABELS: Record<
   review: {
     label: "À valider",
     classes: "border-amber-200 bg-amber-100 text-amber-800",
-    description: "En attente de validation administrateur.",
+    description: "En attente d’un responsable de validation.",
   },
   approved: {
     label: "Validé",
@@ -312,6 +316,7 @@ export function ClientDatabaseDialog({
   const [trashLoading, setTrashLoading] = useState(false);
   const pageRequestRef = useRef(0);
   const canWrite = user.permissions.clientsWrite;
+  const canApprove = user.permissions.clientsApprove;
   const canDelete = user.permissions.clientsDelete;
   const canRestore = user.permissions.clientsRestore;
   const canDownload = user.permissions.clientsDownload;
@@ -597,7 +602,18 @@ export function ClientDatabaseDialog({
         : status === "approved"
           ? "valider et verrouiller ce CV"
           : "repasser ce CV en brouillon";
-    if (!confirm(`Voulez-vous ${action} pour « ${profile.name} » ?`)) return;
+    let comment: string | undefined;
+    if (status === "draft" && canApprove) {
+      const requestedComment = window.prompt(
+        `Indiquez les corrections demandées pour « ${profile.name} » :`,
+      );
+      if (requestedComment === null) return;
+      comment = requestedComment.trim();
+      if (!comment) {
+        setMessage("Le commentaire de retour en brouillon est obligatoire.");
+        return;
+      }
+    } else if (!confirm(`Voulez-vous ${action} pour « ${profile.name} » ?`)) return;
     setBusy(`workflow:${profile.id}:${status}`);
     setMessage("");
     try {
@@ -609,6 +625,7 @@ export function ClientDatabaseDialog({
         profile.id,
         status,
         profile.revision ?? 0,
+        comment,
       );
       await saveClientProfile(result.profile);
       if (activeProfileId === profile.id) onOpenProfile(result.profile);
@@ -943,6 +960,22 @@ export function ClientDatabaseDialog({
                                   : ""}
                               </span>
                             </div>
+                            {profile.workflowComment && workflowStatus !== "approved" && (
+                              <div className="mt-2 flex max-w-xl items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-950">
+                                <MessageSquareWarning className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
+                                <span>
+                                  <strong>Corrections demandées :</strong> {profile.workflowComment}
+                                  {profile.workflowCommentBy?.displayName && (
+                                    <span className="block text-[11px] text-amber-800">
+                                      Par {profile.workflowCommentBy.displayName}
+                                      {profile.workflowCommentAt
+                                        ? ` · ${new Date(profile.workflowCommentAt).toLocaleString("fr-DZ")}`
+                                        : ""}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           {activeProfileId === profile.id && (
                             <span className="rounded-full bg-primary px-2 py-1 text-[11px] text-primary-foreground">
@@ -1014,7 +1047,7 @@ export function ClientDatabaseDialog({
                               Soumettre
                             </Button>
                           )}
-                          {canWrite && workflowStatus === "review" && user.role !== "admin" && (
+                          {canWrite && workflowStatus === "review" && !canApprove && (
                             <Button
                               type="button"
                               size="sm"
@@ -1026,7 +1059,7 @@ export function ClientDatabaseDialog({
                               validation
                             </Button>
                           )}
-                          {user.role === "admin" && workflowStatus === "review" && (
+                          {canApprove && workflowStatus === "review" && (
                             <>
                               <Button
                                 type="button"
@@ -1052,7 +1085,7 @@ export function ClientDatabaseDialog({
                               </Button>
                             </>
                           )}
-                          {user.role === "admin" && workflowStatus === "approved" && (
+                          {canApprove && workflowStatus === "approved" && (
                             <Button
                               type="button"
                               size="sm"

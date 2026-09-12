@@ -580,6 +580,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [activeProfileWorkflowStatus, setActiveProfileWorkflowStatus] =
     useState<ClientWorkflowStatus>("draft");
+  const [activeProfileWorkflowComment, setActiveProfileWorkflowComment] = useState<{
+    text: string;
+    author?: string;
+    at?: string;
+  } | null>(null);
   const [activeClientOrder, setActiveClientOrder] = useState<ClientOrderSummary | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [clientSyncStatus, setClientSyncStatus] = useState<ClientSyncStatus>({
@@ -763,12 +768,24 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     let cancelled = false;
     if (!activeProfileId) {
       setActiveProfileWorkflowStatus("draft");
+      setActiveProfileWorkflowComment(null);
       return () => {
         cancelled = true;
       };
     }
     void getClientProfile(activeProfileId).then((profile) => {
-      if (!cancelled) setActiveProfileWorkflowStatus(profile?.workflowStatus ?? "draft");
+      if (!cancelled) {
+        setActiveProfileWorkflowStatus(profile?.workflowStatus ?? "draft");
+        setActiveProfileWorkflowComment(
+          profile?.workflowComment
+            ? {
+                text: profile.workflowComment,
+                author: profile.workflowCommentBy?.displayName,
+                at: profile.workflowCommentAt,
+              }
+            : null,
+        );
+      }
     });
     return () => {
       cancelled = true;
@@ -1524,7 +1541,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     if (profileEditingLocked) {
       setClientSyncStatus({
         state: "synced",
-        message: "Ce CV validé est verrouillé. Un administrateur doit le rouvrir en brouillon.",
+        message:
+          "Ce CV validé est verrouillé. Un responsable de validation doit le rouvrir en brouillon.",
       });
       return;
     }
@@ -1554,6 +1572,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         workflowStatus: existing?.workflowStatus ?? "draft",
         workflowUpdatedAt: existing?.workflowUpdatedAt ?? now,
         workflowUpdatedBy: existing?.workflowUpdatedBy ?? actor,
+        workflowComment: existing?.workflowComment,
+        workflowCommentAt: existing?.workflowCommentAt,
+        workflowCommentBy: existing?.workflowCommentBy,
         language,
         cvByLanguage: structuredClone(cvByLanguage),
         hiddenElements: structuredClone(hiddenElements),
@@ -1695,6 +1716,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     resetBaselineRef.current = true;
     setActiveProfileId(profile.id);
     setActiveProfileWorkflowStatus(profile.workflowStatus ?? "draft");
+    setActiveProfileWorkflowComment(
+      profile.workflowComment
+        ? {
+            text: profile.workflowComment,
+            author: profile.workflowCommentBy?.displayName,
+            at: profile.workflowCommentAt,
+          }
+        : null,
+    );
     setClientSyncStatus({
       state: profile.revision ? "synced" : "local",
       message: profile.revision
@@ -2871,8 +2901,22 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       {profileEditingLocked && (
         <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-xs font-medium text-emerald-900">
           <LockKeyhole className="mr-1.5 inline h-3.5 w-3.5" /> CV validé et verrouillé. Il reste
-          consultable et téléchargeable ; un administrateur doit le rouvrir en brouillon pour le
-          modifier.
+          consultable et téléchargeable ; un responsable de validation doit le rouvrir en brouillon
+          pour le modifier.
+        </div>
+      )}
+      {activeProfileWorkflowComment && activeProfileWorkflowStatus !== "approved" && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-950">
+          <TriangleAlert className="mr-1.5 inline h-3.5 w-3.5" /> Corrections demandées :{" "}
+          {activeProfileWorkflowComment.text}
+          {activeProfileWorkflowComment.author && (
+            <span className="ml-1 font-normal text-amber-800">
+              — {activeProfileWorkflowComment.author}
+              {activeProfileWorkflowComment.at
+                ? ` · ${new Date(activeProfileWorkflowComment.at).toLocaleString("fr-DZ")}`
+                : ""}
+            </span>
+          )}
         </div>
       )}
 

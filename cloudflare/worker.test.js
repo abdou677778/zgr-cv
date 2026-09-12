@@ -363,6 +363,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(accountResponse.status, 201);
 
   const editor = await login(env, "editeur", "mot-de-passe-editeur");
+  assert.equal(editor.user.permissions.clientsApprove, false);
   const sharedListResponse = await call(env, "/api/clients", authorized(editor.token));
   assert.equal(sharedListResponse.status, 200);
   const sharedList = await sharedListResponse.json();
@@ -743,7 +744,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(emptyList.deletedProfiles[0].deletedBy, "admin");
 });
 
-test("le workflow verrouille un CV validé jusqu’à sa réouverture par un administrateur", async () => {
+test("un responsable de validation peut valider puis rouvrir un CV sans être administrateur", async () => {
   const env = {
     CLIENTS_BUCKET: new MemoryR2Bucket(),
     ADMIN_USERNAME: "admin",
@@ -797,12 +798,14 @@ test("le workflow verrouille un CV validé jusqu’à sa réouverture par un adm
     }),
   );
   assert.equal(accountResponse.status, 201);
-  const editor = await login(env, "workflow-editor", "mot-de-passe-workflow");
+  const editorBeforeGrant = await login(env, "workflow-editor", "mot-de-passe-workflow");
+  assert.equal(editorBeforeGrant.user.role, "editor");
+  assert.equal(editorBeforeGrant.user.permissions.clientsApprove, false);
 
   const submittedResponse = await call(
     env,
     `/api/clients/${profile.id}/workflow`,
-    authorized(editor.token, {
+    authorized(editorBeforeGrant.token, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "review", expectedRevision: 1 }),
@@ -817,7 +820,7 @@ test("le workflow verrouille un CV validé jusqu’à sa réouverture par un adm
   const forbiddenApproval = await call(
     env,
     `/api/clients/${profile.id}/workflow`,
-    authorized(editor.token, {
+    authorized(editorBeforeGrant.token, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "approved", expectedRevision: 2 }),
@@ -825,10 +828,35 @@ test("le workflow verrouille un CV validé jusqu’à sa réouverture par un adm
   );
   assert.equal(forbiddenApproval.status, 403);
 
+  const grantResponse = await call(
+    env,
+    "/api/admin/users/workflow-editor",
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        displayName: "Éditeur Workflow",
+        active: true,
+        role: "editor",
+        workflowManager: true,
+      }),
+    }),
+  );
+  assert.equal(grantResponse.status, 200);
+  const granted = await grantResponse.json();
+  assert.equal(granted.user.role, "editor");
+  assert.equal(granted.user.permissions.clientsApprove, true);
+  assert.equal(
+    (await call(env, `/api/clients/${profile.id}`, authorized(editorBeforeGrant.token))).status,
+    401,
+  );
+  const editor = await login(env, "workflow-editor", "mot-de-passe-workflow");
+  assert.equal(editor.user.permissions.clientsApprove, true);
+
   const approvedResponse = await call(
     env,
     `/api/clients/${profile.id}/workflow`,
-    authorized(admin.token, {
+    authorized(editor.token, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "approved", expectedRevision: 2 }),
@@ -837,6 +865,7 @@ test("le workflow verrouille un CV validé jusqu’à sa réouverture par un adm
   assert.equal(approvedResponse.status, 200);
   const approved = await approvedResponse.json();
   assert.equal(approved.profile.workflowStatus, "approved");
+  assert.equal(approved.profile.workflowUpdatedBy.username, "workflow-editor");
   assert.equal(approved.profile.revision, 3);
 
   const lockedUpdate = await call(
@@ -871,19 +900,39 @@ test("le workflow verrouille un CV validé jusqu’à sa réouverture par un adm
   );
   assert.equal(lockedRestore.status, 423);
 
-  const reopenedResponse = await call(
+  const missingCommentResponse = await call(
     env,
     `/api/clients/${profile.id}/workflow`,
-    authorized(admin.token, {
+    authorized(editor.token, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "draft", expectedRevision: 3 }),
+    }),
+  );
+  assert.equal(missingCommentResponse.status, 422);
+
+  const reopenedResponse = await call(
+    env,
+    `/api/clients/${profile.id}/workflow`,
+    authorized(editor.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: "draft",
+        expectedRevision: 3,
+        comment: "Corriger le numéro de téléphone avant validation.",
+      }),
     }),
   );
   assert.equal(reopenedResponse.status, 200);
   const reopened = await reopenedResponse.json();
   assert.equal(reopened.profile.workflowStatus, "draft");
   assert.equal(reopened.profile.revision, 4);
+  assert.equal(
+    reopened.profile.workflowComment,
+    "Corriger le numéro de téléphone avant validation.",
+  );
+  assert.equal(reopened.profile.workflowCommentBy.username, "workflow-editor");
 
   const editableAgain = await call(
     env,
@@ -895,7 +944,11 @@ test("le workflow verrouille un CV validé jusqu’à sa réouverture par un adm
     }),
   );
   assert.equal(editableAgain.status, 200);
-  assert.equal((await editableAgain.json()).profile.revision, 5);
+  const editedAgain = await editableAgain.json();
+  assert.equal(editedAgain.profile.revision, 5);
+  const stored = await env.CLIENTS_BUCKET.get(`clients/${profile.id}.json`);
+  const storedProfile = JSON.parse(await stored.text());
+  assert.equal(storedProfile.workflowComment, "Corriger le numéro de téléphone avant validation.");
 });
 
 test("la supervision agrège uniquement des métriques techniques anonymes", async () => {

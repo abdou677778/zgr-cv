@@ -68,6 +68,7 @@ export type AccountRole = "admin" | "editor" | "viewer";
 export type AccountPermissions = {
   clientsRead: boolean;
   clientsWrite: boolean;
+  clientsApprove: boolean;
   clientsDelete: boolean;
   clientsRestore: boolean;
   clientsDownload: boolean;
@@ -79,6 +80,7 @@ export type SessionUser = {
   username: string;
   displayName: string;
   role: AccountRole;
+  workflowManager: boolean;
   permissions: AccountPermissions;
   active: boolean;
   createdAt: string | null;
@@ -118,6 +120,7 @@ function tokenHasExpired(token: string) {
 const permissionsForRole = (role: AccountRole): AccountPermissions => ({
   clientsRead: true,
   clientsWrite: role === "admin" || role === "editor",
+  clientsApprove: role === "admin",
   clientsDelete: role === "admin",
   clientsRestore: role === "admin",
   clientsDownload: true,
@@ -137,7 +140,22 @@ function normalizeSessionUser(value: unknown): SessionUser | null {
   )
     return null;
   const role: AccountRole = user.role === "admin" || user.role === "viewer" ? user.role : "editor";
-  return { ...user, role, permissions: permissionsForRole(role) } as SessionUser;
+  const fallback = permissionsForRole(role);
+  const supplied = user.permissions;
+  const permissions = Object.fromEntries(
+    Object.entries(fallback).map(([key, value]) => [
+      key,
+      typeof supplied?.[key as keyof AccountPermissions] === "boolean"
+        ? supplied[key as keyof AccountPermissions]
+        : value,
+    ]),
+  ) as AccountPermissions;
+  return {
+    ...user,
+    role,
+    workflowManager: permissions.clientsApprove,
+    permissions,
+  } as SessionUser;
 }
 
 async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: number) {

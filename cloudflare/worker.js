@@ -121,11 +121,12 @@ function normalizeClientWorkflowStatus(value) {
   return value === "review" || value === "approved" ? value : "draft";
 }
 
-function rolePermissions(role) {
+function rolePermissions(role, workflowManager = false) {
   const normalized = normalizeAccountRole(role);
   return {
     clientsRead: true,
     clientsWrite: normalized === "admin" || normalized === "editor",
+    clientsApprove: normalized === "admin" || (normalized === "editor" && workflowManager === true),
     clientsDelete: normalized === "admin",
     clientsRestore: normalized === "admin",
     clientsDownload: true,
@@ -192,11 +193,13 @@ async function readR2Json(env, key) {
 
 function publicUser(user) {
   const role = normalizeAccountRole(user.role);
+  const workflowManager = role === "admin" || (role === "editor" && user.workflowManager === true);
   return {
     username: user.username,
     displayName: user.displayName,
     role,
-    permissions: rolePermissions(role),
+    workflowManager,
+    permissions: rolePermissions(role, workflowManager),
     active: user.active !== false,
     createdAt: user.createdAt || null,
     updatedAt: user.updatedAt || null,
@@ -216,6 +219,7 @@ async function saveUser(env, user) {
         username: user.username,
         displayName: String(user.displayName || user.username).slice(0, 120),
         role: normalizeAccountRole(user.role),
+        workflowManager: user.workflowManager === true ? "true" : "false",
         active: user.active === false ? "false" : "true",
         createdAt: String(user.createdAt || "").slice(0, 40),
         updatedAt: String(user.updatedAt || "").slice(0, 40),
@@ -240,6 +244,7 @@ function bootstrapAdmin(env) {
     username,
     displayName: "Administrateur",
     role: "admin",
+    workflowManager: true,
     active: true,
     password: null,
     sessionVersion: 1,
@@ -888,7 +893,9 @@ async function listUsers(env, origin) {
         username: metadata.username || "",
         displayName: metadata.displayName || metadata.username || "Profil",
         role,
-        permissions: rolePermissions(role),
+        workflowManager:
+          role === "admin" || (role === "editor" && metadata.workflowManager === "true"),
+        permissions: rolePermissions(role, metadata.workflowManager === "true"),
         active: metadata.active !== "false",
         createdAt: metadata.createdAt || null,
         updatedAt: metadata.updatedAt || null,
@@ -928,6 +935,8 @@ async function createUser(request, env, actor, origin, ctx) {
     typeof payload?.displayName === "string" ? payload.displayName.trim().slice(0, 120) : "";
   const password = typeof payload?.password === "string" ? payload.password : "";
   const role = ACCOUNT_ROLES.has(payload?.role) ? payload.role : "editor";
+  const workflowManager =
+    role === "admin" || (role === "editor" && payload?.workflowManager === true);
   if (!USERNAME_PATTERN.test(username))
     return json(
       {
@@ -953,6 +962,7 @@ async function createUser(request, env, actor, origin, ctx) {
     username,
     displayName,
     role,
+    workflowManager,
     active: true,
     password: await hashPassword(password),
     sessionVersion: 1,
@@ -966,6 +976,7 @@ async function createUser(request, env, actor, origin, ctx) {
     writeAudit(env, request, "user_created", actor.username, "success", {
       target: username,
       role,
+      workflowManager,
     }),
   );
   return json({ ok: true, user: { ...publicUser(user), isPrimary: false } }, 201, origin);
@@ -1008,26 +1019,37 @@ async function updateUser(request, env, actor, username, origin, ctx) {
         ? normalizeAccountRole(user.role)
         : requestedRole;
   const active = protectedAccount ? true : payload?.active !== false;
+  const workflowManager =
+    role === "admin" ||
+    (role === "editor" &&
+      (protectedAccount ? user.workflowManager === true : payload?.workflowManager === true));
   if (!displayName) return json({ error: "Le nom affiché est obligatoire." }, 422, origin);
   const changedActivity = user.active !== active;
   const changedRole = user.role !== role;
+  const changedWorkflowManager = (user.workflowManager === true) !== workflowManager;
   const updated = {
     ...user,
     displayName,
     role,
+    workflowManager,
     active,
     updatedAt: new Date().toISOString(),
-    sessionVersion: (Number(user.sessionVersion) || 1) + (changedActivity || changedRole ? 1 : 0),
+    sessionVersion:
+      (Number(user.sessionVersion) || 1) +
+      (changedActivity || changedRole || changedWorkflowManager ? 1 : 0),
   };
   await Promise.all([
     saveUser(env, updated),
-    changedActivity || changedRole ? deleteUserSessions(env, username) : Promise.resolve(),
+    changedActivity || changedRole || changedWorkflowManager
+      ? deleteUserSessions(env, username)
+      : Promise.resolve(),
   ]);
   ctx.waitUntil(
     writeAudit(env, request, "user_updated", actor.username, "success", {
       target: username,
       active,
       role,
+      workflowManager,
     }),
   );
   return json(
@@ -1300,6 +1322,16 @@ async function readR2ProfileIndex(env) {
               role: normalizeAccountRole(metadata.workflowUpdatedByRole),
             }
           : undefined,
+        workflowComment: metadata.workflowComment || undefined,
+        workflowCommentAt: metadata.workflowCommentAt || undefined,
+        workflowCommentBy: metadata.workflowCommentByUsername
+          ? {
+              username: metadata.workflowCommentByUsername,
+              displayName:
+                metadata.workflowCommentByDisplayName || metadata.workflowCommentByUsername,
+              role: normalizeAccountRole(metadata.workflowCommentByRole),
+            }
+          : undefined,
         size: object.size,
         hasPhoto: metadata.hasPhoto === "true",
         createdBy: metadata.createdByUsername
@@ -1331,8 +1363,10 @@ const CLIENT_PROFILE_INDEX_UPSERT = `
     created_by_username, created_by_display_name, created_by_role,
     updated_by_username, updated_by_display_name, updated_by_role,
     workflow_status, workflow_updated_at,
-    workflow_updated_by_username, workflow_updated_by_display_name, workflow_updated_by_role
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    workflow_updated_by_username, workflow_updated_by_display_name, workflow_updated_by_role,
+    workflow_comment, workflow_comment_at,
+    workflow_comment_by_username, workflow_comment_by_display_name, workflow_comment_by_role
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     revision = excluded.revision,
     name = excluded.name,
@@ -1353,13 +1387,19 @@ const CLIENT_PROFILE_INDEX_UPSERT = `
     workflow_updated_at = excluded.workflow_updated_at,
     workflow_updated_by_username = excluded.workflow_updated_by_username,
     workflow_updated_by_display_name = excluded.workflow_updated_by_display_name,
-    workflow_updated_by_role = excluded.workflow_updated_by_role
+    workflow_updated_by_role = excluded.workflow_updated_by_role,
+    workflow_comment = excluded.workflow_comment,
+    workflow_comment_at = excluded.workflow_comment_at,
+    workflow_comment_by_username = excluded.workflow_comment_by_username,
+    workflow_comment_by_display_name = excluded.workflow_comment_by_display_name,
+    workflow_comment_by_role = excluded.workflow_comment_by_role
 `;
 
 function profileIndexBindings(profile, size = 0) {
   const createdBy = storedProfileActor(profile.createdBy);
   const updatedBy = storedProfileActor(profile.updatedBy);
   const workflowUpdatedBy = storedProfileActor(profile.workflowUpdatedBy);
+  const workflowCommentBy = storedProfileActor(profile.workflowCommentBy);
   return [
     profile.id,
     storedProfileRevision(profile),
@@ -1382,6 +1422,11 @@ function profileIndexBindings(profile, size = 0) {
     workflowUpdatedBy?.username ?? null,
     workflowUpdatedBy?.displayName ?? null,
     workflowUpdatedBy?.role ?? null,
+    typeof profile.workflowComment === "string" ? profile.workflowComment.slice(0, 500) : null,
+    typeof profile.workflowCommentAt === "string" ? profile.workflowCommentAt.slice(0, 40) : null,
+    workflowCommentBy?.username ?? null,
+    workflowCommentBy?.displayName ?? null,
+    workflowCommentBy?.role ?? null,
   ];
 }
 
@@ -1408,6 +1453,9 @@ function d1ProfileSummary(row) {
     workflowStatus: normalizeClientWorkflowStatus(row.workflow_status),
     workflowUpdatedAt: row.workflow_updated_at || undefined,
     workflowUpdatedBy: d1Actor(row, "workflow_updated"),
+    workflowComment: row.workflow_comment || undefined,
+    workflowCommentAt: row.workflow_comment_at || undefined,
+    workflowCommentBy: d1Actor(row, "workflow_comment"),
     size: Number(row.size) || 0,
     hasPhoto: Number(row.has_photo) === 1,
     createdBy: d1Actor(row, "created"),
@@ -1756,7 +1804,7 @@ function profileLocked(origin, profile) {
   return json(
     {
       error:
-        "Ce CV est validé et verrouillé. Un administrateur doit le repasser en brouillon avant toute modification.",
+        "Ce CV est validé et verrouillé. Un responsable de validation doit le repasser en brouillon avant toute modification.",
       code: "CLIENT_PROFILE_LOCKED",
       current: profile
         ? {
@@ -1776,6 +1824,7 @@ function clientProfileMetadata(profile) {
   const creator = storedProfileActor(profile.createdBy);
   const editor = storedProfileActor(profile.updatedBy);
   const workflowEditor = storedProfileActor(profile.workflowUpdatedBy);
+  const workflowCommentBy = storedProfileActor(profile.workflowCommentBy);
   return {
     id: profile.id,
     revision: String(storedProfileRevision(profile)),
@@ -1788,6 +1837,8 @@ function clientProfileMetadata(profile) {
     hasPhoto: profile.photoAsset?.r2Key ? "true" : "false",
     workflowStatus: normalizeClientWorkflowStatus(profile.workflowStatus),
     workflowUpdatedAt: String(profile.workflowUpdatedAt || "").slice(0, 40),
+    workflowComment: String(profile.workflowComment || "").slice(0, 500),
+    workflowCommentAt: String(profile.workflowCommentAt || "").slice(0, 40),
     ...(creator
       ? {
           createdByUsername: creator.username,
@@ -1810,6 +1861,13 @@ function clientProfileMetadata(profile) {
           workflowUpdatedByUsername: workflowEditor.username,
           workflowUpdatedByDisplayName: workflowEditor.displayName,
           workflowUpdatedByRole: workflowEditor.role,
+        }
+      : {}),
+    ...(workflowCommentBy
+      ? {
+          workflowCommentByUsername: workflowCommentBy.username,
+          workflowCommentByDisplayName: workflowCommentBy.displayName,
+          workflowCommentByRole: workflowCommentBy.role,
         }
       : {}),
   };
@@ -2166,6 +2224,9 @@ async function restoreProfileVersion(request, env, target, actor, origin, ctx) {
     workflowStatus: normalizeClientWorkflowStatus(current.workflowStatus),
     workflowUpdatedAt: current.workflowUpdatedAt,
     workflowUpdatedBy: storedProfileActor(current.workflowUpdatedBy),
+    workflowComment: current.workflowComment,
+    workflowCommentAt: current.workflowCommentAt,
+    workflowCommentBy: storedProfileActor(current.workflowCommentBy),
   };
   const storedRaw = JSON.stringify(restored);
   const storedObject = await env.CLIENTS_BUCKET.put(profileKey, storedRaw, {
@@ -2235,6 +2296,7 @@ async function updateProfileWorkflow(request, env, id, actor, origin, ctx) {
   }
   const targetStatus = value?.status;
   const expectedRevision = Number(value?.expectedRevision);
+  const comment = typeof value?.comment === "string" ? value.comment.trim().slice(0, 500) : "";
   if (!["draft", "review", "approved"].includes(targetStatus))
     return json({ error: "Statut de validation invalide." }, 422, origin);
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)
@@ -2255,8 +2317,9 @@ async function updateProfileWorkflow(request, env, id, actor, origin, ctx) {
     return json({ ok: true, id, unchanged: true, profile: current }, 200, origin);
 
   const role = normalizeAccountRole(actor.role);
-  const adminTransition =
-    role === "admin" &&
+  const managesWorkflow = role === "admin" || (role === "editor" && actor.workflowManager === true);
+  const managerTransition =
+    managesWorkflow &&
     ((currentStatus === "draft" && targetStatus === "review") ||
       (currentStatus === "review" && (targetStatus === "draft" || targetStatus === "approved")) ||
       (currentStatus === "approved" && targetStatus === "draft"));
@@ -2264,10 +2327,16 @@ async function updateProfileWorkflow(request, env, id, actor, origin, ctx) {
     role === "editor" &&
     ((currentStatus === "draft" && targetStatus === "review") ||
       (currentStatus === "review" && targetStatus === "draft"));
-  if (!adminTransition && !editorTransition)
+  if (!managerTransition && !editorTransition)
     return json(
       { error: "Cette transition de validation n’est pas autorisée pour votre rôle." },
       403,
+      origin,
+    );
+  if (targetStatus === "draft" && managesWorkflow && !comment)
+    return json(
+      { error: "Ajoutez un commentaire pour expliquer les corrections demandées." },
+      422,
       origin,
     );
 
@@ -2281,6 +2350,19 @@ async function updateProfileWorkflow(request, env, id, actor, origin, ctx) {
     workflowStatus: targetStatus,
     workflowUpdatedAt: now,
     workflowUpdatedBy: workflowEditor,
+    ...(targetStatus === "draft" && managesWorkflow
+      ? {
+          workflowComment: comment,
+          workflowCommentAt: now,
+          workflowCommentBy: workflowEditor,
+        }
+      : targetStatus === "approved"
+        ? {
+            workflowComment: undefined,
+            workflowCommentAt: undefined,
+            workflowCommentBy: undefined,
+          }
+        : {}),
   };
   const raw = JSON.stringify(updated);
   await snapshotProfileVersion(env, current);
@@ -2310,6 +2392,7 @@ async function updateProfileWorkflow(request, env, id, actor, origin, ctx) {
       from: currentStatus,
       to: targetStatus,
       revision: updated.revision,
+      comment: targetStatus === "draft" && managesWorkflow ? comment : undefined,
     }),
   );
   return json({ ok: true, id, profile: updated }, 200, origin);
@@ -2392,6 +2475,9 @@ async function putProfile(request, env, id, actor, origin, ctx) {
     workflowStatus,
     workflowUpdatedAt: previous?.workflowUpdatedAt || now,
     workflowUpdatedBy: storedProfileActor(previous?.workflowUpdatedBy) || creator,
+    workflowComment: previous?.workflowComment,
+    workflowCommentAt: previous?.workflowCommentAt,
+    workflowCommentBy: storedProfileActor(previous?.workflowCommentBy),
   };
   const storedRaw = JSON.stringify(storedProfile);
 

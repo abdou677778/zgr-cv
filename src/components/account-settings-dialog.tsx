@@ -54,7 +54,19 @@ import {
   type ManagedUser,
   type OperationalMonitoring,
 } from "@/lib/account-client";
-import type { SessionUser } from "@/lib/auth-client";
+import type { AccountRole, SessionUser } from "@/lib/auth-client";
+
+const roleLabels: Record<AccountRole, string> = {
+  admin: "Administrateur",
+  editor: "Éditeur",
+  viewer: "Lecture seule",
+};
+
+const roleBadgeClasses: Record<AccountRole, string> = {
+  admin: "bg-violet-100 text-violet-800",
+  editor: "bg-sky-100 text-sky-800",
+  viewer: "bg-slate-100 text-slate-700",
+};
 
 const eventLabels: Record<string, string> = {
   login: "Connexion",
@@ -144,7 +156,7 @@ export function AccountSettingsDialog({
     username: "",
     displayName: "",
     password: "",
-    role: "user" as "admin" | "user",
+    role: "editor" as AccountRole,
   });
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const [ownPassword, setOwnPassword] = useState({ current: "", next: "", confirm: "" });
@@ -274,7 +286,7 @@ export function AccountSettingsDialog({
     setMessage(null);
     try {
       await createManagedUser(newUser);
-      setNewUser({ username: "", displayName: "", password: "", role: "user" });
+      setNewUser({ username: "", displayName: "", password: "", role: "editor" });
       setMessage({ ok: true, text: "Le nouveau profil peut maintenant se connecter." });
       await loadAdminData();
     } catch (error) {
@@ -444,7 +456,8 @@ export function AccountSettingsDialog({
             <ShieldCheck className="h-5 w-5 text-indigo-600" /> Paramètres du compte
           </DialogTitle>
           <DialogDescription>
-            Connecté comme <strong>{user.displayName}</strong> ({user.username}) · rôle {user.role}.
+            Connecté comme <strong>{user.displayName}</strong> ({user.username}) · rôle{" "}
+            {roleLabels[user.role]}.
           </DialogDescription>
         </DialogHeader>
 
@@ -1007,6 +1020,26 @@ export function AccountSettingsDialog({
                 <UserPlus className="h-5 w-5 text-indigo-600" />
                 <h3 className="font-semibold">Créer un profil utilisateur</h3>
               </div>
+              <div className="grid gap-2 text-xs md:grid-cols-3">
+                <div className="rounded-lg border border-violet-100 bg-white p-3">
+                  <strong className="text-violet-800">Administrateur</strong>
+                  <p className="mt-1 text-muted-foreground">
+                    Gestion complète, suppressions, restaurations et utilisateurs.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-sky-100 bg-white p-3">
+                  <strong className="text-sky-800">Éditeur</strong>
+                  <p className="mt-1 text-muted-foreground">
+                    Consultation, création, modification, IA et téléchargement.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <strong className="text-slate-700">Lecture seule</strong>
+                  <p className="mt-1 text-muted-foreground">
+                    Consultation et téléchargement, sans modification du cloud.
+                  </p>
+                </div>
+              </div>
               <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={createProfile}>
                 <div className="space-y-1.5">
                   <Label htmlFor="new-username">Identifiant</Label>
@@ -1040,10 +1073,11 @@ export function AccountSettingsDialog({
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                     value={newUser.role}
                     onChange={(event) =>
-                      setNewUser({ ...newUser, role: event.target.value as "admin" | "user" })
+                      setNewUser({ ...newUser, role: event.target.value as AccountRole })
                     }
                   >
-                    <option value="user">Utilisateur standard</option>
+                    <option value="editor">Éditeur — créer et modifier</option>
+                    <option value="viewer">Lecture seule — consulter</option>
                     <option value="admin">Administrateur — accès complet</option>
                   </select>
                 </div>
@@ -1103,9 +1137,9 @@ export function AccountSettingsDialog({
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="font-semibold">{profile.username}</p>
                               <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${profile.role === "admin" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${roleBadgeClasses[profile.role]}`}
                               >
-                                {profile.role === "admin" ? "Administrateur" : "Utilisateur"}
+                                {roleLabels[profile.role]}
                               </span>
                               {profile.isPrimary && (
                                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
@@ -1145,14 +1179,15 @@ export function AccountSettingsDialog({
                                     item.username === profile.username
                                       ? {
                                           ...item,
-                                          role: event.target.value as "admin" | "user",
+                                          role: event.target.value as AccountRole,
                                         }
                                       : item,
                                   ),
                                 )
                               }
                             >
-                              <option value="user">Utilisateur standard</option>
+                              <option value="editor">Éditeur</option>
+                              <option value="viewer">Lecture seule</option>
                               <option value="admin">Administrateur</option>
                             </select>
                           </div>

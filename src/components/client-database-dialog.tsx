@@ -89,6 +89,10 @@ export function ClientDatabaseDialog({
   const [historyProfileId, setHistoryProfileId] = useState<string | null>(null);
   const [historyVersions, setHistoryVersions] = useState<CloudProfileVersion[]>([]);
   const pageRequestRef = useRef(0);
+  const canWrite = user.permissions.clientsWrite;
+  const canDelete = user.permissions.clientsDelete;
+  const canRestore = user.permissions.clientsRestore;
+  const canDownload = user.permissions.clientsDownload;
 
   const loadLocalPage = useCallback(async () => {
     const query = search.trim().toLocaleLowerCase("fr");
@@ -180,6 +184,13 @@ export function ClientDatabaseDialog({
   );
 
   const synchronize = useCallback(async () => {
+    if (!canWrite) {
+      await loadPage(false);
+      setMessage(
+        "Index partagé actualisé en lecture seule. Aucun changement local n’a été envoyé.",
+      );
+      return;
+    }
     setBusy("cloud");
     setMessage("");
     onSyncStatusChange?.({ state: "syncing", message: "Synchronisation complète en cours…" });
@@ -231,7 +242,7 @@ export function ClientDatabaseDialog({
     } finally {
       setBusy("");
     }
-  }, [loadLocalPage, loadPage, onSyncStatusChange]);
+  }, [canWrite, loadLocalPage, loadPage, onSyncStatusChange]);
 
   useEffect(() => {
     if (!open) return;
@@ -281,6 +292,10 @@ export function ClientDatabaseDialog({
   };
 
   const remove = async (profile: ClientProfileSummary) => {
+    if (!canDelete) {
+      setMessage("Seul un administrateur peut supprimer un profil client.");
+      return;
+    }
     if (
       !confirm(
         `Supprimer définitivement « ${profile.name} » (${profile.id}) de la base partagée et de tous les navigateurs ?`,
@@ -334,6 +349,10 @@ export function ClientDatabaseDialog({
   };
 
   const publishLocalVersion = async (profile: ClientProfileSummary) => {
+    if (!canWrite) {
+      setMessage("Votre rôle est limité à la lecture.");
+      return;
+    }
     if (
       !confirm(
         `Publier volontairement votre version locale de « ${profile.name} » à la place de la version partagée actuelle ?`,
@@ -401,6 +420,10 @@ export function ClientDatabaseDialog({
   };
 
   const restoreVersion = async (profile: ClientProfileSummary, revision: number) => {
+    if (!canRestore) {
+      setMessage("Seul un administrateur peut restaurer une ancienne révision.");
+      return;
+    }
     if (
       !confirm(
         `Restaurer la révision ${revision} de « ${profile.name} » ? La version actuelle restera dans l’historique.`,
@@ -568,22 +591,25 @@ export function ClientDatabaseDialog({
                           {busy === profile.id && (
                             <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                           )}
-                          <ExternalLink className="mr-2 h-4 w-4" /> Ouvrir et modifier
+                          <ExternalLink className="mr-2 h-4 w-4" />{" "}
+                          {canWrite ? "Ouvrir et modifier" : "Ouvrir en lecture"}
                         </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void download(profile)}
-                          disabled={Boolean(busy)}
-                        >
-                          {busy === `pdf:${profile.id}` ? (
-                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Download className="mr-2 h-4 w-4" />
-                          )}
-                          Télécharger PDF
-                        </Button>
+                        {canDownload && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void download(profile)}
+                            disabled={Boolean(busy)}
+                          >
+                            {busy === `pdf:${profile.id}` ? (
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="mr-2 h-4 w-4" />
+                            )}
+                            Télécharger PDF
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           size="sm"
@@ -598,16 +624,18 @@ export function ClientDatabaseDialog({
                           )}
                           Historique
                         </Button>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          aria-label={`Supprimer ${profile.name}`}
-                          onClick={() => void remove(profile)}
-                          disabled={Boolean(busy)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {canDelete && (
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Supprimer ${profile.name}`}
+                            onClick={() => void remove(profile)}
+                            disabled={Boolean(busy)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                       {historyProfileId === profile.id && (
                         <div className="rounded-md border bg-slate-50 p-3">
@@ -639,7 +667,7 @@ export function ClientDatabaseDialog({
                                         : ""}
                                     </p>
                                   </div>
-                                  {!current && (
+                                  {!current && canRestore && (
                                     <Button
                                       type="button"
                                       size="sm"
@@ -679,17 +707,19 @@ export function ClientDatabaseDialog({
                               )}
                               Utiliser la version partagée
                             </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => void publishLocalVersion(profile)}
-                              disabled={Boolean(busy)}
-                            >
-                              {busy === `publish-local:${profile.id}` && (
-                                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                              )}
-                              Publier ma version locale
-                            </Button>
+                            {canWrite && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => void publishLocalVersion(profile)}
+                                disabled={Boolean(busy)}
+                              >
+                                {busy === `publish-local:${profile.id}` && (
+                                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                                )}
+                                Publier ma version locale
+                              </Button>
+                            )}
                           </div>
                         </div>
                       )}
@@ -741,8 +771,16 @@ export function ClientDatabaseDialog({
               </span>
             </div>
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-              Connecté comme {user.displayName} ({user.username}). Chaque création et chaque
-              modification sont attribuées à ce profil.
+              Connecté comme {user.displayName} ({user.username}) ·{" "}
+              {user.role === "admin"
+                ? "administrateur"
+                : user.role === "editor"
+                  ? "éditeur"
+                  : "lecture seule"}
+              .{" "}
+              {canWrite
+                ? "Chaque création et modification est attribuée à ce profil."
+                : "Les données cloud peuvent être consultées et téléchargées, sans être modifiées."}
             </div>
             <Button
               type="button"
@@ -755,11 +793,12 @@ export function ClientDatabaseDialog({
               ) : (
                 <Cloud className="mr-2 h-4 w-4" />
               )}
-              Synchroniser maintenant
+              {canWrite ? "Synchroniser maintenant" : "Actualiser la base"}
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              L’index est actualisé automatiquement. Utilisez cette synchronisation complète pour
-              envoyer ou récupérer les changements réalisés hors ligne.
+              {canWrite
+                ? "L’index est actualisé automatiquement. Cette synchronisation envoie ou récupère les changements réalisés hors ligne."
+                : "L’actualisation récupère l’index cloud sans envoyer les données locales de cet appareil."}
             </p>
           </aside>
         </div>

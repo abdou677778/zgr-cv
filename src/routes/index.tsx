@@ -592,6 +592,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const resetBaselineRef = useRef(false);
   const queueFlushRef = useRef(false);
   const cv = cvByLanguage[language];
+  const canWriteClients = user.permissions.clientsWrite;
   const draftPayload = useMemo<WorkspaceDraftPayload>(
     () => ({
       activeProfileId,
@@ -707,6 +708,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     });
 
   const flushPendingCloud = useCallback(async () => {
+    if (!canWriteClients) return;
     if (queueFlushRef.current || typeof navigator === "undefined" || !navigator.onLine) return;
     const token = getAdminSession();
     if (!token) return;
@@ -742,7 +744,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     } finally {
       queueFlushRef.current = false;
     }
-  }, []);
+  }, [canWriteClients]);
 
   useEffect(() => {
     const availableTemplates = getTemplates(
@@ -1483,6 +1485,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   };
 
   const saveCurrentClient = async () => {
+    if (!canWriteClients) {
+      setClientSyncStatus({
+        state: "local",
+        message: "Votre rôle est limité à la lecture : aucune modification cloud n’a été envoyée.",
+      });
+      return;
+    }
     if (profileSaving) return;
     setProfileSaving(true);
     setClientSyncStatus({ state: "syncing", message: "Sauvegarde et synchronisation en cours…" });
@@ -2450,10 +2459,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               variant="outline"
               size="sm"
               className="border-emerald-200 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100"
-              disabled={profileSaving}
+              disabled={profileSaving || !canWriteClients}
               onClick={() => void saveCurrentClient()}
               title={
-                activeProfileId ? `Mettre à jour ${activeProfileId}` : "Créer un profil client"
+                !canWriteClients
+                  ? "Mode lecture seule : sauvegarde cloud interdite"
+                  : activeProfileId
+                    ? `Mettre à jour ${activeProfileId}`
+                    : "Créer un profil client"
               }
             >
               {profileSaving ? (
@@ -2555,39 +2568,45 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                       : "Local"}
               </span>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-cyan-200 bg-cyan-50/80 text-cyan-900 hover:bg-cyan-100"
-              onClick={() => setClientOrdersOpen(true)}
-            >
-              <ClipboardList className="mr-2 h-4 w-4" /> Commandes
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-violet-200 bg-violet-50/80 text-violet-800 hover:bg-violet-100"
-              onClick={() => setAiAssistantOpen(true)}
-            >
-              <Bot className="mr-2 h-4 w-4 text-violet-600" /> Assistant IA
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-amber-200 bg-amber-50/80 text-amber-900 hover:bg-amber-100"
-              onClick={() => setPromptMasterOpen(true)}
-            >
-              <BookOpenText className="mr-2 h-4 w-4 text-amber-600" /> Prompte
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Paramètres IA"
-              title="Paramètres IA"
-              onClick={() => setAiSettingsOpen(true)}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
+            {user.role === "admin" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-cyan-200 bg-cyan-50/80 text-cyan-900 hover:bg-cyan-100"
+                onClick={() => setClientOrdersOpen(true)}
+              >
+                <ClipboardList className="mr-2 h-4 w-4" /> Commandes
+              </Button>
+            )}
+            {user.permissions.aiUse && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-violet-200 bg-violet-50/80 text-violet-800 hover:bg-violet-100"
+                  onClick={() => setAiAssistantOpen(true)}
+                >
+                  <Bot className="mr-2 h-4 w-4 text-violet-600" /> Assistant IA
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-amber-200 bg-amber-50/80 text-amber-900 hover:bg-amber-100"
+                  onClick={() => setPromptMasterOpen(true)}
+                >
+                  <BookOpenText className="mr-2 h-4 w-4 text-amber-600" /> Prompte
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Paramètres IA"
+                  title="Paramètres IA"
+                  onClick={() => setAiSettingsOpen(true)}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -2790,6 +2809,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           </div>
         )}
       </header>
+
+      {!canWriteClients && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900">
+          Mode lecture seule : consultation et téléchargement autorisés. Les sauvegardes cloud,
+          suppressions, restaurations et fonctions IA sont désactivées.
+        </div>
+      )}
 
       <main
         className={`mx-auto grid min-w-0 gap-6 px-4 py-7 ${

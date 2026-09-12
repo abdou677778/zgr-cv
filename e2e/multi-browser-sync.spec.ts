@@ -3,7 +3,7 @@ import { expect, test, type BrowserContext, type Page, type Route } from "@playw
 type TestUser = {
   username: string;
   displayName: string;
-  role: "admin" | "user";
+  role: "admin" | "editor" | "viewer";
   active: true;
   createdAt: string;
   updatedAt: string;
@@ -37,7 +37,17 @@ const USERS: Record<string, TestUser> = {
   editeur: {
     username: "editeur",
     displayName: "Éditeur E2E",
-    role: "user",
+    role: "editor",
+    active: true,
+    createdAt: "2026-09-11T08:00:00.000Z",
+    updatedAt: "2026-09-11T08:00:00.000Z",
+    lastLoginAt: "2026-09-11T08:00:00.000Z",
+    loginCount: 1,
+  },
+  lecteur: {
+    username: "lecteur",
+    displayName: "Lecteur E2E",
+    role: "viewer",
     active: true,
     createdAt: "2026-09-11T08:00:00.000Z",
     updatedAt: "2026-09-11T08:00:00.000Z",
@@ -440,6 +450,27 @@ test("les outils lourds sont chargés uniquement lorsqu’ils deviennent utiles"
       true,
     );
     expect(resourcesAfterInteraction.some((url) => url.includes("document-pdf"))).toBe(true);
+  } finally {
+    await context.close();
+  }
+});
+
+test("le profil lecture seule masque les actions interdites", async ({ browser }) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+  try {
+    const page = await connect(context, api, "lecteur");
+    await expect(page.getByText(/Mode lecture seule : consultation/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sauvegarder client" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Assistant IA" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Commandes" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Base de données", exact: true }).click();
+    const database = page.getByRole("dialog", { name: /Base de données clients/ });
+    await expect(database.getByText(/lecture seule/).first()).toBeVisible();
+    await expect(
+      database.getByRole("button").filter({ hasText: "Actualiser la base" }),
+    ).toBeVisible();
+    await expect(database.getByRole("button", { name: "Synchroniser maintenant" })).toHaveCount(0);
   } finally {
     await context.close();
   }

@@ -32,6 +32,7 @@ const TELEMETRY_NAMES = new Set([
   "sync_error",
 ]);
 const TELEMETRY_RATINGS = new Set(["good", "needs-improvement", "poor", "error"]);
+const ACCOUNT_ROLES = new Set(["admin", "editor", "viewer"]);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -108,6 +109,26 @@ function normalizeUsername(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function normalizeAccountRole(value) {
+  if (value === "admin" || value === "editor" || value === "viewer") return value;
+  // The former `user` role is intentionally migrated to editor without
+  // interrupting existing accounts or sessions.
+  return value === "user" ? "editor" : "viewer";
+}
+
+function rolePermissions(role) {
+  const normalized = normalizeAccountRole(role);
+  return {
+    clientsRead: true,
+    clientsWrite: normalized === "admin" || normalized === "editor",
+    clientsDelete: normalized === "admin",
+    clientsRestore: normalized === "admin",
+    clientsDownload: true,
+    aiUse: normalized === "admin" || normalized === "editor",
+    manageUsers: normalized === "admin",
+  };
+}
+
 function randomBase64Url(size) {
   return encodeBase64Url(crypto.getRandomValues(new Uint8Array(size)));
 }
@@ -165,10 +186,12 @@ async function readR2Json(env, key) {
 }
 
 function publicUser(user) {
+  const role = normalizeAccountRole(user.role);
   return {
     username: user.username,
     displayName: user.displayName,
-    role: user.role,
+    role,
+    permissions: rolePermissions(role),
     active: user.active !== false,
     createdAt: user.createdAt || null,
     updatedAt: user.updatedAt || null,
@@ -187,7 +210,7 @@ async function saveUser(env, user) {
       customMetadata: {
         username: user.username,
         displayName: String(user.displayName || user.username).slice(0, 120),
-        role: user.role,
+        role: normalizeAccountRole(user.role),
         active: user.active === false ? "false" : "true",
         createdAt: String(user.createdAt || "").slice(0, 40),
         updatedAt: String(user.updatedAt || "").slice(0, 40),
@@ -279,7 +302,7 @@ async function issueSession(env, user, sessionId) {
   const payload = encodeBase64Url(
     JSON.stringify({
       sub: user.username,
-      role: user.role,
+      role: normalizeAccountRole(user.role),
       sv: Number(user.sessionVersion) || 1,
       sid: sessionId,
       iat: issuedAt,
@@ -398,7 +421,7 @@ async function verifySession(token, env) {
     const now = Math.floor(Date.now() / 1000);
     if (
       !USERNAME_PATTERN.test(normalizeUsername(claims?.sub)) ||
-      !["admin", "user"].includes(claims?.role) ||
+      ![...ACCOUNT_ROLES, "user"].includes(claims?.role) ||
       Number(claims.exp) <= now ||
       Number(claims.iat) > now + 60
     )
@@ -418,7 +441,7 @@ async function authenticatedUser(request, env, ctx) {
   if (
     !user ||
     user.active === false ||
-    user.role !== claims.role ||
+    normalizeAccountRole(user.role) !== normalizeAccountRole(claims.role) ||
     (Number(user.sessionVersion) || 1) !== Number(claims.sv)
   )
     return null;
@@ -435,8 +458,12 @@ async function authenticatedUser(request, env, ctx) {
       );
     }
   }
-  Object.defineProperty(user, "sessionId", { value: claims.sid || null, enumerable: false });
-  return user;
+  const authenticated = { ...user, role: normalizeAccountRole(user.role) };
+  Object.defineProperty(authenticated, "sessionId", {
+    value: claims.sid || null,
+    enumerable: false,
+  });
+  return authenticated;
 }
 
 async function loginAttemptKey(request, env, username) {
@@ -743,7 +770,7 @@ async function login(request, env, origin, ctx) {
     ...user,
     bootstrap: undefined,
     password: user.password || (await hashPassword(password)),
-    role: user.role === "admin" ? "admin" : "user",
+    role: normalizeAccountRole(user.role),
     active: true,
     createdAt: user.createdAt || now,
     updatedAt: now,
@@ -851,10 +878,12 @@ async function listUsers(env, origin) {
     });
     for (const object of page.objects) {
       const metadata = object.customMetadata || {};
+      const role = normalizeAccountRole(metadata.role);
       users.push({
         username: metadata.username || "",
         displayName: metadata.displayName || metadata.username || "Profil",
-        role: metadata.role === "admin" ? "admin" : "user",
+        role,
+        permissions: rolePermissions(role),
         active: metadata.active !== "false",
         createdAt: metadata.createdAt || null,
         updatedAt: metadata.updatedAt || null,
@@ -868,8 +897,9 @@ async function listUsers(env, origin) {
   } while (cursor);
   if (!users.some((user) => user.username === adminUsername))
     users.unshift({ ...publicUser(bootstrapAdmin(env)), isPrimary: true });
+  const roleOrder = { admin: 0, editor: 1, viewer: 2 };
   users.sort((left, right) => {
-    if (left.role !== right.role) return left.role === "admin" ? -1 : 1;
+    if (left.role !== right.role) return roleOrder[left.role] - roleOrder[right.role];
     return left.username.localeCompare(right.username);
   });
   return json({ users }, 200, origin);
@@ -892,7 +922,7 @@ async function createUser(request, env, actor, origin, ctx) {
   const displayName =
     typeof payload?.displayName === "string" ? payload.displayName.trim().slice(0, 120) : "";
   const password = typeof payload?.password === "string" ? payload.password : "";
-  const role = payload?.role === "admin" ? "admin" : "user";
+  const role = ACCOUNT_ROLES.has(payload?.role) ? payload.role : "editor";
   if (!USERNAME_PATTERN.test(username))
     return json(
       {
@@ -963,9 +993,15 @@ async function updateUser(request, env, actor, username, origin, ctx) {
       ? payload.displayName.trim().slice(0, 120)
       : user.displayName;
   const protectedAccount = username === adminUsername || username === actor.username;
-  const requestedRole =
-    payload?.role === "admin" || payload?.role === "user" ? payload.role : user.role;
-  const role = username === adminUsername ? "admin" : protectedAccount ? user.role : requestedRole;
+  const requestedRole = ACCOUNT_ROLES.has(payload?.role)
+    ? payload.role
+    : normalizeAccountRole(user.role);
+  const role =
+    username === adminUsername
+      ? "admin"
+      : protectedAccount
+        ? normalizeAccountRole(user.role)
+        : requestedRole;
   const active = protectedAccount ? true : payload?.active !== false;
   if (!displayName) return json({ error: "Le nom affiché est obligatoire." }, 422, origin);
   const changedActivity = user.active !== active;
@@ -1234,14 +1270,14 @@ async function readR2ProfileIndex(env) {
           ? {
               username: metadata.createdByUsername,
               displayName: metadata.createdByDisplayName || metadata.createdByUsername,
-              role: metadata.createdByRole === "admin" ? "admin" : "user",
+              role: normalizeAccountRole(metadata.createdByRole),
             }
           : undefined,
         updatedBy: metadata.updatedByUsername
           ? {
               username: metadata.updatedByUsername,
               displayName: metadata.updatedByDisplayName || metadata.updatedByUsername,
-              role: metadata.updatedByRole === "admin" ? "admin" : "user",
+              role: normalizeAccountRole(metadata.updatedByRole),
             }
           : undefined,
       });
@@ -1306,7 +1342,7 @@ function d1Actor(row, prefix) {
   return {
     username,
     displayName: row[`${prefix}_by_display_name`] || username,
-    role: row[`${prefix}_by_role`] === "admin" ? "admin" : "user",
+    role: normalizeAccountRole(row[`${prefix}_by_role`]),
   };
 }
 
@@ -1622,7 +1658,7 @@ function clientProfileActor(user) {
   return {
     username: normalizeUsername(user?.username) || "unknown",
     displayName: String(user?.displayName || user?.username || "Profil").slice(0, 120),
-    role: user?.role === "admin" ? "admin" : "user",
+    role: normalizeAccountRole(user?.role),
   };
 }
 
@@ -1636,7 +1672,7 @@ function storedProfileActor(value) {
   return {
     username: normalizeUsername(value.username),
     displayName: String(value.displayName || value.username).slice(0, 120),
-    role: value.role === "admin" ? "admin" : "user",
+    role: normalizeAccountRole(value.role),
   };
 }
 
@@ -1765,7 +1801,7 @@ async function listProfileVersions(env, id, origin) {
           ? {
               username: metadata.updatedByUsername,
               displayName: metadata.updatedByDisplayName || metadata.updatedByUsername,
-              role: metadata.updatedByRole === "admin" ? "admin" : "user",
+              role: normalizeAccountRole(metadata.updatedByRole),
             }
           : undefined,
         restoredFromRevision: Number(metadata.restoredFromRevision) || undefined,
@@ -3174,6 +3210,7 @@ async function route(request, env, ctx) {
 
   const actor = await authenticatedUser(request, env, ctx);
   if (!actor) return json({ error: "Session expirée ou accès non autorisé." }, 401, origin);
+  const permissions = rolePermissions(actor.role);
   if (url.pathname === "/api/auth/session" && request.method === "GET")
     return json({ ok: true, user: publicUser(actor) }, 200, origin);
   if (url.pathname === "/api/account/sessions" && request.method === "GET")
@@ -3231,13 +3268,18 @@ async function route(request, env, ctx) {
   }
 
   if (url.pathname === "/api/ai/models" && request.method === "GET") {
+    if (!permissions.aiUse)
+      return json({ error: "Votre rôle ne permet pas d’utiliser les fonctions IA." }, 403, origin);
     const provider = url.searchParams.get("provider");
     if (provider !== "gemini" && provider !== "openrouter")
       return json({ error: "Fournisseur IA invalide." }, 400, origin);
     return listAiModels(provider, env, origin);
   }
-  if (url.pathname === "/api/ai/generate" && request.method === "POST")
+  if (url.pathname === "/api/ai/generate" && request.method === "POST") {
+    if (!permissions.aiUse)
+      return json({ error: "Votre rôle ne permet pas d’utiliser les fonctions IA." }, 403, origin);
     return generateAi(request, env, origin);
+  }
 
   if (url.pathname === "/api/telemetry" && request.method === "POST")
     return recordOperationalEvents(request, env, actor, origin, ctx);
@@ -3246,8 +3288,15 @@ async function route(request, env, ctx) {
     return listProfiles(env, origin, ctx, actor, url.searchParams);
   const restoreTarget = profileVersionRestore(url.pathname);
   if (restoreTarget) {
-    if (request.method === "POST")
+    if (request.method === "POST") {
+      if (!permissions.clientsRestore)
+        return json(
+          { error: "Seul un administrateur peut restaurer une révision client." },
+          403,
+          origin,
+        );
       return restoreProfileVersion(request, env, restoreTarget, actor, origin, ctx);
+    }
     return json({ error: "Méthode non autorisée." }, 405, origin);
   }
   const versionsId = profileVersionsId(url.pathname);
@@ -3258,8 +3307,14 @@ async function route(request, env, ctx) {
   const photoId = profilePhotoId(url.pathname);
   if (photoId) {
     if (request.method === "GET") return getProfilePhoto(env, photoId, origin);
-    if (request.method === "PUT") return putProfilePhoto(request, env, photoId, origin);
+    if (request.method === "PUT") {
+      if (!permissions.clientsWrite)
+        return json({ error: "Votre rôle est limité à la lecture." }, 403, origin);
+      return putProfilePhoto(request, env, photoId, origin);
+    }
     if (request.method === "DELETE") {
+      if (!permissions.clientsWrite)
+        return json({ error: "Votre rôle est limité à la lecture." }, 403, origin);
       const current = await readR2Json(env, `clients/${photoId}.json`);
       if (current) {
         await snapshotProfileVersion(env, current);
@@ -3273,8 +3328,18 @@ async function route(request, env, ctx) {
   const id = profileId(url.pathname);
   if (!id) return json({ error: "Route ou ID client invalide." }, 404, origin);
   if (request.method === "GET") return getProfile(env, id, origin);
-  if (request.method === "PUT") return putProfile(request, env, id, actor, origin, ctx);
+  if (request.method === "PUT") {
+    if (!permissions.clientsWrite)
+      return json({ error: "Votre rôle est limité à la lecture." }, 403, origin);
+    return putProfile(request, env, id, actor, origin, ctx);
+  }
   if (request.method === "DELETE") {
+    if (!permissions.clientsDelete)
+      return json(
+        { error: "Seul un administrateur peut supprimer un profil client." },
+        403,
+        origin,
+      );
     const deletedAt = new Date().toISOString();
     await ensureCurrentProfileSnapshot(env, id);
     await Promise.all([

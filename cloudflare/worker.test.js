@@ -356,7 +356,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
         username: "editeur",
         displayName: "Éditeur Test",
         password: "mot-de-passe-editeur",
-        role: "user",
+        role: "editor",
       }),
     }),
   );
@@ -386,7 +386,59 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   const updated = await updatedResponse.json();
   assert.equal(updated.profile.createdBy.username, "admin");
   assert.equal(updated.profile.updatedBy.username, "editeur");
+  assert.equal(updated.profile.updatedBy.role, "editor");
   assert.equal(updated.profile.revision, 2);
+
+  const viewerAccountResponse = await call(
+    env,
+    "/api/admin/users",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "lecteur",
+        displayName: "Lecteur Test",
+        password: "mot-de-passe-lecteur",
+        role: "viewer",
+      }),
+    }),
+  );
+  assert.equal(viewerAccountResponse.status, 201);
+  const viewer = await login(env, "lecteur", "mot-de-passe-lecteur");
+  assert.equal(viewer.user.role, "viewer");
+  assert.equal(viewer.user.permissions.clientsWrite, false);
+  assert.equal(
+    (await call(env, `/api/clients/${profile.id}`, authorized(viewer.token))).status,
+    200,
+  );
+  assert.equal(
+    (
+      await call(
+        env,
+        `/api/clients/${profile.id}`,
+        authorized(viewer.token, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...current, phone: "+213555222222" }),
+        }),
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await call(
+        env,
+        "/api/ai/generate",
+        authorized(viewer.token, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }),
+      )
+    ).status,
+    403,
+  );
 
   const stalePhotoResponse = await call(
     env,
@@ -426,7 +478,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
     [2, 1],
   );
 
-  const restoredResponse = await call(
+  const forbiddenEditorRestore = await call(
     env,
     `/api/clients/${profile.id}/versions/1/restore`,
     authorized(editor.token, {
@@ -435,10 +487,28 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
       body: JSON.stringify({ expectedRevision: 2 }),
     }),
   );
+  assert.equal(forbiddenEditorRestore.status, 403);
+
+  const forbiddenEditorDelete = await call(
+    env,
+    `/api/clients/${profile.id}`,
+    authorized(editor.token, { method: "DELETE" }),
+  );
+  assert.equal(forbiddenEditorDelete.status, 403);
+
+  const restoredResponse = await call(
+    env,
+    `/api/clients/${profile.id}/versions/1/restore`,
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision: 2 }),
+    }),
+  );
   assert.equal(restoredResponse.status, 200);
   const restored = await restoredResponse.json();
   assert.equal(restored.profile.revision, 3);
-  assert.equal(restored.profile.updatedBy.username, "editeur");
+  assert.equal(restored.profile.updatedBy.username, "admin");
 
   const staleRestoreResponse = await call(
     env,
@@ -456,7 +526,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(finalProfile.phone, "+213555000000");
   assert.equal(finalProfile.revision, 3);
   assert.equal(finalProfile.createdBy.username, "admin");
-  assert.equal(finalProfile.updatedBy.username, "editeur");
+  assert.equal(finalProfile.updatedBy.username, "admin");
 
   const scheduled = testContext();
   const backupTime = Date.now();
@@ -499,7 +569,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
 
   const searchedResponse = await call(
     env,
-    "/api/clients?q=partag&page=1&pageSize=1&owner=updated",
+    "/api/clients?q=partag&page=1&pageSize=1",
     authorized(editor.token),
   );
   const searched = await searchedResponse.json();
@@ -578,14 +648,14 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   const deletedResponse = await call(
     env,
     `/api/clients/${profile.id}`,
-    authorized(editor.token, { method: "DELETE" }),
+    authorized(admin.token, { method: "DELETE" }),
   );
   assert.equal(deletedResponse.status, 200);
   const emptyListResponse = await call(env, "/api/clients?scope=sync", authorized(admin.token));
   const emptyList = await emptyListResponse.json();
   assert.equal(emptyList.profiles.length, 0);
   assert.equal(emptyList.deletedProfiles.length, 1);
-  assert.equal(emptyList.deletedProfiles[0].deletedBy, "editeur");
+  assert.equal(emptyList.deletedProfiles[0].deletedBy, "admin");
 });
 
 test("la supervision agrège uniquement des métriques techniques anonymes", async () => {

@@ -1,4 +1,4 @@
-import { authenticatedFetch, type SessionUser } from "@/lib/auth-client";
+import { authenticatedFetch, type AccountRole, type SessionUser } from "@/lib/auth-client";
 
 export type ManagedUser = SessionUser & { sessionVersion: number; isPrimary?: boolean };
 
@@ -41,7 +41,7 @@ export type RecoveryPoint = {
   period: string;
   createdAt: string;
   copied: number;
-  createdBy?: { username: string; displayName: string; role: "admin" | "user" };
+  createdBy?: { username: string; displayName: string; role: AccountRole };
 };
 
 export type BackupMonitoring = {
@@ -130,7 +130,7 @@ export async function createManagedUser(input: {
   username: string;
   displayName: string;
   password: string;
-  role: "admin" | "user";
+  role: AccountRole;
 }) {
   return (await apiJson<{ user: ManagedUser }>("/api/admin/users", jsonRequest("POST", input)))
     .user;
@@ -138,7 +138,7 @@ export async function createManagedUser(input: {
 
 export async function updateManagedUser(
   username: string,
-  input: { displayName: string; active: boolean; role: "admin" | "user" },
+  input: { displayName: string; active: boolean; role: AccountRole },
 ) {
   return (
     await apiJson<{ user: ManagedUser }>(

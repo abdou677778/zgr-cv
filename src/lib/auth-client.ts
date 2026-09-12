@@ -63,10 +63,23 @@ function apiNetworkError(failure: unknown) {
   return failure instanceof Error ? failure : new Error("Le service sécurisé est indisponible.");
 }
 
+export type AccountRole = "admin" | "editor" | "viewer";
+
+export type AccountPermissions = {
+  clientsRead: boolean;
+  clientsWrite: boolean;
+  clientsDelete: boolean;
+  clientsRestore: boolean;
+  clientsDownload: boolean;
+  aiUse: boolean;
+  manageUsers: boolean;
+};
+
 export type SessionUser = {
   username: string;
   displayName: string;
-  role: "admin" | "user";
+  role: AccountRole;
+  permissions: AccountPermissions;
   active: boolean;
   createdAt: string | null;
   updatedAt: string | null;
@@ -102,16 +115,29 @@ function tokenHasExpired(token: string) {
   }
 }
 
-function isSessionUser(value: unknown): value is SessionUser {
-  if (!value || typeof value !== "object") return false;
-  const user = value as Partial<SessionUser>;
-  return (
-    typeof user.username === "string" &&
-    user.username.trim().length > 0 &&
-    typeof user.displayName === "string" &&
-    (user.role === "admin" || user.role === "user") &&
-    typeof user.active === "boolean"
-  );
+const permissionsForRole = (role: AccountRole): AccountPermissions => ({
+  clientsRead: true,
+  clientsWrite: role === "admin" || role === "editor",
+  clientsDelete: role === "admin",
+  clientsRestore: role === "admin",
+  clientsDownload: true,
+  aiUse: role === "admin" || role === "editor",
+  manageUsers: role === "admin",
+});
+
+function normalizeSessionUser(value: unknown): SessionUser | null {
+  if (!value || typeof value !== "object") return null;
+  const user = value as Partial<SessionUser> & { role?: AccountRole | "user" };
+  if (
+    typeof user.username !== "string" ||
+    !user.username.trim() ||
+    typeof user.displayName !== "string" ||
+    !["admin", "editor", "viewer", "user"].includes(String(user.role)) ||
+    typeof user.active !== "boolean"
+  )
+    return null;
+  const role: AccountRole = user.role === "admin" || user.role === "viewer" ? user.role : "editor";
+  return { ...user, role, permissions: permissionsForRole(role) } as SessionUser;
 }
 
 async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: number) {
@@ -193,7 +219,11 @@ export function getCurrentUser(): SessionUser | null {
   if (!getAdminSession()) return null;
   try {
     const user = JSON.parse(localStorage.getItem(SESSION_USER_KEY) || "null") as unknown;
-    if (isSessionUser(user)) return user;
+    const normalized = normalizeSessionUser(user);
+    if (normalized) {
+      localStorage.setItem(SESSION_USER_KEY, JSON.stringify(normalized));
+      return normalized;
+    }
   } catch {
     // The cleanup below repairs legacy or partially-written browser sessions.
   }
@@ -238,9 +268,10 @@ export async function loginAdmin(username: string, password: string) {
     SESSION_LOGIN_TIMEOUT_MS,
   );
   const body = await responseJson(response);
-  if (!body.token || !body.user) throw new Error("Le serveur n’a pas créé de session.");
-  saveSession(body.token, body.user);
-  return body.user;
+  const user = normalizeSessionUser(body.user);
+  if (!body.token || !user) throw new Error("Le serveur n’a pas créé de session.");
+  saveSession(body.token, user);
+  return user;
 }
 
 export async function verifyAdminSession(token = getAdminSession()) {
@@ -257,12 +288,13 @@ export async function verifyAdminSession(token = getAdminSession()) {
       return null;
     }
     const body = await responseJson(response);
-    if (!body.user) {
+    const user = normalizeSessionUser(body.user);
+    if (!user) {
       clearAdminSession();
       return null;
     }
-    saveSession(token, body.user);
-    return body.user;
+    saveSession(token, user);
+    return user;
   } catch {
     return cachedUser;
   }

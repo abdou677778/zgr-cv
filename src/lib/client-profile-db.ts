@@ -9,7 +9,7 @@ import {
   normalizeProfilePhoto,
   profilePhotoBlob,
 } from "./profile-photo";
-import { authenticatedFetch } from "./auth-client";
+import { authenticatedFetch, type AccountRole } from "./auth-client";
 
 const DB_NAME = "zgr-cv-clients";
 const DB_VERSION = 3;
@@ -43,7 +43,7 @@ export type ClientProfile = {
 export type ClientProfileActor = {
   username: string;
   displayName: string;
-  role: "admin" | "user";
+  role: AccountRole;
 };
 
 export type ClientProfileSummary = Pick<

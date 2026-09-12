@@ -5,11 +5,15 @@ const MAX_AI_BYTES = 120_000;
 const MAX_TELEMETRY_BYTES = 16_384;
 const MAX_PHOTO_BYTES = 150 * 1024;
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 6;
+const LOGIN_BLOCK_MS = 15 * 60 * 1000;
 // Cloudflare Workers currently rejects PBKDF2 iteration counts above 100,000.
 const PBKDF2_ITERATIONS = 100_000;
 const ID_PATTERN = /^ZGR-\d{8}-[A-Z0-9]{6,12}$/;
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 const USERS_PREFIX = "system/users/";
+const SESSIONS_PREFIX = "system/sessions/";
 const AUDIT_PREFIX = "system/audit/";
 const AI_KEYS_OBJECT = "system/secrets/ai-keys.enc.json";
 const CLIENT_HISTORY_PREFIX = "history/clients/";
@@ -53,13 +57,16 @@ function corsHeaders(origin) {
   };
 }
 
-function json(body, status = 200, origin = null) {
+function json(body, status = 200, origin = null, extraHeaders = {}) {
   return Response.json(body, {
     status,
     headers: {
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
       ...corsHeaders(origin),
+      ...extraHeaders,
     },
   });
 }
@@ -265,7 +272,7 @@ async function writeAudit(env, request, event, username, outcome = "success", de
   );
 }
 
-async function issueSession(env, user) {
+async function issueSession(env, user, sessionId) {
   const key = await sessionKey(env, ["sign"]);
   if (!key) throw new Error("SESSION_SECRET absent ou trop court.");
   const issuedAt = Math.floor(Date.now() / 1000);
@@ -274,6 +281,7 @@ async function issueSession(env, user) {
       sub: user.username,
       role: user.role,
       sv: Number(user.sessionVersion) || 1,
+      sid: sessionId,
       iat: issuedAt,
       exp: issuedAt + SESSION_TTL_SECONDS,
     }),
@@ -283,6 +291,89 @@ async function issueSession(env, user) {
     token: `${payload}.${encodeBase64Url(signature)}`,
     expiresAt: issuedAt + SESSION_TTL_SECONDS,
   };
+}
+
+function sessionObjectKey(username, sessionId) {
+  return `${SESSIONS_PREFIX}${encodeURIComponent(username)}/${sessionId}.json`;
+}
+
+function deviceLabel(request) {
+  const userAgent = String(request.headers.get("User-Agent") || "");
+  const browser = /Edg\//i.test(userAgent)
+    ? "Microsoft Edge"
+    : /Firefox\//i.test(userAgent)
+      ? "Firefox"
+      : /Chrome\//i.test(userAgent)
+        ? "Google Chrome"
+        : /Safari\//i.test(userAgent)
+          ? "Safari"
+          : "Navigateur web";
+  const system = /Android/i.test(userAgent)
+    ? "Android"
+    : /iPhone|iPad|iPod/i.test(userAgent)
+      ? "iOS"
+      : /Windows/i.test(userAgent)
+        ? "Windows"
+        : /Macintosh|Mac OS X/i.test(userAgent)
+          ? "macOS"
+          : /Linux/i.test(userAgent)
+            ? "Linux"
+            : "appareil inconnu";
+  return `${browser} sur ${system}`;
+}
+
+async function writeAccountSession(env, session) {
+  await env.CLIENTS_BUCKET.put(
+    sessionObjectKey(session.username, session.id),
+    JSON.stringify(session),
+    {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: {
+        id: session.id,
+        username: session.username,
+        deviceLabel: session.deviceLabel.slice(0, 100),
+        createdAt: session.createdAt,
+        lastSeenAt: session.lastSeenAt,
+        expiresAt: session.expiresAt,
+      },
+    },
+  );
+}
+
+async function saveAccountSession(env, user, request, sessionId, expiresAt) {
+  const now = new Date().toISOString();
+  const session = {
+    id: sessionId,
+    username: user.username,
+    deviceLabel: deviceLabel(request),
+    createdAt: now,
+    lastSeenAt: now,
+    expiresAt: new Date(expiresAt * 1000).toISOString(),
+  };
+  await writeAccountSession(env, session);
+  return session;
+}
+
+async function getAccountSession(env, username, sessionId) {
+  if (!/^[A-Za-z0-9_-]{20,40}$/.test(sessionId || "")) return null;
+  const session = await readR2Json(env, sessionObjectKey(username, sessionId));
+  return session?.username === username && session?.id === sessionId ? session : null;
+}
+
+async function deleteUserSessions(env, username) {
+  const prefix = `${SESSIONS_PREFIX}${encodeURIComponent(username)}/`;
+  let deleted = 0;
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({ prefix, cursor, limit: 500 });
+    const keys = page.objects.map((object) => object.key);
+    if (keys.length) {
+      await env.CLIENTS_BUCKET.delete(keys);
+      deleted += keys.length;
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return deleted;
 }
 
 async function verifySession(token, env) {
@@ -318,7 +409,7 @@ async function verifySession(token, env) {
   }
 }
 
-async function authenticatedUser(request, env) {
+async function authenticatedUser(request, env, ctx) {
   const received = request.headers.get("Authorization") || "";
   if (!received.startsWith("Bearer ")) return null;
   const claims = await verifySession(received.slice(7), env);
@@ -331,7 +422,112 @@ async function authenticatedUser(request, env) {
     (Number(user.sessionVersion) || 1) !== Number(claims.sv)
   )
     return null;
+  if (claims.sid) {
+    const session = await getAccountSession(env, user.username, claims.sid);
+    if (!session || Date.parse(session.expiresAt) <= Date.now()) {
+      if (session)
+        ctx?.waitUntil(env.CLIENTS_BUCKET.delete(sessionObjectKey(user.username, claims.sid)));
+      return null;
+    }
+    if (Date.now() - Date.parse(session.lastSeenAt) > 60 * 60 * 1000) {
+      ctx?.waitUntil(
+        writeAccountSession(env, { ...session, lastSeenAt: new Date().toISOString() }),
+      );
+    }
+  }
+  Object.defineProperty(user, "sessionId", { value: claims.sid || null, enumerable: false });
   return user;
+}
+
+async function loginAttemptKey(request, env, username) {
+  const network = String(request.headers.get("CF-Connecting-IP") || "unknown").slice(0, 80);
+  const secret = String(env.SESSION_SECRET || "missing-secret");
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    encoder.encode(`${secret}\n${network}\n${normalizeUsername(username) || "invalid"}`),
+  );
+  return encodeBase64Url(digest);
+}
+
+async function loginThrottleState(request, env, username) {
+  if (!env.CLIENTS_DB) return null;
+  try {
+    const key = await loginAttemptKey(request, env, username);
+    const row = await env.CLIENTS_DB.prepare(
+      "SELECT attempts, window_started_at, blocked_until FROM login_attempts WHERE key_hash = ?",
+    )
+      .bind(key)
+      .first();
+    if (!row) return { key, blocked: false };
+    const now = Date.now();
+    const blockedUntil = Date.parse(row.blocked_until || "");
+    if (Number.isFinite(blockedUntil) && blockedUntil > now)
+      return {
+        key,
+        blocked: true,
+        retryAfter: Math.max(1, Math.ceil((blockedUntil - now) / 1000)),
+      };
+    if (now - Date.parse(row.window_started_at) >= LOGIN_WINDOW_MS) {
+      await env.CLIENTS_DB.prepare("DELETE FROM login_attempts WHERE key_hash = ?").bind(key).run();
+      return { key, blocked: false };
+    }
+    return { key, blocked: false };
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "login_throttle_read_failed",
+        message: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+    return null;
+  }
+}
+
+async function recordFailedLogin(request, env, username, knownKey) {
+  if (!env.CLIENTS_DB) return;
+  try {
+    const key = knownKey || (await loginAttemptKey(request, env, username));
+    const existing = await env.CLIENTS_DB.prepare(
+      "SELECT attempts, window_started_at FROM login_attempts WHERE key_hash = ?",
+    )
+      .bind(key)
+      .first();
+    const now = Date.now();
+    const sameWindow = existing && now - Date.parse(existing.window_started_at) < LOGIN_WINDOW_MS;
+    const attempts = sameWindow ? Number(existing.attempts) + 1 : 1;
+    const windowStartedAt = sameWindow ? existing.window_started_at : new Date(now).toISOString();
+    const blockedUntil =
+      attempts >= LOGIN_MAX_ATTEMPTS ? new Date(now + LOGIN_BLOCK_MS).toISOString() : null;
+    await env.CLIENTS_DB.prepare(
+      `INSERT INTO login_attempts
+         (key_hash, attempts, window_started_at, blocked_until, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(key_hash) DO UPDATE SET
+         attempts = excluded.attempts,
+         window_started_at = excluded.window_started_at,
+         blocked_until = excluded.blocked_until,
+         updated_at = excluded.updated_at`,
+    )
+      .bind(key, attempts, windowStartedAt, blockedUntil, new Date(now).toISOString())
+      .run();
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "login_throttle_write_failed",
+        message: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+  }
+}
+
+async function clearFailedLogins(request, env, username, knownKey) {
+  if (!env.CLIENTS_DB) return;
+  try {
+    const key = knownKey || (await loginAttemptKey(request, env, username));
+    await env.CLIENTS_DB.prepare("DELETE FROM login_attempts WHERE key_hash = ?").bind(key).run();
+  } catch {
+    // A successful login must not fail solely because rate-limit cleanup is unavailable.
+  }
 }
 
 async function readJson(request, maxBytes) {
@@ -526,10 +722,18 @@ async function login(request, env, origin, ctx) {
   }
   const username = normalizeUsername(credentials?.username);
   const password = typeof credentials?.password === "string" ? credentials.password : "";
+  const throttle = await loginThrottleState(request, env, username);
+  if (throttle?.blocked) {
+    ctx.waitUntil(writeAudit(env, request, "login", username, "blocked"));
+    return json({ error: "Trop de tentatives. Réessayez dans quelques minutes." }, 429, origin, {
+      "Retry-After": String(throttle.retryAfter),
+    });
+  }
   const user = await getLoginUser(env, username);
   const passwordMatches = user ? await verifyUserPassword(user, password, env) : false;
   if (!user || user.active === false || !passwordMatches) {
     if (!user) await hashPassword(password || "invalid-password", "AAECAwQFBgcICQoLDA0ODw");
+    await recordFailedLogin(request, env, username, throttle?.key);
     ctx.waitUntil(writeAudit(env, request, "login", username, "failure"));
     await new Promise((resolve) => setTimeout(resolve, 650));
     return json({ error: "Identifiants incorrects." }, 401, origin);
@@ -547,9 +751,91 @@ async function login(request, env, origin, ctx) {
     loginCount: (Number(user.loginCount) || 0) + 1,
     sessionVersion: Number(user.sessionVersion) || 1,
   };
-  const [session] = await Promise.all([issueSession(env, storedUser), saveUser(env, storedUser)]);
+  const sessionId = randomBase64Url(18);
+  const session = await issueSession(env, storedUser, sessionId);
+  await Promise.all([
+    saveUser(env, storedUser),
+    saveAccountSession(env, storedUser, request, sessionId, session.expiresAt),
+    clearFailedLogins(request, env, username, throttle?.key),
+  ]);
   ctx.waitUntil(writeAudit(env, request, "login", username, "success"));
   return json({ ok: true, ...session, user: publicUser(storedUser) }, 200, origin);
+}
+
+async function listAccountSessions(env, actor, origin, ctx) {
+  const prefix = `${SESSIONS_PREFIX}${encodeURIComponent(actor.username)}/`;
+  const sessions = [];
+  const expiredKeys = [];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix,
+      cursor,
+      include: ["customMetadata"],
+      limit: 500,
+    });
+    for (const object of page.objects) {
+      const metadata = object.customMetadata || {};
+      const expiresAt = metadata.expiresAt || null;
+      if (!expiresAt || Date.parse(expiresAt) <= Date.now()) {
+        expiredKeys.push(object.key);
+        continue;
+      }
+      sessions.push({
+        id: metadata.id || object.key.slice(prefix.length).replace(/\.json$/, ""),
+        deviceLabel: metadata.deviceLabel || "Navigateur web sur appareil inconnu",
+        createdAt: metadata.createdAt || null,
+        lastSeenAt: metadata.lastSeenAt || metadata.createdAt || null,
+        expiresAt,
+        current: Boolean(actor.sessionId && metadata.id === actor.sessionId),
+      });
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  if (expiredKeys.length) ctx.waitUntil(env.CLIENTS_BUCKET.delete(expiredKeys));
+  sessions.sort(
+    (left, right) => Date.parse(right.lastSeenAt || "") - Date.parse(left.lastSeenAt || ""),
+  );
+  return json({ sessions, legacySession: !actor.sessionId }, 200, origin);
+}
+
+async function revokeAccountSession(request, env, actor, sessionId, origin, ctx) {
+  const session = await getAccountSession(env, actor.username, sessionId);
+  if (!session) return json({ error: "Session introuvable ou déjà fermée." }, 404, origin);
+  await env.CLIENTS_BUCKET.delete(sessionObjectKey(actor.username, sessionId));
+  ctx.waitUntil(
+    writeAudit(env, request, "session_revoked", actor.username, "success", {
+      current: sessionId === actor.sessionId,
+      deviceLabel: session.deviceLabel,
+    }),
+  );
+  return json({ ok: true, logoutRequired: sessionId === actor.sessionId }, 200, origin);
+}
+
+async function revokeOtherAccountSessions(request, env, actor, origin, ctx) {
+  const prefix = `${SESSIONS_PREFIX}${encodeURIComponent(actor.username)}/`;
+  const keys = [];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({ prefix, cursor, limit: 500 });
+    for (const object of page.objects) {
+      const id = object.key.slice(prefix.length).replace(/\.json$/, "");
+      if (!actor.sessionId || id !== actor.sessionId) keys.push(object.key);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  if (keys.length) await env.CLIENTS_BUCKET.delete(keys);
+  ctx.waitUntil(
+    writeAudit(env, request, "other_sessions_revoked", actor.username, "success", {
+      revoked: keys.length,
+    }),
+  );
+  return json({ ok: true, revoked: keys.length }, 200, origin);
+}
+
+function accountSessionId(pathname) {
+  const match = pathname.match(/^\/api\/account\/sessions\/([A-Za-z0-9_-]{20,40})$/);
+  return match ? match[1] : null;
 }
 
 async function listUsers(env, origin) {
@@ -692,7 +978,10 @@ async function updateUser(request, env, actor, username, origin, ctx) {
     updatedAt: new Date().toISOString(),
     sessionVersion: (Number(user.sessionVersion) || 1) + (changedActivity || changedRole ? 1 : 0),
   };
-  await saveUser(env, updated);
+  await Promise.all([
+    saveUser(env, updated),
+    changedActivity || changedRole ? deleteUserSessions(env, username) : Promise.resolve(),
+  ]);
   ctx.waitUntil(
     writeAudit(env, request, "user_updated", actor.username, "success", {
       target: username,
@@ -731,7 +1020,7 @@ async function resetUserPassword(request, env, actor, username, origin, ctx) {
     updatedAt: new Date().toISOString(),
     sessionVersion: (Number(user.sessionVersion) || 1) + 1,
   };
-  await saveUser(env, updated);
+  await Promise.all([saveUser(env, updated), deleteUserSessions(env, username)]);
   ctx.waitUntil(
     writeAudit(env, request, "password_reset", actor.username, "success", { target: username }),
   );
@@ -764,7 +1053,7 @@ async function changeOwnPassword(request, env, actor, origin, ctx) {
     updatedAt: new Date().toISOString(),
     sessionVersion: (Number(actor.sessionVersion) || 1) + 1,
   };
-  await saveUser(env, updated);
+  await Promise.all([saveUser(env, updated), deleteUserSessions(env, actor.username)]);
   ctx.waitUntil(writeAudit(env, request, "password_changed", actor.username, "success"));
   return json({ ok: true, logoutRequired: true }, 200, origin);
 }
@@ -779,7 +1068,10 @@ async function deleteUser(request, env, actor, username, origin, ctx) {
     );
   if (!(await getStoredUser(env, username)))
     return json({ error: "Profil introuvable." }, 404, origin);
-  await env.CLIENTS_BUCKET.delete(`${USERS_PREFIX}${encodeURIComponent(username)}.json`);
+  await Promise.all([
+    env.CLIENTS_BUCKET.delete(`${USERS_PREFIX}${encodeURIComponent(username)}.json`),
+    deleteUserSessions(env, username),
+  ]);
   ctx.waitUntil(
     writeAudit(env, request, "user_deleted", actor.username, "success", { target: username }),
   );
@@ -2827,6 +3119,42 @@ async function runDailyBackup(env, origin) {
   }
 }
 
+async function cleanupSecurityState(env, scheduledTime = Date.now()) {
+  const cutoff = new Date(Number(scheduledTime) - 24 * 60 * 60 * 1000).toISOString();
+  if (env.CLIENTS_DB) {
+    try {
+      await env.CLIENTS_DB.prepare("DELETE FROM login_attempts WHERE updated_at < ?")
+        .bind(cutoff)
+        .run();
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "login_throttle_cleanup_failed",
+          message: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    }
+  }
+  const expiredKeys = [];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix: SESSIONS_PREFIX,
+      cursor,
+      include: ["customMetadata"],
+      limit: 500,
+    });
+    for (const object of page.objects) {
+      if (Date.parse(object.customMetadata?.expiresAt || "") <= Number(scheduledTime))
+        expiredKeys.push(object.key);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  for (let offset = 0; offset < expiredKeys.length; offset += 500)
+    await env.CLIENTS_BUCKET.delete(expiredKeys.slice(offset, offset + 500));
+  return { expiredSessions: expiredKeys.length };
+}
+
 async function route(request, env, ctx) {
   const url = new URL(request.url);
   const origin = allowedOrigin(request, env);
@@ -2844,10 +3172,17 @@ async function route(request, env, ctx) {
   if (url.pathname === "/api/auth/login" && request.method === "POST")
     return login(request, env, origin, ctx);
 
-  const actor = await authenticatedUser(request, env);
+  const actor = await authenticatedUser(request, env, ctx);
   if (!actor) return json({ error: "Session expirée ou accès non autorisé." }, 401, origin);
   if (url.pathname === "/api/auth/session" && request.method === "GET")
     return json({ ok: true, user: publicUser(actor) }, 200, origin);
+  if (url.pathname === "/api/account/sessions" && request.method === "GET")
+    return listAccountSessions(env, actor, origin, ctx);
+  if (url.pathname === "/api/account/sessions/others" && request.method === "DELETE")
+    return revokeOtherAccountSessions(request, env, actor, origin, ctx);
+  const sessionId = accountSessionId(url.pathname);
+  if (sessionId && request.method === "DELETE")
+    return revokeAccountSession(request, env, actor, sessionId, origin, ctx);
   if (url.pathname === "/api/account/password" && request.method === "PUT")
     return changeOwnPassword(request, env, actor, origin, ctx);
 
@@ -2995,5 +3330,6 @@ export default {
         throw error;
       }),
     );
+    ctx.waitUntil(cleanupSecurityState(env, controller.scheduledTime));
   },
 };

@@ -2,6 +2,15 @@ import { authenticatedFetch, type SessionUser } from "@/lib/auth-client";
 
 export type ManagedUser = SessionUser & { sessionVersion: number; isPrimary?: boolean };
 
+export type AccountSession = {
+  id: string;
+  deviceLabel: string;
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  expiresAt: string;
+  current: boolean;
+};
+
 export type AuditEntry = {
   id: string;
   event: string;
@@ -157,6 +166,23 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
     "/api/account/password",
     jsonRequest("PUT", { currentPassword, newPassword }),
   );
+}
+
+export async function listAccountSessions() {
+  return apiJson<{ sessions: AccountSession[]; legacySession: boolean }>("/api/account/sessions");
+}
+
+export async function revokeAccountSession(sessionId: string) {
+  return apiJson<{ ok: boolean; logoutRequired: boolean }>(
+    `/api/account/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function revokeOtherAccountSessions() {
+  return apiJson<{ ok: boolean; revoked: number }>("/api/account/sessions/others", {
+    method: "DELETE",
+  });
 }
 
 export async function listAuditEntries(limit = 100) {

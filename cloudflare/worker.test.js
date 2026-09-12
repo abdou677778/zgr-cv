@@ -108,6 +108,9 @@ class MemoryTelemetryD1 {
         }
         return { success: true };
       },
+      async first() {
+        return null;
+      },
       async all() {
         return { results: structuredClone(database.rows) };
       },
@@ -116,6 +119,39 @@ class MemoryTelemetryD1 {
 
   async batch(statements) {
     return Promise.all(statements.map((statement) => statement.run()));
+  }
+}
+
+class MemorySecurityD1 {
+  loginAttempts = new Map();
+
+  prepare(sql) {
+    const database = this;
+    return {
+      values: [],
+      bind(...values) {
+        this.values = values;
+        return this;
+      },
+      async first() {
+        if (!sql.includes("FROM login_attempts")) return null;
+        return structuredClone(database.loginAttempts.get(this.values[0]) || null);
+      },
+      async run() {
+        if (sql.includes("INSERT INTO login_attempts")) {
+          const [keyHash, attempts, windowStartedAt, blockedUntil, updatedAt] = this.values;
+          database.loginAttempts.set(keyHash, {
+            attempts,
+            window_started_at: windowStartedAt,
+            blocked_until: blockedUntil,
+            updated_at: updatedAt,
+          });
+        } else if (sql.includes("DELETE FROM login_attempts")) {
+          database.loginAttempts.delete(this.values[0]);
+        }
+        return { success: true };
+      },
+    };
   }
 }
 
@@ -161,6 +197,93 @@ async function login(env, username, password) {
 const authorized = (token, init = {}) => ({
   ...init,
   headers: { Authorization: `Bearer ${token}`, ...init.headers },
+});
+
+test("les sessions par appareil peuvent être consultées et révoquées séparément", async () => {
+  const env = {
+    CLIENTS_BUCKET: new MemoryR2Bucket(),
+    ADMIN_USERNAME: "admin",
+    ADMIN_PASSWORD: "mot-de-passe-admin-test",
+    SESSION_SECRET: "secret-de-session-de-test-suffisamment-long-1234567890",
+    ALLOWED_ORIGINS: "http://127.0.0.1:8080",
+  };
+
+  const firstResponse = await call(env, "/api/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/140.0",
+    },
+    body: JSON.stringify({ username: "admin", password: env.ADMIN_PASSWORD }),
+  });
+  const first = await firstResponse.json();
+  const secondResponse = await call(env, "/api/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Firefox/142.0",
+    },
+    body: JSON.stringify({ username: "admin", password: env.ADMIN_PASSWORD }),
+  });
+  const second = await secondResponse.json();
+
+  const listResponse = await call(env, "/api/account/sessions", authorized(second.token));
+  assert.equal(listResponse.status, 200);
+  const listed = await listResponse.json();
+  assert.equal(listed.sessions.length, 2);
+  assert.equal(listed.sessions.filter((session) => session.current).length, 1);
+  assert.ok(listed.sessions.some((session) => session.deviceLabel === "Google Chrome sur Windows"));
+  assert.ok(listed.sessions.some((session) => session.deviceLabel === "Firefox sur Linux"));
+
+  const firstSession = listed.sessions.find((session) => !session.current);
+  const revokeFirst = await call(
+    env,
+    `/api/account/sessions/${firstSession.id}`,
+    authorized(second.token, { method: "DELETE" }),
+  );
+  assert.equal(revokeFirst.status, 200);
+  assert.equal((await revokeFirst.json()).logoutRequired, false);
+  assert.equal((await call(env, "/api/auth/session", authorized(first.token))).status, 401);
+  assert.equal((await call(env, "/api/auth/session", authorized(second.token))).status, 200);
+
+  const currentSession = listed.sessions.find((session) => session.current);
+  const revokeCurrent = await call(
+    env,
+    `/api/account/sessions/${currentSession.id}`,
+    authorized(second.token, { method: "DELETE" }),
+  );
+  assert.equal(revokeCurrent.status, 200);
+  assert.equal((await revokeCurrent.json()).logoutRequired, true);
+  assert.equal((await call(env, "/api/auth/session", authorized(second.token))).status, 401);
+});
+
+test("les tentatives de connexion abusives sont temporairement bloquées sans IP en clair", async () => {
+  const database = new MemorySecurityD1();
+  const env = {
+    CLIENTS_BUCKET: new MemoryR2Bucket(),
+    CLIENTS_DB: database,
+    ADMIN_USERNAME: "admin",
+    ADMIN_PASSWORD: "mot-de-passe-admin-test",
+    SESSION_SECRET: "secret-de-session-de-test-suffisamment-long-1234567890",
+    ALLOWED_ORIGINS: "http://127.0.0.1:8080",
+  };
+  const sourceIp = "203.0.113.42";
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const response = await call(env, "/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": sourceIp },
+      body: JSON.stringify({ username: "admin", password: "incorrect-password" }),
+    });
+    assert.equal(response.status, 401);
+  }
+  const blocked = await call(env, "/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": sourceIp },
+    body: JSON.stringify({ username: "admin", password: env.ADMIN_PASSWORD }),
+  });
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get("Retry-After")) > 0);
+  assert.equal(JSON.stringify([...database.loginAttempts.keys()]).includes(sourceIp), false);
 });
 
 test("les clients R2 sont partagés, attribués et protégés contre les écrasements", async () => {

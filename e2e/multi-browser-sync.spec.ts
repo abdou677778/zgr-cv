@@ -123,6 +123,22 @@ class SharedClientApi {
       return this.respond(route, 202, { ok: true, stored: events.length, available: true });
     }
 
+    if (url.pathname === "/api/account/sessions" && method === "GET") {
+      return this.respond(route, 200, {
+        legacySession: false,
+        sessions: [
+          {
+            id: "e2e-session-current-12345",
+            deviceLabel: "Navigateur E2E sur Windows",
+            createdAt: "2026-09-12T07:00:00.000Z",
+            lastSeenAt: "2026-09-12T08:00:00.000Z",
+            expiresAt: "2026-09-19T07:00:00.000Z",
+            current: true,
+          },
+        ],
+      });
+    }
+
     if (url.pathname.startsWith("/api/admin/")) {
       if (user.role !== "admin")
         return this.respond(route, 403, { error: "Droits administrateur requis." });

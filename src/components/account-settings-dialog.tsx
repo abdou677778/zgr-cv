@@ -9,6 +9,7 @@ import {
   EyeOff,
   HardDrive,
   KeyRound,
+  Laptop,
   LoaderCircle,
   RefreshCw,
   RotateCcw,
@@ -37,13 +38,17 @@ import {
   getBackupMonitoring,
   getOperationalMonitoring,
   listAuditEntries,
+  listAccountSessions,
   listManagedUsers,
   previewBackupRestore,
   resetManagedUserPassword,
   restoreClientBackup,
+  revokeAccountSession,
+  revokeOtherAccountSessions,
   runBackupNow,
   updateManagedUser,
   type AuditEntry,
+  type AccountSession,
   type BackupMonitoring,
   type BackupRestorePreview,
   type ManagedUser,
@@ -143,6 +148,25 @@ export function AccountSettingsDialog({
   });
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const [ownPassword, setOwnPassword] = useState({ current: "", next: "", confirm: "" });
+  const [accountSessions, setAccountSessions] = useState<AccountSession[]>([]);
+  const [legacySession, setLegacySession] = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const result = await listAccountSessions();
+      setAccountSessions(Array.isArray(result.sessions) ? result.sessions : []);
+      setLegacySession(result.legacySession === true);
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Chargement des appareils impossible.",
+      });
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
 
   const loadAdminData = useCallback(async () => {
     if (user.role !== "admin") return;
@@ -171,8 +195,55 @@ export function AccountSettingsDialog({
   }, [user.role]);
 
   useEffect(() => {
-    if (open) void loadAdminData();
-  }, [open, loadAdminData]);
+    if (open) {
+      void loadAdminData();
+      void loadSessions();
+    }
+  }, [open, loadAdminData, loadSessions]);
+
+  const revokeSession = async (session: AccountSession) => {
+    setBusy(`session-${session.id}`);
+    setMessage(null);
+    try {
+      const result = await revokeAccountSession(session.id);
+      if (result.logoutRequired) {
+        onOpenChange(false);
+        onSessionInvalidated();
+        return;
+      }
+      setMessage({ ok: true, text: `Session « ${session.deviceLabel} » déconnectée.` });
+      await loadSessions();
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Déconnexion impossible.",
+      });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const revokeOtherSessions = async () => {
+    setBusy("other-sessions");
+    setMessage(null);
+    try {
+      const result = await revokeOtherAccountSessions();
+      setMessage({
+        ok: true,
+        text: result.revoked
+          ? `${result.revoked} autre appareil${result.revoked > 1 ? "s" : ""} déconnecté${result.revoked > 1 ? "s" : ""}.`
+          : "Aucun autre appareil connecté.",
+      });
+      await loadSessions();
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Déconnexion impossible.",
+      });
+    } finally {
+      setBusy("");
+    }
+  };
 
   const changePassword = async (event: FormEvent) => {
     event.preventDefault();
@@ -433,6 +504,85 @@ export function AccountSettingsDialog({
               Modifier et me reconnecter
             </Button>
           </form>
+        </section>
+
+        <section className="space-y-4 rounded-2xl border border-indigo-100 bg-indigo-50/30 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Laptop className="h-5 w-5 text-indigo-700" />
+              <div>
+                <h3 className="font-semibold">Appareils connectés</h3>
+                <p className="text-xs text-muted-foreground">
+                  Consultez et fermez séparément les sessions ouvertes avec votre compte.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={
+                busy === "other-sessions" || !accountSessions.some((session) => !session.current)
+              }
+              onClick={() => void revokeOtherSessions()}
+            >
+              {busy === "other-sessions" && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+              Déconnecter les autres
+            </Button>
+          </div>
+
+          {legacySession && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Cette session a été créée avant le suivi par appareil. Elle reste valide jusqu’à sa
+              date d’expiration et apparaîtra ici après votre prochaine connexion.
+            </p>
+          )}
+
+          {sessionsLoading ? (
+            <div className="flex items-center gap-2 rounded-xl border bg-white px-4 py-4 text-sm text-muted-foreground">
+              <LoaderCircle className="h-4 w-4 animate-spin" /> Chargement des appareils…
+            </div>
+          ) : accountSessions.length ? (
+            <div className="divide-y overflow-hidden rounded-xl border bg-white">
+              {accountSessions.map((session) => (
+                <div
+                  key={session.id}
+                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+                      {session.deviceLabel}
+                      {session.current && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                          Cet appareil
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Dernière activité : {formatDate(session.lastSeenAt)} · créée le{" "}
+                      {formatDate(session.createdAt)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant={session.current ? "destructive" : "outline"}
+                    size="sm"
+                    disabled={busy === `session-${session.id}`}
+                    onClick={() => void revokeSession(session)}
+                  >
+                    {busy === `session-${session.id}` && (
+                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {session.current ? "Me déconnecter" : "Déconnecter"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-xl border bg-white px-4 py-4 text-sm text-muted-foreground">
+              Aucun appareil suivi pour cette session.
+            </p>
+          )}
         </section>
 
         {user.role === "admin" && (

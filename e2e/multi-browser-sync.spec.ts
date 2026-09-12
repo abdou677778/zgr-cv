@@ -69,6 +69,7 @@ function tokenFor(username: string) {
 
 class SharedClientApi {
   readonly profiles = new Map<string, StoredProfile>();
+  readonly profileVersions = new Map<string, Map<number, StoredProfile>>();
   readonly sessions = new Map<string, TestUser>();
   readonly offlineUsers = new Set<string>();
   private revisionClock = 0;
@@ -342,6 +343,36 @@ class SharedClientApi {
       });
     }
 
+    const versionMatch = url.pathname.match(/^\/api\/clients\/([^/]+)\/versions\/(\d+)$/);
+    if (versionMatch && method === "GET") {
+      const id = decodeURIComponent(versionMatch[1]);
+      const revision = Number(versionMatch[2]);
+      const profile = this.profileVersions.get(id)?.get(revision);
+      return profile
+        ? this.respond(route, 200, { id, revision, profile })
+        : this.respond(route, 404, { error: "Cette version n’existe plus." });
+    }
+
+    const versionsMatch = url.pathname.match(/^\/api\/clients\/([^/]+)\/versions$/);
+    if (versionsMatch && method === "GET") {
+      const id = decodeURIComponent(versionsMatch[1]);
+      const profile = this.profiles.get(id);
+      if (!profile) return this.respond(route, 404, { error: "Profil de test introuvable." });
+      const versions = [...(this.profileVersions.get(id)?.values() || [])]
+        .sort((left, right) => right.revision - left.revision)
+        .map((version) => ({
+          revision: version.revision,
+          updatedAt: version.updatedAt,
+          updatedBy: version.updatedBy,
+          hasPhoto: false,
+        }));
+      return this.respond(route, 200, {
+        id,
+        currentRevision: profile.revision,
+        versions,
+      });
+    }
+
     const match = url.pathname.match(/^\/api\/clients\/([^/]+)(?:\/(photo))?$/);
     if (!match) return this.respond(route, 404, { error: "Route de test inconnue." });
     const id = decodeURIComponent(match[1]);
@@ -384,6 +415,9 @@ class SharedClientApi {
         updatedBy: actor(user),
       };
       this.profiles.set(id, committed);
+      const versions = this.profileVersions.get(id) || new Map<number, StoredProfile>();
+      versions.set(committed.revision, structuredClone(committed));
+      this.profileVersions.set(id, versions);
       return this.respond(route, 200, {
         ok: true,
         profile: {
@@ -551,6 +585,21 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await expect.poll(() => api.profiles.get(profileId)?.revision).toBe(2);
     expect(api.profiles.get(profileId)?.phone).toBe("+213 555 200 200");
     expect(api.profiles.get(profileId)?.updatedBy.username).toBe("editeur");
+
+    await editorPage.getByRole("button", { name: "Base de données", exact: true }).click();
+    const historyDatabase = editorPage.getByRole("dialog", { name: /Base de données clients/ });
+    const historyRow = historyDatabase.locator("article").filter({ hasText: "Client E2E partagé" });
+    await historyRow.getByRole("button", { name: "Historique" }).click();
+    await expect(historyRow.getByText("Timeline des modifications")).toBeVisible();
+    await expect(historyRow.getByLabel("Version de départ")).toHaveValue("1");
+    await expect(historyRow.getByLabel("Version d’arrivée")).toHaveValue("2");
+    await historyRow.getByRole("button", { name: "Comparer", exact: true }).click();
+    const comparison = historyRow.getByRole("region", { name: "Résultat de la comparaison" });
+    await expect(comparison.getByText("Révision 1 → révision 2")).toBeVisible();
+    await expect(comparison.getByText("CV › Français › Téléphone", { exact: true })).toBeVisible();
+    await expect(comparison.getByText("+213 555 100 100", { exact: true })).toBeVisible();
+    await expect(comparison.getByText("+213 555 200 200", { exact: true })).toBeVisible();
+    await historyDatabase.getByRole("button", { name: "Close" }).click();
 
     api.offlineUsers.add("editeur");
     await editorPage.getByPlaceholder("+1 514 000 0000").fill("+213 555 300 300");

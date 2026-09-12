@@ -1168,6 +1168,16 @@ function profileVersionRestore(pathname) {
     : null;
 }
 
+function profileVersionId(pathname) {
+  const match = pathname.match(/^\/api\/clients\/([^/]+)\/versions\/(\d+)$/);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]).toUpperCase();
+  const revision = Number(match[2]);
+  return ID_PATTERN.test(id) && Number.isSafeInteger(revision) && revision > 0
+    ? { id, revision }
+    : null;
+}
+
 const profilePhotoKey = (id) => `clients/${id}/photo.webp`;
 const profileDeletedKey = (id) => `clients/${id}.deleted.json`;
 const trashProfilePrefix = (id) => `trash/clients/${id}/`;
@@ -2007,6 +2017,22 @@ async function listProfileVersions(env, id, origin) {
   } while (cursor);
   versions.sort((left, right) => right.revision - left.revision);
   return json({ id, currentRevision: storedProfileRevision(current), versions }, 200, origin);
+}
+
+async function getProfileVersion(env, target, origin) {
+  const current = await env.CLIENTS_BUCKET.get(`clients/${target.id}.json`);
+  if (!current) return json({ error: "Profil introuvable." }, 404, origin);
+  const historical = await readR2Json(env, profileVersionKey(target.id, target.revision));
+  if (!historical) return json({ error: "Cette version n’existe plus." }, 404, origin);
+  return json(
+    {
+      id: target.id,
+      revision: target.revision,
+      profile: historical,
+    },
+    200,
+    origin,
+  );
 }
 
 async function restoreProfileVersion(request, env, target, actor, origin, ctx) {
@@ -3535,6 +3561,11 @@ async function route(request, env, ctx) {
         );
       return restoreProfileVersion(request, env, restoreTarget, actor, origin, ctx);
     }
+    return json({ error: "Méthode non autorisée." }, 405, origin);
+  }
+  const versionTarget = profileVersionId(url.pathname);
+  if (versionTarget) {
+    if (request.method === "GET") return getProfileVersion(env, versionTarget, origin);
     return json({ error: "Méthode non autorisée." }, 405, origin);
   }
   const versionsId = profileVersionsId(url.pathname);

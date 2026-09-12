@@ -415,6 +415,19 @@ export async function listCloudProfileVersions(endpoint: string, token: string, 
   }>(response);
 }
 
+export async function getCloudProfileVersion(
+  endpoint: string,
+  token: string,
+  id: string,
+  revision: number,
+) {
+  const response = await authenticatedFetch(`${cloudUrl(endpoint, id)}/versions/${revision}`, {
+    headers: cloudHeaders(token),
+    cache: "no-store",
+  });
+  return cloudResponse<{ id: string; revision: number; profile: ClientProfile }>(response);
+}
+
 export async function restoreCloudProfileVersion(
   endpoint: string,
   token: string,

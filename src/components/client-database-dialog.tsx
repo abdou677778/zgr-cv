@@ -8,6 +8,7 @@ import {
   Database,
   Download,
   ExternalLink,
+  GitCompareArrows,
   History,
   LoaderCircle,
   PencilLine,
@@ -30,6 +31,7 @@ import {
   applyCloudCommit,
   deleteClientProfile,
   deleteCloudProfile,
+  getCloudProfileVersion,
   getCloudProfile,
   getClientProfile,
   listCloudProfileVersions,
@@ -65,6 +67,183 @@ const EMPTY_PAGINATION: CloudProfilePagination = {
   hasNext: false,
 };
 
+type ProfileDifference = {
+  key: string;
+  label: string;
+  before: string;
+  after: string;
+};
+
+type ProfileComparison = {
+  fromRevision: number;
+  toRevision: number;
+  differences: ProfileDifference[];
+};
+
+const COMPARISON_LABELS: Record<string, string> = {
+  cvByLanguage: "CV",
+  hiddenElements: "Éléments masqués",
+  documentKind: "Type de document",
+  templateId: "Modèle",
+  templateColors: "Palette",
+  templateDesign: "Design",
+  sectionAppearance: "Titres des sections",
+  nom_complet: "Nom complet",
+  titre_poste: "Poste",
+  telephone: "Téléphone",
+  email: "E-mail",
+  adresse: "Adresse",
+  statut_relocation: "Statut / Relocation",
+  date_naissance: "Date de naissance",
+  situation_familiale: "Situation familiale",
+  permis_conduire: "Permis de conduire",
+  service_national: "Service national",
+  wilaya: "Wilaya / Province",
+  pays: "Pays",
+  candidature: "Candidature",
+  objectif: "Objectif",
+  competences: "Compétences",
+  logiciels: "Logiciels",
+  langues: "Langues",
+  experiences: "Expériences",
+  formations: "Formations",
+  educations: "Éducation",
+  participations: "Participations",
+  certifications: "Certifications",
+  interets: "Centres d’intérêt",
+  references: "Références",
+  lettre_motivation: "Lettre de motivation",
+  plan_developpement: "Plan professionnel",
+  titre: "Titre",
+  dates: "Dates",
+  date: "Date",
+  lieu: "Lieu",
+  employeur: "Employeur",
+  institution: "Institution",
+  descriptions: "Responsabilités",
+  option: "Option",
+  equivalence: "Équivalence",
+  name: "Nom du profil",
+  phone: "Téléphone du profil",
+  language: "Langue active",
+};
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  fr: "Français",
+  en: "Anglais",
+  ar: "Arabe",
+  de: "Allemand",
+  es: "Espagnol",
+  kab: "Kabyle",
+};
+
+const COMPARISON_IGNORED_FIELDS = new Set([
+  "version",
+  "revision",
+  "createdAt",
+  "updatedAt",
+  "createdBy",
+  "updatedBy",
+  "restoredFromRevision",
+  "restoredFromTrash",
+  "photoAsset",
+  "photo",
+  "dataUrl",
+  "id",
+]);
+const COMPARISON_ROOT_IGNORED_FIELDS = new Set(["name", "email", "phone"]);
+
+function comparisonLabel(key: string) {
+  if (LANGUAGE_LABELS[key]) return LANGUAGE_LABELS[key];
+  if (COMPARISON_LABELS[key]) return COMPARISON_LABELS[key];
+  const spaced = key.replaceAll("_", " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toLocaleUpperCase("fr") + spaced.slice(1);
+}
+
+function comparisonText(value: unknown) {
+  if (value === null || value === undefined || value === "") return "Vide";
+  if (typeof value === "boolean") return value ? "Oui" : "Non";
+  return String(value)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function flattenComparableProfile(profile: ClientProfile) {
+  const flattened = new Map<string, { label: string; value: string }>();
+
+  const visit = (value: unknown, keySegments: string[], labelSegments: string[]): void => {
+    if (Array.isArray(value)) {
+      if (!value.length) {
+        flattened.set(keySegments.join("."), {
+          label: labelSegments.join(" › "),
+          value: "Vide",
+        });
+        return;
+      }
+      if (value.every((item) => item === null || typeof item !== "object")) {
+        flattened.set(keySegments.join("."), {
+          label: labelSegments.join(" › "),
+          value: value.map(comparisonText).join("\n"),
+        });
+        return;
+      }
+      value.forEach((item, index) => {
+        if (!item || typeof item !== "object") return;
+        const record = item as Record<string, unknown>;
+        const identity = comparisonText(record.id ?? index + 1);
+        const itemLabel = comparisonText(
+          record.titre ??
+            record.label ??
+            record.institution ??
+            record.employeur ??
+            `Élément ${index + 1}`,
+        );
+        visit(record, [...keySegments, identity], [...labelSegments, itemLabel]);
+      });
+      return;
+    }
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value as Record<string, unknown>).filter(
+        ([key]) =>
+          !COMPARISON_IGNORED_FIELDS.has(key) &&
+          !(keySegments.length === 0 && COMPARISON_ROOT_IGNORED_FIELDS.has(key)),
+      );
+      if (!entries.length && keySegments.length) {
+        flattened.set(keySegments.join("."), {
+          label: labelSegments.join(" › "),
+          value: "Vide",
+        });
+      }
+      entries.forEach(([key, child]) =>
+        visit(child, [...keySegments, key], [...labelSegments, comparisonLabel(key)]),
+      );
+      return;
+    }
+    flattened.set(keySegments.join("."), {
+      label: labelSegments.join(" › "),
+      value: comparisonText(value),
+    });
+  };
+
+  visit(profile, [], []);
+  return flattened;
+}
+
+function compareProfiles(before: ClientProfile, after: ClientProfile): ProfileDifference[] {
+  const beforeFields = flattenComparableProfile(before);
+  const afterFields = flattenComparableProfile(after);
+  return [...new Set([...beforeFields.keys(), ...afterFields.keys()])]
+    .map((key) => ({
+      key,
+      label: afterFields.get(key)?.label || beforeFields.get(key)?.label || key,
+      before: beforeFields.get(key)?.value || "Vide",
+      after: afterFields.get(key)?.value || "Vide",
+    }))
+    .filter((difference) => difference.before !== difference.after)
+    .sort((left, right) => left.label.localeCompare(right.label, "fr"));
+}
+
 export function ClientDatabaseDialog({
   open,
   onOpenChange,
@@ -93,6 +272,9 @@ export function ClientDatabaseDialog({
   const [indexSource, setIndexSource] = useState<"d1" | "r2" | "r2-backfill" | "local">("local");
   const [historyProfileId, setHistoryProfileId] = useState<string | null>(null);
   const [historyVersions, setHistoryVersions] = useState<CloudProfileVersion[]>([]);
+  const [comparisonFrom, setComparisonFrom] = useState(0);
+  const [comparisonTo, setComparisonTo] = useState(0);
+  const [profileComparison, setProfileComparison] = useState<ProfileComparison | null>(null);
   const [trashItems, setTrashItems] = useState<TrashedClientProfile[]>([]);
   const [trashRetentionDays, setTrashRetentionDays] = useState(30);
   const [trashLoading, setTrashLoading] = useState(false);
@@ -461,6 +643,7 @@ export function ClientDatabaseDialog({
     if (historyProfileId === profile.id) {
       setHistoryProfileId(null);
       setHistoryVersions([]);
+      setProfileComparison(null);
       return;
     }
     setBusy(`history:${profile.id}`);
@@ -471,8 +654,45 @@ export function ClientDatabaseDialog({
       const result = await listCloudProfileVersions(CLIENTS_API_ENDPOINT, token, profile.id);
       setHistoryProfileId(profile.id);
       setHistoryVersions(result.versions);
+      const currentRevision = result.currentRevision;
+      const previousRevision =
+        result.versions.find((version) => version.revision < currentRevision)?.revision ??
+        currentRevision;
+      setComparisonFrom(previousRevision);
+      setComparisonTo(currentRevision);
+      setProfileComparison(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Historique impossible à charger.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const compareHistoryVersions = async (profile: ClientProfileSummary) => {
+    if (!comparisonFrom || !comparisonTo || comparisonFrom === comparisonTo) {
+      setMessage("Choisissez deux révisions différentes à comparer.");
+      return;
+    }
+    const fromRevision = Math.min(comparisonFrom, comparisonTo);
+    const toRevision = Math.max(comparisonFrom, comparisonTo);
+    setBusy(`compare:${profile.id}`);
+    setMessage("");
+    try {
+      const token = getAdminSession();
+      if (!token) throw new Error("La session du compte a expiré. Reconnectez-vous.");
+      const [before, after] = await Promise.all([
+        getCloudProfileVersion(CLIENTS_API_ENDPOINT, token, profile.id, fromRevision),
+        getCloudProfileVersion(CLIENTS_API_ENDPOINT, token, profile.id, toRevision),
+      ]);
+      setComparisonFrom(fromRevision);
+      setComparisonTo(toRevision);
+      setProfileComparison({
+        fromRevision,
+        toRevision,
+        differences: compareProfiles(before.profile, after.profile),
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Comparaison impossible.");
     } finally {
       setBusy("");
     }
@@ -506,6 +726,9 @@ export function ClientDatabaseDialog({
       if (activeProfileId === profile.id) onOpenProfile(cloud);
       const history = await listCloudProfileVersions(CLIENTS_API_ENDPOINT, token, profile.id);
       setHistoryVersions(history.versions);
+      setComparisonFrom(revision);
+      setComparisonTo(history.currentRevision);
+      setProfileComparison(null);
       await loadPage(true);
       onSyncStatusChange?.({
         state: "synced",
@@ -697,56 +920,191 @@ export function ClientDatabaseDialog({
                         )}
                       </div>
                       {historyProfileId === profile.id && (
-                        <div className="rounded-md border bg-slate-50 p-3">
-                          <p className="text-xs font-semibold text-slate-800">
-                            Historique des révisions
-                          </p>
-                          <div className="mt-2 space-y-2">
-                            {historyVersions.map((version) => {
+                        <section className="space-y-3 rounded-md border bg-slate-50 p-3">
+                          <div>
+                            <p className="text-xs font-semibold text-slate-800">
+                              Timeline des modifications
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              Consultez l’auteur de chaque version et comparez précisément les
+                              changements.
+                            </p>
+                          </div>
+
+                          {historyVersions.length > 1 && (
+                            <div className="rounded-md border bg-white p-3">
+                              <p className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                                <GitCompareArrows className="h-3.5 w-3.5 text-primary" /> Comparer
+                                deux révisions
+                              </p>
+                              <div className="mt-2 grid items-end gap-2 sm:grid-cols-[1fr_auto_1fr_auto]">
+                                <label className="space-y-1 text-[10px] font-medium text-slate-600">
+                                  Version de départ
+                                  <select
+                                    aria-label="Version de départ"
+                                    className="h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground"
+                                    value={comparisonFrom}
+                                    onChange={(event) => {
+                                      setComparisonFrom(Number(event.target.value));
+                                      setProfileComparison(null);
+                                    }}
+                                  >
+                                    {historyVersions.map((version) => (
+                                      <option key={version.revision} value={version.revision}>
+                                        Révision {version.revision}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <span className="hidden pb-2 text-slate-400 sm:block">→</span>
+                                <label className="space-y-1 text-[10px] font-medium text-slate-600">
+                                  Version d’arrivée
+                                  <select
+                                    aria-label="Version d’arrivée"
+                                    className="h-8 w-full rounded-md border bg-background px-2 text-xs text-foreground"
+                                    value={comparisonTo}
+                                    onChange={(event) => {
+                                      setComparisonTo(Number(event.target.value));
+                                      setProfileComparison(null);
+                                    }}
+                                  >
+                                    {historyVersions.map((version) => (
+                                      <option key={version.revision} value={version.revision}>
+                                        Révision {version.revision}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8"
+                                  disabled={Boolean(busy) || comparisonFrom === comparisonTo}
+                                  onClick={() => void compareHistoryVersions(profile)}
+                                >
+                                  {busy === `compare:${profile.id}` ? (
+                                    <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <GitCompareArrows className="mr-1.5 h-3.5 w-3.5" />
+                                  )}
+                                  Comparer
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {profileComparison && (
+                            <section
+                              aria-label="Résultat de la comparaison"
+                              className="rounded-md border border-sky-200 bg-sky-50/70 p-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-xs font-semibold text-sky-950">
+                                  Révision {profileComparison.fromRevision} → révision{" "}
+                                  {profileComparison.toRevision}
+                                </p>
+                                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-sky-800">
+                                  {profileComparison.differences.length} changement(s)
+                                </span>
+                              </div>
+                              {profileComparison.differences.length ? (
+                                <div className="mt-2 max-h-80 space-y-2 overflow-y-auto pr-1">
+                                  {profileComparison.differences.map((difference) => (
+                                    <article
+                                      key={difference.key}
+                                      className="rounded border bg-white p-2"
+                                    >
+                                      <p className="text-[10px] font-semibold text-slate-700">
+                                        {difference.label}
+                                      </p>
+                                      <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                                        <div className="rounded bg-red-50 px-2 py-1.5">
+                                          <span className="text-[9px] font-bold uppercase tracking-wide text-red-700">
+                                            Avant
+                                          </span>
+                                          <p className="mt-0.5 whitespace-pre-wrap break-words text-[10px] text-slate-700">
+                                            {difference.before}
+                                          </p>
+                                        </div>
+                                        <div className="rounded bg-emerald-50 px-2 py-1.5">
+                                          <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                                            Après
+                                          </span>
+                                          <p className="mt-0.5 whitespace-pre-wrap break-words text-[10px] text-slate-700">
+                                            {difference.after}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </article>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-2 rounded bg-white px-3 py-2 text-xs text-slate-600">
+                                  Aucun changement de contenu détecté entre ces deux versions.
+                                </p>
+                              )}
+                            </section>
+                          )}
+
+                          <div className="space-y-0">
+                            {historyVersions.map((version, index) => {
                               const current = version.revision === (profile.revision ?? 0);
+                              const oldest = index === historyVersions.length - 1;
+                              const eventName = oldest
+                                ? "Création du client"
+                                : version.restoredFromRevision
+                                  ? `Restauration de la révision ${version.restoredFromRevision}`
+                                  : "Modification du client";
                               return (
                                 <div
                                   key={version.revision}
-                                  className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-3 py-2 text-xs"
+                                  className="relative border-l-2 border-slate-200 pb-3 pl-4 last:pb-0"
                                 >
-                                  <div>
-                                    <span className="font-semibold">
-                                      Révision {version.revision}
-                                    </span>
-                                    {current && (
-                                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                                        Actuelle
+                                  <span
+                                    className={`absolute -left-[5px] top-1 h-2 w-2 rounded-full ring-2 ring-slate-50 ${current ? "bg-emerald-500" : "bg-slate-400"}`}
+                                  />
+                                  <div className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-3 py-2 text-xs">
+                                    <div>
+                                      <span className="font-semibold">
+                                        Révision {version.revision}
                                       </span>
-                                    )}
-                                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                      {new Date(version.updatedAt).toLocaleString("fr-DZ")} ·{" "}
-                                      {version.updatedBy?.displayName || "Auteur non enregistré"}
-                                      {version.restoredFromRevision
-                                        ? ` · restaurée depuis la révision ${version.restoredFromRevision}`
-                                        : ""}
-                                    </p>
-                                  </div>
-                                  {!current && canRestore && (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => void restoreVersion(profile, version.revision)}
-                                      disabled={Boolean(busy)}
-                                    >
-                                      {busy === `restore:${profile.id}:${version.revision}` ? (
-                                        <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
-                                      ) : (
-                                        <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                                      {current && (
+                                        <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                                          Actuelle
+                                        </span>
                                       )}
-                                      Restaurer
-                                    </Button>
-                                  )}
+                                      <p className="mt-0.5 text-[10px] font-medium text-slate-600">
+                                        {eventName}
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                        {new Date(version.updatedAt).toLocaleString("fr-DZ")} ·{" "}
+                                        {version.updatedBy?.displayName || "Auteur non enregistré"}
+                                      </p>
+                                    </div>
+                                    {!current && canRestore && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          void restoreVersion(profile, version.revision)
+                                        }
+                                        disabled={Boolean(busy)}
+                                      >
+                                        {busy === `restore:${profile.id}:${version.revision}` ? (
+                                          <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                          <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                                        )}
+                                        Restaurer
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
                           </div>
-                        </div>
+                        </section>
                       )}
                       {conflictIds.includes(profile.id) && (
                         <div className="rounded-md border border-red-200 bg-red-50 p-3">

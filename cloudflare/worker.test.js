@@ -478,6 +478,32 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
     [2, 1],
   );
 
+  const firstVersionResponse = await call(
+    env,
+    `/api/clients/${profile.id}/versions/1`,
+    authorized(editor.token),
+  );
+  assert.equal(firstVersionResponse.status, 200);
+  const firstVersion = await firstVersionResponse.json();
+  assert.equal(firstVersion.revision, 1);
+  assert.equal(firstVersion.profile.phone, "+213555000000");
+
+  const secondVersionResponse = await call(
+    env,
+    `/api/clients/${profile.id}/versions/2`,
+    authorized(editor.token),
+  );
+  assert.equal(secondVersionResponse.status, 200);
+  const secondVersion = await secondVersionResponse.json();
+  assert.equal(secondVersion.profile.phone, "+213555111111");
+
+  const missingVersionResponse = await call(
+    env,
+    `/api/clients/${profile.id}/versions/99`,
+    authorized(editor.token),
+  );
+  assert.equal(missingVersionResponse.status, 404);
+
   const forbiddenEditorRestore = await call(
     env,
     `/api/clients/${profile.id}/versions/1/restore`,

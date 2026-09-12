@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ZGR CV">
+  <rect width="512" height="512" rx="112" fill="#6b0037"/>
+  <path d="M140 104h232c31 0 56 25 56 56v192c0 31-25 56-56 56H140c-31 0-56-25-56-56V160c0-31 25-56 56-56Z" fill="#fff"/>
+  <path d="M158 177h196M158 246h196M158 315h118" fill="none" stroke="#6b0037" stroke-linecap="round" stroke-width="30"/>
+  <circle cx="350" cy="315" r="39" fill="#d9e2f3"/>
+  <path d="m330 315 14 14 28-31" fill="none" stroke="#6b0037" stroke-linecap="round" stroke-linejoin="round" stroke-width="15"/>
+</svg>

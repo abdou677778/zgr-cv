@@ -46,6 +46,7 @@ import {
   CloudCheck,
   CloudOff,
   TriangleAlert,
+  RefreshCw,
 } from "lucide-react";
 import {
   analyzeEuropassCoverage,
@@ -167,6 +168,7 @@ import {
   type WorkspaceDraft,
 } from "@/lib/client-profile-db";
 import { importClientOrderJson, type ClientOrderSummary } from "@/lib/client-orders";
+import { activatePwaUpdate, promptPwaInstall, usePwaStatus } from "@/lib/pwa-client";
 
 const AiSettingsDialog = lazy(async () => {
   const module = await import("@/components/ai-settings-dialog");
@@ -512,6 +514,7 @@ function Index() {
 }
 
 function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const pwa = usePwaStatus();
   const [language, setLanguage] = useState<DocumentLanguage>("fr");
   const [cvByLanguage, setCvByLanguage] = useState<Record<DocumentLanguage, CV>>({
     ...sampleCVByLanguage,
@@ -2491,6 +2494,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             >
               <Database className="mr-2 h-4 w-4" /> Base de données
             </Button>
+            {pwa.installAvailable && !pwa.installed && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-fuchsia-200 bg-fuchsia-50/80 text-fuchsia-900 hover:bg-fuchsia-100"
+                onClick={() => void promptPwaInstall()}
+              >
+                <Download className="mr-2 h-4 w-4" /> Installer l’application
+              </Button>
+            )}
             {clientSyncStatus.state !== "idle" && (
               <span
                 role="status"
@@ -2711,6 +2724,28 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             )}
           </div>
         </div>
+        {pwa.updateAvailable && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="mx-auto mb-2 flex max-w-7xl flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-950 shadow-sm"
+          >
+            <span>
+              <strong>Nouvelle version disponible.</strong>{" "}
+              {hasUnsavedChanges
+                ? "Votre brouillon local est conservé avant l’actualisation."
+                : "Vous pouvez l’appliquer maintenant sans perdre votre travail."}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-2 bg-violet-700 text-white hover:bg-violet-800"
+              onClick={activatePwaUpdate}
+            >
+              <RefreshCw className="h-4 w-4" /> Actualiser
+            </Button>
+          </div>
+        )}
         {importMessage && (
           <div
             role="status"

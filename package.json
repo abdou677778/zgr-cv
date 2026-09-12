@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "build:spa": "vite build --config vite.spa.config.ts",
-    "build:pages": "vite build --config vite.spa.config.ts",
+    "build:spa": "vite build --config vite.spa.config.ts && node scripts/finalize-pwa.mjs",
+    "build:pages": "vite build --config vite.spa.config.ts && node scripts/finalize-pwa.mjs",
     "check:worker": "wrangler deploy --config wrangler.worker.jsonc --dry-run",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
@@ -18,7 +18,8 @@
     "test:worker": "node --test cloudflare/worker.test.js",
     "test:e2e": "playwright test",
     "check:bundle": "node scripts/check-bundle-size.mjs",
-    "quality": "npm run typecheck && npm run lint && npm test && npm run build:spa && npm run check:bundle && npm run check:worker && npm run test:e2e",
+    "check:pwa": "node scripts/check-pwa.mjs",
+    "quality": "npm run typecheck && npm run lint && npm test && npm run build:spa && npm run check:bundle && npm run check:pwa && npm run check:worker && npm run test:e2e",
     "format": "prettier --write ."
   },
   "dependencies": {

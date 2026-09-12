@@ -365,6 +365,46 @@ async function openPersonalDetails(page: Page) {
   await expect(fullName).toBeVisible();
 }
 
+test("les outils lourds sont chargés uniquement lorsqu’ils deviennent utiles", async ({
+  browser,
+}) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+
+  try {
+    const page = await connect(context, api, "admin");
+    const resourcesBeforeInteraction = await page.evaluate(() =>
+      performance.getEntriesByType("resource").map((entry) => entry.name),
+    );
+    expect(resourcesBeforeInteraction.some((url) => url.includes("preview-control-dock"))).toBe(
+      false,
+    );
+    expect(resourcesBeforeInteraction.some((url) => url.includes("cv-experience-workspace"))).toBe(
+      false,
+    );
+
+    await page.getByRole("button", { name: "Déplier Expérience professionnelle" }).click();
+    await expect(page.getByRole("button", { name: /Modifier l’expérience/ }).first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Afficher l’aperçu" }).click();
+    await expect(page.getByRole("toolbar", { name: "Outils de l’aperçu" })).toBeVisible();
+    await expect(page.getByLabel(/Page 1 sur/)).toBeVisible({ timeout: 30_000 });
+
+    const resourcesAfterInteraction = await page.evaluate(() =>
+      performance.getEntriesByType("resource").map((entry) => entry.name),
+    );
+    expect(resourcesAfterInteraction.some((url) => url.includes("preview-control-dock"))).toBe(
+      true,
+    );
+    expect(resourcesAfterInteraction.some((url) => url.includes("cv-experience-workspace"))).toBe(
+      true,
+    );
+    expect(resourcesAfterInteraction.some((url) => url.includes("document-pdf"))).toBe(true);
+  } finally {
+    await context.close();
+  }
+});
+
 test("deux navigateurs partagent un client et protègent une modification concurrente", async ({
   browser,
 }) => {

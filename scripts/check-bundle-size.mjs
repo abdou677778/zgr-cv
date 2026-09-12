@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
 const DIST_DIR = resolve("dist-spa");
-const MAIN_JS_GZIP_BUDGET_KIB = 360;
+const MAIN_JS_GZIP_BUDGET_KIB = 310;
 const html = readFileSync(resolve(DIST_DIR, "index.html"), "utf8");
 const mainScript = html.match(/<script[^>]+src="\.\/(assets\/index-[^"]+\.js)"/i)?.[1];
 
@@ -20,6 +20,11 @@ const forbiddenInitialAssets = [
   "client-orders-dialog",
   "ai-settings-dialog",
   "prompt-master-dialog",
+  "preview-control-dock",
+  "cv-experience-workspace",
+  "cv-learning-workspaces",
+  "document-pdf",
+  "europass-xml",
 ];
 const accidentallyPreloaded = forbiddenInitialAssets.filter((asset) => html.includes(asset));
 

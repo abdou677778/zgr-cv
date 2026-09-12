@@ -182,48 +182,13 @@ function renderLanguage(language: EuropassLanguageProfile): string {
       </PersonCompetency>`;
 }
 
-export type EuropassCoverage = {
-  percent: number;
-  mapped: string[];
-  missing: string[];
-};
-
-export function analyzeEuropassCoverage(cv: CV): EuropassCoverage {
-  const profile = cv.europass || emptyEuropassProfile;
-  const checks: Array<[string, boolean]> = [
-    ["identité", Boolean(cv.nom_complet)],
-    ["titre/profil", Boolean(cv.titre_poste || cv.objectif)],
-    ["courriel", Boolean(cv.email)],
-    ["téléphone", Boolean(cv.telephone)],
-    ["adresse", Boolean(cv.adresse || profile.address_line_1)],
-    ["date de naissance", Boolean(isoDate(cv.date_naissance))],
-    ["sexe", Boolean(normalizeGender(profile.gender_code))],
-    ["nationalité", Boolean(cleanCountryCode(profile.nationality_code))],
-    ["lieu de naissance", Boolean(profile.birth_place)],
-    ["photo", Boolean(cv.photo?.dataUrl)],
-    ["expériences", cv.experiences.length > 0],
-    ["études et formations", cv.educations.length + cv.formations.length > 0],
-    ["compétences", cv.competences.length > 0],
-    [
-      "langues CECRL",
-      profile.languages.some((item) => !item.mother_tongue && Boolean(item.listening)),
-    ],
-    ["certifications", cv.certifications.length > 0],
-    ["permis de conduire", Boolean(profile.driving_licences.length || cv.permis_conduire)],
-    ["centres d’intérêt", cv.interets.length > 0],
-    ["métadonnées employeurs", profile.experience_details.length > 0],
-    ["métadonnées études", profile.education_details.length > 0],
-  ];
-  const mapped = checks.filter(([, present]) => present).map(([label]) => label);
-  const missing = checks.filter(([, present]) => !present).map(([label]) => label);
-  return { percent: Math.round((mapped.length / checks.length) * 100), mapped, missing };
-}
-
 type EuropassXmlPhoto = {
   dataUrl: string;
   mimeType: "image/jpeg" | "image/png";
   filename: string;
 };
+
+export { analyzeEuropassCoverage, type EuropassCoverage } from "./europass-coverage";
 
 export function convertCvToEuropassXml(
   cv: CV,

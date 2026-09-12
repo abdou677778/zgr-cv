@@ -48,13 +48,7 @@ import {
   TriangleAlert,
   RefreshCw,
 } from "lucide-react";
-import {
-  analyzeEuropassCoverage,
-  convertCvToEuropassXml,
-  downloadEuropassXml,
-  downloadEuropassMultilingualZip,
-  parseEuropassXml,
-} from "@/lib/europass-xml";
+import { analyzeEuropassCoverage } from "@/lib/europass-coverage";
 import { EUROPASS_TEMPLATE_ID } from "@/lib/document-templates";
 import {
   type CV,
@@ -81,19 +75,13 @@ import {
   type ThemeTemplateId,
 } from "@/lib/pdf-theme";
 import {
-  createCompletePackZip,
   COMPLETE_PACK_DOCUMENT_COUNT,
-  createCurrentTemplateMultilingualZip,
-  createDocumentPdfBlob,
   defaultTemplateFor,
-  downloadCompletePackArchive,
-  downloadCurrentMultilingualArchive,
-  downloadPdfDocument,
   getDocumentKinds,
   getTemplates,
   type DocumentKind,
   type PdfTemplateId,
-} from "@/lib/document-pdf";
+} from "@/lib/document-catalog";
 import { isArabicCvTemplate, normalizeCvTemplateForLanguage } from "@/lib/document-templates";
 import {
   DropdownMenu,
@@ -109,14 +97,11 @@ import type { ClientSyncStatus } from "@/components/client-database-dialog";
 import { AdminLogin } from "@/components/admin-login";
 import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
 import { ProfilePhotoField } from "@/components/profile-photo-field";
-import {
-  PreviewControlDock,
-  type PreviewDockSection,
-  type PreviewPageLayout,
-  type PreviewSurface,
+import type {
+  PreviewDockSection,
+  PreviewPageLayout,
+  PreviewSurface,
 } from "@/components/preview-control-dock";
-import { ExperienceWorkspace } from "@/components/cv-experience-workspace";
-import { EducationWorkspace, FormationWorkspace } from "@/components/cv-learning-workspaces";
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
 import {
   DEFAULT_TEMPLATE_DESIGNER_SETTINGS,
@@ -198,6 +183,25 @@ const PromptMasterDialog = lazy(async () => {
   const module = await import("@/components/prompt-master-dialog");
   return { default: module.PromptMasterDialog };
 });
+const PreviewControlDock = lazy(async () => {
+  const module = await import("@/components/preview-control-dock");
+  return { default: module.PreviewControlDock };
+});
+const ExperienceWorkspace = lazy(async () => {
+  const module = await import("@/components/cv-experience-workspace");
+  return { default: module.ExperienceWorkspace };
+});
+const FormationWorkspace = lazy(async () => {
+  const module = await import("@/components/cv-learning-workspaces");
+  return { default: module.FormationWorkspace };
+});
+const EducationWorkspace = lazy(async () => {
+  const module = await import("@/components/cv-learning-workspaces");
+  return { default: module.EducationWorkspace };
+});
+
+const loadDocumentPdfTools = () => import("@/lib/document-pdf");
+const loadEuropassTools = () => import("@/lib/europass-xml");
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -1136,6 +1140,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
 
     const timeout = window.setTimeout(async () => {
       try {
+        const { createDocumentPdfBlob } = await loadDocumentPdfTools();
         const blob = await pdfWithDeadline(
           createDocumentPdfBlob(
             outputCv,
@@ -1406,6 +1411,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
 
       // Support direct import of Europass XML files (.xml)
       if (file.name.toLowerCase().endsWith(".xml") || fileText.trim().startsWith("<")) {
+        const { parseEuropassXml } = await loadEuropassTools();
         const importedCv = await parseEuropassXml(fileText);
         const next = { ...cvByLanguage, [language]: importedCv };
         setCvByLanguage(next);
@@ -1740,6 +1746,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       .trim()
       .replace(/\s+/g, "_");
     if (isEuropassTemplate) {
+      const { convertCvToEuropassXml } = await loadEuropassTools();
       const xml = convertCvToEuropassXml(outputCv, language);
       return {
         file: new File([xml], `${normalizedName}_CV_Europass_${language.toUpperCase()}.xml`, {
@@ -1748,6 +1755,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         service: "CV_EUROPASS",
       };
     }
+    const { createDocumentPdfBlob } = await loadDocumentPdfTools();
     const blob = await createDocumentPdfBlob(
       outputCv,
       documentKind,
@@ -1789,6 +1797,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setPdfLoading(true);
     setPdfError("");
     try {
+      const { createDocumentPdfBlob, downloadPdfDocument } = await loadDocumentPdfTools();
       let blob = pdfPreview?.key === cvKey ? pdfPreview.blob : null;
       if (!blob) {
         blob = await pdfWithDeadline(
@@ -1827,6 +1836,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           ? normalizeCvTemplateForLanguage(String(profile.templateId), profile.language)
           : profile.templateId;
     if (profileTemplateId === EUROPASS_TEMPLATE_ID) {
+      const { downloadEuropassXml } = await loadEuropassTools();
       await downloadEuropassXml(profileCv, profile.language);
       setImportMessage({
         ok: true,
@@ -1834,6 +1844,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       });
       return;
     }
+    const { createDocumentPdfBlob, downloadPdfDocument } = await loadDocumentPdfTools();
     const color = profile.templateColors[profileTemplateId as ThemeTemplateId];
     const blob = await createDocumentPdfBlob(
       profileCv,
@@ -1852,6 +1863,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setPackProgress({ completed: 0, total: COMPLETE_PACK_DOCUMENT_COUNT });
     setPackMessage(null);
     try {
+      const { createCompletePackZip, downloadCompletePackArchive } = await loadDocumentPdfTools();
       const blob = await createCompletePackZip(
         outputCvByLanguage,
         ({ completed, total }) => {
@@ -1879,6 +1891,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     });
     setPackMessage(null);
     try {
+      const { createCurrentTemplateMultilingualZip, downloadCurrentMultilingualArchive } =
+        await loadDocumentPdfTools();
       const blob = await createCurrentTemplateMultilingualZip(
         outputCvByLanguage,
         documentKind,
@@ -1906,6 +1920,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try {
       const editorWindow = window.open(europassEditorUrl(language), "_blank");
       if (editorWindow) editorWindow.opener = null;
+      const { downloadEuropassXml } = await loadEuropassTools();
       await downloadEuropassXml(outputCv, language);
       setPackMessage({
         ok: true,
@@ -2657,6 +2672,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   <DropdownMenuItem
                     onSelect={async () => {
                       try {
+                        const { downloadEuropassXml } = await loadEuropassTools();
                         await downloadEuropassXml(outputCv, language);
                         setPackMessage({
                           ok: true,
@@ -2685,6 +2701,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   <DropdownMenuItem
                     onSelect={async () => {
                       try {
+                        const { downloadEuropassMultilingualZip } = await loadEuropassTools();
                         await downloadEuropassMultilingualZip(outputCvByLanguage, cv);
                         setPackMessage({
                           ok: true,
@@ -3191,27 +3208,29 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             count={cv.experiences.length}
             onAdd={addExp}
           >
-            <ExperienceWorkspace
-              experiences={cv.experiences}
-              editingId={editingExperienceId}
-              labels={{
-                dates: form.dates,
-                place: form.place,
-                title: form.title,
-                employer: form.employer,
-                achievements: form.achievements,
-                addLine: form.addLine,
-                delete: form.delete,
-              }}
-              onEdit={setEditingExperienceId}
-              onUpdate={updateExp}
-              onRemove={removeExp}
-              isVisible={isVisible}
-              onToggleVisibility={toggleVisibility}
-              onRemoveIndexedVisibility={removeIndexedVisibility}
-              onLogoChange={updateExperienceLogo}
-              onAi={openAiField}
-            />
+            <Suspense fallback={<DeferredEditorFallback />}>
+              <ExperienceWorkspace
+                experiences={cv.experiences}
+                editingId={editingExperienceId}
+                labels={{
+                  dates: form.dates,
+                  place: form.place,
+                  title: form.title,
+                  employer: form.employer,
+                  achievements: form.achievements,
+                  addLine: form.addLine,
+                  delete: form.delete,
+                }}
+                onEdit={setEditingExperienceId}
+                onUpdate={updateExp}
+                onRemove={removeExp}
+                isVisible={isVisible}
+                onToggleVisibility={toggleVisibility}
+                onRemoveIndexedVisibility={removeIndexedVisibility}
+                onLogoChange={updateExperienceLogo}
+                onAi={openAiField}
+              />
+            </Suspense>
           </CvSectionPanel>
 
           <CvSectionPanel
@@ -3229,24 +3248,26 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             count={cv.formations.length}
             onAdd={addForm}
           >
-            <FormationWorkspace
-              items={cv.formations}
-              editingId={editingFormationId}
-              labels={{
-                date: ui.date,
-                place: form.place,
-                title: form.title,
-                institution: form.institution,
-                delete: form.delete,
-              }}
-              acquiredSkillsLabel={form.acquiredSkills}
-              onEdit={setEditingFormationId}
-              onUpdate={updateForm}
-              onRemove={removeForm}
-              isVisible={isVisible}
-              onToggleVisibility={toggleVisibility}
-              onAi={openAiField}
-            />
+            <Suspense fallback={<DeferredEditorFallback />}>
+              <FormationWorkspace
+                items={cv.formations}
+                editingId={editingFormationId}
+                labels={{
+                  date: ui.date,
+                  place: form.place,
+                  title: form.title,
+                  institution: form.institution,
+                  delete: form.delete,
+                }}
+                acquiredSkillsLabel={form.acquiredSkills}
+                onEdit={setEditingFormationId}
+                onUpdate={updateForm}
+                onRemove={removeForm}
+                isVisible={isVisible}
+                onToggleVisibility={toggleVisibility}
+                onAi={openAiField}
+              />
+            </Suspense>
           </CvSectionPanel>
 
           <CvSectionPanel
@@ -3264,25 +3285,27 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             count={cv.educations.length}
             onAdd={addEdu}
           >
-            <EducationWorkspace
-              items={cv.educations}
-              editingId={editingEducationId}
-              labels={{
-                date: ui.date,
-                place: form.place,
-                title: form.title,
-                institution: form.institution,
-                delete: form.delete,
-              }}
-              optionLabel={form.option}
-              equivalenceLabel={form.equivalence}
-              onEdit={setEditingEducationId}
-              onUpdate={updateEdu}
-              onRemove={removeEdu}
-              isVisible={isVisible}
-              onToggleVisibility={toggleVisibility}
-              onAi={openAiField}
-            />
+            <Suspense fallback={<DeferredEditorFallback />}>
+              <EducationWorkspace
+                items={cv.educations}
+                editingId={editingEducationId}
+                labels={{
+                  date: ui.date,
+                  place: form.place,
+                  title: form.title,
+                  institution: form.institution,
+                  delete: form.delete,
+                }}
+                optionLabel={form.option}
+                equivalenceLabel={form.equivalence}
+                onEdit={setEditingEducationId}
+                onUpdate={updateEdu}
+                onRemove={removeEdu}
+                isVisible={isVisible}
+                onToggleVisibility={toggleVisibility}
+                onAi={openAiField}
+              />
+            </Suspense>
           </CvSectionPanel>
 
           <CvSectionPanel
@@ -3758,56 +3781,66 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   </Button>
                 </div>
               )}
-              <PreviewControlDock
-                templates={templates}
-                templateId={selectedTemplateOptionId}
-                onTemplateChange={selectTemplateOption}
-                focusMode={previewFocusMode}
-                onFocusModeChange={setPreviewFocusMode}
-                pageLayout={previewPageLayout}
-                onPageLayoutChange={setPreviewPageLayout}
-                sections={previewSections}
-                onNavigateSection={navigateToEditorSection}
-                onSectionVisibilityChange={setSectionVisible}
-                onExpandAllSections={() => setAllEditorSectionsOpen(true)}
-                onCollapseAllSections={() => setAllEditorSectionsOpen(false)}
-                onShowAllSections={showAllPreviewSections}
-                onHideEmptySections={hideEmptyPreviewSections}
-                paletteColors={paletteColors}
-                accentColor={accentColor}
-                onAccentColorChange={(color) =>
-                  setTemplateColors((current) => ({
-                    ...current,
-                    [themeTemplateId]: color,
-                  }))
-                }
-                paletteDisabled={isEuropassTemplate}
-                surface={previewSurface}
-                onSurfaceChange={setPreviewSurface}
-                zoom={previewZoom}
-                onZoomChange={setPreviewZoom}
-                zoomDisabled={isEuropassTemplate}
-                designerSettings={designerSettings}
-                designerFonts={designerFonts}
-                designerPresets={visibleDesignerPresets}
-                activeDesignerPresetId={activeDesignerPresetId}
-                onDesignerSettingsChange={updateDesignerSettings}
-                onDesignerReset={resetDesignerSettings}
-                onCreateDesignerPreset={createDesignerPreset}
-                onApplyDesignerPreset={applyDesignerPreset}
-                onDeleteDesignerPreset={deleteDesignerPreset}
-                designerDisabled={documentKind !== "cv" || isEuropassTemplate}
-                designerSelection={designerSelection}
-                selectedTextOverride={selectedTextOverride}
-                selectedExtraElement={selectedDesignerExtraElement}
-                onDesignerModeChange={setDesignerModeActive}
-                onSelectedTextOverrideChange={updateSelectedTextOverride}
-                onSelectedTextReset={resetSelectedTextOverride}
-                onDesignerSelectionClear={() => setDesignerSelection(null)}
-                onSelectedExtraElementChange={updateSelectedDesignerExtraElement}
-                onSelectedExtraElementDelete={() => {
-                  if (!designerExtraSelectionId) return;
-                  if (isNativeDesignerElement(designerExtraSelectionId)) {
+              <Suspense fallback={null}>
+                <PreviewControlDock
+                  templates={templates}
+                  templateId={selectedTemplateOptionId}
+                  onTemplateChange={selectTemplateOption}
+                  focusMode={previewFocusMode}
+                  onFocusModeChange={setPreviewFocusMode}
+                  pageLayout={previewPageLayout}
+                  onPageLayoutChange={setPreviewPageLayout}
+                  sections={previewSections}
+                  onNavigateSection={navigateToEditorSection}
+                  onSectionVisibilityChange={setSectionVisible}
+                  onExpandAllSections={() => setAllEditorSectionsOpen(true)}
+                  onCollapseAllSections={() => setAllEditorSectionsOpen(false)}
+                  onShowAllSections={showAllPreviewSections}
+                  onHideEmptySections={hideEmptyPreviewSections}
+                  paletteColors={paletteColors}
+                  accentColor={accentColor}
+                  onAccentColorChange={(color) =>
+                    setTemplateColors((current) => ({
+                      ...current,
+                      [themeTemplateId]: color,
+                    }))
+                  }
+                  paletteDisabled={isEuropassTemplate}
+                  surface={previewSurface}
+                  onSurfaceChange={setPreviewSurface}
+                  zoom={previewZoom}
+                  onZoomChange={setPreviewZoom}
+                  zoomDisabled={isEuropassTemplate}
+                  designerSettings={designerSettings}
+                  designerFonts={designerFonts}
+                  designerPresets={visibleDesignerPresets}
+                  activeDesignerPresetId={activeDesignerPresetId}
+                  onDesignerSettingsChange={updateDesignerSettings}
+                  onDesignerReset={resetDesignerSettings}
+                  onCreateDesignerPreset={createDesignerPreset}
+                  onApplyDesignerPreset={applyDesignerPreset}
+                  onDeleteDesignerPreset={deleteDesignerPreset}
+                  designerDisabled={documentKind !== "cv" || isEuropassTemplate}
+                  designerSelection={designerSelection}
+                  selectedTextOverride={selectedTextOverride}
+                  selectedExtraElement={selectedDesignerExtraElement}
+                  onDesignerModeChange={setDesignerModeActive}
+                  onSelectedTextOverrideChange={updateSelectedTextOverride}
+                  onSelectedTextReset={resetSelectedTextOverride}
+                  onDesignerSelectionClear={() => setDesignerSelection(null)}
+                  onSelectedExtraElementChange={updateSelectedDesignerExtraElement}
+                  onSelectedExtraElementDelete={() => {
+                    if (!designerExtraSelectionId) return;
+                    if (isNativeDesignerElement(designerExtraSelectionId)) {
+                      updateDesignerSettings({
+                        ...designerSettings,
+                        extraElements: designerSettings.extraElements.filter(
+                          (element) => element.id !== designerExtraSelectionId,
+                        ),
+                      });
+                      setDesignerExtraSelectionId(null);
+                      return;
+                    }
                     updateDesignerSettings({
                       ...designerSettings,
                       extraElements: designerSettings.extraElements.filter(
@@ -3815,26 +3848,18 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                       ),
                     });
                     setDesignerExtraSelectionId(null);
-                    return;
-                  }
-                  updateDesignerSettings({
-                    ...designerSettings,
-                    extraElements: designerSettings.extraElements.filter(
-                      (element) => element.id !== designerExtraSelectionId,
-                    ),
-                  });
-                  setDesignerExtraSelectionId(null);
-                }}
-                onExtraElementSelect={selectDesignerExtraElement}
-                onExtraSelectionClear={() => setDesignerExtraSelectionId(null)}
-                onNudgeSelection={(deltaX, deltaY) => {
-                  if (designerExtraSelectionId) {
-                    moveDesignerExtraElement(designerExtraSelectionId, deltaX, deltaY);
-                  } else if (designerSelection) {
-                    moveDesignerText(designerSelection, deltaX, deltaY);
-                  }
-                }}
-              />
+                  }}
+                  onExtraElementSelect={selectDesignerExtraElement}
+                  onExtraSelectionClear={() => setDesignerExtraSelectionId(null)}
+                  onNudgeSelection={(deltaX, deltaY) => {
+                    if (designerExtraSelectionId) {
+                      moveDesignerExtraElement(designerExtraSelectionId, deltaX, deltaY);
+                    } else if (designerSelection) {
+                      moveDesignerText(designerSelection, deltaX, deltaY);
+                    }
+                  }}
+                />
+              </Suspense>
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">
               {isEuropassTemplate
@@ -3915,6 +3940,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           />
         ) : null}
       </Suspense>
+    </div>
+  );
+}
+
+function DeferredEditorFallback() {
+  return (
+    <div className="flex min-h-24 items-center justify-center text-sm text-slate-500" role="status">
+      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Chargement de l’éditeur…
     </div>
   );
 }

@@ -14,7 +14,9 @@ import {
   Link2,
   PackageOpen,
   Paperclip,
+  Pencil,
   RefreshCw,
+  Save,
   Search,
   Send,
   Share2,
@@ -36,6 +38,7 @@ import {
   addClientOrderSourceFile,
   addClientOrderDeliverable,
   deleteClientOrderSourceFile,
+  deleteClientOrder,
   downloadClientOrderFile,
   downloadClientOrderDeliverable,
   downloadClientOrderJson,
@@ -47,6 +50,7 @@ import {
   readClientOrderJson,
   syncClientOrderDrive,
   updateClientOrderFacebook,
+  updateClientOrder,
   type ClientOrderDetail,
   type ClientOrderDeliverable,
   type ClientOrderFile,
@@ -86,8 +90,12 @@ const STATUS_STYLES: Record<string, string> = {
 
 const EVENT_LABELS: Record<string, string> = {
   ORDER_CREATED: "Commande créée",
+  ORDER_RESUMED_FROM_INVITATION: "Commande reprise depuis le lien client",
   FILE_UPLOADED: "Document ajouté",
   ORDER_COMPLETED: "Dossier envoyé",
+  ORDER_UPDATED_BY_CLIENT: "Informations modifiées par le client",
+  ORDER_RECONFIRMED_BY_CLIENT: "Dossier reconfirmé par le client",
+  FILE_DELETED_BY_CLIENT: "Document retiré par le client",
   AI_PACK_DOWNLOADED: "Pack IA téléchargé",
   JSON_IMPORTED: "JSON ZGR importé",
   DRIVE_SYNCED: "Google Drive synchronisé",
@@ -149,12 +157,22 @@ export function ClientOrdersDialog({
   const [selectedDeliverables, setSelectedDeliverables] = useState<string[]>([]);
   const [deliverableService, setDeliverableService] = useState("AUTRE");
   const [facebookUrl, setFacebookUrl] = useState("");
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [editDraft, setEditDraft] = useState({
+    clientName: "",
+    email: "",
+    phone: "",
+    facebookUrl: "",
+    language: "fr",
+    notes: "",
+    services: [] as string[],
+  });
 
   const createInvitation = async () => {
     setBusy("invite");
     setMessage("");
     try {
-      const invitation = await createClientInvitation(7);
+      const invitation = await createClientInvitation(5);
       setInviteUrl(invitation.inviteUrl);
       await navigator.clipboard.writeText(invitation.inviteUrl);
       setMessage(
@@ -206,7 +224,19 @@ export function ClientOrdersDialog({
     setSelectedDeliverables([]);
     setDeliverableService(firstOrderService);
     setFacebookUrl(detail?.order.facebookUrl || "");
-  }, [detail?.order.facebookUrl, detail?.order.id, firstOrderService]);
+    setEditingOrder(false);
+    if (detail) {
+      setEditDraft({
+        clientName: detail.order.clientName,
+        email: detail.order.email,
+        phone: detail.order.phone,
+        facebookUrl: detail.order.facebookUrl,
+        language: detail.order.language,
+        notes: detail.order.notes,
+        services: [...detail.order.services],
+      });
+    }
+  }, [detail, firstOrderService]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
@@ -329,6 +359,62 @@ export function ClientOrdersDialog({
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Enregistrement impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const saveOrderDetails = async () => {
+    if (!detail) return;
+    if (editDraft.clientName.trim().length < 2) {
+      setMessage("Le nom du client doit contenir au moins 2 caractères.");
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(editDraft.email.trim())) {
+      setMessage("Saisissez une adresse email valide.");
+      return;
+    }
+    if (!editDraft.services.length) {
+      setMessage("Sélectionnez au moins un service.");
+      return;
+    }
+    setBusy("order-save");
+    setMessage("");
+    try {
+      await updateClientOrder(detail.order.id, editDraft);
+      setEditingOrder(false);
+      await refresh();
+      setMessage("Informations de la commande mises à jour.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Modification impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const removeOrder = async () => {
+    if (!detail) return;
+    const orderId = detail.order.id;
+    const confirmation = window.prompt(
+      `Suppression administrateur irréversible. Saisissez l’identifiant ${orderId} pour confirmer.`,
+    );
+    if (confirmation?.trim() !== orderId) {
+      if (confirmation !== null) setMessage("Suppression annulée : identifiant incorrect.");
+      return;
+    }
+    setBusy("order-delete");
+    setMessage("");
+    try {
+      const result = await deleteClientOrder(orderId);
+      setDetail(null);
+      await loadOrders();
+      setMessage(
+        result.storageCleanupPending
+          ? `Commande ${orderId} supprimée. Le nettoyage des objets privés devra être relancé.`
+          : `Commande ${orderId} supprimée par l’administrateur.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
       setBusy("");
     }
@@ -707,6 +793,29 @@ export function ClientOrdersDialog({
                     <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
+                        variant="outline"
+                        onClick={() => setEditingOrder((current) => !current)}
+                        disabled={Boolean(busy)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        {editingOrder ? "Fermer l’édition" : "Modifier"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                        onClick={() => void removeOrder()}
+                        disabled={Boolean(busy)}
+                      >
+                        {busy === "order-delete" ? (
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-2 h-4 w-4" />
+                        )}
+                        Supprimer
+                      </Button>
+                      <Button
+                        size="sm"
                         onClick={() => void downloadPack()}
                         disabled={Boolean(busy)}
                       >
@@ -760,6 +869,138 @@ export function ClientOrdersDialog({
                       )}
                     </div>
                   </div>
+
+                  {editingOrder && (
+                    <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50/40 p-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1 text-xs font-bold text-slate-700">
+                          Nom du client
+                          <Input
+                            value={editDraft.clientName}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({
+                                ...current,
+                                clientName: event.target.value,
+                              }))
+                            }
+                            className="bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs font-bold text-slate-700">
+                          Email
+                          <Input
+                            type="email"
+                            value={editDraft.email}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({ ...current, email: event.target.value }))
+                            }
+                            className="bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs font-bold text-slate-700">
+                          Téléphone / WhatsApp
+                          <Input
+                            value={editDraft.phone}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({ ...current, phone: event.target.value }))
+                            }
+                            className="bg-white"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs font-bold text-slate-700">
+                          Langue
+                          <select
+                            value={editDraft.language}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({
+                                ...current,
+                                language: event.target.value,
+                              }))
+                            }
+                            className="h-9 w-full rounded-md border bg-white px-3 text-sm"
+                          >
+                            <option value="fr">Français</option>
+                            <option value="en">English</option>
+                            <option value="ar">العربية</option>
+                          </select>
+                        </label>
+                        <label className="space-y-1 text-xs font-bold text-slate-700 sm:col-span-2">
+                          Lien Facebook
+                          <Input
+                            type="url"
+                            value={editDraft.facebookUrl}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({
+                                ...current,
+                                facebookUrl: event.target.value,
+                              }))
+                            }
+                            className="bg-white"
+                          />
+                        </label>
+                      </div>
+                      <fieldset className="mt-4">
+                        <legend className="text-xs font-bold text-slate-700">Services</legend>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {Object.entries(SERVICE_LABELS).map(([service, label]) => (
+                            <label
+                              key={service}
+                              className="flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={editDraft.services.includes(service)}
+                                onChange={(event) =>
+                                  setEditDraft((current) => ({
+                                    ...current,
+                                    services: event.target.checked
+                                      ? [...new Set([...current.services, service])]
+                                      : current.services.filter((value) => value !== service),
+                                  }))
+                                }
+                              />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                      <label className="mt-4 block space-y-1 text-xs font-bold text-slate-700">
+                        Remarques du client
+                        <textarea
+                          value={editDraft.notes}
+                          onChange={(event) =>
+                            setEditDraft((current) => ({ ...current, notes: event.target.value }))
+                          }
+                          rows={4}
+                          className="w-full resize-y rounded-md border bg-white px-3 py-2 text-sm font-normal leading-6"
+                        />
+                      </label>
+                      <div className="mt-4 flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingOrder(false)}
+                          disabled={Boolean(busy)}
+                        >
+                          Annuler
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void saveOrderDetails()}
+                          disabled={Boolean(busy)}
+                        >
+                          {busy === "order-save" ? (
+                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Save className="mr-2 h-4 w-4" />
+                          )}
+                          Enregistrer les modifications
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {detail.order.services.map((service) => (

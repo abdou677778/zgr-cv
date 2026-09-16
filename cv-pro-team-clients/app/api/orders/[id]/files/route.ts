@@ -11,7 +11,7 @@ import {
   safeFileName,
   sha256Hex,
 } from '@/lib/order-model';
-import { getOrder, validateUploadToken } from '@/lib/order-repository';
+import { getOrder, validateOrderAccess } from '@/lib/order-repository';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -19,15 +19,12 @@ interface RouteContext {
 
 export async function POST(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  if (!(await validateUploadToken(id, request.headers.get('x-upload-token')))) {
+  if (!(await validateOrderAccess(id, request.headers.get('x-upload-token')))) {
     return jsonResponse({ error: 'Lien de dossier invalide ou expiré.' }, 401);
   }
 
   const order = await getOrder(id);
   if (!order) return jsonResponse({ error: 'Commande introuvable.' }, 404);
-  if (order.status !== 'DRAFT') {
-    return jsonResponse({ error: 'Cette commande a déjà été envoyée.' }, 409);
-  }
 
   const requestType = request.headers.get('content-type') || '';
   let originalName = '';
@@ -164,6 +161,15 @@ export async function POST(request: Request, context: RouteContext) {
     originalName,
     sizeBytes: fileSize,
   });
+  await runtimeEnv()
+    .DB.prepare(
+      `UPDATE orders
+       SET status = CASE WHEN status = 'DRAFT' THEN status ELSE 'RECEIVED' END,
+           drive_status = 'PENDING', updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(now, id)
+    .run();
 
   return jsonResponse(
     {

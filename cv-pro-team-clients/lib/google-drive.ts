@@ -74,6 +74,17 @@ async function driveFetch(path: string, init: RequestInit = {}) {
   return response;
 }
 
+export async function trashDriveFolder(folderId: string) {
+  if (!driveConfigured()) return { configured: false as const };
+  if (!folderId) return { configured: true as const, trashed: false as const };
+  await driveFetch(`/files/${encodeURIComponent(folderId)}?supportsAllDrives=true`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ trashed: true }),
+  });
+  return { configured: true as const, trashed: true as const };
+}
+
 function driveQueryValue(value: string) {
   return value.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
 }

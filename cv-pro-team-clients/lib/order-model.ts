@@ -20,6 +20,10 @@ export const createOrderSchema = z.object({
   services: z.array(z.enum(serviceIds)).min(1).max(serviceIds.length),
 });
 
+export const orderDetailsSchema = createOrderSchema.omit({
+  invitationToken: true,
+});
+
 export const acceptedMimeTypes = new Set([
   'application/pdf',
   'application/msword',

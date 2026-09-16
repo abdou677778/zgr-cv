@@ -231,17 +231,37 @@ export async function getDeliveries(orderId: string) {
   return (result.results as D1Row[]).map(mapDelivery);
 }
 
-export async function validateUploadToken(
+/**
+ * Authorizes the private client workspace while its invitation is still valid.
+ * Both the short-lived upload token and the original invitation link are
+ * accepted, but neither can outlive the invitation's five-day window.
+ */
+export async function validateOrderAccess(
   orderId: string,
   token: string | null,
 ) {
   if (!token) return false;
   await ensureSchema();
+  const tokenHash = await sha256Hex(token);
+  const now = new Date().toISOString();
   const row = await runtimeEnv()
-    .DB.prepare('SELECT upload_token_hash FROM orders WHERE id = ?')
-    .bind(orderId)
-    .first<{ upload_token_hash: string }>();
-  return Boolean(row && row.upload_token_hash === (await sha256Hex(token)));
+    .DB.prepare(
+      `SELECT o.upload_token_hash, i.token_hash AS invitation_token_hash
+       FROM orders o
+       INNER JOIN invitations i ON i.order_id = o.id
+       WHERE o.id = ? AND i.expires_at > ?
+       LIMIT 1`,
+    )
+    .bind(orderId, now)
+    .first<{
+      upload_token_hash: string;
+      invitation_token_hash: string;
+    }>();
+  return Boolean(
+    row &&
+      (row.upload_token_hash === tokenHash ||
+        row.invitation_token_hash === tokenHash),
+  );
 }
 
 export async function listOrders(limit = 200) {

@@ -120,7 +120,7 @@ export async function listClientOrders() {
   return responseJson<{ orders: ClientOrderSummary[] }>(response).then((body) => body.orders);
 }
 
-export async function createClientInvitation(validDays = 7) {
+export async function createClientInvitation(validDays = 5) {
   const response = await authenticatedFetch("/api/admin/client-orders/invitations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -173,15 +173,42 @@ export async function deleteClientOrderSourceFile(orderId: string, fileId: strin
 }
 
 export async function updateClientOrderFacebook(orderId: string, facebookUrl: string) {
+  const result = await updateClientOrder(orderId, { facebookUrl });
+  return {
+    facebookUrl: result.order.facebookUrl,
+    updatedAt: result.updatedAt,
+  };
+}
+
+export type ClientOrderUpdate = Partial<
+  Pick<
+    ClientOrderSummary,
+    "clientName" | "email" | "phone" | "facebookUrl" | "language" | "notes" | "services"
+  >
+>;
+
+export async function updateClientOrder(orderId: string, input: ClientOrderUpdate) {
   const response = await authenticatedFetch(
     `/api/admin/client-orders/${encodeURIComponent(orderId)}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ facebookUrl }),
+      body: JSON.stringify(input),
     },
   );
-  return responseJson<{ facebookUrl: string; updatedAt: string }>(response);
+  return responseJson<{ order: ClientOrderSummary; updatedAt: string }>(response);
+}
+
+export async function deleteClientOrder(orderId: string) {
+  const response = await authenticatedFetch(
+    `/api/admin/client-orders/${encodeURIComponent(orderId)}`,
+    { method: "DELETE" },
+  );
+  return responseJson<{
+    deleted: true;
+    deletedObjects: number;
+    storageCleanupPending?: boolean;
+  }>(response);
 }
 
 export async function importClientOrderJson(orderId: string, file: File) {

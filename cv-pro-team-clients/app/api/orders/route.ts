@@ -8,6 +8,46 @@ import {
   jsonResponse,
   sha256Hex,
 } from '@/lib/order-model';
+import { getOrder } from '@/lib/order-repository';
+
+async function resumeLinkedOrder(
+  orderId: string,
+  invitationToken: string,
+  input: z.infer<typeof createOrderSchema>,
+) {
+  const order = await getOrder(orderId);
+  if (!order) return null;
+
+  const now = new Date().toISOString();
+  await runtimeEnv()
+    .DB.prepare(
+      `UPDATE orders
+       SET client_name = ?, email = ?, phone = ?, language = ?, notes = ?,
+           services_json = ?, drive_status = 'PENDING', updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(
+      input.clientName,
+      input.email,
+      input.phone,
+      input.language,
+      input.notes,
+      JSON.stringify(input.services),
+      now,
+      orderId,
+    )
+    .run();
+  await recordEvent(orderId, 'ORDER_RESUMED_FROM_INVITATION', {
+    reason: 'idempotent-create-retry',
+  });
+  return jsonResponse({
+    id: orderId,
+    // The invitation itself remains a valid scoped access token until expiry.
+    uploadToken: invitationToken,
+    status: order.status,
+    resumed: true,
+  });
+}
 
 export async function POST(request: Request) {
   let payload: unknown;
@@ -35,6 +75,31 @@ export async function POST(request: Request) {
   const input = parsed.data;
 
   const tokenHash = await sha256Hex(input.invitationToken);
+  const invitation = await runtimeEnv()
+    .DB.prepare(
+      `SELECT order_id
+       FROM invitations
+       WHERE token_hash = ? AND expires_at > ?
+       LIMIT 1`,
+    )
+    .bind(tokenHash, now)
+    .first<{ order_id: string | null }>();
+  if (!invitation) {
+    return jsonResponse(
+      { error: 'Ce lien d’invitation est invalide ou expiré.' },
+      403,
+    );
+  }
+  if (invitation.order_id) {
+    const resumed = await resumeLinkedOrder(
+      invitation.order_id,
+      input.invitationToken,
+      input,
+    );
+    if (resumed) return resumed;
+    return jsonResponse({ error: 'La commande associée est introuvable.' }, 404);
+  }
+
   const results = await runtimeEnv().DB.batch([
     runtimeEnv()
       .DB.prepare(
@@ -67,8 +132,27 @@ export async function POST(request: Request) {
       .bind(id, now, tokenHash, now),
   ]);
   if (!results[0].meta.changes) {
+    // A concurrent request may have claimed the invitation between the lookup
+    // and the batch. Resume that same order instead of rejecting the client.
+    const claimed = await runtimeEnv()
+      .DB.prepare(
+        `SELECT order_id
+         FROM invitations
+         WHERE token_hash = ? AND expires_at > ? AND order_id IS NOT NULL
+         LIMIT 1`,
+      )
+      .bind(tokenHash, now)
+      .first<{ order_id: string }>();
+    if (claimed?.order_id) {
+      const resumed = await resumeLinkedOrder(
+        claimed.order_id,
+        input.invitationToken,
+        input,
+      );
+      if (resumed) return resumed;
+    }
     return jsonResponse(
-      { error: 'Ce lien d’invitation est invalide, expiré ou déjà utilisé.' },
+      { error: 'Ce lien d’invitation est invalide ou expiré.' },
       403,
     );
   }

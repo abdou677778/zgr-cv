@@ -7,14 +7,10 @@ export async function POST(request: Request) {
   if (denial) return denial;
   await ensureSchema();
 
-  let days = 7;
-  try {
-    const payload = (await request.json()) as { validDays?: number };
-    if (Number.isFinite(payload.validDays))
-      days = Math.min(30, Math.max(1, payload.validDays!));
-  } catch {
-    // The default seven-day invitation remains appropriate.
-  }
+  // Product rule: every client link has one predictable five-day lifetime.
+  // Ignore a legacy validDays payload so callers cannot weaken this policy.
+  await request.json().catch(() => null);
+  const days = 5;
   const token = createSecretToken();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);

@@ -12,7 +12,7 @@ import {
   Trash2,
   UploadCloud,
 } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,31 @@ interface PendingFile {
 interface OrderSession {
   id: string;
   uploadToken: string;
+}
+
+interface ExistingFile {
+  id: string;
+  category: FileCategoryId;
+  originalName: string;
+  sizeBytes: number;
+}
+
+interface ExistingOrder {
+  id: string;
+  clientName: string;
+  email: string;
+  phone: string;
+  language: 'fr' | 'en' | 'ar';
+  notes: string;
+  services: ServiceId[];
+  status: string;
+}
+
+interface InvitationSessionResponse {
+  state: 'NEW' | 'EXISTING';
+  expiresAt: string;
+  order?: ExistingOrder;
+  files?: ExistingFile[];
 }
 
 const acceptedExtensions = '.pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.heif';
@@ -118,6 +143,7 @@ export function ClientIntakeForm({
   const [notes, setNotes] = useState('');
   const [services, setServices] = useState<ServiceId[]>([]);
   const [files, setFiles] = useState<PendingFile[]>([]);
+  const [existingFiles, setExistingFiles] = useState<ExistingFile[]>([]);
   const [consent, setConsent] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -125,11 +151,57 @@ export function ClientIntakeForm({
   const [message, setMessage] = useState('');
   const [session, setSession] = useState<OrderSession | null>(null);
   const [completedOrderId, setCompletedOrderId] = useState('');
+  const [restoring, setRestoring] = useState(Boolean(invitationToken));
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [expiresAt, setExpiresAt] = useState('');
 
   const totalBytes = useMemo(
-    () => files.reduce((sum, item) => sum + item.file.size, 0),
-    [files],
+    () =>
+      files.reduce((sum, item) => sum + item.file.size, 0) +
+      existingFiles.reduce((sum, item) => sum + item.sizeBytes, 0),
+    [existingFiles, files],
   );
+
+  useEffect(() => {
+    if (!invitationToken) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/orders/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invitationToken }),
+        });
+        if (!response.ok) throw new Error(await apiError(response));
+        const payload = (await response.json()) as InvitationSessionResponse;
+        if (cancelled) return;
+        setExpiresAt(payload.expiresAt);
+        if (payload.state === 'EXISTING' && payload.order) {
+          const order = payload.order;
+          setClientName(order.clientName);
+          setEmail(order.email);
+          setPhone(order.phone);
+          setLanguage(order.language);
+          setNotes(order.notes);
+          setServices(order.services);
+          setExistingFiles(payload.files ?? []);
+          setSession({ id: order.id, uploadToken: invitationToken });
+          setCompletedOrderId(order.id);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setAccessDenied(true);
+        setMessage(
+          error instanceof Error ? error.message : 'Ce lien client est indisponible.',
+        );
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [invitationToken]);
 
   if (!invitationToken) {
     return (
@@ -146,7 +218,37 @@ export function ClientIntakeForm({
           </h2>
           <p className="mx-auto mt-3 max-w-xl leading-7 text-muted-foreground">
             Ouvrez le lien personnel transmis par CV PRO TEAM. Chaque invitation
-            protège un seul dossier et ne peut être utilisée qu’une fois.
+            protège un seul dossier pendant 5 jours.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (restoring) {
+    return (
+      <Card className="border-0 text-center shadow-[0_22px_70px_-48px_rgba(13,38,63,.55)] ring-primary/10">
+        <CardContent className="grid min-h-64 place-items-center px-6 py-10">
+          <div>
+            <LoaderCircle className="mx-auto size-9 animate-spin text-accent" />
+            <p className="mt-4 font-bold text-primary">Ouverture sécurisée du dossier…</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <Card className="border-0 text-center shadow-[0_22px_70px_-48px_rgba(13,38,63,.55)] ring-primary/10">
+        <CardContent className="px-6 py-10 sm:px-10 sm:py-14">
+          <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-red-100 text-red-700">
+            <LockKeyhole className="size-8" />
+          </div>
+          <h2 className="text-2xl font-black text-primary">Lien indisponible</h2>
+          <p className="mx-auto mt-3 max-w-xl leading-7 text-muted-foreground">{message}</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Demandez un nouveau lien à CV PRO TEAM si les 5 jours sont terminés.
           </p>
         </CardContent>
       </Card>
@@ -175,7 +277,7 @@ export function ClientIntakeForm({
           (file) =>
             !signatures.has(`${file.name}:${file.size}:${file.lastModified}`),
         )
-        .slice(0, Math.max(0, 50 - current.length))
+        .slice(0, Math.max(0, 50 - existingFiles.length - current.length))
         .map((file) => ({
           id: crypto.randomUUID(),
           file,
@@ -199,7 +301,8 @@ export function ClientIntakeForm({
   };
 
   const submit = async () => {
-    if (!files.length) return setMessage('Ajoutez au moins un document.');
+    if (!files.length && !existingFiles.length)
+      return setMessage('Ajoutez au moins un document.');
     if (!consent) return setMessage('Confirmez votre accord avant l’envoi.');
     setSubmitting(true);
     setMessage('');
@@ -222,16 +325,35 @@ export function ClientIntakeForm({
         if (!response.ok) throw new Error(await apiError(response));
         activeSession = (await response.json()) as OrderSession;
         setSession(activeSession);
+      } else {
+        const response = await fetch(
+          `/api/orders/${encodeURIComponent(activeSession.id)}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-upload-token': activeSession.uploadToken,
+            },
+            body: JSON.stringify({
+              clientName,
+              email,
+              phone,
+              language,
+              notes,
+              services,
+            }),
+          },
+        );
+        if (!response.ok) throw new Error(await apiError(response));
       }
 
       const pending = files.filter((item) => !item.uploaded);
       for (let index = 0; index < pending.length; index += 1) {
         const item = pending[index];
         await uploadFile(activeSession, item, (ratio) => {
-          const doneBefore = files.filter(
-            (candidate) => candidate.uploaded,
-          ).length;
-          setProgress(((doneBefore + index + ratio) / files.length) * 100);
+          setProgress(
+            pending.length ? ((index + ratio) / pending.length) * 100 : 100,
+          );
         });
         setFiles((current) =>
           current.map((candidate) =>
@@ -252,9 +374,42 @@ export function ClientIntakeForm({
       if (!response.ok) throw new Error(await apiError(response));
       setProgress(100);
       setCompletedOrderId(activeSession.id);
+      const restored = await fetch('/api/orders/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitationToken }),
+      });
+      if (restored.ok) {
+        const payload = (await restored.json()) as InvitationSessionResponse;
+        setExistingFiles(payload.files ?? []);
+        setFiles([]);
+      }
       setStep(3);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Envoi impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const deleteExistingFile = async (file: ExistingFile) => {
+    if (!session || submitting) return;
+    setSubmitting(true);
+    setMessage('');
+    try {
+      const response = await fetch(
+        `/api/orders/${encodeURIComponent(session.id)}/files/${encodeURIComponent(file.id)}`,
+        {
+          method: 'DELETE',
+          headers: { 'x-upload-token': session.uploadToken },
+        },
+      );
+      if (!response.ok) throw new Error(await apiError(response));
+      setExistingFiles((current) =>
+        current.filter((candidate) => candidate.id !== file.id),
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Suppression impossible.');
     } finally {
       setSubmitting(false);
     }
@@ -291,8 +446,24 @@ export function ClientIntakeForm({
             </Button>
           </div>
           <p className="mt-5 text-sm text-muted-foreground">
-            Conservez cette référence pour toute modification future.
+            Ce même lien reste utilisable pour consulter et modifier votre dossier
+            jusqu’au{' '}
+            {expiresAt
+              ? new Date(expiresAt).toLocaleString('fr-DZ')
+              : 'terme des 5 jours'}.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-6"
+            onClick={() => {
+              setConsent(false);
+              setMessage('');
+              setStep(1);
+            }}
+          >
+            Modifier ma commande
+          </Button>
         </CardContent>
       </Card>
     );
@@ -510,16 +681,50 @@ export function ClientIntakeForm({
                 </p>
               </section>
 
-              {files.length > 0 && (
+              {(files.length > 0 || existingFiles.length > 0) && (
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h2 className="font-black text-primary">
-                      {files.length} fichier{files.length > 1 ? 's' : ''}
+                      {files.length + existingFiles.length} fichier
+                      {files.length + existingFiles.length > 1 ? 's' : ''}
                     </h2>
                     <span className="text-xs font-semibold text-muted-foreground">
                       {formatBytes(totalBytes)}
                     </span>
                   </div>
+                  {existingFiles.map((item) => (
+                    <div
+                      key={item.id}
+                      className="grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 sm:grid-cols-[minmax(0,1fr)_220px_auto] sm:items-center"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-emerald-700">
+                          <FileCheck2 className="size-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-primary">
+                            {item.originalName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatBytes(item.sizeBytes)} · déjà enregistré
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex h-10 items-center rounded-lg border border-input bg-white px-3 text-sm">
+                        {fileCategoryLabels[item.category] ?? item.category}
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        disabled={submitting}
+                        aria-label={`Supprimer ${item.originalName}`}
+                        onClick={() => void deleteExistingFile(item)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  ))}
                   {files.map((item) => (
                     <div
                       key={item.id}

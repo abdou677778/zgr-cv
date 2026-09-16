@@ -102,6 +102,10 @@ export function runtimeEnv() {
     GOOGLE_CLIENT_SECRET?: string;
     GOOGLE_REFRESH_TOKEN?: string;
     GOOGLE_DRIVE_ROOT_FOLDER_ID?: string;
+    MCP_API_TOKEN?: string;
+    MCP_FILE_SIGNING_SECRET?: string;
+    MCP_OAUTH_ISSUER?: string;
+    MCP_OAUTH_AUDIENCE?: string;
   };
 }
 

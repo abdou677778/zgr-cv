@@ -1,6 +1,7 @@
 import { recordEvent, runtimeEnv } from '@/db/runtime';
 import { safeFileName } from '@/lib/order-model';
 import {
+  getDeliverables,
   getJsonVersions,
   getOrder,
   getOrderFiles,
@@ -291,6 +292,7 @@ export async function syncOrderToDrive(orderId: string) {
     const cache: DriveDirectoryCache = new Map();
     const files = await getOrderFiles(orderId);
     const versions = await getJsonVersions(orderId);
+    const deliverables = await getDeliverables(orderId);
     const date = new Date(order.createdAt);
     const year = String(date.getUTCFullYear());
     const month = `${String(date.getUTCMonth() + 1).padStart(2, '0')}_${date
@@ -328,8 +330,9 @@ export async function syncOrderToDrive(orderId: string) {
       '04_LIVRABLES',
     );
     await ensureFolder(cache, clientFolder, '05_ARCHIVES');
+    const serviceFolders = new Map<string, string>();
     for (const service of order.services)
-      await ensureFolder(cache, deliverablesFolder, service);
+      serviceFolders.set(service, await ensureFolder(cache, deliverablesFolder, service));
 
     const sourceCategoryFolders: Record<string, string> = {};
     const usedCategories = new Set(files.map((file) => file.category));
@@ -405,6 +408,38 @@ export async function syncOrderToDrive(orderId: string) {
       });
     }
 
+    // Keep generated PDFs private in their service folders. Client delivery is a
+    // separate, explicit operation that copies only approved files to a shareable folder.
+    const usedDeliverableNames = new Map<string, number>();
+    for (const deliverable of [...deliverables].sort(
+      (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+    )) {
+      let serviceFolder = serviceFolders.get(deliverable.service);
+      if (!serviceFolder) {
+        serviceFolder = await ensureFolder(cache, deliverablesFolder, deliverable.service);
+        serviceFolders.set(deliverable.service, serviceFolder);
+      }
+      const baseName = safeFileName(deliverable.originalName);
+      const nameKey = `${deliverable.service}\u0000${baseName}`;
+      const occurrence = usedDeliverableNames.get(nameKey) ?? 0;
+      usedDeliverableNames.set(nameKey, occurrence + 1);
+      const name = occurrence
+        ? baseName.replace(/(\.[^.]+)?$/, `__${occurrence + 1}$1`)
+        : baseName;
+      const object = await env.FILES.get(deliverable.storageKey);
+      if (!object) throw new Error(`Livrable R2 introuvable : ${deliverable.originalName}`);
+      await uploadToFolder({
+        cache,
+        parentId: serviceFolder,
+        name,
+        contentType: deliverable.mimeType || 'application/octet-stream',
+        size: object.size,
+        body: object.body,
+        sourceKey: deliverable.storageKey,
+        overwrite: true,
+      });
+    }
+
     const now = new Date().toISOString();
     await env.DB.prepare(
       "UPDATE orders SET drive_folder_id = ?, drive_status = 'SYNCED', updated_at = ? WHERE id = ?",
@@ -415,6 +450,7 @@ export async function syncOrderToDrive(orderId: string) {
       driveFolderId: clientFolder,
       fileCount: files.length,
       jsonVersionCount: versions.length,
+      deliverableCount: deliverables.length,
     });
     return { configured: true as const, driveFolderId: clientFolder };
   } catch (error) {

@@ -1898,12 +1898,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     );
     const suffix =
       documentKind === "cover-letter"
-        ? language === "fr"
-          ? "Lettre_FR"
-          : "Lettre_ENG"
+        ? "Lettre"
         : documentKind === "advises"
           ? "Conseils"
-          : "CV";
+          : templateId === "ats-a4"
+            ? "CV_ATS"
+            : templateId === "cv-pro"
+              ? "CV_PRO"
+              : String(templateId).startsWith("arabic-pro")
+                ? "CV_Arabe"
+                : "CV_Canadien";
     const service =
       documentKind === "cover-letter"
         ? language === "fr"

@@ -34,6 +34,10 @@ Copier `.env.example` vers un fichier local ignoré puis renseigner :
   fournisseur compatible OAuth 2.1).
 - `MCP_OAUTH_AUDIENCE` : audience exacte de l’API, normalement
   `https://cv-pro-team-clients.zgrcv-wizi.workers.dev/api/mcp`.
+- `MCP_ADMIN_SUBJECTS` : liste séparée par des virgules des identifiants `sub`
+  Auth0 autorisés à rechercher ou lister toutes les commandes. Une commande
+  écrite dans le chat, y compris `wizistore`, ne remplace jamais cette
+  vérification d’identité.
 
 Le jeton Google doit autoriser la création et la mise à jour des fichiers dans Drive. Les secrets ne doivent jamais être placés dans le code, GitHub Pages ou une variable `VITE_*`.
 
@@ -57,9 +61,12 @@ En développement personnel, configurer `MCP_API_TOKEN` comme secret Cloudflare 
 fournir la même valeur dans `ZGR_CV_MCP_TOKEN`. En publication, configurer
 `MCP_OAUTH_ISSUER`, `MCP_OAUTH_AUDIENCE` et `MCP_FILE_SIGNING_SECRET`, puis retirer
 `MCP_API_TOKEN`. Le fournisseur OAuth doit émettre des jetons RS256 pour l’audience
-MCP avec les permissions `zgr:orders:read` et `zgr:orders:write`. Le serveur publie
-ses métadonnées sur `/.well-known/oauth-protected-resource` et vérifie signature,
-émetteur, audience, expiration et permissions à chaque appel.
+MCP avec les permissions minimales `zgr:orders:read`, `zgr:json:write` et
+`zgr:photos:write`. Les permissions `zgr:admin:read` et `zgr:drive:write` sont
+réservées au rôle propriétaire et à un identifiant `sub` présent dans
+`MCP_ADMIN_SUBJECTS`. Le serveur publie ses métadonnées sur
+`/.well-known/oauth-protected-resource` et vérifie signature, émetteur, audience,
+expiration et permissions à chaque appel.
 
 Les pages publiques nécessaires à la revue se trouvent aux adresses
 `/privacy.html`, `/terms.html` et `/mcp-support.html`. Aucun identifiant de

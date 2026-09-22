@@ -85,6 +85,34 @@ export async function trashDriveFolder(folderId: string) {
   return { configured: true as const, trashed: true as const };
 }
 
+/** Read-only verification of one known order folder; never broadens sharing. */
+export async function inspectDriveFolder(folderId: string) {
+  if (!driveConfigured()) return { verified: false as const, reason: 'not_configured' };
+  try {
+    const folder = await driveFetch(`/files/${encodeURIComponent(folderId)}?fields=id,name,mimeType,trashed&supportsAllDrives=true`);
+    const metadata = await folder.json() as { name: string; mimeType: string; trashed?: boolean };
+    if (metadata.trashed || metadata.mimeType !== FOLDER_MIME_TYPE) {
+      return { verified: false as const, reason: 'folder_unavailable' };
+    }
+    const files: { id: string; name: string; mimeType: string; size?: string }[] = [];
+    let pageToken: string | undefined;
+    do {
+      const params = new URLSearchParams({
+        q: `'${driveQueryValue(folderId)}' in parents and trashed = false`,
+        fields: 'nextPageToken,files(id,name,mimeType,size)', pageSize: '1000',
+        ...(pageToken ? { pageToken } : {}),
+      });
+      const response = await driveFetch(`/files?${params}`);
+      const page = await response.json() as { files?: typeof files; nextPageToken?: string };
+      files.push(...(page.files ?? []));
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+    return { verified: true as const, name: metadata.name, files, checkedAt: new Date().toISOString() };
+  } catch {
+    return { verified: false as const, reason: 'drive_read_failed' };
+  }
+}
+
 function driveQueryValue(value: string) {
   return value.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
 }

@@ -54,6 +54,20 @@ function configuredSigningSecret() {
   return runtimeEnv().MCP_FILE_SIGNING_SECRET?.trim() || configuredLegacyToken();
 }
 
+function configuredAdminSubjects() {
+  return new Set(
+    (runtimeEnv().MCP_ADMIN_SUBJECTS || '')
+      .split(',')
+      .map((subject) => subject.trim())
+      .filter(Boolean),
+  );
+}
+
+export function isMcpAdministrator(principal: McpPrincipal) {
+  const allowedSubjects = configuredAdminSubjects();
+  return allowedSubjects.size > 0 && allowedSubjects.has(principal.subject);
+}
+
 function bytesToBase64Url(bytes: Uint8Array) {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -120,6 +134,7 @@ function oauthChallenge(request: Request, scopes: string[], error?: string) {
     `resource_metadata="${resourceMetadataUrl(request)}"`,
     scopes.length ? `scope="${scopes.join(' ')}"` : '',
     error ? `error="${error}"` : '',
+    error ? 'error_description="Authentification ou autorisation ZGR requise"' : '',
   ].filter(Boolean);
   return `Bearer ${attributes.join(', ')}`;
 }
@@ -187,16 +202,17 @@ async function fetchJwks(jwksUri: string, force = false) {
 }
 
 function tokenScopes(payload: JwtPayload) {
-  const scopes = new Set<string>();
-  if (typeof payload.scope === 'string') {
-    for (const scope of payload.scope.split(/\s+/)) if (scope) scopes.add(scope);
+  if (typeof payload.scope !== 'string' || !Array.isArray(payload.permissions)) {
+    return new Set<string>();
   }
-  if (Array.isArray(payload.permissions)) {
-    for (const permission of payload.permissions) {
-      if (typeof permission === 'string' && permission) scopes.add(permission);
-    }
-  }
-  return scopes;
+  const grantedPermissions = new Set(
+    payload.permissions.filter(
+      (permission): permission is string => typeof permission === 'string',
+    ),
+  );
+  return new Set(
+    payload.scope.split(/\s+/).filter((scope) => grantedPermissions.has(scope)),
+  );
 }
 
 async function verifyOAuthToken(
@@ -222,7 +238,8 @@ async function verifyOAuthToken(
   const now = Math.floor(Date.now() / 1000);
   const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
   if (
-    payload.iss !== issuer ||
+    typeof payload.iss !== 'string' ||
+    normalizeIssuer(payload.iss) !== issuer ||
     !audiences.includes(audience) ||
     typeof payload.exp !== 'number' ||
     payload.exp <= now ||
@@ -303,7 +320,11 @@ export async function requireMcp(request: Request, requiredScopes: string[]) {
   return {
     principal: {
       subject: 'legacy-local-plugin',
-      scopes: new Set(['zgr:orders:read', 'zgr:orders:write']),
+      scopes: new Set([
+        'zgr:orders:read',
+        'zgr:json:write',
+        'zgr:photos:write',
+      ]),
       authentication: 'legacy-token' as const,
     },
     denial: null,
@@ -318,7 +339,13 @@ export function oauthProtectedResourceMetadata(request: Request) {
   return jsonResponse({
     resource: configuredAudience(request),
     authorization_servers: [issuer],
-    scopes_supported: ['zgr:orders:read', 'zgr:orders:write'],
+    scopes_supported: [
+      'zgr:orders:read',
+      'zgr:json:write',
+      'zgr:photos:write',
+      'zgr:admin:read',
+      'zgr:drive:write',
+    ],
     resource_documentation: 'https://abdou677778.github.io/zgr-cv/mcp-support.html',
     resource_policy_uri: 'https://abdou677778.github.io/zgr-cv/privacy.html',
     resource_tos_uri: 'https://abdou677778.github.io/zgr-cv/terms.html',

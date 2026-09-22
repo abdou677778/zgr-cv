@@ -106,6 +106,7 @@ export function runtimeEnv() {
     MCP_FILE_SIGNING_SECRET?: string;
     MCP_OAUTH_ISSUER?: string;
     MCP_OAUTH_AUDIENCE?: string;
+    MCP_ADMIN_SUBJECTS?: string;
   };
 }
 

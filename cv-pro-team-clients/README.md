@@ -66,6 +66,14 @@ qu’un fichier est absent, partiellement paginé, trop volumineux, illisible ou
 dans un format non extractible. Convertir les images HEIC/HEIF en JPEG/PNG avant
 la génération IA afin qu’elles puissent être analysées visuellement.
 
+`get_order` retourne aussi un menu numéroté de huit workflows adaptés au projet :
+génération et modification JSON, contrôle des sources, photo de profil,
+adaptation à une offre, contrôle des livrables Drive et email final.
+`prepare_profile_photo` remet une image source au modèle avec un prompt
+CV/LinkedIn sécurisé sur fond `#E7E7E7`. Le serveur ne génère ni ne sauvegarde
+lui-même l’image : ChatGPT utilise sa fonction Images lorsqu’elle est disponible
+et demande une validation humaine avant toute utilisation.
+
 En développement personnel, configurer `MCP_API_TOKEN` comme secret Cloudflare et
 fournir la même valeur dans `ZGR_CV_MCP_TOKEN`. En publication, configurer
 `MCP_OAUTH_ISSUER`, `MCP_OAUTH_AUDIENCE` et `MCP_FILE_SIGNING_SECRET`, puis retirer

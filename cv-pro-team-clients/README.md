@@ -57,6 +57,15 @@ commande, lire son brief et ses documents avec des liens privés de 15 minutes,
 charger le prompt maître, consulter une version JSON et enregistrer une nouvelle
 version validée.
 
+`read_source_file` extrait le texte des PDF, DOC/DOCX, RTF, fichiers texte,
+HTML/XML/JSON/CSV, classeurs XLSX, présentations PPTX et formats OpenDocument.
+Les images JPEG, PNG et WebP sont envoyées directement au modèle pour analyse
+visuelle. Après chaque dossier, `get_source_reading_status` doit retourner
+`complete: true`. `save_json_version` refuse côté serveur toute sauvegarde tant
+qu’un fichier est absent, partiellement paginé, trop volumineux, illisible ou
+dans un format non extractible. Convertir les images HEIC/HEIF en JPEG/PNG avant
+la génération IA afin qu’elles puissent être analysées visuellement.
+
 En développement personnel, configurer `MCP_API_TOKEN` comme secret Cloudflare et
 fournir la même valeur dans `ZGR_CV_MCP_TOKEN`. En publication, configurer
 `MCP_OAUTH_ISSUER`, `MCP_OAUTH_AUDIENCE` et `MCP_FILE_SIGNING_SECRET`, puis retirer

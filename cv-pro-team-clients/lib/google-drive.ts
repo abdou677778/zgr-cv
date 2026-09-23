@@ -108,7 +108,24 @@ export async function inspectDriveFolder(folderId: string) {
       files.push(...(page.files ?? []));
       pageToken = page.nextPageToken;
     } while (pageToken);
-    return { verified: true as const, name: metadata.name, files, checkedAt: new Date().toISOString() };
+    const permissionResponse = await driveFetch(
+      `/files/${encodeURIComponent(folderId)}/permissions?fields=permissions(id,type,role,allowFileDiscovery)&supportsAllDrives=true`,
+    );
+    const permissionPayload = await permissionResponse.json() as {
+      permissions?: { id: string; type: string; role: string; allowFileDiscovery?: boolean }[];
+    };
+    const publicPermission = (permissionPayload.permissions ?? []).find(
+      (permission) => permission.type === 'anyone' && permission.role === 'reader',
+    );
+    return {
+      verified: true as const,
+      name: metadata.name,
+      files,
+      linkSharing: publicPermission
+        ? { enabled: true as const, allowFileDiscovery: Boolean(publicPermission.allowFileDiscovery) }
+        : { enabled: false as const },
+      checkedAt: new Date().toISOString(),
+    };
   } catch {
     return { verified: false as const, reason: 'drive_read_failed' };
   }

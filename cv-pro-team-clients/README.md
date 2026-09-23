@@ -34,6 +34,9 @@ Copier `.env.example` vers un fichier local ignoré puis renseigner :
   fournisseur compatible OAuth 2.1).
 - `MCP_OAUTH_AUDIENCE` : audience exacte de l’API, normalement
   `https://cv-pro-team-clients.zgrcv-wizi.workers.dev/api/mcp`.
+- `MCP_ALLOWED_SUBJECTS` : liste séparée par des virgules des identifiants Auth0
+  `sub` autorisés à utiliser le MCP. Si elle est absente, la liste
+  `MCP_ADMIN_SUBJECTS` est utilisée afin de rester strictement fermé.
 - `MCP_ADMIN_SUBJECTS` : liste séparée par des virgules des identifiants `sub`
   Auth0 autorisés à rechercher ou lister toutes les commandes. Une commande
   écrite dans le chat, y compris `wizistore`, ne remplace jamais cette
@@ -79,13 +82,13 @@ et demande une validation humaine avant toute utilisation.
 En développement personnel, configurer `MCP_API_TOKEN` comme secret Cloudflare et
 fournir la même valeur dans `ZGR_CV_MCP_TOKEN`. En publication, configurer
 `MCP_OAUTH_ISSUER`, `MCP_OAUTH_AUDIENCE` et `MCP_FILE_SIGNING_SECRET`, puis retirer
-`MCP_API_TOKEN`. Le fournisseur OAuth doit émettre des jetons RS256 pour l’audience
-MCP avec les permissions minimales `zgr:orders:read`, `zgr:json:write` et
-`zgr:photos:write`. Les permissions `zgr:admin:read` et `zgr:drive:write` sont
-réservées au rôle propriétaire et à un identifiant `sub` présent dans
-`MCP_ADMIN_SUBJECTS`. Le serveur publie ses métadonnées sur
-`/.well-known/oauth-protected-resource` et vérifie signature, émetteur, audience,
-expiration et permissions à chaque appel.
+`MCP_API_TOKEN`. Le fournisseur OAuth doit émettre des jetons RS256 pour
+l’audience MCP avec les scopes nécessaires. L’autorisation ne dépend pas du
+module payant de gestion des rôles Auth0 : le serveur vérifie la signature,
+l’émetteur, l’audience, l’expiration, les scopes signés et l’identifiant `sub`
+présent dans `MCP_ALLOWED_SUBJECTS`. Les outils propriétaire exigent en plus que
+ce `sub` figure dans `MCP_ADMIN_SUBJECTS`. Le serveur publie ses métadonnées sur
+`/.well-known/oauth-protected-resource`.
 
 Les pages publiques nécessaires à la revue se trouvent aux adresses
 `/privacy.html`, `/terms.html` et `/mcp-support.html`. Aucun identifiant de

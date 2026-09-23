@@ -63,6 +63,16 @@ function configuredAdminSubjects() {
   );
 }
 
+function configuredAllowedSubjects() {
+  const configured = runtimeEnv().MCP_ALLOWED_SUBJECTS?.trim();
+  return new Set(
+    (configured || runtimeEnv().MCP_ADMIN_SUBJECTS || '')
+      .split(',')
+      .map((subject) => subject.trim())
+      .filter(Boolean),
+  );
+}
+
 export function isMcpAdministrator(principal: McpPrincipal) {
   const allowedSubjects = configuredAdminSubjects();
   return allowedSubjects.size > 0 && allowedSubjects.has(principal.subject);
@@ -202,16 +212,16 @@ async function fetchJwks(jwksUri: string, force = false) {
 }
 
 function tokenScopes(payload: JwtPayload) {
-  if (typeof payload.scope !== 'string' || !Array.isArray(payload.permissions)) {
-    return new Set<string>();
-  }
-  const grantedPermissions = new Set(
-    payload.permissions.filter(
-      (permission): permission is string => typeof permission === 'string',
-    ),
-  );
+  if (typeof payload.scope !== 'string') return new Set<string>();
+  const supportedScopes = new Set([
+    'zgr:orders:read',
+    'zgr:json:write',
+    'zgr:photos:write',
+    'zgr:admin:read',
+    'zgr:drive:write',
+  ]);
   return new Set(
-    payload.scope.split(/\s+/).filter((scope) => grantedPermissions.has(scope)),
+    payload.scope.split(/\s+/).filter((scope) => supportedScopes.has(scope)),
   );
 }
 
@@ -272,6 +282,9 @@ async function verifyOAuthToken(
     encoder.encode(`${parts[0]}.${parts[1]}`),
   );
   if (!verified) return null;
+
+  const allowedSubjects = configuredAllowedSubjects();
+  if (!allowedSubjects.size || !allowedSubjects.has(payload.sub)) return null;
 
   const scopes = tokenScopes(payload);
   if (requiredScopes.some((scope) => !scopes.has(scope))) return null;

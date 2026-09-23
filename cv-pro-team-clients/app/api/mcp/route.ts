@@ -29,7 +29,7 @@ type RpcRequest = {
   params?: unknown;
 };
 
-const SERVER_VERSION = '0.4.0';
+const SERVER_VERSION = '0.4.1';
 const MAX_SEARCH_RESULTS = 20;
 const READ_SCOPE = 'zgr:orders:read';
 const JSON_WRITE_SCOPE = 'zgr:json:write';

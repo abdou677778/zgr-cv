@@ -69,6 +69,8 @@ la génération IA afin qu’elles puissent être analysées visuellement.
 `get_order` retourne aussi un menu numéroté de huit workflows adaptés au projet :
 génération et modification JSON, contrôle des sources, photo de profil,
 adaptation à une offre, contrôle des livrables Drive et email final.
+L’ouverture de la commande ne matérialise pas les pièces jointes : leur lecture
+commence seulement après le choix d’une action qui exige leur contenu.
 `prepare_profile_photo` remet une image source au modèle avec un prompt
 CV/LinkedIn sécurisé sur fond `#E7E7E7`. Le serveur ne génère ni ne sauvegarde
 lui-même l’image : ChatGPT utilise sa fonction Images lorsqu’elle est disponible

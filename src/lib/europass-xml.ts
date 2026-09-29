@@ -23,6 +23,87 @@ const ISO_639_2: Record<string, string> = {
   kab: "kab",
 };
 
+const HTML_ENTITY_NAMES: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: " ",
+  quot: '"',
+};
+
+function decodeHtmlEntities(value: string) {
+  return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity, code: string) => {
+    const normalized = code.toLowerCase();
+    if (normalized.startsWith("#x")) {
+      const point = Number.parseInt(normalized.slice(2), 16);
+      return Number.isFinite(point) ? String.fromCodePoint(point) : entity;
+    }
+    if (normalized.startsWith("#")) {
+      const point = Number.parseInt(normalized.slice(1), 10);
+      return Number.isFinite(point) ? String.fromCodePoint(point) : entity;
+    }
+    return HTML_ENTITY_NAMES[normalized] ?? entity;
+  });
+}
+
+/** Convertit le HTML échappé par Europass en texte propre sans exposer de balises dans le formulaire. */
+export function cleanEuropassText(value: string): string {
+  if (!value) return "";
+  const withStructure = value
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\s*li(?:\s[^>]*)?>/gi, "")
+    .replace(/<\s*\/\s*(?:li|p|div|h[1-6]|tr|section|article)\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+  return decodeHtmlEntities(withStructure)
+    .replace(/\r/g, "")
+    .replace(/[\t ]+\n/g, "\n")
+    .replace(/\n[\t ]+/g, "\n")
+    .replace(/[\t ]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+const SKILL_BRANDS: Array<[RegExp, string]> = [
+  [/\bmicrosoft\s+power\s*point\b/gi, "Microsoft PowerPoint"],
+  [/\bmicrosoft\s+excel\b/gi, "Microsoft Excel"],
+  [/\bmicrosoft\s+word\b/gi, "Microsoft Word"],
+  [/\bmicrosoft\s+outlook\b/gi, "Microsoft Outlook"],
+  [/\bpower\s*point\b/gi, "PowerPoint"],
+  [/\bjavascript\b/gi, "JavaScript"],
+  [/\btypescript\b/gi, "TypeScript"],
+  [/\bnode\.?js\b/gi, "Node.js"],
+  [/\bgithub\b/gi, "GitHub"],
+  [/\blinkedin\b/gi, "LinkedIn"],
+  [/\bzoom\b/gi, "Zoom"],
+  [/\bhtml\b/gi, "HTML"],
+  [/\bcss\b/gi, "CSS"],
+  [/\bsql\b/gi, "SQL"],
+  [/\bapi\b/gi, "API"],
+  [/\bhplc\b/gi, "HPLC"],
+];
+
+export function normalizeEuropassSkill(value: string): string {
+  let normalized = cleanEuropassText(value)
+    .replace(/^[•·\-–—\s]+/, "")
+    .trim();
+  for (const [pattern, replacement] of SKILL_BRANDS) {
+    normalized = normalized.replace(pattern, replacement);
+  }
+  return normalized.replace(/^\p{Ll}/u, (letter) => letter.toLocaleUpperCase("fr"));
+}
+
+export function normalizeEuropassSkills(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.map(normalizeEuropassSkill).filter((value) => {
+    if (!value) return false;
+    const key = value.toLocaleLowerCase("fr");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function escapeXml(unsafe: string): string {
   if (!unsafe) return "";
   return unsafe
@@ -586,19 +667,14 @@ function parseCandidateEuropassXml(doc: Document): CV {
   const all = (name: string, context: Element | Document = doc): Element[] =>
     Array.from(context.getElementsByTagNameNS("*", name));
   const value = (name: string, context: Element | Document = doc): string =>
-    (one(name, context)?.textContent || "").trim();
+    cleanEuropassText(one(name, context)?.textContent || "");
   const direct = (name: string, context: Element): Element | null =>
     Array.from(context.children).find((element) => element.localName === name) || null;
   const directValue = (name: string, context: Element): string =>
-    (direct(name, context)?.textContent || "").trim();
+    cleanEuropassText(direct(name, context)?.textContent || "");
   const htmlItems = (source: string): string[] => {
     if (!source) return [];
-    const parsed = new DOMParser().parseFromString(source, "text/html");
-    const listItems = Array.from(parsed.querySelectorAll("li"))
-      .map((item) => (item.textContent || "").trim())
-      .filter(Boolean);
-    if (listItems.length) return listItems;
-    const plain = (parsed.body.textContent || source).trim();
+    const plain = cleanEuropassText(source);
     return plain
       ? plain
           .split(/\n|•|\*/)
@@ -777,9 +853,9 @@ function parseCandidateEuropassXml(doc: Document): CV {
 
   const skillsNode = one("Skills", profileNode);
   const competencies = skillsNode
-    ? all("CompetencyName", skillsNode)
-        .map((item) => (item.textContent || "").trim())
-        .filter(Boolean)
+    ? normalizeEuropassSkills(
+        all("CompetencyName", skillsNode).map((item) => item.textContent || ""),
+      )
     : [];
   const certifications = all("CourseCertification", profileNode)
     .map((item) => value("Title", item))
@@ -866,55 +942,81 @@ async function importedEuropassPhoto(doc: Document) {
   const text = (name: string, context: Element) =>
     (elements(name, context)[0]?.textContent || "").trim();
 
-  let mimeType = "";
-  let base64 = "";
-  let filename = "photo-profil";
-  const attachment = elements("Attachment").find(
-    (item) => text("FileType", item).toLowerCase() === "photo",
-  );
-  if (attachment) {
-    const embedded = elements("EmbeddedData", attachment)[0];
-    mimeType = embedded?.getAttribute("mimeCode") || "";
-    base64 = (embedded?.textContent || "").replace(/\s+/g, "");
-    filename = text("FileName", attachment) || filename;
-  } else {
-    const photo = elements("Photo")[0];
-    if (photo) {
-      mimeType = text("MimeType", photo);
-      base64 = text("Data", photo).replace(/\s+/g, "");
+  const attribute = (element: Element | undefined, names: string[]) => {
+    if (!element) return "";
+    const accepted = names.map((name) => name.toLowerCase());
+    return (
+      Array.from(element.attributes).find((item) => accepted.includes(item.name.toLowerCase()))
+        ?.value || ""
+    );
+  };
+  const containers = [
+    ...elements("Attachment"),
+    ...elements("Photo"),
+    ...elements("ProfilePicture"),
+  ];
+  for (const container of containers) {
+    const payload = ["EmbeddedData", "ImageData", "BinaryObject", "Data"]
+      .flatMap((name) => elements(name, container))
+      .find((item) => Boolean(item.textContent?.trim()));
+    if (!payload) continue;
+
+    let filename = text("FileName", container) || "photo-profil";
+    let mimeType = (
+      attribute(payload, ["mimeCode", "mimeType", "contentType", "mediaType"]) ||
+      text("MimeType", container)
+    ).toLowerCase();
+    let base64 = (payload.textContent || "").trim();
+    const dataUrl = base64.match(/^data:(image\/[\w.+-]+);base64,(.*)$/is);
+    if (dataUrl) {
+      mimeType ||= dataUrl[1].toLowerCase();
+      base64 = dataUrl[2];
+    }
+    if (!mimeType) {
+      if (/\.png$/i.test(filename)) mimeType = "image/png";
+      else if (/\.webp$/i.test(filename)) mimeType = "image/webp";
+      else if (/\.jpe?g$/i.test(filename)) mimeType = "image/jpeg";
+    }
+    const photoHint = [
+      container.localName,
+      text("FileType", container),
+      text("DocumentTitle", container),
+      filename,
+      mimeType,
+    ].join(" ");
+    if (!/photo|portrait|picture|image|image\//i.test(photoHint)) continue;
+    if (
+      !["image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/webp"].includes(mimeType)
+    ) {
+      continue;
+    }
+
+    base64 = base64.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+    if (base64.length > 28_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) continue;
+
+    try {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1)
+        bytes[index] = binary.charCodeAt(index);
+      const normalizedMime = mimeType.includes("png")
+        ? "image/png"
+        : mimeType === "image/webp"
+          ? "image/webp"
+          : "image/jpeg";
+      const extension =
+        normalizedMime === "image/png"
+          ? ".png"
+          : normalizedMime === "image/webp"
+            ? ".webp"
+            : ".jpg";
+      if (!/\.(?:png|webp|jpe?g)$/i.test(filename)) filename += extension;
+      return await processProfilePhoto(new File([bytes], filename, { type: normalizedMime }));
+    } catch {
+      // Continue : certains exports contiennent plusieurs pièces jointes avant la vraie photo.
     }
   }
-
-  if (
-    !base64 ||
-    !["image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/webp"].includes(mimeType)
-  ) {
-    return undefined;
-  }
-  if (base64.length > 28_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return undefined;
-
-  try {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    const normalizedMime = mimeType.includes("png")
-      ? "image/png"
-      : mimeType === "image/webp"
-        ? "image/webp"
-        : "image/jpeg";
-    const extension =
-      normalizedMime === "image/png" ? ".png" : normalizedMime === "image/webp" ? ".webp" : ".jpg";
-    const source = new File(
-      [bytes],
-      filename.includes(".") ? filename : `${filename}${extension}`,
-      {
-        type: normalizedMime,
-      },
-    );
-    return await processProfilePhoto(source);
-  } catch {
-    return undefined;
-  }
+  return undefined;
 }
 
 export async function parseEuropassXml(xmlString: string): Promise<CV> {
@@ -928,12 +1030,12 @@ export async function parseEuropassXml(xmlString: string): Promise<CV> {
 
   const getText = (selector: string, context: Element | Document = doc): string => {
     const el = context.querySelector(selector);
-    return el ? (el.textContent || "").trim() : "";
+    return el ? cleanEuropassText(el.textContent || "") : "";
   };
 
   const getAllTexts = (selector: string, context: Element | Document = doc): string[] => {
     return Array.from(context.querySelectorAll(selector))
-      .map((el) => (el.textContent || "").trim())
+      .map((el) => cleanEuropassText(el.textContent || ""))
       .filter(Boolean);
   };
 
@@ -1044,11 +1146,13 @@ export async function parseEuropassXml(xmlString: string): Promise<CV> {
   const commSkills = getText("Skills > Communication > Description");
   const orgSkills = getText("Skills > Organisational > Description");
   const compSkills = getText("Skills > Computer > Description");
-  const allSkills = [commSkills, orgSkills, compSkills].filter(Boolean).flatMap((s) =>
-    s
-      .split(/\n|•|\*/)
-      .map((item) => item.trim())
-      .filter(Boolean),
+  const allSkills = normalizeEuropassSkills(
+    [commSkills, orgSkills, compSkills].filter(Boolean).flatMap((s) =>
+      s
+        .split(/\n|•|\*/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
   );
 
   const motherTongues = getAllTexts(

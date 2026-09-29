@@ -1,7 +1,15 @@
-import { emptyCV, emptyEuropassProfile, newId, type CV, type EuropassProfile } from "./cv-types";
+import {
+  emptyCV,
+  emptyEuropassProfile,
+  newId,
+  type CV,
+  type EuropassProfile,
+  type ProfilePhoto,
+} from "./cv-types";
 import { type DocumentLanguage } from "./document-language";
 import { analyzeEuropassCoverage } from "./europass-coverage";
 import { parseEuropassXml } from "./europass-xml";
+import { processProfilePhoto } from "./profile-photo";
 
 const SUPPORTED_LANGUAGES = ["fr", "en", "es", "de", "it", "zh", "ar"] as const;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -30,7 +38,144 @@ type PdfExtraction = {
   xml?: string;
   text: string;
   urls: string[];
+  photo?: ProfilePhoto;
 };
+
+type PdfImageData = {
+  width?: number;
+  height?: number;
+  kind?: number;
+  data?: Uint8Array | Uint8ClampedArray;
+  bitmap?: ImageBitmap;
+};
+
+function isPdfImageData(value: unknown): value is PdfImageData {
+  if (!value || typeof value !== "object") return false;
+  const image = value as PdfImageData;
+  return (
+    Boolean(image.bitmap) || (Boolean(image.data) && Boolean(image.width) && Boolean(image.height))
+  );
+}
+
+async function canvasBlob(canvas: HTMLCanvasElement, type: string) {
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type));
+}
+
+async function pdfImageToProfilePhoto(
+  image: PdfImageData,
+  imageKind: { RGB_24BPP: number; RGBA_32BPP: number },
+): Promise<ProfilePhoto | undefined> {
+  const width = image.bitmap?.width || image.width || 0;
+  const height = image.bitmap?.height || image.height || 0;
+  if (width < 160 || height < 160 || width > 2_500 || height > 2_500) return undefined;
+  const ratio = width / height;
+  if (ratio < 0.5 || ratio > 1.45) return undefined;
+
+  const canvas = window.document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) return undefined;
+  if (image.bitmap) {
+    context.drawImage(image.bitmap, 0, 0, width, height);
+  } else if (image.data && image.kind === imageKind.RGBA_32BPP) {
+    const rgba = new Uint8ClampedArray(new ArrayBuffer(image.data.byteLength));
+    rgba.set(image.data);
+    context.putImageData(new ImageData(rgba, width, height), 0, 0);
+  } else if (image.data && image.kind === imageKind.RGB_24BPP) {
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    for (let source = 0, target = 0; source + 2 < image.data.length; source += 3, target += 4) {
+      rgba[target] = image.data[source];
+      rgba[target + 1] = image.data[source + 1];
+      rgba[target + 2] = image.data[source + 2];
+      rgba[target + 3] = 255;
+    }
+    context.putImageData(new ImageData(rgba, width, height), 0, 0);
+  } else {
+    return undefined;
+  }
+
+  const blob = await canvasBlob(canvas, "image/png");
+  if (!blob) return undefined;
+  try {
+    return await processProfilePhoto(new File([blob], "photo-europass.png", { type: "image/png" }));
+  } catch {
+    return undefined;
+  }
+}
+
+async function extractPdfProfilePhoto(
+  page: {
+    getOperatorList: () => Promise<{ fnArray: number[]; argsArray: unknown[][] }>;
+    objs: { get: (id: string, callback: (data: unknown) => void) => unknown };
+  },
+  pdfjs: {
+    OPS: {
+      paintImageXObject: number;
+      paintImageXObjectRepeat: number;
+      paintInlineImageXObject: number;
+    };
+    ImageKind: { RGB_24BPP: number; RGBA_32BPP: number };
+  },
+) {
+  const operatorList = await page.getOperatorList();
+  const candidates: PdfImageData[] = [];
+  const objectIds = new Set<string>();
+
+  for (let index = 0; index < operatorList.fnArray.length; index += 1) {
+    const operation = operatorList.fnArray[index];
+    const args = operatorList.argsArray[index] || [];
+    if (operation === pdfjs.OPS.paintInlineImageXObject && isPdfImageData(args[0])) {
+      candidates.push(args[0]);
+      continue;
+    }
+    if (
+      operation !== pdfjs.OPS.paintImageXObject &&
+      operation !== pdfjs.OPS.paintImageXObjectRepeat
+    ) {
+      continue;
+    }
+    const id = typeof args[0] === "string" ? args[0] : "";
+    if (id) objectIds.add(id);
+  }
+
+  await Promise.all(
+    [...objectIds].map(
+      (id) =>
+        new Promise<void>((resolve) => {
+          try {
+            page.objs.get(id, (data) => {
+              if (isPdfImageData(data)) candidates.push(data);
+              resolve();
+            });
+          } catch {
+            resolve();
+          }
+        }),
+    ),
+  );
+
+  const ranked = candidates
+    .filter((image) => {
+      const width = image.bitmap?.width || image.width || 0;
+      const height = image.bitmap?.height || image.height || 0;
+      const ratio = height ? width / height : 0;
+      return width >= 160 && height >= 160 && ratio >= 0.5 && ratio <= 1.45;
+    })
+    .sort((left, right) => {
+      const leftArea =
+        (left.bitmap?.width || left.width || 0) * (left.bitmap?.height || left.height || 0);
+      const rightArea =
+        (right.bitmap?.width || right.width || 0) * (right.bitmap?.height || right.height || 0);
+      return rightArea - leftArea;
+    });
+
+  for (const candidate of ranked) {
+    const photo = await pdfImageToProfilePhoto(candidate, pdfjs.ImageKind);
+    if (photo) return photo;
+  }
+  return undefined;
+}
 
 let importerPdfWorkerUrl: string | null = null;
 
@@ -345,20 +490,31 @@ async function extractPdf(file: File): Promise<PdfExtraction> {
   const loadingTask = pdfjs.getDocument({ data });
   const document = await loadingTask.promise;
   try {
+    let xml: string | undefined;
     const attachments = await document.getAttachments();
     if (attachments) {
       for (const [id, attachment] of attachments) {
         const content = attachment.content ?? (await document.getAttachmentContent(id));
         if (!content) continue;
-        const xml = decodeXmlBytes(content);
-        if (xml) return { xml, text: "", urls: extractUrls(xml) };
+        const candidate = decodeXmlBytes(content);
+        if (candidate) {
+          xml = candidate;
+          break;
+        }
       }
+    }
+
+    const firstPage = await document.getPage(1);
+    const photo = await extractPdfProfilePhoto(firstPage, pdfjs).catch(() => undefined);
+    if (xml) {
+      firstPage.cleanup();
+      return { xml, text: "", urls: extractUrls(xml), photo };
     }
 
     const lines: string[] = [];
     const urls: string[] = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      const page = await document.getPage(pageNumber);
+      const page = pageNumber === 1 ? firstPage : await document.getPage(pageNumber);
       const content = await page.getTextContent();
       let line = "";
       for (const item of content.items) {
@@ -377,7 +533,7 @@ async function extractPdf(file: File): Promise<PdfExtraction> {
       page.cleanup();
     }
     const text = lines.join("\n");
-    return { text, urls: unique([...urls, ...extractUrls(text)]) };
+    return { text, urls: unique([...urls, ...extractUrls(text)]), photo };
   } finally {
     await loadingTask.destroy();
   }
@@ -451,6 +607,7 @@ async function importOne(file: File, fallback: DocumentLanguage): Promise<Europa
         "Ce PDF ne contient pas de XML Europass embarqué : les champs textuels ont été récupérés, mais la mise en page et la photo doivent être vérifiées.",
       );
     }
+    if (!cv.photo?.dataUrl && pdf.photo?.dataUrl) cv.photo = pdf.photo;
   } else {
     sourceContent = await file.text();
     if (!xmlLooksLikeEuropass(sourceContent)) {

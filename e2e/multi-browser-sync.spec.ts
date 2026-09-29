@@ -692,7 +692,33 @@ test("extrait le XML embarqué d’un PDF Europass et préremplit le formulaire"
     await expect(page.getByPlaceholder("name@example.com")).toHaveValue(
       "amine.bensalem@example.com",
     );
+    await expect(page.getByAltText("Aperçu de la photo du profil")).toBeVisible();
     await expect(page.getByLabel("Modèle", { exact: true })).toHaveValue("europass");
+
+    const objectiveSection = page.locator("#cv-editor-section-objective");
+    const objectiveEditor = objectiveSection.getByRole("textbox", {
+      name: "profil professionnel",
+      exact: true,
+    });
+    if (!(await objectiveEditor.isVisible())) {
+      await objectiveSection.getByRole("button", { name: /^Déplier / }).click();
+    }
+    await expect(objectiveEditor).toContainText("développement web");
+    await expect(objectiveEditor).not.toContainText("<p>");
+    await expect(objectiveEditor).not.toContainText("<strong>");
+
+    const skillsSection = page.locator("#cv-editor-section-skills");
+    const skillsEditor = skillsSection.getByRole("textbox", {
+      name: "compétences clés",
+      exact: true,
+    });
+    if (!(await skillsEditor.isVisible())) {
+      await skillsSection.getByRole("button", { name: /^Déplier / }).click();
+    }
+    await expect(skillsEditor).toContainText("Centrifugation");
+    await expect(skillsEditor).toContainText("Microscopie");
+    await expect(skillsEditor).toContainText("Microsoft PowerPoint");
+    await expect(skillsEditor).toContainText("Zoom");
   } finally {
     await context.close();
   }

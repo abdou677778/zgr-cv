@@ -159,6 +159,7 @@ import {
   type WorkspaceDraft,
 } from "@/lib/client-profile-db";
 import { importClientOrderJson, type ClientOrderSummary } from "@/lib/client-orders";
+import type { EuropassBatchImport } from "@/lib/europass-import";
 import { activatePwaUpdate, promptPwaInstall, usePwaStatus } from "@/lib/pwa-client";
 import { reportSyncFailure } from "@/lib/observability";
 
@@ -209,6 +210,7 @@ const EducationWorkspace = lazy(async () => {
 
 const loadDocumentPdfTools = () => import("@/lib/document-pdf");
 const loadEuropassTools = () => import("@/lib/europass-xml");
+const loadEuropassImportTools = () => import("@/lib/europass-import");
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -571,6 +573,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   });
   const [packMessage, setPackMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [importMessage, setImportMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [europassImporting, setEuropassImporting] = useState(false);
+  const [europassImportReport, setEuropassImportReport] = useState<EuropassBatchImport | null>(
+    null,
+  );
   const [aiSettings, setAiSettings] = useState<AiSettings>(() => defaultAiSettings());
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
@@ -608,6 +614,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   );
   const pdfUrlRef = useRef<string | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
+  const europassInputRef = useRef<HTMLInputElement>(null);
   const resetBaselineRef = useRef(false);
   const queueFlushRef = useRef(false);
   const cv = cvByLanguage[language];
@@ -1470,6 +1477,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setHiddenElements({});
       setActiveProfileId(null);
       setActiveClientOrder(null);
+      setEuropassImportReport(null);
     }
   };
   const loadSample = () => {
@@ -1478,6 +1486,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setHiddenElements({});
     setActiveProfileId(null);
     setActiveClientOrder(null);
+    setEuropassImportReport(null);
   };
 
   const changeDocumentKind = (kind: DocumentKind) => {
@@ -1490,6 +1499,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+
+    setEuropassImportReport(null);
 
     try {
       if (file.size > 5_000_000) throw new Error("Le fichier dépasse la limite de 5 Mo.");
@@ -1563,6 +1574,70 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     } catch (error) {
       const message = error instanceof Error ? error.message : ui.importError;
       setImportMessage({ ok: false, text: message });
+    }
+  };
+
+  const importEuropass = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length || europassImporting) return;
+
+    setEuropassImporting(true);
+    setImportMessage(null);
+    try {
+      const { importEuropassFiles } = await loadEuropassImportTools();
+      const result = await importEuropassFiles(files, language);
+      setEuropassImportReport(result);
+      const next = { ...cvByLanguage };
+      for (const importedLanguage of result.languages) {
+        const document = result.documents[importedLanguage];
+        if (document) next[importedLanguage] = document;
+      }
+
+      const importedPhoto = result.sources
+        .map((source) => source.cv.photo)
+        .find((photo) => photo?.dataUrl);
+      if (importedPhoto) {
+        for (const item of DOCUMENT_LANGUAGES) {
+          next[item.id] = { ...next[item.id], photo: structuredClone(importedPhoto) };
+        }
+      }
+
+      setCvByLanguage(next);
+      updateProfilePhoto(importedPhoto);
+      setHiddenElements({});
+      setActiveProfileId(null);
+      setDocumentKind("cv");
+      setTemplateId(EUROPASS_TEMPLATE_ID);
+      const nextLanguage = result.languages.includes(language) ? language : result.languages[0];
+      if (nextLanguage) setLanguage(nextLanguage);
+
+      const exactCount = result.sources.filter((source) => source.format !== "pdf-text").length;
+      const fallbackCount = result.sources.length - exactCount;
+      const driveMessage = activeClientOrder?.driveFolderId
+        ? ` · Drive de la commande ${activeClientOrder.id} conservé`
+        : result.driveUrls.length
+          ? ` · ${result.driveUrls.length} lien(s) Drive récupéré(s)`
+          : "";
+      const warningMessage = result.warnings.length
+        ? ` · ${result.warnings.length} point(s) à vérifier`
+        : " · contrôle complet réussi";
+      setImportMessage({
+        ok: true,
+        text: `Europass importé : ${result.languages
+          .map((item) => item.toUpperCase())
+          .join(" + ")} · ${exactCount} source(s) XML exacte(s)${
+          fallbackCount ? ` · ${fallbackCount} PDF analysé(s) sans XML` : ""
+        } · photo ${result.photoFound ? "récupérée" : "absente"}${driveMessage}${warningMessage}. Le formulaire est rempli et le modèle Europass est sélectionné.`,
+      });
+    } catch (error) {
+      setEuropassImportReport(null);
+      setImportMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Import Europass impossible.",
+      });
+    } finally {
+      setEuropassImporting(false);
     }
   };
 
@@ -2422,6 +2497,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               className="hidden"
               onChange={importJson}
             />
+            <input
+              ref={europassInputRef}
+              type="file"
+              accept=".pdf,application/pdf,.xml,application/xml,text/xml"
+              multiple
+              className="hidden"
+              onChange={importEuropass}
+            />
             <div className="zgr-control flex items-center gap-2 rounded-xl border px-3 py-1.5">
               <Label htmlFor="document-kind" className="text-xs font-medium text-muted-foreground">
                 {ui.document}
@@ -2570,6 +2653,21 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-blue-200 bg-blue-50/80 text-blue-800 hover:bg-blue-100"
+              disabled={europassImporting}
+              onClick={() => europassInputRef.current?.click()}
+              title="Importer jusqu’à 4 CV Europass officiels PDF/XML, par exemple un document FR et un document EN"
+            >
+              {europassImporting ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileCode className="mr-2 h-4 w-4" />
+              )}
+              {europassImporting ? "Analyse Europass…" : "Importer CV Europass"}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -2926,6 +3024,83 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           >
             {importMessage.text}
           </div>
+        )}
+        {europassImportReport && (
+          <section
+            aria-label="Rapport d’import Europass"
+            className="mx-auto mb-3 max-w-7xl rounded-xl border border-blue-200 bg-white/95 p-3 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Contrôle de l’import Europass</h2>
+                <p className="mt-0.5 text-xs text-slate-600">
+                  Identité vérifiée entre les documents · données factuelles fusionnées · textes de
+                  chaque langue conservés séparément.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold">
+                <span className="rounded-full bg-blue-100 px-2 py-1 text-blue-800">
+                  {europassImportReport.sources.length} fichier(s)
+                </span>
+                <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-800">
+                  {europassImportReport.languages.map((item) => item.toUpperCase()).join(" + ")}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-1 ${
+                    europassImportReport.photoFound
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-amber-100 text-amber-800"
+                  }`}
+                >
+                  Photo {europassImportReport.photoFound ? "récupérée" : "à ajouter"}
+                </span>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {europassImportReport.sources.map((source) => (
+                <article
+                  key={`${source.fileName}-${source.language}`}
+                  className="rounded-lg border p-2.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong
+                      className="min-w-0 truncate text-xs text-slate-900"
+                      title={source.fileName}
+                    >
+                      {source.fileName}
+                    </strong>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                      {source.language.toUpperCase()} · {source.coverage}%
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    {source.format === "pdf-xml"
+                      ? "PDF officiel avec XML embarqué : import exact."
+                      : source.format === "xml"
+                        ? "XML Europass officiel : import exact."
+                        : "PDF sans XML : extraction textuelle avec contrôle manuel."}
+                  </p>
+                  <p
+                    className={`mt-1 text-[11px] font-medium ${
+                      source.missing.length ? "text-amber-700" : "text-emerald-700"
+                    }`}
+                  >
+                    {source.missing.length
+                      ? `À vérifier : ${source.missing.join(", ")}.`
+                      : "Tous les groupes principaux sont renseignés."}
+                  </p>
+                </article>
+              ))}
+            </div>
+            {(europassImportReport.driveUrls.length > 0 || activeClientOrder?.driveFolderId) && (
+              <p className="mt-2 text-xs font-medium text-emerald-800">
+                <CloudCheck className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
+                {activeClientOrder?.driveFolderId
+                  ? `Le lien Drive de la commande ${activeClientOrder.id} reste associé au profil.`
+                  : `${europassImportReport.driveUrls.length} lien(s) Google Drive récupéré(s) dans les coordonnées Europass.`}
+              </p>
+            )}
+          </section>
         )}
         {packMessage && (
           <div

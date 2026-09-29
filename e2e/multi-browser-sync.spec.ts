@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page, type Route } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 type TestUser = {
   username: string;
@@ -662,6 +663,77 @@ async function openPersonalDetails(page: Page) {
   }
   await expect(fullName).toBeVisible();
 }
+
+test("extrait le XML embarqué d’un PDF Europass et préremplit le formulaire", async ({
+  browser,
+}) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+
+  try {
+    const page = await connect(context, api, "admin");
+    const europassInput = page.locator('input[type="file"][multiple][accept*="application/pdf"]');
+    await europassInput.setInputFiles("test-data/europass/Europass-CV-Amine-Bensalem-FR.pdf");
+
+    await expect(page.getByRole("status").filter({ hasText: /Europass importé/ })).toContainText(
+      "FR",
+    );
+    await expect(page.getByRole("button", { name: /Importer CV Europass/ })).toBeVisible();
+    await openPersonalDetails(page);
+    await expect(page.getByPlaceholder("Nom complet")).toHaveValue("Amine Bensalem");
+    await expect(page.getByPlaceholder("name@example.com")).toHaveValue(
+      "amine.bensalem@example.com",
+    );
+    await expect(page.getByLabel("Modèle", { exact: true })).toHaveValue("europass");
+  } finally {
+    await context.close();
+  }
+});
+
+test("importe ensemble les versions française et anglaise du même profil Europass", async ({
+  browser,
+}) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+
+  try {
+    const page = await connect(context, api, "admin");
+    const frenchXml = await readFile(
+      "test-data/europass/Europass-CV-Amine-Bensalem-FR.xml",
+      "utf8",
+    );
+    const englishXml = frenchXml
+      .replace('languageCode="fr"', 'languageCode="en"')
+      .replace(
+        "Développeur logiciel full-stack spécialisé en applications web modernes.",
+        "Full-stack software developer specialized in modern web applications.",
+      );
+    const europassInput = page.locator('input[type="file"][multiple][accept*="application/pdf"]');
+    await europassInput.setInputFiles([
+      {
+        name: "Europass-CV-Amine-Bensalem-FR.xml",
+        mimeType: "application/xml",
+        buffer: Buffer.from(frenchXml),
+      },
+      {
+        name: "Europass-CV-Amine-Bensalem-EN.xml",
+        mimeType: "application/xml",
+        buffer: Buffer.from(englishXml),
+      },
+    ]);
+
+    await expect(page.getByRole("status").filter({ hasText: /Europass importé/ })).toContainText(
+      "FR + EN",
+    );
+    await page.getByRole("button", { name: /Langue du document : Français/ }).click();
+    await page.getByRole("menuitem").filter({ hasText: "English" }).click();
+    await openPersonalDetails(page);
+    await expect(page.getByPlaceholder("Nom complet")).toHaveValue("Amine Bensalem");
+    await expect(page.getByLabel("Modèle", { exact: true })).toHaveValue("europass");
+  } finally {
+    await context.close();
+  }
+});
 
 test("les outils lourds sont chargés uniquement lorsqu’ils deviennent utiles", async ({
   browser,

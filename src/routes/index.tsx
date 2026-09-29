@@ -48,6 +48,7 @@ import {
   CloudOff,
   TriangleAlert,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { analyzeEuropassCoverage } from "@/lib/europass-coverage";
 import { EUROPASS_TEMPLATE_ID } from "@/lib/document-templates";
@@ -577,6 +578,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [europassImportReport, setEuropassImportReport] = useState<EuropassBatchImport | null>(
     null,
   );
+  const [europassImportReportExpanded, setEuropassImportReportExpanded] = useState(false);
   const [aiSettings, setAiSettings] = useState<AiSettings>(() => defaultAiSettings());
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
@@ -1478,6 +1480,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setActiveProfileId(null);
       setActiveClientOrder(null);
       setEuropassImportReport(null);
+      setEuropassImportReportExpanded(false);
     }
   };
   const loadSample = () => {
@@ -1487,6 +1490,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setActiveProfileId(null);
     setActiveClientOrder(null);
     setEuropassImportReport(null);
+    setEuropassImportReportExpanded(false);
   };
 
   const changeDocumentKind = (kind: DocumentKind) => {
@@ -1501,6 +1505,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     if (!file) return;
 
     setEuropassImportReport(null);
+    setEuropassImportReportExpanded(false);
 
     try {
       if (file.size > 5_000_000) throw new Error("Le fichier dépasse la limite de 5 Mo.");
@@ -1588,6 +1593,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const { importEuropassFiles } = await loadEuropassImportTools();
       const result = await importEuropassFiles(files, language);
       setEuropassImportReport(result);
+      setEuropassImportReportExpanded(false);
       const next = { ...cvByLanguage };
       for (const importedLanguage of result.languages) {
         const document = result.documents[importedLanguage];
@@ -1612,26 +1618,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const nextLanguage = result.languages.includes(language) ? language : result.languages[0];
       if (nextLanguage) setLanguage(nextLanguage);
 
-      const exactCount = result.sources.filter((source) => source.format !== "pdf-text").length;
-      const fallbackCount = result.sources.length - exactCount;
-      const driveMessage = activeClientOrder?.driveFolderId
-        ? ` · Drive de la commande ${activeClientOrder.id} conservé`
-        : result.driveUrls.length
-          ? ` · ${result.driveUrls.length} lien(s) Drive récupéré(s)`
-          : "";
-      const warningMessage = result.warnings.length
-        ? ` · ${result.warnings.length} point(s) à vérifier`
-        : " · contrôle complet réussi";
-      setImportMessage({
-        ok: true,
-        text: `Europass importé : ${result.languages
-          .map((item) => item.toUpperCase())
-          .join(" + ")} · ${exactCount} source(s) XML exacte(s)${
-          fallbackCount ? ` · ${fallbackCount} PDF analysé(s) sans XML` : ""
-        } · photo ${result.photoFound ? "récupérée" : "absente"}${driveMessage}${warningMessage}. Le formulaire est rempli et le modèle Europass est sélectionné.`,
-      });
+      setImportMessage(null);
     } catch (error) {
       setEuropassImportReport(null);
+      setEuropassImportReportExpanded(false);
       setImportMessage({
         ok: false,
         text: error instanceof Error ? error.message : "Import Europass impossible.",
@@ -3014,106 +3004,149 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             </Button>
           </div>
         )}
-        {importMessage && (
-          <div
-            role="status"
-            aria-live="polite"
-            className={`mx-auto mb-2 max-w-7xl rounded-lg px-3 py-2 text-xs font-medium shadow-sm ${
-              importMessage.ok ? "zgr-status-success" : "zgr-status-error"
-            }`}
-          >
-            {importMessage.text}
-          </div>
-        )}
-        {europassImportReport && (
-          <section
-            aria-label="Rapport d’import Europass"
-            className="mx-auto mb-3 max-w-7xl rounded-xl border border-blue-200 bg-white/95 p-3 shadow-sm"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Contrôle de l’import Europass</h2>
-                <p className="mt-0.5 text-xs text-slate-600">
-                  Identité vérifiée entre les documents · données factuelles fusionnées · textes de
-                  chaque langue conservés séparément.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold">
-                <span className="rounded-full bg-blue-100 px-2 py-1 text-blue-800">
-                  {europassImportReport.sources.length} fichier(s)
-                </span>
-                <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-800">
-                  {europassImportReport.languages.map((item) => item.toUpperCase()).join(" + ")}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-1 ${
-                    europassImportReport.photoFound
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "bg-amber-100 text-amber-800"
-                  }`}
-                >
-                  Photo {europassImportReport.photoFound ? "récupérée" : "à ajouter"}
-                </span>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {europassImportReport.sources.map((source) => (
-                <article
-                  key={`${source.fileName}-${source.language}`}
-                  className="rounded-lg border p-2.5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <strong
-                      className="min-w-0 truncate text-xs text-slate-900"
-                      title={source.fileName}
-                    >
-                      {source.fileName}
-                    </strong>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                      {source.language.toUpperCase()} · {source.coverage}%
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-600">
-                    {source.format === "pdf-xml"
-                      ? "PDF officiel avec XML embarqué : import exact."
-                      : source.format === "xml"
-                        ? "XML Europass officiel : import exact."
-                        : "PDF sans XML : extraction textuelle avec contrôle manuel."}
-                  </p>
-                  <p
-                    className={`mt-1 text-[11px] font-medium ${
-                      source.missing.length ? "text-amber-700" : "text-emerald-700"
-                    }`}
-                  >
-                    {source.missing.length
-                      ? `À vérifier : ${source.missing.join(", ")}.`
-                      : "Tous les groupes principaux sont renseignés."}
-                  </p>
-                </article>
-              ))}
-            </div>
-            {(europassImportReport.driveUrls.length > 0 || activeClientOrder?.driveFolderId) && (
-              <p className="mt-2 text-xs font-medium text-emerald-800">
-                <CloudCheck className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
-                {activeClientOrder?.driveFolderId
-                  ? `Le lien Drive de la commande ${activeClientOrder.id} reste associé au profil.`
-                  : `${europassImportReport.driveUrls.length} lien(s) Google Drive récupéré(s) dans les coordonnées Europass.`}
-              </p>
-            )}
-          </section>
-        )}
-        {packMessage && (
-          <div
-            role="status"
-            aria-live="polite"
-            className={`mx-auto mb-2 max-w-7xl rounded-lg px-3 py-2 text-xs font-medium shadow-sm ${
-              packMessage.ok ? "zgr-status-success" : "zgr-status-error"
-            }`}
-          >
-            {packMessage.text}
-          </div>
-        )}
       </header>
+      {importMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`mx-auto mt-2 flex max-w-7xl items-center justify-between gap-3 rounded-lg px-3 py-2 text-xs font-medium shadow-sm ${
+            importMessage.ok ? "zgr-status-success" : "zgr-status-error"
+          }`}
+        >
+          <span>{importMessage.text}</span>
+          <button
+            type="button"
+            className="shrink-0 rounded-md p-1 hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+            aria-label="Fermer le message d’import"
+            onClick={() => setImportMessage(null)}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      {europassImportReport && (
+        <section
+          role="status"
+          aria-live="polite"
+          aria-label="Rapport d’import Europass"
+          className="mx-auto mt-2 max-w-7xl rounded-xl border border-emerald-200 bg-emerald-50/95 px-3 py-2 shadow-sm"
+        >
+          <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <CircleCheck className="h-4 w-4 shrink-0 text-emerald-700" />
+              <h2 className="text-xs font-bold text-emerald-950">Europass importé</h2>
+              <span className="text-[11px] text-emerald-900/80">
+                {europassImportReport.languages.map((item) => item.toUpperCase()).join(" + ")} ·{" "}
+                {europassImportReport.sources.length} fichier(s) · couverture jusqu’à{" "}
+                {Math.max(...europassImportReport.sources.map((source) => source.coverage))}%
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold">
+              <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-800">
+                {europassImportReport.languages.map((item) => item.toUpperCase()).join(" + ")}
+              </span>
+              <span
+                className={`rounded-full px-2 py-1 ${
+                  europassImportReport.photoFound
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                Photo {europassImportReport.photoFound ? "récupérée" : "à ajouter"}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-[11px] text-emerald-900 hover:bg-emerald-100"
+                aria-expanded={europassImportReportExpanded}
+                onClick={() => setEuropassImportReportExpanded((current) => !current)}
+              >
+                {europassImportReportExpanded ? "Réduire" : "Voir le rapport"}
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${
+                    europassImportReportExpanded ? "rotate-180" : ""
+                  }`}
+                />
+              </Button>
+              <button
+                type="button"
+                className="rounded-md p-1 text-emerald-900 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700"
+                aria-label="Fermer le rapport d’import Europass"
+                onClick={() => {
+                  setEuropassImportReport(null);
+                  setEuropassImportReportExpanded(false);
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+          {europassImportReportExpanded && (
+            <div className="mt-2 border-t border-emerald-200 pt-2">
+              <p className="mb-2 text-[11px] text-slate-600">
+                Identité vérifiée entre les documents · données factuelles fusionnées · textes de
+                chaque langue conservés séparément.
+              </p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {europassImportReport.sources.map((source) => (
+                  <article
+                    key={`${source.fileName}-${source.language}`}
+                    className="rounded-lg border border-emerald-200 bg-white p-2.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong
+                        className="min-w-0 truncate text-xs text-slate-900"
+                        title={source.fileName}
+                      >
+                        {source.fileName}
+                      </strong>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                        {source.language.toUpperCase()} · {source.coverage}%
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-600">
+                      {source.format === "pdf-xml"
+                        ? "PDF officiel avec XML embarqué : import exact."
+                        : source.format === "xml"
+                          ? "XML Europass officiel : import exact."
+                          : "PDF sans XML : extraction textuelle avec contrôle manuel."}
+                    </p>
+                    <p
+                      className={`mt-1 text-[11px] font-medium ${
+                        source.missing.length ? "text-amber-700" : "text-emerald-700"
+                      }`}
+                    >
+                      {source.missing.length
+                        ? `À vérifier : ${source.missing.join(", ")}.`
+                        : "Tous les groupes principaux sont renseignés."}
+                    </p>
+                  </article>
+                ))}
+              </div>
+              {(europassImportReport.driveUrls.length > 0 || activeClientOrder?.driveFolderId) && (
+                <p className="mt-2 text-xs font-medium text-emerald-800">
+                  <CloudCheck className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
+                  {activeClientOrder?.driveFolderId
+                    ? `Le lien Drive de la commande ${activeClientOrder.id} reste associé au profil.`
+                    : `${europassImportReport.driveUrls.length} lien(s) Google Drive récupéré(s) dans les coordonnées Europass.`}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+      {packMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`mx-auto mb-2 max-w-7xl rounded-lg px-3 py-2 text-xs font-medium shadow-sm ${
+            packMessage.ok ? "zgr-status-success" : "zgr-status-error"
+          }`}
+        >
+          {packMessage.text}
+        </div>
+      )}
 
       {!canWriteClients && (
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900">

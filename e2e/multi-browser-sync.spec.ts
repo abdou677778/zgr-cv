@@ -678,6 +678,14 @@ test("extrait le XML embarqué d’un PDF Europass et préremplit le formulaire"
     await expect(page.getByRole("status").filter({ hasText: /Europass importé/ })).toContainText(
       "FR",
     );
+    const importReport = page.getByRole("status", { name: "Rapport d’import Europass" });
+    await expect(importReport.getByText(/PDF officiel avec XML embarqué/)).toBeHidden();
+    await importReport.getByRole("button", { name: "Voir le rapport" }).click();
+    await expect(importReport.getByText(/PDF officiel avec XML embarqué/)).toBeVisible();
+    await importReport.getByRole("button", { name: "Réduire" }).click();
+    await expect(importReport.getByText(/PDF officiel avec XML embarqué/)).toBeHidden();
+    await importReport.getByRole("button", { name: "Fermer le rapport d’import Europass" }).click();
+    await expect(importReport).toBeHidden();
     await expect(page.getByRole("button", { name: /Importer CV Europass/ })).toBeVisible();
     await openPersonalDetails(page);
     await expect(page.getByPlaceholder("Nom complet")).toHaveValue("Amine Bensalem");

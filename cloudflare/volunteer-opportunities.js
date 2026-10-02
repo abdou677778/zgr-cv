@@ -3,9 +3,11 @@ const OFFICIAL_LIST_URL = "https://youth.europa.eu/go-abroad/volunteering/opport
 const OFFICIAL_DETAIL_PREFIX = "https://youth.europa.eu/solidarity/opportunity/";
 const OFFICIAL_REGISTER_URL = "https://youth.europa.eu/solidarity/register_en";
 const CACHE_KEY = "public-cache/eu-youth-volunteering-latest.json";
+const HEALTH_KEY = "system/monitoring/volunteer-opportunities.json";
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000;
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const SEARCH_PAGE_SIZE = 200;
+const MAX_DISCOVERY_PAGES = 10;
 
 const COUNTRY_NAMES = {
   AL: "Albanie",
@@ -350,6 +352,28 @@ async function fetchOfficialPage(options = {}) {
   return hits.map((hit) => normalizeOfficialOpportunity(hit?._source, checkedAt)).filter(Boolean);
 }
 
+async function fetchOfficialLatest() {
+  const collected = new Map();
+  const recentCutoff = Date.now() - 8 * 24 * 60 * 60 * 1000;
+  let pagesScanned = 0;
+  for (let pageIndex = 0; pageIndex < MAX_DISCOVERY_PAGES; pageIndex += 1) {
+    const page = await fetchOfficialPage({
+      from: pageIndex * SEARCH_PAGE_SIZE,
+      size: SEARCH_PAGE_SIZE,
+    });
+    pagesScanned += 1;
+    for (const opportunity of page) collected.set(opportunity.id, opportunity);
+    if (page.length < SEARCH_PAGE_SIZE) break;
+    const oldestPublishedAt = Math.min(
+      ...page
+        .map((opportunity) => Date.parse(opportunity.publishedAt || ""))
+        .filter(Number.isFinite),
+    );
+    if (Number.isFinite(oldestPublishedAt) && oldestPublishedAt < recentCutoff) break;
+  }
+  return { opportunities: [...collected.values()], pagesScanned };
+}
+
 async function readCache(env) {
   if (!env?.CLIENTS_BUCKET) return null;
   const object = await env.CLIENTS_BUCKET.get(CACHE_KEY);
@@ -371,16 +395,110 @@ async function writeCache(env, payload) {
   });
 }
 
-export async function refreshVolunteerOpportunityCache(env) {
-  const opportunities = await fetchOfficialPage();
-  const payload = {
-    version: CACHE_VERSION,
-    fetchedAt: new Date().toISOString(),
+async function readHealth(env) {
+  if (!env?.CLIENTS_BUCKET) return null;
+  const object = await env.CLIENTS_BUCKET.get(HEALTH_KEY);
+  if (!object) return null;
+  try {
+    return JSON.parse(await object.text());
+  } catch {
+    return null;
+  }
+}
+
+async function writeHealth(env, payload) {
+  if (!env?.CLIENTS_BUCKET) return;
+  await env.CLIENTS_BUCKET.put(HEALTH_KEY, JSON.stringify(payload), {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+  });
+}
+
+function sourceSchemaAlerts(opportunities) {
+  const alerts = [];
+  if (!opportunities.length) alerts.push("La source officielle n’a renvoyé aucune opportunité.");
+  const incomplete = opportunities.filter(
+    (item) =>
+      !item.id ||
+      !item.title ||
+      !item.sourceUrl ||
+      !Array.isArray(item.eligibilityCodes) ||
+      !item.publishedAt,
+  );
+  if (incomplete.length)
+    alerts.push(`${incomplete.length} fiche(s) ne respectent plus le schéma attendu.`);
+  return alerts;
+}
+
+export async function getVolunteerOpportunityHealth(env) {
+  const stored = await readHealth(env);
+  if (stored) return stored;
+  return {
+    state: "collecting",
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+    lastFailureAt: null,
+    consecutiveFailures: 0,
+    opportunities: 0,
+    pagesScanned: 0,
+    cacheVersion: CACHE_VERSION,
     sourceUrl: OFFICIAL_LIST_URL,
-    opportunities,
+    alerts: ["Premier contrôle automatique en attente."],
   };
-  await writeCache(env, payload);
+}
+
+export async function recordVolunteerOpportunityFailure(env, error) {
+  const previous = await getVolunteerOpportunityHealth(env);
+  const consecutiveFailures = Number(previous.consecutiveFailures || 0) + 1;
+  const message =
+    error instanceof Error ? error.message : "Erreur inconnue de la source officielle.";
+  const payload = {
+    ...previous,
+    state: consecutiveFailures >= 3 ? "critical" : "warning",
+    lastAttemptAt: new Date().toISOString(),
+    lastFailureAt: new Date().toISOString(),
+    consecutiveFailures,
+    cacheVersion: CACHE_VERSION,
+    sourceUrl: OFFICIAL_LIST_URL,
+    alerts: [`Actualisation échouée : ${message}`],
+  };
+  await writeHealth(env, payload);
   return payload;
+}
+
+export async function refreshVolunteerOpportunityCache(env) {
+  const attemptedAt = new Date().toISOString();
+  try {
+    const { opportunities, pagesScanned } = await fetchOfficialLatest();
+    const alerts = sourceSchemaAlerts(opportunities);
+    if (!opportunities.length) throw new Error(alerts.join(" "));
+    const payload = {
+      version: CACHE_VERSION,
+      fetchedAt: new Date().toISOString(),
+      sourceUrl: OFFICIAL_LIST_URL,
+      pagesScanned,
+      opportunities,
+    };
+    const previousHealth = await getVolunteerOpportunityHealth(env);
+    await Promise.all([
+      writeCache(env, payload),
+      writeHealth(env, {
+        state: alerts.length ? "warning" : "healthy",
+        lastAttemptAt: attemptedAt,
+        lastSuccessAt: payload.fetchedAt,
+        lastFailureAt: previousHealth.lastFailureAt || null,
+        consecutiveFailures: 0,
+        opportunities: opportunities.length,
+        pagesScanned,
+        cacheVersion: CACHE_VERSION,
+        sourceUrl: OFFICIAL_LIST_URL,
+        alerts,
+      }),
+    ]);
+    return payload;
+  } catch (error) {
+    await recordVolunteerOpportunityFailure(env, error);
+    throw error;
+  }
 }
 
 async function latestOpportunities(env) {
@@ -446,6 +564,7 @@ export async function searchVolunteerOpportunities(env, options = {}) {
       returned: Math.min(limit, matches.length),
       totalMatches: matches.length,
       scanned: payload.opportunities.length,
+      pagesScanned: Number(payload.pagesScanned) || 1,
       verifiedAt: payload.fetchedAt,
       stale: payload.stale === true,
       sourceUrl: OFFICIAL_LIST_URL,

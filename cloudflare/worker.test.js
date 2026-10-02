@@ -1048,6 +1048,7 @@ test("la supervision agrège uniquement des métriques techniques anonymes", asy
   assert.equal(monitoring.last24h.events, 2);
   assert.equal(monitoring.last24h.apiFailures, 1);
   assert.equal(monitoring.vitals.find((vital) => vital.name === "LCP").p75, 1_450);
+  assert.equal(monitoring.opportunitySource.state, "collecting");
   assert.equal(JSON.stringify(monitoring).includes("personnel@example.com"), false);
   assert.match(monitoring.privacy, /Aucun nom/);
 });

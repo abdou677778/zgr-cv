@@ -203,11 +203,12 @@ class SharedClientApi {
           returned: 1,
           totalMatches: 1,
           scanned: 200,
+          pagesScanned: 1,
           verifiedAt: "2026-10-02T17:00:00.000Z",
           stale: false,
           sourceUrl: "https://youth.europa.eu/go-abroad/volunteering/opportunities_en",
           methodology: "Contrôle exact du pays.",
-          cacheVersion: 2,
+          cacheVersion: 3,
           sourceStrategy: "official_structured_api",
         },
       });
@@ -291,6 +292,18 @@ class SharedClientApi {
             { name: "TTFB", samples: 5, p75: 190, average: 175, poor: 0 },
           ],
           daily: [],
+          opportunitySource: {
+            state: "healthy",
+            lastAttemptAt: "2026-10-02T03:15:00.000Z",
+            lastSuccessAt: "2026-10-02T03:15:01.000Z",
+            lastFailureAt: null,
+            consecutiveFailures: 0,
+            opportunities: 200,
+            pagesScanned: 1,
+            cacheVersion: 3,
+            sourceUrl: "https://youth.europa.eu/go-abroad/volunteering/opportunities_en",
+            alerts: [],
+          },
           privacy:
             "Aucun nom, CV, courriel, téléphone, adresse IP ou contenu client n’est enregistré.",
         });

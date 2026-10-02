@@ -52,6 +52,7 @@ export type VolunteerSearchResult = {
     returned: number;
     totalMatches: number;
     scanned: number;
+    pagesScanned: number;
     verifiedAt: string;
     stale: boolean;
     sourceUrl: string;

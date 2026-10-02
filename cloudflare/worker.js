@@ -1,4 +1,5 @@
 import {
+  getVolunteerOpportunityHealth,
   handleVolunteerApi,
   handleVolunteerMcp,
   refreshVolunteerOpportunityCache,
@@ -673,14 +674,21 @@ function percentile(values, ratio) {
 }
 
 async function operationalMonitoring(env, origin) {
+  const opportunitySource = await getVolunteerOpportunityHealth(env);
   const empty = {
     generatedAt: new Date().toISOString(),
     available: false,
-    health: "collecting",
+    health:
+      opportunitySource.state === "critical"
+        ? "critical"
+        : opportunitySource.state === "warning"
+          ? "warning"
+          : "collecting",
     retentionDays: 30,
     last24h: { events: 0, javascriptErrors: 0, apiFailures: 0, syncFailures: 0 },
     vitals: [],
     daily: [],
+    opportunitySource,
     privacy: "Aucun nom, CV, courriel, téléphone, adresse IP ou contenu client n’est enregistré.",
   };
   if (!env.CLIENTS_DB) return json(empty, 200, origin);
@@ -744,13 +752,21 @@ async function operationalMonitoring(env, origin) {
   const vitalSamples = vitals.reduce((total, vital) => total + vital.samples, 0);
   const poorVitals = vitals.reduce((total, vital) => total + vital.poor, 0);
   const poorRatio = vitalSamples ? poorVitals / vitalSamples : 0;
-  const health =
+  const applicationHealth =
     last24h.events === 0
       ? "collecting"
       : failures >= 20 || poorRatio >= 0.4
         ? "critical"
         : failures >= 5 || poorRatio >= 0.15
           ? "warning"
+          : "healthy";
+  const health =
+    applicationHealth === "critical" || opportunitySource.state === "critical"
+      ? "critical"
+      : applicationHealth === "warning" || opportunitySource.state === "warning"
+        ? "warning"
+        : applicationHealth === "collecting" && opportunitySource.state === "collecting"
+          ? "collecting"
           : "healthy";
   return json({ ...empty, available: true, health, last24h, vitals, daily }, 200, origin);
 }

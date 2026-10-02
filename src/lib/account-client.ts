@@ -105,6 +105,18 @@ export type OperationalMonitoring = {
     poor: number;
   }>;
   daily: Array<{ day: string; events: number; errors: number }>;
+  opportunitySource: {
+    state: "healthy" | "warning" | "critical" | "collecting";
+    lastAttemptAt: string | null;
+    lastSuccessAt: string | null;
+    lastFailureAt: string | null;
+    consecutiveFailures: number;
+    opportunities: number;
+    pagesScanned: number;
+    cacheVersion: number;
+    sourceUrl: string;
+    alerts: string[];
+  };
   privacy: string;
   error?: string;
 };

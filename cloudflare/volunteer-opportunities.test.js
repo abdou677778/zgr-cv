@@ -2,12 +2,29 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getVolunteerOpportunityHealth,
   handleVolunteerMcp,
   isCountryEligible,
   normalizeOfficialOpportunity,
+  recordVolunteerOpportunityFailure,
+  refreshVolunteerOpportunityCache,
   resolveParticipantCountry,
   searchVolunteerOpportunities,
 } from "./volunteer-opportunities.js";
+
+function memoryBucket() {
+  const objects = new Map();
+  return {
+    objects,
+    async get(key) {
+      const value = objects.get(key);
+      return value == null ? null : { text: async () => value };
+    },
+    async put(key, value) {
+      objects.set(key, String(value));
+    },
+  };
+}
 
 function source(overrides = {}) {
   return {
@@ -78,7 +95,7 @@ test("la recherche en cache ne renvoie que les offres admissibles et actives", a
         return {
           async text() {
             return JSON.stringify({
-              version: 2,
+              version: 3,
               fetchedAt: new Date().toISOString(),
               opportunities,
             });
@@ -122,4 +139,36 @@ test("le point MCP publie uniquement les outils de lecture", async () => {
     ["search_volunteer_opportunities", "inspect_volunteer_opportunity"],
   );
   assert.ok(tools.every((tool) => tool.annotations.readOnlyHint));
+});
+
+test("l’actualisation paginée enregistre un état de supervision sain", async () => {
+  const bucket = memoryBucket();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    Response.json({
+      hits: {
+        hits: [{ _source: source({ volunteer_countries: ["TN"] }) }],
+      },
+    });
+  try {
+    const payload = await refreshVolunteerOpportunityCache({ CLIENTS_BUCKET: bucket });
+    assert.equal(payload.pagesScanned, 1);
+    assert.equal(payload.opportunities.length, 1);
+    const health = await getVolunteerOpportunityHealth({ CLIENTS_BUCKET: bucket });
+    assert.equal(health.state, "healthy");
+    assert.equal(health.opportunities, 1);
+    assert.equal(health.cacheVersion, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("trois échecs consécutifs font passer la source en état critique", async () => {
+  const env = { CLIENTS_BUCKET: memoryBucket() };
+  await recordVolunteerOpportunityFailure(env, new Error("panne test"));
+  await recordVolunteerOpportunityFailure(env, new Error("panne test"));
+  const health = await recordVolunteerOpportunityFailure(env, new Error("panne test"));
+  assert.equal(health.state, "critical");
+  assert.equal(health.consecutiveFailures, 3);
+  assert.match(health.alerts[0], /panne test/);
 });

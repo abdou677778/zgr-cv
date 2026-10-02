@@ -690,6 +690,67 @@ export function AccountSettingsDialog({
                     ))}
                   </div>
 
+                  <div
+                    className={`rounded-xl border p-4 ${
+                      operationalMonitoring.opportunitySource.state === "healthy"
+                        ? "border-emerald-200 bg-emerald-50"
+                        : operationalMonitoring.opportunitySource.state === "critical"
+                          ? "border-red-200 bg-red-50"
+                          : operationalMonitoring.opportunitySource.state === "warning"
+                            ? "border-amber-200 bg-amber-50"
+                            : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex items-start gap-2">
+                        {operationalMonitoring.opportunitySource.state === "healthy" ? (
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-700" />
+                        ) : operationalMonitoring.opportunitySource.state === "collecting" ? (
+                          <RefreshCw className="mt-0.5 h-4 w-4 text-slate-600" />
+                        ) : (
+                          <TriangleAlert className="mt-0.5 h-4 w-4 text-amber-700" />
+                        )}
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">
+                            Source volontariat — Portail européen
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-600">
+                            {operationalMonitoring.opportunitySource.opportunities} offres
+                            contrôlées sur {operationalMonitoring.opportunitySource.pagesScanned}{" "}
+                            page(s) · cache v{operationalMonitoring.opportunitySource.cacheVersion}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="rounded-full border bg-white/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                        {operationalMonitoring.opportunitySource.state === "healthy"
+                          ? "Source saine"
+                          : operationalMonitoring.opportunitySource.state === "critical"
+                            ? "Action requise"
+                            : operationalMonitoring.opportunitySource.state === "warning"
+                              ? "À surveiller"
+                              : "Premier contrôle en attente"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-600">
+                      Dernier succès :{" "}
+                      {operationalMonitoring.opportunitySource.lastSuccessAt
+                        ? new Date(
+                            operationalMonitoring.opportunitySource.lastSuccessAt,
+                          ).toLocaleString("fr-DZ")
+                        : "aucun"}
+                      {operationalMonitoring.opportunitySource.consecutiveFailures
+                        ? ` · ${operationalMonitoring.opportunitySource.consecutiveFailures} échec(s) consécutif(s)`
+                        : ""}
+                    </p>
+                    {operationalMonitoring.opportunitySource.alerts.length ? (
+                      <ul className="mt-2 space-y-1 text-xs font-semibold text-red-700">
+                        {operationalMonitoring.opportunitySource.alerts.map((alert) => (
+                          <li key={alert}>• {alert}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+
                   <div className="overflow-hidden rounded-xl border bg-white">
                     <div className="border-b bg-slate-50 px-4 py-2 text-xs font-semibold">
                       Web Vitals réels — 75e percentile

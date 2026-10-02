@@ -236,11 +236,20 @@ class SharedClientApi {
               "L’employeur accepte explicitement les candidats avec ou sans permis de travail canadien valide.",
             lmiaStatus: "not_specified",
             applicationMethod: {
-              type: "company_site",
-              label: "Site officiel de l’employeur",
-              url: "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html",
+              type: "email",
+              label: "Postuler par e-mail",
+              url: "mailto:careers@manningelliott.example",
               loginRequired: false,
-              note: "Candidature externe : aucun compte Indeed ou Guichet-Emplois requis pour ouvrir le formulaire.",
+              note: "Envoyez votre CV à l’adresse publiée par l’employeur.",
+            },
+            applicationContact: {
+              type: "email",
+              email: "careers@manningelliott.example",
+              phone: "",
+              url: "mailto:careers@manningelliott.example",
+              label: "Postuler par e-mail",
+              details: "Envoyez votre CV et votre lettre de motivation.",
+              loginRequired: false,
             },
             candidateCountry: {
               code: country,
@@ -840,11 +849,10 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(dialog.getByText("Candidat international vérifié", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Sans compte Indeed", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 16 oct. 2026/)).toBeVisible();
-    await expect(
-      dialog.getByRole("link", { name: /Postuler sur le site officiel/ }),
-    ).toHaveAttribute(
+    await expect(dialog.getByText("careers@manningelliott.example", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: /Écrire à l’employeur/ })).toHaveAttribute(
       "href",
-      "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html",
+      "mailto:careers@manningelliott.example",
     );
 
     await dialog.getByRole("button", { name: /Indeed Canada/ }).click();

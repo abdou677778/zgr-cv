@@ -5,11 +5,14 @@ import {
   Building2,
   CalendarClock,
   CircleDollarSign,
+  Copy,
   ExternalLink,
   Landmark,
   LoaderCircle,
   LockKeyhole,
+  Mail,
   MapPin,
+  Phone,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -52,6 +55,18 @@ function lmiaLabel(value: CanadaOpportunity["lmiaStatus"]) {
 
 function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity }) {
   const noAccount = !opportunity.applicationMethod.loginRequired;
+  const [copied, setCopied] = useState(false);
+  const contact = opportunity.applicationContact;
+  const copyEmail = async () => {
+    if (!contact?.email) return;
+    try {
+      await navigator.clipboard.writeText(contact.email);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  };
   return (
     <article className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -123,6 +138,56 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
         </p>
       </div>
 
+      {contact?.email ? (
+        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-950">
+          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-violet-700">
+            <Mail className="h-4 w-4" /> E-mail officiel pour postuler
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <a
+              href={`mailto:${contact.email}`}
+              className="min-w-0 flex-1 break-all text-sm font-bold text-violet-950 underline decoration-violet-300 underline-offset-2"
+            >
+              {contact.email}
+            </a>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 border-violet-300 bg-white text-violet-900"
+              onClick={() => void copyEmail()}
+            >
+              <Copy className="mr-1.5 h-3.5 w-3.5" /> {copied ? "Copié" : "Copier"}
+            </Button>
+          </div>
+        </div>
+      ) : contact?.type === "external_form" && contact.url ? (
+        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-950">
+          <p className="flex items-center gap-2 text-sm font-black">
+            <ExternalLink className="h-4 w-4" /> Formulaire officiel pour postuler
+          </p>
+          <a
+            href={contact.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 block break-all text-xs font-semibold text-violet-800 underline underline-offset-2"
+          >
+            {contact.url}
+          </a>
+        </div>
+      ) : contact?.phone ? (
+        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-950">
+          <p className="flex items-center gap-2 text-sm font-black">
+            <Phone className="h-4 w-4" /> Téléphone de candidature : {contact.phone}
+          </p>
+        </div>
+      ) : (
+        <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+          E-mail non publié : utilisez le bouton officiel ci-dessous pour afficher les consignes de
+          l’employeur.
+        </p>
+      )}
+
       {opportunity.description ? (
         <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-slate-600">
           {opportunity.description}
@@ -137,9 +202,12 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
         </Button>
         <Button asChild size="sm" className="bg-red-700 text-white hover:bg-red-800">
           <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
-            {opportunity.applicationMethod.type === "company_site"
-              ? "Postuler sur le site officiel"
-              : "Voir comment postuler"}
+            {opportunity.applicationMethod.type === "email"
+              ? "Écrire à l’employeur"
+              : opportunity.applicationMethod.type === "company_site" ||
+                  opportunity.applicationMethod.type === "external_form"
+                ? "Postuler sur le site officiel"
+                : "Voir comment postuler"}
             <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
           </a>
         </Button>

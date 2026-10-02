@@ -6,7 +6,7 @@ const INDEED_SEARCH_URL =
 const CACHE_KEY = "public-cache/canada-international-jobs-latest.json";
 const HEALTH_KEY = "system/monitoring/canada-opportunities.json";
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 9;
 const MAX_DETAILS = 18;
 
 const CANDIDATE_COUNTRIES = {
@@ -197,12 +197,96 @@ export function parseJobBankDetailHtml(html, summary = {}) {
       ? "L’employeur accepte explicitement les candidats avec ou sans permis de travail canadien valide."
       : "L’admissibilité internationale n’a pas pu être confirmée sur la fiche détaillée.",
     applicationMethod,
+    applicationContact: {
+      type: applicationMethod.type,
+      email: "",
+      phone: "",
+      url: applicationMethod.url || summary.sourceUrl,
+      label: applicationMethod.label,
+      details: applicationMethod.note,
+      loginRequired: applicationMethod.loginRequired,
+    },
     lmiaStatus: /(?:LMIA|EIMT)\s+(?:approved|approuv[ée]e?)/i.test(source)
       ? "approved"
       : /(?:LMIA|EIMT)\s+(?:requested|demand[ée]e?)/i.test(source)
         ? "requested"
         : summary.lmiaStatus || "not_specified",
     checkedAt: new Date().toISOString(),
+  };
+}
+
+function decodeXmlMarkup(value) {
+  return String(value || "")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, "&");
+}
+
+export function parseJobBankHowToApplyHtml(html, fallback = {}) {
+  const source = decodeXmlMarkup(html);
+  const section =
+    firstMatch(
+      source,
+      /<(?:section|div)[^>]+id=["']howtoapply["'][^>]*>([\s\S]*?)<\/(?:section|div)>/i,
+    ) || source;
+  const email = decodeURIComponent(
+    firstMatch(section, /href=["']mailto:([^?"'<\s]+)(?:\?[^"']*)?["']/i),
+  )
+    .replace(/^mailto:/i, "")
+    .trim();
+  const phone = decodeURIComponent(
+    firstMatch(section, /href=["']tel:([^?"'<\s]+)(?:\?[^"']*)?["']/i),
+  ).trim();
+  const links = [...section.matchAll(/href=["']([^"']+)["']/gi)]
+    .map((match) => safeExternalUrl(match[1]))
+    .filter((url) => url && !/\.jobbank\.gc\.ca\//i.test(url));
+  const url = links[0] || "";
+  const details = decodeHtml(section)
+    .replace(/^How to apply\s*/i, "")
+    .slice(0, 800);
+  if (email) {
+    return {
+      type: "email",
+      email,
+      phone,
+      url: `mailto:${email}`,
+      label: "Postuler par e-mail",
+      details: details || "Envoyez votre candidature à l’adresse publiée par l’employeur.",
+      loginRequired: false,
+    };
+  }
+  if (url) {
+    return {
+      type: "external_form",
+      email: "",
+      phone,
+      url,
+      label: "Formulaire officiel de candidature",
+      details: details || "Remplissez le formulaire indiqué par l’employeur.",
+      loginRequired: false,
+    };
+  }
+  if (phone) {
+    return {
+      type: "phone",
+      email: "",
+      phone,
+      url: `tel:${phone}`,
+      label: "Contacter l’employeur par téléphone",
+      details,
+      loginRequired: false,
+    };
+  }
+  return {
+    type: fallback.type || "public_instructions",
+    email: "",
+    phone: "",
+    url: fallback.url || "",
+    label: fallback.label || "Consignes sur la fiche officielle",
+    details: details || fallback.note || "Ouvrez la fiche officielle pour voir comment postuler.",
+    loginRequired: fallback.loginRequired === true,
   };
 }
 
@@ -229,6 +313,99 @@ async function fetchText(url) {
   throw lastError instanceof Error ? lastError : new Error("Guichet-Emplois indisponible.");
 }
 
+function responseCookie(response) {
+  const raw = response.headers.get("set-cookie") || "";
+  return raw
+    .split(/,(?=\s*[^;,=]+=)/)
+    .map((cookie) => cookie.split(";", 1)[0].trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
+async function fetchJobBankDocument(url) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "en-CA,en;q=0.9,fr-CA;q=0.8",
+          "Cache-Control": "no-cache",
+          "User-Agent": "ZGR-CV-Canada-Opportunities/1.0 (+https://abdou677778.github.io/zgr-cv/)",
+        },
+        cf: { cacheTtl: 0, cacheEverything: false },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (response.ok)
+        return {
+          html: await response.text(),
+          responseUrl: response.url || url,
+          cookie: responseCookie(response),
+        };
+      lastError = new Error(`Guichet-Emplois HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt));
+  }
+  throw lastError instanceof Error ? lastError : new Error("Fiche Guichet-Emplois indisponible.");
+}
+
+function inputValue(html, name) {
+  const escaped = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return decodeXmlMarkup(
+    firstMatch(
+      html,
+      new RegExp(`<input[^>]+name=["']${escaped}["'][^>]+value=["']([^"']*)["']`, "i"),
+    ) ||
+      firstMatch(
+        html,
+        new RegExp(`<input[^>]+value=["']([^"']*)["'][^>]+name=["']${escaped}["']`, "i"),
+      ),
+  );
+}
+
+async function fetchHowToApply(document, jobId, fallback) {
+  const action = decodeXmlMarkup(
+    firstMatch(document.html, /<form[^>]+id=["']seekeractivity["'][^>]+action=["']([^"']+)["']/i),
+  );
+  if (!action) return parseJobBankHowToApplyHtml("", fallback);
+  // The official page replaces the static JSF form action with window.location.href
+  // immediately before sending the partial request.
+  const endpoint = document.responseUrl;
+  const viewState = inputValue(document.html, "jakarta.faces.ViewState") || "stateless";
+  const body = new URLSearchParams({
+    "jakarta.faces.partial.ajax": "true",
+    "jakarta.faces.source": "seekeractivity",
+    "jakarta.faces.partial.execute": "jobid",
+    "jakarta.faces.partial.render": "applynow markappliedgroup",
+    "jakarta.faces.partial.event": "click",
+    "jakarta.faces.behavior.event": "action",
+    action: "applynowbutton",
+    seekeractivity: "seekeractivity",
+    "seekeractivity:jobid": String(jobId),
+    "jakarta.faces.ViewState": viewState,
+  });
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Accept: "application/xml, text/xml, */*; q=0.01",
+      "Accept-Language": "en-CA,en;q=0.9",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "Faces-Request": "partial/ajax",
+      Referer: document.responseUrl,
+      "User-Agent": "ZGR-CV-Canada-Opportunities/1.0 (+https://abdou677778.github.io/zgr-cv/)",
+      "X-Requested-With": "XMLHttpRequest",
+      ...(document.cookie ? { Cookie: document.cookie } : {}),
+    },
+    body: body.toString(),
+    redirect: "follow",
+    signal: AbortSignal.timeout(12_000),
+  });
+  if (!response.ok) throw new Error(`Guichet-Emplois candidature HTTP ${response.status}`);
+  return parseJobBankHowToApplyHtml(await response.text(), fallback);
+}
+
 async function readJsonObject(env, key) {
   if (!env?.CLIENTS_BUCKET) return null;
   const object = await env.CLIENTS_BUCKET.get(key);
@@ -247,17 +424,52 @@ async function writeJsonObject(env, key, payload) {
   });
 }
 
+async function mapSettledWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        results[index] = { status: "fulfilled", value: await mapper(items[index], index) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
+
 export async function refreshCanadaOpportunityCache(env) {
   const attemptedAt = new Date().toISOString();
   try {
     const searchHtml = await fetchText(JOB_BANK_SEARCH_URL);
     const summaries = parseJobBankSearchHtml(searchHtml).slice(0, MAX_DETAILS);
     if (!summaries.length) throw new Error("Aucune offre trouvée dans la source officielle.");
-    const settled = await Promise.allSettled(
-      summaries.map(async (summary) =>
-        parseJobBankDetailHtml(await fetchText(summary.sourceUrl), summary),
-      ),
-    );
+    const settled = await mapSettledWithConcurrency(summaries, 4, async (summary) => {
+      const document = await fetchJobBankDocument(summary.sourceUrl);
+      const opportunity = parseJobBankDetailHtml(document.html, summary);
+      let applicationContact = opportunity.applicationContact;
+      try {
+        applicationContact = await fetchHowToApply(
+          document,
+          opportunity.id,
+          opportunity.applicationMethod,
+        );
+      } catch {
+        // The public listing remains usable when the optional JSF contact panel is unavailable.
+      }
+      const applicationMethod = {
+        type: applicationContact.type,
+        label: applicationContact.label,
+        url: applicationContact.url || opportunity.applicationMethod.url,
+        loginRequired: applicationContact.loginRequired,
+        note: applicationContact.details || opportunity.applicationMethod.note,
+      };
+      return { ...opportunity, applicationContact, applicationMethod };
+    });
     const opportunities = settled
       .filter((result) => result.status === "fulfilled")
       .map((result) => result.value)

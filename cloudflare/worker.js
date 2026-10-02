@@ -4245,15 +4245,16 @@ export default {
         );
       }),
     );
-    ctx.waitUntil(
-      refreshCanadaOpportunityCache(env).catch((error) => {
-        console.error(
-          JSON.stringify({
-            event: "canada_opportunities_refresh_failed",
-            message: error instanceof Error ? error.message : "unknown",
-          }),
-        );
-      }),
-    );
+    if (env.CANADA_OPPORTUNITIES_REFRESH === "enabled")
+      ctx.waitUntil(
+        refreshCanadaOpportunityCache(env).catch((error) => {
+          console.error(
+            JSON.stringify({
+              event: "canada_opportunities_refresh_failed",
+              message: error instanceof Error ? error.message : "unknown",
+            }),
+          );
+        }),
+      );
   },
 };

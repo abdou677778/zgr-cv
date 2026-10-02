@@ -17,11 +17,26 @@ export type CanadaOpportunity = {
   eligibilityEvidence: string;
   lmiaStatus: "approved" | "requested" | "not_specified";
   applicationMethod: {
-    type: "company_site" | "job_bank_direct" | "public_instructions";
+    type:
+      | "email"
+      | "external_form"
+      | "phone"
+      | "company_site"
+      | "job_bank_direct"
+      | "public_instructions";
     label: string;
     url: string;
     loginRequired: boolean;
     note: string;
+  };
+  applicationContact: {
+    type: string;
+    email: string;
+    phone: string;
+    url: string;
+    label: string;
+    details: string;
+    loginRequired: boolean;
   };
   candidateCountry: { code: "DZ" | "TN"; name: string };
   checkedAt: string;

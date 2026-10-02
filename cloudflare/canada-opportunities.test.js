@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseJobBankDetailHtml, parseJobBankSearchHtml } from "./canada-opportunities.js";
+import {
+  parseJobBankDetailHtml,
+  parseJobBankHowToApplyHtml,
+  parseJobBankSearchHtml,
+} from "./canada-opportunities.js";
 
 test("la recherche Guichet-Emplois extrait les cartes récentes sans conserver la session", () => {
   const jobs = parseJobBankSearchHtml(`
@@ -66,4 +70,32 @@ test("une échéance absente reste absente et la candidature directe annonce la 
   assert.equal(job.deadlineAt, null);
   assert.equal(job.applicationMethod.type, "job_bank_direct");
   assert.equal(job.applicationMethod.loginRequired, true);
+});
+
+test("les instructions dynamiques exposent directement l'e-mail officiel", () => {
+  const contact = parseJobBankHowToApplyHtml(`
+    <partial-response><changes><update id="applynow"><![CDATA[
+      <section id="howtoapply" class="how-to-apply">
+        <h2>How to apply</h2><h3>By email</h3>
+        <p><a href="mailto:jobs@example.ca?subject=Application">jobs@example.ca</a></p>
+        <p>Include a cover letter and the job reference number.</p>
+      </section>
+    ]]></update></changes></partial-response>
+  `);
+  assert.equal(contact.type, "email");
+  assert.equal(contact.email, "jobs@example.ca");
+  assert.equal(contact.url, "mailto:jobs@example.ca");
+  assert.equal(contact.loginRequired, false);
+  assert.match(contact.details, /cover letter/i);
+});
+
+test("les instructions dynamiques détectent un formulaire externe", () => {
+  const contact = parseJobBankHowToApplyHtml(`
+    <section id="howtoapply"><h3>Online</h3>
+      <a href="https://careers.example.ca/apply/50411434">Apply online</a>
+    </section>
+  `);
+  assert.equal(contact.type, "external_form");
+  assert.equal(contact.url, "https://careers.example.ca/apply/50411434");
+  assert.equal(contact.loginRequired, false);
 });

@@ -1,3 +1,9 @@
+import {
+  handleVolunteerApi,
+  handleVolunteerMcp,
+  refreshVolunteerOpportunityCache,
+} from "./volunteer-opportunities.js";
+
 const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
 const MAX_ACCOUNT_BYTES = 16_384;
@@ -3950,6 +3956,8 @@ async function route(request, env, ctx) {
   const url = new URL(request.url);
   const origin = allowedOrigin(request, env);
 
+  if (url.pathname === "/mcp") return handleVolunteerMcp(request, env);
+
   if (request.method === "OPTIONS") {
     if (request.headers.get("Origin") && !origin)
       return json({ error: "Origine non autorisée." }, 403);
@@ -3960,6 +3968,8 @@ async function route(request, env, ctx) {
   if (request.headers.get("Origin") && !origin)
     return json({ error: "Origine non autorisée." }, 403);
   if (!env.CLIENTS_BUCKET) return json({ error: "Binding R2 CLIENTS_BUCKET absent." }, 503, origin);
+  if (url.pathname.startsWith("/api/opportunities/"))
+    return handleVolunteerApi(request, env, origin);
   if (url.pathname === "/api/auth/login" && request.method === "POST")
     return login(request, env, origin, ctx);
 
@@ -4203,5 +4213,15 @@ export default {
     );
     ctx.waitUntil(cleanupSecurityState(env, controller.scheduledTime));
     ctx.waitUntil(cleanupExpiredTrash(env, controller.scheduledTime));
+    ctx.waitUntil(
+      refreshVolunteerOpportunityCache(env).catch((error) => {
+        console.error(
+          JSON.stringify({
+            event: "volunteer_opportunities_refresh_failed",
+            message: error instanceof Error ? error.message : "unknown",
+          }),
+        );
+      }),
+    );
   },
 };

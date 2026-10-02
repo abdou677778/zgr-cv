@@ -44,6 +44,7 @@ import {
   UserCog,
   BookOpenText,
   ClipboardList,
+  HeartHandshake,
   CloudCheck,
   CloudOff,
   TriangleAlert,
@@ -183,6 +184,10 @@ const ClientDatabaseDialog = lazy(async () => {
 const ClientOrdersDialog = lazy(async () => {
   const module = await import("@/components/client-orders-dialog");
   return { default: module.ClientOrdersDialog };
+});
+const VolunteerOpportunitiesDialog = lazy(async () => {
+  const module = await import("@/components/volunteer-opportunities-dialog");
+  return { default: module.VolunteerOpportunitiesDialog };
 });
 const AccountSettingsDialog = lazy(async () => {
   const module = await import("@/components/account-settings-dialog");
@@ -593,6 +598,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     approved: 0,
   });
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
+  const [volunteerOpportunitiesOpen, setVolunteerOpportunitiesOpen] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [activeProfileWorkflowStatus, setActiveProfileWorkflowStatus] =
     useState<ClientWorkflowStatus>("draft");
@@ -2796,6 +2802,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 <ClipboardList className="mr-2 h-4 w-4" /> Commandes
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-emerald-200 bg-emerald-50/80 text-emerald-900 hover:bg-emerald-100"
+              onClick={() => setVolunteerOpportunitiesOpen(true)}
+            >
+              <HeartHandshake className="mr-2 h-4 w-4" /> Opportunités volontariat
+            </Button>
             {user.permissions.aiUse && (
               <>
                 <Button
@@ -4328,6 +4342,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             onOpenJson={openClientOrderJson}
             activeOrderId={activeClientOrder?.id}
             onCreateCurrentDeliverable={createCurrentOrderDeliverable}
+          />
+        ) : null}
+        {volunteerOpportunitiesOpen ? (
+          <VolunteerOpportunitiesDialog
+            open={volunteerOpportunitiesOpen}
+            onOpenChange={setVolunteerOpportunitiesOpen}
           />
         ) : null}
       </Suspense>

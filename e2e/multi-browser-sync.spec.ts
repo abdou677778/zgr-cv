@@ -150,6 +150,52 @@ class SharedClientApi {
     const url = new URL(request.url());
     const method = request.method();
 
+    if (url.pathname === "/api/opportunities/search" && method === "GET") {
+      const country = url.searchParams.get("country") || "TN";
+      return this.respond(route, 200, {
+        opportunities: [
+          {
+            id: "54646",
+            title: "Buon cammino",
+            organization: "KALISTRATIA ODV",
+            description: "Protection de l’environnement et durabilité écologique.",
+            participantProfile: "Jeunes de 18 à 29 ans.",
+            destination: { town: "Polia", countryCode: "IT", countryName: "Italie" },
+            activityType: "individual",
+            topics: ["natr"],
+            startAt: "2026-10-08T12:00:00.000Z",
+            endAt: "2026-11-17T12:00:00.000Z",
+            deadlineAt: "2026-10-04T22:00:00.000Z",
+            publishedAt: "2026-10-02T15:47:22.000Z",
+            updatedAt: "2026-10-02T16:05:03.000Z",
+            eligibilityCodes: ["TN", "DZ"],
+            eligibilitySource: "funding_programme.residence_countries",
+            sourceUrl: "https://youth.europa.eu/solidarity/opportunity/54646_en",
+            checkedAt: "2026-10-02T17:00:00.000Z",
+            eligible: true,
+            eligibleCountry: {
+              code: country,
+              name: country === "DZ" ? "Algérie" : "Tunisie",
+            },
+          },
+        ],
+        meta: {
+          participantCountry: {
+            code: country,
+            name: country === "DZ" ? "Algérie" : "Tunisie",
+          },
+          period: url.searchParams.get("period") || "week",
+          returned: 1,
+          totalMatches: 1,
+          scanned: 200,
+          verifiedAt: "2026-10-02T17:00:00.000Z",
+          stale: false,
+          sourceUrl: "https://youth.europa.eu/go-abroad/volunteering/opportunities_en",
+          methodology: "Contrôle exact du pays.",
+        },
+      });
+    }
+
     if (url.pathname === "/api/auth/login" && method === "POST") {
       const credentials = request.postDataJSON() as { username?: string; password?: string };
       const user =
@@ -663,6 +709,27 @@ async function openPersonalDetails(page: Page) {
   }
   await expect(fullName).toBeVisible();
 }
+
+test("ouvre les opportunités et confirme précisément l’admissibilité tunisienne", async ({
+  browser,
+}) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+  try {
+    const page = await connect(context, api, "admin");
+    await page.getByRole("button", { name: "Opportunités volontariat" }).click();
+    const dialog = page.getByRole("dialog", { name: "Opportunités de volontariat" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("Buon cammino", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Tunisie admissible", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: /Voir l’offre officielle/ })).toHaveAttribute(
+      "href",
+      "https://youth.europa.eu/solidarity/opportunity/54646_en",
+    );
+  } finally {
+    await context.close();
+  }
+});
 
 test("extrait le XML embarqué d’un PDF Europass et préremplit le formulaire", async ({
   browser,

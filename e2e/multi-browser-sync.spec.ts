@@ -214,6 +214,68 @@ class SharedClientApi {
       });
     }
 
+    if (url.pathname === "/api/canada-opportunities/search" && method === "GET") {
+      const country = (url.searchParams.get("country") || "DZ") as "DZ" | "TN";
+      return this.respond(route, 200, {
+        opportunities: [
+          {
+            id: "50411434",
+            title: "senior accountant",
+            employer: "MANNING ELLIOTT LLP",
+            employerUrl: "https://www.manningelliott.com/",
+            description: "Permanent employment, full time.",
+            location: "Surrey, BC",
+            salary: "$80,000.00 to $104,000.00 annually",
+            workplace: "Hybrid",
+            employmentType: "Permanent employment Full time",
+            postedAt: "2026-10-02T00:00:00.000Z",
+            deadlineAt: "2026-10-16T00:00:00.000Z",
+            sourceUrl: "https://www.jobbank.gc.ca/jobsearch/jobposting/50411434",
+            acceptsInternational: true,
+            eligibilityEvidence:
+              "L’employeur accepte explicitement les candidats avec ou sans permis de travail canadien valide.",
+            lmiaStatus: "not_specified",
+            applicationMethod: {
+              type: "company_site",
+              label: "Site officiel de l’employeur",
+              url: "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html",
+              loginRequired: false,
+              note: "Candidature externe : aucun compte Indeed ou Guichet-Emplois requis pour ouvrir le formulaire.",
+            },
+            candidateCountry: {
+              code: country,
+              name: country === "TN" ? "Tunisie" : "Algérie",
+            },
+            checkedAt: "2026-10-02T18:00:00.000Z",
+          },
+        ],
+        sources: {
+          jobBank: {
+            name: "Guichet-Emplois Canada",
+            url: "https://www.jobbank.gc.ca/findajob/foreign-candidates",
+            automated: true,
+          },
+          indeed: {
+            name: "Indeed Canada",
+            url: "https://ca.indeed.com/jobs?q=foreign+candidates+outside+canada&sort=date",
+            automated: false,
+            reason: "Indeed interdit le scraping automatisé sans autorisation écrite.",
+          },
+        },
+        meta: {
+          country: { code: country, name: country === "TN" ? "Tunisie" : "Algérie" },
+          period: url.searchParams.get("period") || "week",
+          returned: 1,
+          totalMatches: 1,
+          scanned: 18,
+          verifiedAt: "2026-10-02T18:00:00.000Z",
+          stale: false,
+          sourceUrl: "https://www.jobbank.gc.ca/jobsearch/jobsearch?fglo=1&sort=M",
+          methodology: "Contrôle de la fiche officielle.",
+        },
+      });
+    }
+
     if (url.pathname === "/api/auth/login" && method === "POST") {
       const credentials = request.postDataJSON() as { username?: string; password?: string };
       const user =
@@ -758,6 +820,38 @@ test("ouvre les opportunités et confirme précisément l’admissibilité tunis
     await expect(dialog.getByRole("link", { name: /Offre officielle/ })).toHaveAttribute(
       "href",
       "https://youth.europa.eu/solidarity/opportunity/54646_en",
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+test("ouvre les opportunités Canada et distingue candidature externe et connexion", async ({
+  browser,
+}) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+  try {
+    const page = await connect(context, api, "admin");
+    await page.getByRole("button", { name: "Opportunités Canada" }).click();
+    const dialog = page.getByRole("dialog", { name: "Opportunités Canada" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("senior accountant", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Candidat international vérifié", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Sans compte Indeed", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/Dernier délai : 16 oct. 2026/)).toBeVisible();
+    await expect(
+      dialog.getByRole("link", { name: /Postuler sur le site officiel/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html",
+    );
+
+    await dialog.getByRole("button", { name: /Indeed Canada/ }).click();
+    await expect(dialog.getByText("Recherche Indeed conforme et durable")).toBeVisible();
+    await expect(dialog.getByRole("link", { name: /Ouvrir Indeed/ })).toHaveAttribute(
+      "href",
+      /ca\.indeed\.com\/jobs\?/,
     );
   } finally {
     await context.close();

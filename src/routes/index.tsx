@@ -45,6 +45,7 @@ import {
   BookOpenText,
   ClipboardList,
   HeartHandshake,
+  BriefcaseBusiness,
   CloudCheck,
   CloudOff,
   TriangleAlert,
@@ -188,6 +189,10 @@ const ClientOrdersDialog = lazy(async () => {
 const VolunteerOpportunitiesDialog = lazy(async () => {
   const module = await import("@/components/volunteer-opportunities-dialog");
   return { default: module.VolunteerOpportunitiesDialog };
+});
+const CanadaOpportunitiesDialog = lazy(async () => {
+  const module = await import("@/components/canada-opportunities-dialog");
+  return { default: module.CanadaOpportunitiesDialog };
 });
 const AccountSettingsDialog = lazy(async () => {
   const module = await import("@/components/account-settings-dialog");
@@ -599,6 +604,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   });
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
   const [volunteerOpportunitiesOpen, setVolunteerOpportunitiesOpen] = useState(false);
+  const [canadaOpportunitiesOpen, setCanadaOpportunitiesOpen] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [activeProfileWorkflowStatus, setActiveProfileWorkflowStatus] =
     useState<ClientWorkflowStatus>("draft");
@@ -2810,6 +2816,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             >
               <HeartHandshake className="mr-2 h-4 w-4" /> Opportunités volontariat
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-200 bg-red-50/80 text-red-900 hover:bg-red-100"
+              onClick={() => setCanadaOpportunitiesOpen(true)}
+            >
+              <BriefcaseBusiness className="mr-2 h-4 w-4" /> Opportunités Canada
+            </Button>
             {user.permissions.aiUse && (
               <>
                 <Button
@@ -4348,6 +4362,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           <VolunteerOpportunitiesDialog
             open={volunteerOpportunitiesOpen}
             onOpenChange={setVolunteerOpportunitiesOpen}
+          />
+        ) : null}
+        {canadaOpportunitiesOpen ? (
+          <CanadaOpportunitiesDialog
+            open={canadaOpportunitiesOpen}
+            onOpenChange={setCanadaOpportunitiesOpen}
           />
         ) : null}
       </Suspense>

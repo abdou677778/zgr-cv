@@ -160,12 +160,27 @@ class SharedClientApi {
             organization: "KALISTRATIA ODV",
             description: "Protection de l’environnement et durabilité écologique.",
             participantProfile: "Jeunes de 18 à 29 ans.",
+            ageRequirement: {
+              minimum: 18,
+              maximum: 29,
+              label: "18–29 ans",
+              source: "participant_profile",
+              programmeMaximum: 30,
+            },
+            applicationMethod: {
+              type: "portal_account",
+              label: "Connexion EU Login requise",
+              url: "https://youth.europa.eu/solidarity/register_en",
+              portalAccountRequired: true,
+              note: "Connectez-vous ou rejoignez le Corps européen de solidarité avant de postuler.",
+            },
+            applicationRequirements: { cv: true, motivationStatement: true },
             destination: { town: "Polia", countryCode: "IT", countryName: "Italie" },
             activityType: "individual",
             topics: ["natr"],
             startAt: "2026-10-08T12:00:00.000Z",
             endAt: "2026-11-17T12:00:00.000Z",
-            deadlineAt: "2026-10-04T22:00:00.000Z",
+            deadlineAt: "2026-10-04T23:00:00.000Z",
             publishedAt: "2026-10-02T15:47:22.000Z",
             updatedAt: "2026-10-02T16:05:03.000Z",
             eligibilityCodes: ["TN", "DZ"],
@@ -192,6 +207,8 @@ class SharedClientApi {
           stale: false,
           sourceUrl: "https://youth.europa.eu/go-abroad/volunteering/opportunities_en",
           methodology: "Contrôle exact du pays.",
+          cacheVersion: 2,
+          sourceStrategy: "official_structured_api",
         },
       });
     }
@@ -722,7 +739,10 @@ test("ouvre les opportunités et confirme précisément l’admissibilité tunis
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("Buon cammino", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Tunisie admissible", { exact: true })).toBeVisible();
-    await expect(dialog.getByRole("link", { name: /Voir l’offre officielle/ })).toHaveAttribute(
+    await expect(dialog.getByText(/Dernier délai : 04\/10\/2026 23:00/)).toBeVisible();
+    await expect(dialog.getByText(/Âge : 18–29 ans/)).toBeVisible();
+    await expect(dialog.getByText("Connexion EU Login requise", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: /Offre officielle/ })).toHaveAttribute(
       "href",
       "https://youth.europa.eu/solidarity/opportunity/54646_en",
     );

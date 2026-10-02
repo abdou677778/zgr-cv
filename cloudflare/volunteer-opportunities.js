@@ -1,8 +1,10 @@
 const OFFICIAL_SEARCH_URL = "https://youth.europa.eu/api/rest/eyp/v1/search_en";
 const OFFICIAL_LIST_URL = "https://youth.europa.eu/go-abroad/volunteering/opportunities_en";
 const OFFICIAL_DETAIL_PREFIX = "https://youth.europa.eu/solidarity/opportunity/";
+const OFFICIAL_REGISTER_URL = "https://youth.europa.eu/solidarity/register_en";
 const CACHE_KEY = "public-cache/eu-youth-volunteering-latest.json";
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+const CACHE_VERSION = 2;
 const SEARCH_PAGE_SIZE = 200;
 
 const COUNTRY_NAMES = {
@@ -121,8 +123,132 @@ function decodeHtml(value) {
 
 function validIso(value) {
   if (!value) return null;
-  const parsed = Date.parse(String(value));
+  const raw = String(value).trim();
+  const includesTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  // The portal publishes Brussels wall-clock values without an offset. Keep
+  // the displayed hour stable instead of letting the Worker or test machine
+  // silently shift it according to its own timezone.
+  const parsed = Date.parse(includesTimezone ? raw : `${raw}Z`);
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(String(value || "").replaceAll("&amp;", "&"));
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function urlsFromHtml(value) {
+  const html = String(value || "");
+  const urls = [];
+  for (const match of html.matchAll(/href=["']([^"']+)["']/gi)) {
+    const url = safeExternalUrl(match[1]);
+    if (url) urls.push(url);
+  }
+  for (const match of html.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
+    const url = safeExternalUrl(match[0].replace(/[),.;]+$/, ""));
+    if (url) urls.push(url);
+  }
+  return [...new Set(urls)];
+}
+
+function ageRequirement(source) {
+  const profile = decodeHtml(source?.participant_profile);
+  const normalized = profile.replace(/[–—]/g, "-");
+  const range = normalized.match(
+    /(?:between|aged?|ages?|from)?\s*(1[789]|[2-3]\d)\s*(?:-|to|and)\s*(2\d|3[0-5])\s*(?:years?|yo|y\.o\.)?/i,
+  );
+  const humanitarian = source?.funding_programme?.is_humanitarian === true;
+  const defaultMax = humanitarian ? 35 : 30;
+  if (range) {
+    const minimum = Number(range[1]);
+    const maximum = Number(range[2]);
+    if (minimum >= 17 && maximum >= minimum && maximum <= 35) {
+      return {
+        minimum,
+        maximum,
+        label: `${minimum}–${maximum} ans`,
+        source: "participant_profile",
+        programmeMaximum: defaultMax,
+      };
+    }
+  }
+  const minimumMatch = normalized.match(/(?:at least|minimum|min\.?|from)\s*(1[789]|2\d)/i);
+  const maximumMatch = normalized.match(
+    /(?:not older than|maximum|max\.?|under|up to)\s*(2\d|3[0-5])/i,
+  );
+  const minimum = minimumMatch ? Math.max(18, Number(minimumMatch[1])) : 18;
+  const maximum = maximumMatch ? Math.min(defaultMax, Number(maximumMatch[1])) : defaultMax;
+  return {
+    minimum,
+    maximum,
+    label: `${minimum}–${maximum} ans`,
+    source: minimumMatch || maximumMatch ? "profile_and_programme" : "programme_rule",
+    programmeMaximum: defaultMax,
+  };
+}
+
+function applicationMethod(source) {
+  const fields = [
+    source?.description,
+    source?.participant_profile,
+    source?.accommodation_and_food,
+    source?.training_during_activity,
+    source?.additional_information,
+  ];
+  const combinedHtml = fields.filter(Boolean).join("\n");
+  const combinedText = decodeHtml(combinedHtml);
+  const urls = urlsFromHtml(combinedHtml);
+  const formUrl = urls.find((url) =>
+    /(?:forms\.gle|docs\.google\.com\/forms|jotform|typeform|forms\.office\.com|formstack)/i.test(
+      url,
+    ),
+  );
+  if (formUrl) {
+    return {
+      type: "external_form",
+      label: "Formulaire externe indiqué",
+      url: formUrl,
+      portalAccountRequired: true,
+      note: "Remplissez le formulaire indiqué. L’inscription EU Login/Corps reste requise pour participer.",
+    };
+  }
+  const mentionsExternalApplication =
+    /(?:only way to apply|apply through the form|to apply.{0,80}(?:link|form)|application form)/i.test(
+      combinedText,
+    );
+  if (mentionsExternalApplication && urls.length) {
+    const descriptionUrl = urlsFromHtml(source?.description)[0];
+    return {
+      type: "external_instructions",
+      label: "Candidature sur le site de l’organisme",
+      url: descriptionUrl || urls[0],
+      portalAccountRequired: true,
+      note: "Suivez les instructions de l’organisme. L’inscription EU Login/Corps reste requise pour participer.",
+    };
+  }
+  const emailApplication = combinedText.match(
+    /(?:apply|application|send).{0,80}([\w.+-]+@[\w.-]+\.[a-z]{2,})/i,
+  );
+  if (emailApplication) {
+    return {
+      type: "email",
+      label: "Candidature par e-mail indiquée",
+      url: `mailto:${emailApplication[1]}`,
+      portalAccountRequired: true,
+      note: "Contactez l’organisme à l’adresse indiquée. L’inscription EU Login/Corps reste requise.",
+    };
+  }
+  return {
+    type: "portal_account",
+    label: "Connexion EU Login requise",
+    url: OFFICIAL_REGISTER_URL,
+    portalAccountRequired: true,
+    note: "Connectez-vous ou rejoignez le Corps européen de solidarité avant de postuler.",
+  };
 }
 
 function eligibilityCodes(source) {
@@ -150,6 +276,12 @@ export function normalizeOfficialOpportunity(source, checkedAt = new Date().toIS
     organization: decodeHtml(source?.organisation_name),
     description: decodeHtml(source?.description),
     participantProfile: decodeHtml(source?.participant_profile),
+    ageRequirement: ageRequirement(source),
+    applicationMethod: applicationMethod(source),
+    applicationRequirements: {
+      cv: source?.requires_cv === true,
+      motivationStatement: source?.requires_motivation_statement === true,
+    },
     destination: {
       town: decodeHtml(source?.town),
       countryCode: destinationCode,
@@ -189,15 +321,30 @@ function officialSearchUrl({ id, from = 0, size = SEARCH_PAGE_SIZE } = {}) {
 }
 
 async function fetchOfficialPage(options = {}) {
-  const response = await fetch(officialSearchUrl(options), {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": "ZGR-CV-Opportunity-Finder/1.0 (+https://abdou677778.github.io/zgr-cv/)",
-    },
-    cf: { cacheTtl: 900, cacheEverything: true },
-  });
-  if (!response.ok) throw new Error(`European Youth Portal HTTP ${response.status}`);
+  let response;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await fetch(officialSearchUrl(options), {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "ZGR-CV-Opportunity-Finder/1.0 (+https://abdou677778.github.io/zgr-cv/)",
+        },
+        cf: { cacheTtl: 900, cacheEverything: true },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (response.ok) break;
+      lastError = new Error(`European Youth Portal HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+  }
+  if (!response?.ok)
+    throw lastError instanceof Error ? lastError : new Error("European Youth Portal indisponible");
   const payload = await response.json();
+  if (!payload?.hits || !Array.isArray(payload.hits.hits))
+    throw new Error("Format inattendu du Portail européen de la jeunesse.");
   const hits = Array.isArray(payload?.hits?.hits) ? payload.hits.hits : [];
   const checkedAt = new Date().toISOString();
   return hits.map((hit) => normalizeOfficialOpportunity(hit?._source, checkedAt)).filter(Boolean);
@@ -209,7 +356,9 @@ async function readCache(env) {
   if (!object) return null;
   try {
     const payload = JSON.parse(await object.text());
-    return Array.isArray(payload?.opportunities) ? payload : null;
+    return payload?.version === CACHE_VERSION && Array.isArray(payload?.opportunities)
+      ? payload
+      : null;
   } catch {
     return null;
   }
@@ -225,6 +374,7 @@ async function writeCache(env, payload) {
 export async function refreshVolunteerOpportunityCache(env) {
   const opportunities = await fetchOfficialPage();
   const payload = {
+    version: CACHE_VERSION,
     fetchedAt: new Date().toISOString(),
     sourceUrl: OFFICIAL_LIST_URL,
     opportunities,
@@ -299,6 +449,8 @@ export async function searchVolunteerOpportunities(env, options = {}) {
       verifiedAt: payload.fetchedAt,
       stale: payload.stale === true,
       sourceUrl: OFFICIAL_LIST_URL,
+      cacheVersion: CACHE_VERSION,
+      sourceStrategy: "official_structured_api",
       methodology:
         "Admissibilité vérifiée par code pays exact dans les pays participants de la fiche officielle.",
     },

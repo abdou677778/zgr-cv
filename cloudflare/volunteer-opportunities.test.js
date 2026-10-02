@@ -15,6 +15,7 @@ function source(overrides = {}) {
     title: "<p>Buon cammino</p>",
     organisation_name: "KALISTRATIA ODV",
     description: "<p>Protection de l’environnement</p>",
+    participant_profile: "Young people between 18 and 29 years old.",
     town: "POLIA",
     country: "IT",
     date_start: "2026-10-08T12:00:00",
@@ -30,10 +31,26 @@ function source(overrides = {}) {
 test("normalise le contenu officiel et contrôle le pays par code exact", () => {
   const opportunity = normalizeOfficialOpportunity(source());
   assert.equal(opportunity.title, "Buon cammino");
+  assert.equal(opportunity.ageRequirement.label, "18–29 ans");
+  assert.equal(opportunity.ageRequirement.source, "participant_profile");
+  assert.equal(opportunity.deadlineAt, "2027-10-04T23:00:00.000Z");
+  assert.equal(opportunity.applicationMethod.type, "portal_account");
   assert.equal(isCountryEligible(opportunity, "Tunisie"), true);
   assert.equal(isCountryEligible(opportunity, "TN"), true);
   assert.equal(isCountryEligible(opportunity, "France"), false);
   assert.equal(resolveParticipantCountry("Algérie"), "DZ");
+});
+
+test("détecte un formulaire externe sans masquer l’obligation d’inscription au Corps", () => {
+  const opportunity = normalizeOfficialOpportunity(
+    source({
+      description:
+        '<p>ONLY way to apply: please fill in this form: <a href="https://forms.gle/example">form</a></p>',
+    }),
+  );
+  assert.equal(opportunity.applicationMethod.type, "external_form");
+  assert.equal(opportunity.applicationMethod.url, "https://forms.gle/example");
+  assert.equal(opportunity.applicationMethod.portalAccountRequired, true);
 });
 
 test("utilise les pays du programme uniquement lorsque la fiche indique all", () => {
@@ -60,7 +77,11 @@ test("la recherche en cache ne renvoie que les offres admissibles et actives", a
       async get() {
         return {
           async text() {
-            return JSON.stringify({ fetchedAt: new Date().toISOString(), opportunities });
+            return JSON.stringify({
+              version: 2,
+              fetchedAt: new Date().toISOString(),
+              opportunities,
+            });
           },
         };
       },

@@ -5,12 +5,15 @@ import {
   ExternalLink,
   Globe2,
   HeartHandshake,
+  Hourglass,
   LoaderCircle,
+  LogIn,
   MapPin,
   RefreshCw,
   Search,
   ShieldCheck,
   TriangleAlert,
+  UserRound,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -51,6 +54,20 @@ function formatDate(value: string | null, fallback = "Non indiquée") {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(value));
+}
+
+function formatDeadline(value: string | null) {
+  if (!value) return "Sans échéance indiquée";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "UTC",
   }).format(new Date(value));
 }
 
@@ -85,23 +102,76 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
             Du {formatDate(opportunity.startAt)} au {formatDate(opportunity.endAt)}
           </span>
         </p>
-        <p className="flex items-start gap-2 font-medium text-slate-800">
-          <span className="w-4 shrink-0 text-center text-amber-600">⏱</span>
-          <span>Candidature avant le {formatDate(opportunity.deadlineAt, "sans échéance")}</span>
+        <p className="flex items-start gap-2">
+          <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-cyan-700" />
+          <span>
+            Âge : <strong>{opportunity.ageRequirement?.label || "18–30 ans"}</strong>
+            {opportunity.ageRequirement?.source === "participant_profile"
+              ? " (précisé par l’organisme)"
+              : opportunity.ageRequirement?.source === "profile_and_programme"
+                ? " (profil + règle du programme)"
+                : " (règle du programme)"}
+          </span>
         </p>
+      </div>
+      <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-red-800">
+        <p className="flex items-start gap-2 text-sm font-black">
+          <Hourglass className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Dernier délai : {formatDeadline(opportunity.deadlineAt)}</span>
+        </p>
+      </div>
+      <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-900">
+        <p className="flex items-start gap-2 text-sm font-bold">
+          <LogIn className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{opportunity.applicationMethod?.label || "Connexion EU Login requise"}</span>
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-violet-800">
+          {opportunity.applicationMethod?.note ||
+            "Connectez-vous ou rejoignez le Corps européen de solidarité avant de postuler."}
+        </p>
+        {opportunity.applicationRequirements?.cv ||
+        opportunity.applicationRequirements?.motivationStatement ? (
+          <p className="mt-1.5 text-xs font-semibold text-violet-900">
+            Documents annoncés : {opportunity.applicationRequirements.cv ? "CV" : ""}
+            {opportunity.applicationRequirements.cv &&
+            opportunity.applicationRequirements.motivationStatement
+              ? " + "
+              : ""}
+            {opportunity.applicationRequirements.motivationStatement
+              ? "lettre/texte de motivation"
+              : ""}
+          </p>
+        ) : null}
       </div>
       {opportunity.description && (
         <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-slate-600">
           {opportunity.description}
         </p>
       )}
-      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4">
         <span className="text-[11px] text-slate-500">ID {opportunity.id}</span>
-        <Button asChild size="sm" className="bg-cyan-700 text-white hover:bg-cyan-800">
-          <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
-            Voir l’offre officielle <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-          </a>
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          {opportunity.applicationMethod?.url ? (
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="border-violet-300 text-violet-800 hover:bg-violet-50"
+            >
+              <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
+                {opportunity.applicationMethod.type === "portal_account"
+                  ? "Connexion / inscription"
+                  : "Candidater"}
+                <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+              </a>
+            </Button>
+          ) : null}
+          <Button asChild size="sm" className="bg-cyan-700 text-white hover:bg-cyan-800">
+            <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
+              Offre officielle <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+            </a>
+          </Button>
+        </div>
       </div>
     </article>
   );

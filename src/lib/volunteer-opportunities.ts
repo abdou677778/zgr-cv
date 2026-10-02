@@ -6,6 +6,24 @@ export type VolunteerOpportunity = {
   organization: string;
   description: string;
   participantProfile: string;
+  ageRequirement: {
+    minimum: number;
+    maximum: number;
+    label: string;
+    source: "participant_profile" | "profile_and_programme" | "programme_rule";
+    programmeMaximum: number;
+  };
+  applicationMethod: {
+    type: "external_form" | "external_instructions" | "email" | "portal_account";
+    label: string;
+    url: string;
+    portalAccountRequired: boolean;
+    note: string;
+  };
+  applicationRequirements: {
+    cv: boolean;
+    motivationStatement: boolean;
+  };
   destination: {
     town: string;
     countryCode: string;
@@ -38,6 +56,8 @@ export type VolunteerSearchResult = {
     stale: boolean;
     sourceUrl: string;
     methodology: string;
+    cacheVersion: number;
+    sourceStrategy: "official_structured_api";
   };
 };
 

@@ -1248,7 +1248,7 @@ export function CanadaOpportunitiesDialog({
       <div className="flex min-h-0 flex-1 flex-col">
         <nav
           aria-label="Sources d’opportunités"
-          className="shrink-0 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 [scrollbar-width:thin] sm:px-5"
+          className="shrink-0 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 [scrollbar-width:none] sm:px-5 [&::-webkit-scrollbar]:hidden"
         >
           <div className="mx-auto flex w-max min-w-full max-w-[1800px] gap-2">
             <ProviderTab

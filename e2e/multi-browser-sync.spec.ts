@@ -251,6 +251,27 @@ class SharedClientApi {
               details: "Envoyez votre CV et votre lettre de motivation.",
               loginRequired: false,
             },
+            applicationOptions: [
+              {
+                type: "email",
+                email: "careers@manningelliott.example",
+                phone: "",
+                url: "mailto:careers@manningelliott.example",
+                label: "Postuler par e-mail",
+                details: "Envoyez votre CV et votre lettre de motivation.",
+                loginRequired: false,
+              },
+              {
+                type: "job_bank_direct",
+                email: "",
+                phone: "",
+                url: "https://www.jobbank.gc.ca/jobsearch/jobposting/50411434",
+                label: "Candidature directe Guichet-Emplois",
+                details: "Un compte Plus est requis.",
+                loginRequired: true,
+              },
+            ],
+            applicationContactStatus: "verified",
             candidateCountry: {
               code: country,
               name: country === "TN" ? "Tunisie" : "Algérie",
@@ -850,6 +871,8 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(dialog.getByText("Sans compte Indeed", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 16 oct. 2026/)).toBeVisible();
     await expect(dialog.getByText("careers@manningelliott.example", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Autres méthodes officielles disponibles")).toBeVisible();
+    await expect(dialog.getByText(/Candidature directe Guichet-Emplois/)).toBeVisible();
     await expect(dialog.getByRole("link", { name: /Écrire à l’employeur/ })).toHaveAttribute(
       "href",
       "mailto:careers@manningelliott.example",

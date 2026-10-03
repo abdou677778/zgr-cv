@@ -21,6 +21,8 @@ export type CanadaOpportunity = {
       | "email"
       | "external_form"
       | "phone"
+      | "mail"
+      | "in_person"
       | "company_site"
       | "job_bank_direct"
       | "public_instructions";
@@ -38,6 +40,16 @@ export type CanadaOpportunity = {
     details: string;
     loginRequired: boolean;
   };
+  applicationOptions: Array<{
+    type: string;
+    email: string;
+    phone: string;
+    url: string;
+    label: string;
+    details: string;
+    loginRequired: boolean;
+  }>;
+  applicationContactStatus: "verified" | "fallback" | "unavailable";
   candidateCountry: { code: "DZ" | "TN"; name: string };
   checkedAt: string;
 };

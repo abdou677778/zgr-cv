@@ -6,7 +6,7 @@ const INDEED_SEARCH_URL =
 const CACHE_KEY = "public-cache/canada-international-jobs-latest.json";
 const HEALTH_KEY = "system/monitoring/canada-opportunities.json";
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
-const CACHE_VERSION = 9;
+const CACHE_VERSION = 10;
 const MAX_DETAILS = 18;
 
 const CANDIDATE_COUNTRIES = {
@@ -43,6 +43,43 @@ function safeExternalUrl(value) {
   try {
     const url = new URL(String(value || "").replaceAll("&amp;", "&"));
     return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch {
+    return String(value || "");
+  }
+}
+
+function normalizeEmail(value) {
+  const email = safeDecodeURIComponent(value)
+    .replace(/^mailto:/i, "")
+    .split("?", 1)[0]
+    .trim()
+    .replace(/^[<\s]+|[>\s,;]+$/g, "");
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function isJobBankUrl(value) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "jobbank.gc.ca" || hostname.endsWith(".jobbank.gc.ca");
+  } catch {
+    return false;
+  }
+}
+
+function jobBankRequestUrl(href) {
+  try {
+    const url = new URL(decodeXmlMarkup(href), "https://www.jobbank.gc.ca");
+    if (!isJobBankUrl(url.href) || !/^\/jobsearch\/jobposting(?:tfw)?\/\d+/i.test(url.pathname))
+      return "";
+    return url.href;
   } catch {
     return "";
   }
@@ -88,6 +125,7 @@ export function parseJobBankSearchHtml(html) {
       article,
       /<a[^>]+href=["']([^"']*\/jobsearch\/jobposting(?:tfw)?\/\d+[^"']*)["']/i,
     );
+    const requestUrl = jobBankRequestUrl(href);
     const usesTemporaryWorkerPath = /\/jobpostingtfw\//i.test(href);
     jobs.push({
       id,
@@ -100,6 +138,7 @@ export function parseJobBankSearchHtml(html) {
       sourceUrl: `https://www.jobbank.gc.ca/jobsearch/${
         usesTemporaryWorkerPath ? "jobpostingtfw" : "jobposting"
       }/${encodeURIComponent(id)}?source=searchresults&wbdisable=true`,
+      requestUrl,
       directApplyAdvertised: /class=["'][^"']*\bappmethod\b/i.test(article),
       lmiaStatus: /LMIA\s+approved/i.test(article)
         ? "approved"
@@ -226,71 +265,147 @@ function decodeXmlMarkup(value) {
 
 export function parseJobBankHowToApplyHtml(html, fallback = {}) {
   const source = decodeXmlMarkup(html);
-  const section =
-    firstMatch(
-      source,
-      /<(?:section|div)[^>]+id=["']howtoapply["'][^>]*>([\s\S]*?)<\/(?:section|div)>/i,
-    ) || source;
-  const email = decodeURIComponent(
-    firstMatch(section, /href=["']mailto:([^?"'<\s]+)(?:\?[^"']*)?["']/i),
-  )
-    .replace(/^mailto:/i, "")
-    .trim();
-  const phone = decodeURIComponent(
-    firstMatch(section, /href=["']tel:([^?"'<\s]+)(?:\?[^"']*)?["']/i),
-  ).trim();
-  const links = [...section.matchAll(/href=["']([^"']+)["']/gi)]
-    .map((match) => safeExternalUrl(match[1]))
-    .filter((url) => url && !/\.jobbank\.gc\.ca\//i.test(url));
-  const url = links[0] || "";
-  const details = decodeHtml(section)
-    .replace(/^How to apply\s*/i, "")
-    .slice(0, 800);
-  if (email) {
-    return {
+  // Keep the complete JSF update. The official block contains nested div/section elements,
+  // therefore stopping at the first closing div hides "Additional ways to apply".
+  const update =
+    firstMatch(source, /<update[^>]+id=["']applynow["'][^>]*>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
+    source;
+  const headings = [...update.matchAll(/<h([34])\b[^>]*>([\s\S]*?)<\/h\1>/gi)];
+  const options = [];
+
+  const pushOption = (option) => {
+    if (!option?.type || !option?.url) return;
+    const key = `${option.type}|${option.email || ""}|${option.phone || ""}|${option.url}`;
+    if (options.some((item) => item.key === key)) return;
+    options.push({ ...option, key });
+  };
+
+  for (let index = 0; index < headings.length; index += 1) {
+    const heading = headings[index];
+    const next = headings[index + 1];
+    const block = update.slice(heading.index, next?.index ?? update.length);
+    const label = fold(heading[2]);
+    const details = decodeHtml(block).slice(0, 800);
+    const email = normalizeEmail(
+      firstMatch(block, /href=["']mailto:([^"']+)["']/i) ||
+        firstMatch(block, /\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/i),
+    );
+    const phone = safeDecodeURIComponent(
+      firstMatch(block, /href=["']tel:([^?"'<\s]+)(?:\?[^"']*)?["']/i),
+    ).trim();
+    const externalUrl = [...block.matchAll(/href=["']([^"']+)["']/gi)]
+      .map((match) => safeExternalUrl(match[1]))
+      .find((url) => url && !isJobBankUrl(url));
+
+    if (/\bby email\b|\bpar (?:courriel|e-?mail)\b/.test(label) && email) {
+      pushOption({
+        type: "email",
+        email,
+        phone: "",
+        url: `mailto:${email}`,
+        label: "Postuler par e-mail",
+        details,
+        loginRequired: false,
+      });
+    } else if (/\bonline\b|\ben ligne\b/.test(label) && externalUrl) {
+      pushOption({
+        type: "external_form",
+        email: "",
+        phone: "",
+        url: externalUrl,
+        label: "Formulaire officiel de candidature",
+        details,
+        loginRequired: false,
+      });
+    } else if (/\b(?:by )?(?:telephone|phone)\b|\bpar telephone\b/.test(label) && phone) {
+      pushOption({
+        type: "phone",
+        email: "",
+        phone,
+        url: `tel:${phone}`,
+        label: "Contacter l’employeur par téléphone",
+        details,
+        loginRequired: false,
+      });
+    } else if (/\bby mail\b|\bpar la poste\b/.test(label)) {
+      pushOption({
+        type: "mail",
+        email: "",
+        phone: "",
+        url: fallback.url || "https://www.jobbank.gc.ca/findajob",
+        label: "Postuler par courrier",
+        details,
+        loginRequired: false,
+      });
+    } else if (/\bin person\b|\ben personne\b/.test(label)) {
+      pushOption({
+        type: "in_person",
+        email: "",
+        phone: "",
+        url: fallback.url || "https://www.jobbank.gc.ca/findajob",
+        label: "Postuler en personne",
+        details,
+        loginRequired: false,
+      });
+    } else if (/\bdirect apply\b|\bcandidature directe\b/.test(label)) {
+      pushOption({
+        type: "job_bank_direct",
+        email: "",
+        phone: "",
+        url: fallback.url || "https://www.jobbank.gc.ca/findajob",
+        label: "Candidature directe Guichet-Emplois",
+        details: "Un compte Guichet-Emplois Plus est requis pour cette méthode.",
+        loginRequired: true,
+      });
+    }
+  }
+
+  // Defensive fallbacks for minor markup changes where the method heading disappears.
+  const globalEmail = normalizeEmail(firstMatch(update, /href=["']mailto:([^"']+)["']/i));
+  if (globalEmail)
+    pushOption({
       type: "email",
-      email,
-      phone,
-      url: `mailto:${email}`,
+      email: globalEmail,
+      phone: "",
+      url: `mailto:${globalEmail}`,
       label: "Postuler par e-mail",
-      details: details || "Envoyez votre candidature à l’adresse publiée par l’employeur.",
+      details: "Adresse publiée dans les consignes officielles de l’employeur.",
       loginRequired: false,
-    };
-  }
-  if (url) {
-    return {
-      type: "external_form",
-      email: "",
-      phone,
-      url,
-      label: "Formulaire officiel de candidature",
-      details: details || "Remplissez le formulaire indiqué par l’employeur.",
-      loginRequired: false,
-    };
-  }
-  if (phone) {
-    return {
-      type: "phone",
-      email: "",
-      phone,
-      url: `tel:${phone}`,
-      label: "Contacter l’employeur par téléphone",
-      details,
-      loginRequired: false,
-    };
-  }
-  return {
+    });
+  const fallbackOption = {
     type: fallback.type || "public_instructions",
     email: "",
     phone: "",
     url: fallback.url || "",
     label: fallback.label || "Consignes sur la fiche officielle",
-    details: details || fallback.note || "Ouvrez la fiche officielle pour voir comment postuler.",
+    details: fallback.note || "Ouvrez la fiche officielle pour voir comment postuler.",
     loginRequired: fallback.loginRequired === true,
+  };
+  const extracted = options.length > 0;
+  pushOption(fallbackOption);
+
+  const priority = {
+    email: 1,
+    external_form: 2,
+    company_site: 2,
+    phone: 3,
+    mail: 4,
+    in_person: 5,
+    job_bank_direct: 6,
+    public_instructions: 7,
+  };
+  const publicOptions = options
+    .map(({ key: _key, ...option }) => option)
+    .sort((left, right) => (priority[left.type] || 99) - (priority[right.type] || 99));
+  const primary = publicOptions[0] || fallbackOption;
+  return {
+    ...primary,
+    options: publicOptions,
+    extracted,
   };
 }
 
-async function fetchText(url) {
+async function fetchJobBankSearchDocument(url) {
   let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -300,10 +415,16 @@ async function fetchText(url) {
           "Accept-Language": "en-CA,en;q=0.9,fr-CA;q=0.8",
           "User-Agent": "ZGR-CV-Canada-Opportunities/1.0 (+https://abdou677778.github.io/zgr-cv/)",
         },
-        cf: { cacheTtl: 900, cacheEverything: true },
+        // A fresh response is required because result links and cookies share a temporary JSF session.
+        cf: { cacheTtl: 0, cacheEverything: false },
         signal: AbortSignal.timeout(15_000),
       });
-      if (response.ok) return response.text();
+      if (response.ok)
+        return {
+          html: await response.text(),
+          responseUrl: response.url || url,
+          cookie: responseCookie(response),
+        };
       lastError = new Error(`Guichet-Emplois HTTP ${response.status}`);
     } catch (error) {
       lastError = error;
@@ -314,15 +435,18 @@ async function fetchText(url) {
 }
 
 function responseCookie(response) {
-  const raw = response.headers.get("set-cookie") || "";
-  return raw
-    .split(/,(?=\s*[^;,=]+=)/)
+  const values =
+    typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : [response.headers.get("set-cookie") || ""];
+  return values
+    .flatMap((raw) => raw.split(/,(?=\s*[^;,=]+=)/))
     .map((cookie) => cookie.split(";", 1)[0].trim())
     .filter(Boolean)
     .join("; ");
 }
 
-async function fetchJobBankDocument(url) {
+async function fetchJobBankDocument(url, session = {}) {
   let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -332,6 +456,8 @@ async function fetchJobBankDocument(url) {
           "Accept-Language": "en-CA,en;q=0.9,fr-CA;q=0.8",
           "Cache-Control": "no-cache",
           "User-Agent": "ZGR-CV-Canada-Opportunities/1.0 (+https://abdou677778.github.io/zgr-cv/)",
+          ...(session.cookie ? { Cookie: session.cookie } : {}),
+          ...(session.referer ? { Referer: session.referer } : {}),
         },
         cf: { cacheTtl: 0, cacheEverything: false },
         signal: AbortSignal.timeout(15_000),
@@ -445,19 +571,31 @@ async function mapSettledWithConcurrency(items, concurrency, mapper) {
 export async function refreshCanadaOpportunityCache(env) {
   const attemptedAt = new Date().toISOString();
   try {
-    const searchHtml = await fetchText(JOB_BANK_SEARCH_URL);
-    const summaries = parseJobBankSearchHtml(searchHtml).slice(0, MAX_DETAILS);
+    const searchDocument = await fetchJobBankSearchDocument(JOB_BANK_SEARCH_URL);
+    const summaries = parseJobBankSearchHtml(searchDocument.html).slice(0, MAX_DETAILS);
     if (!summaries.length) throw new Error("Aucune offre trouvée dans la source officielle.");
-    const settled = await mapSettledWithConcurrency(summaries, 4, async (summary) => {
-      const document = await fetchJobBankDocument(summary.sourceUrl);
-      const opportunity = parseJobBankDetailHtml(document.html, summary);
+    // The result URLs share one temporary JSF session. Keep this flow sequential: concurrent
+    // detail/AJAX requests can overwrite server-side state and silently hide contact methods.
+    const settled = await mapSettledWithConcurrency(summaries, 1, async (summary) => {
+      const { requestUrl, ...publicSummary } = summary;
+      const document = await fetchJobBankDocument(requestUrl || summary.sourceUrl, {
+        cookie: searchDocument.cookie,
+        referer: searchDocument.responseUrl,
+      });
+      const opportunity = parseJobBankDetailHtml(document.html, publicSummary);
       let applicationContact = opportunity.applicationContact;
+      let applicationOptions = [applicationContact];
+      let applicationContactStatus = "unavailable";
       try {
-        applicationContact = await fetchHowToApply(
+        const parsedContact = await fetchHowToApply(
           document,
           opportunity.id,
           opportunity.applicationMethod,
         );
+        const { options, extracted, ...primaryContact } = parsedContact;
+        applicationContact = primaryContact;
+        applicationOptions = options?.length ? options : [primaryContact];
+        applicationContactStatus = extracted ? "verified" : "fallback";
       } catch {
         // The public listing remains usable when the optional JSF contact panel is unavailable.
       }
@@ -468,7 +606,13 @@ export async function refreshCanadaOpportunityCache(env) {
         loginRequired: applicationContact.loginRequired,
         note: applicationContact.details || opportunity.applicationMethod.note,
       };
-      return { ...opportunity, applicationContact, applicationMethod };
+      return {
+        ...opportunity,
+        applicationContact,
+        applicationOptions,
+        applicationContactStatus,
+        applicationMethod,
+      };
     });
     const opportunities = settled
       .filter((result) => result.status === "fulfilled")
@@ -478,23 +622,36 @@ export async function refreshCanadaOpportunityCache(env) {
     if (!opportunities.length)
       throw new Error("Aucune offre n’a confirmé l’admissibilité internationale.");
     const fetchedAt = new Date().toISOString();
+    const detailFailures = settled.filter((result) => result.status === "rejected").length;
+    const contactFailures = opportunities.filter(
+      (opportunity) => opportunity.applicationContactStatus !== "verified",
+    ).length;
+    const contactTypes = opportunities.reduce((counts, opportunity) => {
+      const type = opportunity.applicationContact?.type || "unknown";
+      counts[type] = (counts[type] || 0) + 1;
+      return counts;
+    }, {});
     const payload = {
       version: CACHE_VERSION,
       fetchedAt,
       sourceUrl: JOB_BANK_SEARCH_URL,
       scanned: summaries.length,
-      detailFailures: settled.filter((result) => result.status === "rejected").length,
+      detailFailures,
+      contactFailures,
+      contactTypes,
       opportunities,
     };
     await Promise.all([
       writeJsonObject(env, CACHE_KEY, payload),
       writeJsonObject(env, HEALTH_KEY, {
-        state: payload.detailFailures ? "warning" : "healthy",
+        state: detailFailures || contactFailures ? "warning" : "healthy",
         lastAttemptAt: attemptedAt,
         lastSuccessAt: fetchedAt,
         opportunities: opportunities.length,
         scanned: summaries.length,
-        detailFailures: payload.detailFailures,
+        detailFailures,
+        contactFailures,
+        contactTypes,
         sourceUrl: JOB_BANK_SEARCH_URL,
       }),
     ]);
@@ -542,6 +699,14 @@ function parseLimit(value, fallback = 18) {
   return Math.min(30, Math.max(1, Number.isFinite(parsed) ? parsed : fallback));
 }
 
+function isDeadlineOpen(value, now = Date.now()) {
+  if (!value) return true;
+  const deadline = Date.parse(value);
+  if (!Number.isFinite(deadline)) return true;
+  // Job Bank publishes an inclusive calendar date, not a midnight cut-off.
+  return deadline + 24 * 60 * 60 * 1000 > now;
+}
+
 export async function searchCanadaOpportunities(env, options = {}) {
   const payload = await latestCanadaOpportunities(env);
   const country = candidateCountry(options.country);
@@ -549,7 +714,7 @@ export async function searchCanadaOpportunities(env, options = {}) {
   const period = options.period === "week" ? "week" : "recent";
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const matches = payload.opportunities
-    .filter((job) => !job.deadlineAt || Date.parse(job.deadlineAt) >= Date.now())
+    .filter((job) => isDeadlineOpen(job.deadlineAt))
     .filter((job) => period !== "week" || Date.parse(job.postedAt || "") >= weekAgo)
     .filter((job) => {
       if (!query) return true;

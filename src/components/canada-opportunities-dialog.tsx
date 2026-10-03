@@ -181,12 +181,49 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
             <Phone className="h-4 w-4" /> Téléphone de candidature : {contact.phone}
           </p>
         </div>
+      ) : contact?.type === "mail" || contact?.type === "in_person" ? (
+        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-950">
+          <p className="text-sm font-black">{contact.label}</p>
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-violet-800">
+            {contact.details}
+          </p>
+        </div>
       ) : (
         <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
-          E-mail non publié : utilisez le bouton officiel ci-dessous pour afficher les consignes de
-          l’employeur.
+          Coordonnées directes non publiées : utilisez le bouton officiel ci-dessous pour suivre la
+          méthode choisie par l’employeur.
         </p>
       )}
+
+      {opportunity.applicationOptions?.length > 1 ? (
+        <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+          <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
+            Autres méthodes officielles disponibles
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {opportunity.applicationOptions
+              .filter(
+                (option) =>
+                  option.type !== contact?.type ||
+                  option.url !== contact?.url ||
+                  option.email !== contact?.email,
+              )
+              .map((option) => (
+                <a
+                  key={`${option.type}-${option.url}-${option.email}`}
+                  href={option.url}
+                  target={option.url.startsWith("http") ? "_blank" : undefined}
+                  rel={option.url.startsWith("http") ? "noreferrer" : undefined}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:border-violet-300 hover:text-violet-800"
+                  title={option.details}
+                >
+                  {option.label}
+                  {option.loginRequired ? " · connexion requise" : ""}
+                </a>
+              ))}
+          </div>
+        </div>
+      ) : null}
 
       {opportunity.description ? (
         <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-slate-600">

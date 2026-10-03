@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   CalendarDays,
   CheckCircle2,
   ExternalLink,
@@ -17,13 +18,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   inspectVolunteerOpportunity,
@@ -243,21 +237,55 @@ export function VolunteerOpportunitiesDialog({
     [inspected, result],
   );
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] max-w-[min(1500px,96vw)] flex-col overflow-hidden border-cyan-200 bg-slate-50 p-0">
-        <DialogHeader className="border-b border-slate-200 bg-white px-6 py-5 pr-14">
-          <DialogTitle className="flex items-center gap-2 text-xl font-black text-slate-950">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-100 text-cyan-800">
-              <HeartHandshake className="h-5 w-5" />
-            </span>
-            Opportunités de volontariat
-          </DialogTitle>
-          <DialogDescription className="text-sm text-slate-600">
-            Recherche officielle et contrôle exact du pays dans « Looking for participants from ».
-          </DialogDescription>
-        </DialogHeader>
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const returnHome = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", returnHome);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", returnHome);
+    };
+  }, [onOpenChange, open]);
 
+  if (!open) return null;
+
+  return (
+    <main
+      aria-labelledby="volunteer-opportunities-title"
+      className="fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50"
+    >
+      <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
+        <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-fit shrink-0 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-100"
+            onClick={() => onOpenChange(false)}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l’accueil
+          </Button>
+          <div className="min-w-0">
+            <h1
+              id="volunteer-opportunities-title"
+              className="flex items-center gap-2 text-xl font-black text-slate-950 sm:text-2xl"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-100 text-cyan-800">
+                <HeartHandshake className="h-5 w-5" />
+              </span>
+              Opportunités de volontariat
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Recherche officielle et contrôle exact du pays dans « Looking for participants from ».
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[180px_220px_minmax(260px,1fr)_auto]">
           <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
             Pays du participant
@@ -396,7 +424,7 @@ export function VolunteerOpportunitiesDialog({
             Ouvrir la source officielle <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </footer>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </main>
   );
 }

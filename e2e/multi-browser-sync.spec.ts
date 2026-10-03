@@ -928,8 +928,9 @@ test("ouvre les opportunités et confirme précisément l’admissibilité tunis
   try {
     const page = await connect(context, api, "admin");
     await page.getByRole("button", { name: "Opportunités volontariat" }).click();
-    const dialog = page.getByRole("dialog", { name: "Opportunités de volontariat" });
+    const dialog = page.getByRole("main", { name: "Opportunités de volontariat" });
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Retour à l’accueil" })).toBeVisible();
     await expect(dialog.getByText("Buon cammino", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Tunisie admissible", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 04\/10\/2026 23:00/)).toBeVisible();
@@ -939,6 +940,8 @@ test("ouvre les opportunités et confirme précisément l’admissibilité tunis
       "href",
       "https://youth.europa.eu/solidarity/opportunity/54646_en",
     );
+    await dialog.getByRole("button", { name: "Retour à l’accueil" }).click();
+    await expect(dialog).toBeHidden();
   } finally {
     await context.close();
   }

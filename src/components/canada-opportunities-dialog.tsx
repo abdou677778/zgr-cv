@@ -43,12 +43,250 @@ import {
   type AtctOpportunitySearchResult,
 } from "@/lib/atct-opportunities";
 
-type Provider = "jobbank" | "indeed" | "destination_canada" | "aneti" | "atct";
+type Provider = "jobbank" | "indeed" | "destination_canada" | "aneti" | "atct" | "italy";
 
 const DESTINATION_CANADA_CANDIDATES_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/candidats.html";
 const DESTINATION_CANADA_EVENTS_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/a-propos.html";
+const ITALY_ALI_PORTAL_URL = "https://portaleservizi.dlci.interno.it/AliSportello/ali/home.htm";
+const ITALY_DECREE_URL = "https://www.gazzettaufficiale.it/eli/id/2025/10/15/25A05656/SG";
+const ITALY_OFFICIAL_GUIDE_URL =
+  "https://prefettura.interno.gov.it/it/prefetture/belluno/immigrazione-decreto-flussi-2026-2028";
+const ITALY_EURES_URL = "https://eures.europa.eu/jobseekers_it";
+const ITALY_WORK_PERMIT_URL =
+  "https://home-affairs.ec.europa.eu/policies/migration-and-asylum/eu-immigration-portal/employed-worker-italy_en";
+
+function CountryFlag({ country }: { country: "IT" | "TN" | "DZ" }) {
+  const labels = { IT: "Italie", TN: "Tunisie", DZ: "Algérie" } as const;
+  return (
+    <svg
+      viewBox="0 0 36 24"
+      className="h-5 w-[30px] shrink-0 overflow-hidden rounded-sm border border-black/10 shadow-sm"
+      role="img"
+      aria-label={`Drapeau ${labels[country]}`}
+    >
+      {country === "IT" ? (
+        <>
+          <rect width="12" height="24" fill="#009246" />
+          <rect x="12" width="12" height="24" fill="#fff" />
+          <rect x="24" width="12" height="24" fill="#ce2b37" />
+        </>
+      ) : country === "TN" ? (
+        <>
+          <rect width="36" height="24" fill="#e70013" />
+          <circle cx="18" cy="12" r="7" fill="#fff" />
+          <circle cx="19.2" cy="12" r="4.7" fill="#e70013" />
+          <circle cx="20.8" cy="12" r="3.8" fill="#fff" />
+          <path
+            d="m21.5 8.5.85 2.6h2.75l-2.22 1.62.85 2.62-2.23-1.62-2.22 1.62.85-2.62-2.23-1.62h2.75z"
+            fill="#e70013"
+          />
+        </>
+      ) : (
+        <>
+          <rect width="18" height="24" fill="#006233" />
+          <rect x="18" width="18" height="24" fill="#fff" />
+          <circle cx="18" cy="12" r="6.6" fill="#d21034" />
+          <circle cx="20" cy="12" r="5.5" fill="#fff" />
+          <path
+            d="m20.8 7.7 1 3.05h3.2l-2.6 1.9 1 3.05-2.6-1.9-2.6 1.9 1-3.05-2.6-1.9h3.2z"
+            fill="#d21034"
+          />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function ItalyOpportunitiesPanel() {
+  const clickDays = [
+    ["12 janvier 2027 · 09:00", "Travail saisonnier agricole"],
+    ["9 février 2027 · 09:00", "Travail saisonnier tourisme et hôtellerie"],
+    ["16 février 2027 · 09:00", "Travail salarié non saisonnier — secteurs autorisés"],
+    ["18 février 2027 · 09:00", "Assistance familiale et aide à domicile"],
+  ] as const;
+
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-5">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <article className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+            <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-red-50 p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <CountryFlag country="IT" />
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-emerald-800">
+                      République italienne · dispositif officiel
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">
+                      Decreto Flussi 2027 — 165 850 quotas légaux
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold text-red-800">
+                      Programme de quotas : ce ne sont pas 165 850 contrats de travail disponibles.
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase text-emerald-900">
+                  <BadgeCheck className="h-4 w-4" /> Source gouvernementale vérifiée
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-5 sm:p-6">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ["165 850", "Total 2027", "bg-slate-50 text-slate-950"],
+                  ["89 000", "Travail saisonnier", "bg-emerald-50 text-emerald-950"],
+                  ["76 200", "Travail non saisonnier", "bg-blue-50 text-blue-950"],
+                  ["650", "Travail autonome", "bg-amber-50 text-amber-950"],
+                ].map(([value, label, classes]) => (
+                  <div key={label} className={`rounded-xl border border-slate-200 p-4 ${classes}`}>
+                    <strong className="block text-2xl font-black">{value}</strong>
+                    <span className="mt-1 block text-xs font-bold uppercase tracking-wide">
+                      {label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="mr-auto flex items-center gap-2 font-black text-emerald-950">
+                    <UserRoundCheck className="h-5 w-5" /> Pays du candidat officiellement concernés
+                  </p>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-sm font-bold text-slate-900 shadow-sm">
+                    <CountryFlag country="TN" /> Tunisie
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-sm font-bold text-slate-900 shadow-sm">
+                    <CountryFlag country="DZ" /> Algérie
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-emerald-900">
+                  Les deux pays figurent dans la liste officielle liée aux accords de coopération
+                  migratoire. L’admissibilité finale dépend toutefois du secteur, de la catégorie,
+                  du quota encore disponible et d’un véritable employeur italien.
+                </p>
+              </div>
+
+              <section>
+                <h3 className="flex items-center gap-2 font-black text-slate-950">
+                  <CalendarClock className="h-5 w-5 text-red-700" /> Click Days 2027
+                </h3>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {clickDays.map(([date, label]) => (
+                    <div key={date} className="rounded-xl border border-red-200 bg-red-50 p-4">
+                      <strong className="block text-sm font-black text-red-900">{date}</strong>
+                      <span className="mt-1 block text-sm text-red-800">{label}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Heures italiennes. Les dates sont fixées par le DPCM 2026–2028 ; le calendrier de
+                  préremplissage 2027 devra être contrôlé dans la future circulaire d’application.
+                </p>
+              </section>
+
+              <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-red-950">
+                <p className="flex items-start gap-2 font-black">
+                  <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" /> Le candidat ne demande pas
+                  lui-même le Nulla Osta sur le portail ALI
+                </p>
+                <p className="mt-2 text-sm leading-relaxed">
+                  L’employeur italien, son organisation professionnelle ou son mandataire autorisé
+                  dépose la demande de Nulla Osta avec SPID/CIE. Après autorisation, le candidat
+                  suit la procédure de visa auprès du consulat compétent. Une annonce, un quota ou
+                  un paiement à un intermédiaire ne garantit jamais un contrat.
+                </p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-blue-800">
+                    <Search className="h-4 w-4" /> Étape 1 · chercher un vrai employeur
+                  </p>
+                  <h3 className="mt-2 text-lg font-black text-blue-950">
+                    Offres officielles EURES — Italie
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-blue-900">
+                    Consultez les offres italiennes et vérifiez dans chaque fiche l’employeur, le
+                    lieu, le contrat, la méthode de candidature et l’ouverture aux candidats hors
+                    UE. EURES reste un moteur d’emploi : une fiche ne remplace pas le permis de
+                    travail italien.
+                  </p>
+                  <Button asChild className="mt-4 bg-blue-700 text-white hover:bg-blue-800">
+                    <a href={ITALY_EURES_URL} target="_blank" rel="noreferrer">
+                      Rechercher sur EURES <ExternalLink className="ml-2 h-4 w-4" />
+                    </a>
+                  </Button>
+                </section>
+
+                <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-emerald-800">
+                    <Landmark className="h-4 w-4" /> Étape 2 · procédure employeur
+                  </p>
+                  <h3 className="mt-2 text-lg font-black text-emerald-950">
+                    Portail officiel ALI — demande de Nulla Osta
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-emerald-900">
+                    Ce portail sert au dépôt administratif par l’employeur ou son mandataire. Il ne
+                    permet pas au travailleur étranger de chercher un emploi ni d’envoyer
+                    directement son CV pour obtenir une place.
+                  </p>
+                  <Button asChild className="mt-4 bg-emerald-700 text-white hover:bg-emerald-800">
+                    <a href={ITALY_ALI_PORTAL_URL} target="_blank" rel="noreferrer">
+                      Ouvrir le portail ALI <ExternalLink className="ml-2 h-4 w-4" />
+                    </a>
+                  </Button>
+                </section>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-black">Préparation recommandée</p>
+                <p className="mt-1 leading-relaxed">
+                  CV en italien ou en anglais, lettre adaptée à l’offre, passeport valide, diplômes,
+                  preuves d’expérience et coordonnées vérifiables. Refusez toute promesse de « quota
+                  garanti » ou de contrat contre paiement.
+                </p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+        <span>Vérifié le 3 octobre 2026 · DPCM italien du 2 octobre 2025.</span>
+        <div className="flex flex-wrap gap-3">
+          <a
+            href={ITALY_DECREE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:underline"
+          >
+            Texte officiel <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+          <a
+            href={ITALY_OFFICIAL_GUIDE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:underline"
+          >
+            Guide Préfecture <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+          <a
+            href={ITALY_WORK_PERMIT_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:underline"
+          >
+            Procédure visa et permis <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      </footer>
+    </>
+  );
+}
 
 function formatDate(value: string | null, fallback: string) {
   if (!value) return fallback;
@@ -645,15 +883,15 @@ export function CanadaOpportunitiesDialog({
               Opportunités internationales
             </h1>
             <p className="mt-1 text-sm text-slate-600">
-              Canada, ANETI, ATCT, volontariat et événements officiels avec parcours de candidature
-              vérifié.
+              Canada, Italie, ANETI, ATCT, volontariat et événements officiels avec parcours de
+              candidature vérifié.
             </p>
           </div>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <button
             type="button"
             onClick={() => setProvider("jobbank")}
@@ -749,9 +987,31 @@ export function CanadaOpportunitiesDialog({
               Recrutements internationaux officiels filtrés, avec délai et méthode de candidature.
             </span>
           </button>
+          <button
+            type="button"
+            onClick={() => setProvider("italy")}
+            className={`rounded-2xl border p-4 text-left transition ${
+              provider === "italy"
+                ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100"
+                : "border-slate-200 bg-white hover:border-emerald-200"
+            }`}
+          >
+            <span className="flex items-center gap-2 font-black text-slate-950">
+              <CountryFlag country="IT" /> Opportunités Italie
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-900">
+                Officiel
+              </span>
+            </span>
+            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+              Decreto Flussi 2027, EURES et procédure employeur vérifiée pour Tunisiens et
+              Algériens.
+            </span>
+          </button>
         </div>
 
-        {provider === "indeed" ? (
+        {provider === "italy" ? (
+          <ItalyOpportunitiesPanel />
+        ) : provider === "indeed" ? (
           <div className="flex-1 overflow-y-auto p-5">
             <div className="mx-auto max-w-3xl space-y-4 rounded-2xl border border-blue-200 bg-white p-6 shadow-sm">
               <div className="flex items-start gap-3">

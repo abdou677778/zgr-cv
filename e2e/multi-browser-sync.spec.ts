@@ -1001,6 +1001,28 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://connexion-pef.afeseo.ca/je-vis-a-lexterieur-du-canada/");
+
+    await dialog.getByRole("button", { name: /Opportunités Italie/ }).click();
+    const italyCard = dialog.getByRole("article").filter({ hasText: "Decreto Flussi 2027" });
+    await expect(italyCard.getByText("Decreto Flussi 2027 — 165 850 quotas légaux")).toBeVisible();
+    await expect(italyCard.getByText(/ce ne sont pas 165 850 contrats/)).toBeVisible();
+    await expect(italyCard.getByText("89 000", { exact: true })).toBeVisible();
+    await expect(italyCard.getByText("76 200", { exact: true })).toBeVisible();
+    await expect(italyCard.getByText("Tunisie", { exact: true })).toBeVisible();
+    await expect(italyCard.getByText("Algérie", { exact: true })).toBeVisible();
+    await expect(italyCard.getByText("12 janvier 2027 · 09:00", { exact: true })).toBeVisible();
+    await expect(italyCard.getByText("18 février 2027 · 09:00", { exact: true })).toBeVisible();
+    await expect(
+      italyCard.getByText(/Le candidat ne demande pas lui-même le Nulla Osta/),
+    ).toBeVisible();
+    await expect(italyCard.getByRole("link", { name: /Rechercher sur EURES/ })).toHaveAttribute(
+      "href",
+      "https://eures.europa.eu/jobseekers_it",
+    );
+    await expect(italyCard.getByRole("link", { name: /Ouvrir le portail ALI/ })).toHaveAttribute(
+      "href",
+      "https://portaleservizi.dlci.interno.it/AliSportello/ali/home.htm",
+    );
     await dialog.getByRole("button", { name: "Retour à l’accueil" }).click();
     await expect(dialog).toBeHidden();
   } finally {

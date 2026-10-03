@@ -41,6 +41,8 @@ Copier `.env.example` vers un fichier local ignoré puis renseigner :
   Auth0 autorisés à rechercher ou lister toutes les commandes. Une commande
   écrite dans le chat, y compris `wizistore`, ne remplace jamais cette
   vérification d’identité.
+- `ZGR_PUBLIC_API_URL` : URL du Worker ZGR public utilisé par les outils MCP de
+  volontariat et d’opportunités Canada.
 
 Le jeton Google doit autoriser la création et la mise à jour des fichiers dans Drive. Les secrets ne doivent jamais être placés dans le code, GitHub Pages ou une variable `VITE_*`.
 
@@ -59,6 +61,13 @@ Le serveur MCP distant est exposé sur `/api/mcp`. Il permet de rechercher une
 commande, lire son brief et ses documents avec des liens privés de 15 minutes,
 charger le prompt maître, consulter une version JSON et enregistrer une nouvelle
 version validée.
+
+Quatre outils publics authentifiés complètent le traitement des commandes :
+`search_volunteer_opportunities`, `inspect_volunteer_opportunity`,
+`search_canada_opportunities` et `inspect_canada_opportunity`. Une question
+générale déclenche la recherche correspondante. Un lien ou identifiant précis
+déclenche obligatoirement l’inspection de la fiche officielle avant toute
+réponse sur l’admissibilité, l’échéance ou la méthode de candidature.
 
 `read_source_file` extrait le texte des PDF, DOC/DOCX, RTF, fichiers texte,
 HTML/XML/JSON/CSV, classeurs XLSX, présentations PPTX et formats OpenDocument.

@@ -688,10 +688,10 @@ async function latestCanadaOpportunities(env) {
 }
 
 function candidateCountry(value) {
-  const code = String(value || "DZ")
-    .trim()
-    .toUpperCase();
-  return CANDIDATE_COUNTRIES[code] ? code : "DZ";
+  const normalized = fold(value || "DZ").replace(/[^a-z]/g, "");
+  if (["tn", "tunisia", "tunisie"].includes(normalized)) return "TN";
+  if (["dz", "algeria", "algerie"].includes(normalized)) return "DZ";
+  return "DZ";
 }
 
 function parseLimit(value, fallback = 18) {
@@ -719,7 +719,9 @@ export async function searchCanadaOpportunities(env, options = {}) {
     .filter((job) => {
       if (!query) return true;
       return fold(
-        [job.title, job.employer, job.location, job.description, job.employmentType].join(" "),
+        [job.id, job.title, job.employer, job.location, job.description, job.employmentType].join(
+          " ",
+        ),
       ).includes(query);
     });
   const limit = parseLimit(options.limit);
@@ -752,6 +754,32 @@ export async function searchCanadaOpportunities(env, options = {}) {
       sourceUrl: JOB_BANK_SEARCH_URL,
       methodology:
         "Chaque fiche est ouverte et conservée uniquement si elle accepte explicitement les candidats avec ou sans permis canadien valide.",
+    },
+  };
+}
+
+export async function inspectCanadaOpportunity(env, idOrUrl, candidate = "DZ") {
+  const id = String(idOrUrl || "").match(/(?:jobposting(?:tfw)?\/)?(\d{5,})/i)?.[1];
+  if (!id) throw new Error("Lien ou identifiant Guichet-Emplois invalide.");
+  const payload = await latestCanadaOpportunities(env);
+  const opportunity = payload.opportunities.find((item) => String(item.id) === id);
+  if (!opportunity)
+    throw new Error(
+      "Cette offre n’est pas dans la sélection internationale vérifiée actuelle. Utilisez la recherche Canada ou vérifiez le lien officiel sans inventer ses détails.",
+    );
+  const country = candidateCountry(candidate);
+  return {
+    opportunity: {
+      ...opportunity,
+      candidateCountry: { code: country, name: CANDIDATE_COUNTRIES[country] },
+      open: isDeadlineOpen(opportunity.deadlineAt),
+    },
+    meta: {
+      verifiedAt: payload.fetchedAt,
+      stale: payload.stale === true,
+      sourceUrl: opportunity.sourceUrl,
+      methodology:
+        "Fiche Guichet-Emplois vérifiée : admissibilité internationale, échéance et méthodes officielles de candidature.",
     },
   };
 }
@@ -794,6 +822,17 @@ export async function handleCanadaOpportunityApi(request, env, origin) {
     if (url.pathname === "/api/canada-opportunities/health" && request.method === "GET") {
       return apiJson(
         (await readJsonObject(env, HEALTH_KEY)) || { state: "collecting" },
+        200,
+        origin,
+      );
+    }
+    if (url.pathname === "/api/canada-opportunities/inspect" && request.method === "GET") {
+      return apiJson(
+        await inspectCanadaOpportunity(
+          env,
+          url.searchParams.get("url") || url.searchParams.get("id"),
+          url.searchParams.get("country") || "DZ",
+        ),
         200,
         origin,
       );

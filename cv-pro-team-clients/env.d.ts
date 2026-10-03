@@ -7,6 +7,7 @@ declare namespace Cloudflare {
     GOOGLE_CLIENT_SECRET?: string;
     GOOGLE_REFRESH_TOKEN?: string;
     GOOGLE_DRIVE_ROOT_FOLDER_ID?: string;
+    ZGR_PUBLIC_API_URL?: string;
   }
 }
 

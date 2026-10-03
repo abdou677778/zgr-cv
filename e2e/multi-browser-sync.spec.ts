@@ -884,6 +884,13 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "href",
       /ca\.indeed\.com\/jobs\?/,
     );
+
+    await dialog.getByRole("button", { name: /Destination Canada/ }).click();
+    await expect(dialog.getByText("Destination Canada Forum Mobilité 2026")).toBeVisible();
+    await expect(dialog.getByText("10 et 11 décembre 2026")).toBeVisible();
+    await expect(
+      dialog.getByRole("link", { name: /Vérifier l’inscription candidat/ }),
+    ).toHaveAttribute("href", /canada\.ca\/fr\/.*\/destination-canada\/candidats\.html/);
   } finally {
     await context.close();
   }

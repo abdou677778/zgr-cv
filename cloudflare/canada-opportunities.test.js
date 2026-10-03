@@ -2,10 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  inspectCanadaOpportunity,
   parseJobBankDetailHtml,
   parseJobBankHowToApplyHtml,
   parseJobBankSearchHtml,
 } from "./canada-opportunities.js";
+
+function memoryBucket(entries = {}) {
+  const values = new Map(Object.entries(entries));
+  return {
+    async get(key) {
+      const value = values.get(key);
+      return value == null ? null : { text: async () => value };
+    },
+    async put(key, value) {
+      values.set(key, value);
+    },
+  };
+}
 
 test("la recherche Guichet-Emplois extrait les cartes récentes sans conserver la session", () => {
   const jobs = parseJobBankSearchHtml(`
@@ -174,4 +188,33 @@ test("la fiche française confirme strictement l'admissibilité internationale",
     { id: "77", sourceUrl: "https://www.jobbank.gc.ca/jobsearch/jobposting/77" },
   );
   assert.equal(job.acceptsInternational, true);
+});
+
+test("l'inspection Canada retourne uniquement une fiche internationale déjà vérifiée", async () => {
+  const opportunity = {
+    id: "50414483",
+    title: "food service supervisor",
+    sourceUrl: "https://www.jobbank.gc.ca/jobsearch/jobposting/50414483",
+    deadlineAt: "2099-10-24T00:00:00.000Z",
+    acceptsInternational: true,
+    applicationContactStatus: "verified",
+  };
+  const env = {
+    CLIENTS_BUCKET: memoryBucket({
+      "public-cache/canada-international-jobs-latest.json": JSON.stringify({
+        version: 10,
+        fetchedAt: new Date().toISOString(),
+        opportunities: [opportunity],
+      }),
+    }),
+  };
+  const result = await inspectCanadaOpportunity(
+    env,
+    "https://www.jobbank.gc.ca/jobsearch/jobposting/50414483",
+    "Tunisie",
+  );
+  assert.equal(result.opportunity.id, "50414483");
+  assert.equal(result.opportunity.candidateCountry.code, "TN");
+  assert.equal(result.opportunity.open, true);
+  await assert.rejects(() => inspectCanadaOpportunity(env, "99999999", "TN"), /sélection/);
 });

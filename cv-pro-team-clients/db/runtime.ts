@@ -108,6 +108,7 @@ export function runtimeEnv() {
     MCP_OAUTH_AUDIENCE?: string;
     MCP_ALLOWED_SUBJECTS?: string;
     MCP_ADMIN_SUBJECTS?: string;
+    ZGR_PUBLIC_API_URL?: string;
   };
 }
 

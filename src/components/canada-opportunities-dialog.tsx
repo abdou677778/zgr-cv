@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
+  CalendarDays,
   CalendarClock,
   CircleDollarSign,
   Copy,
@@ -35,7 +36,12 @@ import {
   type CanadaOpportunitySearchResult,
 } from "@/lib/canada-opportunities";
 
-type Provider = "jobbank" | "indeed";
+type Provider = "jobbank" | "indeed" | "destination_canada";
+
+const DESTINATION_CANADA_CANDIDATES_URL =
+  "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/candidats.html";
+const DESTINATION_CANADA_EVENTS_URL =
+  "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/a-propos.html";
 
 function formatDate(value: string | null, fallback: string) {
   if (!value) return fallback;
@@ -314,7 +320,7 @@ export function CanadaOpportunitiesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2">
+        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-3">
           <button
             type="button"
             onClick={() => setProvider("jobbank")}
@@ -351,6 +357,25 @@ export function CanadaOpportunitiesDialog({
             </span>
             <span className="mt-1 block text-xs leading-relaxed text-slate-600">
               Ouvre les offres les plus récentes sur Indeed sans recopier ni aspirer leurs données.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setProvider("destination_canada")}
+            className={`rounded-2xl border p-4 text-left transition ${
+              provider === "destination_canada"
+                ? "border-violet-400 bg-violet-50 ring-2 ring-violet-100"
+                : "border-slate-200 bg-white hover:border-violet-200"
+            }`}
+          >
+            <span className="flex items-center gap-2 font-black text-slate-950">
+              <CalendarDays className="h-5 w-5 text-violet-700" /> Destination Canada
+              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black uppercase text-violet-800">
+                Événement officiel
+              </span>
+            </span>
+            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+              Forum Mobilité, dates officielles et accès au formulaire candidat dès son ouverture.
             </span>
           </button>
         </div>
@@ -408,6 +433,69 @@ export function CanadaOpportunitiesDialog({
                 with or without a valid Canadian work permit ». Écartez toute offre exigeant déjà le
                 droit de travailler au Canada sans parrainage.
               </div>
+            </div>
+          </div>
+        ) : provider === "destination_canada" ? (
+          <div className="flex-1 overflow-y-auto p-5">
+            <div className="mx-auto max-w-4xl space-y-5 rounded-2xl border border-violet-200 bg-white p-6 shadow-sm">
+              <div className="flex items-start gap-3">
+                <CalendarDays className="mt-0.5 h-7 w-7 shrink-0 text-violet-700" />
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-violet-700">
+                    Gouvernement du Canada · 22e édition
+                  </p>
+                  <h3 className="mt-1 text-xl font-black text-slate-950">
+                    Destination Canada Forum Mobilité 2026
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                    Événement gratuit destiné aux travailleurs qualifiés francophones ou bilingues.
+                    Il permet de rencontrer des employeurs, des provinces, des territoires et des
+                    organismes d’immigration francophone hors Québec.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <strong className="block text-slate-950">Bruxelles</strong>
+                  <span className="mt-1 block text-sm text-slate-600">5 décembre 2026</span>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <strong className="block text-slate-950">Marseille</strong>
+                  <span className="mt-1 block text-sm text-slate-600">7 décembre 2026</span>
+                </div>
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+                  <strong className="block text-violet-950">Tunis</strong>
+                  <span className="mt-1 block text-sm text-violet-800">10 et 11 décembre 2026</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-black">Inscription des candidats</p>
+                <p className="mt-1 leading-relaxed">
+                  La page officielle annonce une ouverture des inscriptions à l’automne. Le bouton
+                  ci-dessous mène toujours vers la page gouvernementale à jour et vers le formulaire
+                  officiel lorsqu’il sera publié. Les places sont limitées.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button asChild className="bg-violet-700 text-white hover:bg-violet-800">
+                  <a href={DESTINATION_CANADA_CANDIDATES_URL} target="_blank" rel="noreferrer">
+                    Vérifier l’inscription candidat <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href={DESTINATION_CANADA_EVENTS_URL} target="_blank" rel="noreferrer">
+                    Dates et informations officielles <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+              </div>
+
+              <p className="text-xs leading-relaxed text-slate-500">
+                ZGR n’invente aucun formulaire et ne collecte aucune inscription : la demande est
+                toujours effectuée sur Canada.ca.
+              </p>
             </div>
           </div>
         ) : (

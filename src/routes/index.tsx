@@ -4333,7 +4333,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             settings={aiSettings}
             onSettingsChange={setAiSettings}
             onClose={() => setAiFieldRequest(null)}
-            onOpenSettings={() => setAiSettingsOpen(true)}
+            onOpenSettings={() => {
+              setAiFieldRequest(null);
+              setAiSettingsOpen(true);
+            }}
           />
         ) : null}
         {aiAssistantOpen ? (
@@ -4343,7 +4346,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             language={language}
             settings={aiSettings}
             onSettingsChange={setAiSettings}
-            onOpenSettings={() => setAiSettingsOpen(true)}
+            onOpenSettings={() => {
+              setAiAssistantOpen(false);
+              setAiSettingsOpen(true);
+            }}
             onApply={(mappedCv) => {
               setCv({ ...mappedCv, photo: cv.photo });
               setHiddenElements({});

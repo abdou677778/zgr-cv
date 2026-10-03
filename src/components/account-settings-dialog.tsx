@@ -21,14 +21,8 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FullPageWorkspace } from "@/components/full-page-workspace";
+import { DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -464,18 +458,21 @@ export function AccountSettingsDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] max-w-5xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-indigo-600" /> Paramètres du compte
-          </DialogTitle>
-          <DialogDescription>
-            Connecté comme <strong>{user.displayName}</strong> ({user.username}) · rôle{" "}
-            {roleLabels[user.role]}.
-          </DialogDescription>
-        </DialogHeader>
-
+    <FullPageWorkspace
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Paramètres du compte"
+      description={
+        <>
+          Connecté comme <strong>{user.displayName}</strong> ({user.username}) · rôle{" "}
+          {roleLabels[user.role]}.
+        </>
+      }
+      icon={<ShieldCheck className="h-5 w-5" />}
+      iconClassName="bg-indigo-100 text-indigo-700"
+      bodyClassName="mx-auto w-full max-w-6xl gap-4 overflow-y-auto p-5 sm:p-8"
+    >
+      <div className="contents">
         {message && (
           <div
             className={`rounded-xl border px-4 py-3 text-sm ${message.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}
@@ -1462,7 +1459,7 @@ export function AccountSettingsDialog({
             Fermer
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FullPageWorkspace>
   );
 }

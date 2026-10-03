@@ -14,17 +14,11 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FullPageWorkspace } from "@/components/full-page-workspace";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogFooter } from "@/components/ui/dialog";
 import {
   newAiConnection,
   type AiConnection,
@@ -245,18 +239,16 @@ export function AiSettingsDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] max-w-4xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Sparkles className="h-5 w-5 text-violet-600" /> Paramètres IA simplifiés
-          </DialogTitle>
-          <DialogDescription>
-            Un seul parcours relie désormais chaque clé à son fournisseur, ses modèles et son test
-            de génération.
-          </DialogDescription>
-        </DialogHeader>
-
+    <FullPageWorkspace
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Paramètres IA simplifiés"
+      description="Un seul parcours relie désormais chaque clé à son fournisseur, ses modèles et son test de génération."
+      icon={<Sparkles className="h-5 w-5" />}
+      iconClassName="bg-violet-100 text-violet-700"
+      bodyClassName="mx-auto w-full max-w-5xl gap-4 overflow-y-auto p-5 sm:p-8"
+    >
+      <div className="contents">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {["Fournisseur", "Clé sécurisée", "Test + modèles", "Sauvegarde"].map((step, index) => (
             <div
@@ -573,7 +565,7 @@ export function AiSettingsDialog({
             <Sparkles className="mr-2 h-4 w-4" /> Sauvegarder les modèles et la rotation
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FullPageWorkspace>
   );
 }

@@ -24,14 +24,8 @@ import {
   UserRoundPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FullPageWorkspace } from "@/components/full-page-workspace";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   applyCloudCommit,
   deleteClientProfile,
@@ -925,18 +919,16 @@ export function ClientDatabaseDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-primary" /> Base de données clients
-          </DialogTitle>
-          <DialogDescription>
-            Recherche et pagination rapides avec Cloudflare D1. Les CV et photos restent stockés
-            dans R2 et sont téléchargés uniquement lorsque vous ouvrez une fiche.
-          </DialogDescription>
-        </DialogHeader>
-
+    <FullPageWorkspace
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Base de données clients"
+      description="Recherche et pagination rapides avec Cloudflare D1. Les CV et photos restent stockés dans R2 et sont téléchargés uniquement lorsque vous ouvrez une fiche."
+      icon={<Database className="h-5 w-5" />}
+      iconClassName="bg-blue-100 text-blue-700"
+      bodyClassName="mx-auto w-full max-w-[1600px] gap-4 overflow-y-auto p-5 sm:p-8"
+    >
+      <div className="contents">
         <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
           <section className="space-y-3">
             <div
@@ -1677,7 +1669,7 @@ export function ClientDatabaseDialog({
             {message}
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FullPageWorkspace>
   );
 }

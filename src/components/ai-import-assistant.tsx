@@ -1,15 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Bot, CheckCircle2, FileJson, LoaderCircle, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FullPageWorkspace } from "@/components/full-page-workspace";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogFooter } from "@/components/ui/dialog";
 import type { CV } from "@/lib/cv-types";
 import type { DocumentLanguage } from "@/lib/document-language";
 import type { AiSettings } from "@/lib/ai-types";
@@ -118,18 +112,16 @@ export function AiImportAssistant({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-violet-600" /> Assistant IA d’import JSON
-          </DialogTitle>
-          <DialogDescription>
-            Collez un JSON de n’importe quelle structure. L’assistant répartit les données vers le
-            schéma ZGR de la langue active et détecte les sections essentielles manquantes.
-          </DialogDescription>
-        </DialogHeader>
-
+    <FullPageWorkspace
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Assistant IA d’import JSON"
+      description="Collez un JSON de n’importe quelle structure. L’assistant répartit les données vers le schéma ZGR de la langue active et détecte les sections essentielles manquantes."
+      icon={<Bot className="h-5 w-5" />}
+      iconClassName="bg-violet-100 text-violet-700"
+      bodyClassName="mx-auto w-full max-w-4xl gap-4 overflow-y-auto p-5 sm:p-8"
+    >
+      <div className="contents">
         <input
           ref={inputRef}
           type="file"
@@ -240,7 +232,7 @@ export function AiImportAssistant({
             Appliquer au formulaire
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FullPageWorkspace>
   );
 }

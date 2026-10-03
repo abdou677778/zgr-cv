@@ -1198,12 +1198,40 @@ test("le profil lecture seule masque les actions interdites", async ({ browser }
     await expect(page.getByRole("button", { name: "Assistant IA" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Commandes" })).toHaveCount(0);
     await page.getByRole("button", { name: "Base de données", exact: true }).click();
-    const database = page.getByRole("dialog", { name: /Base de données clients/ });
+    const database = page.getByRole("main", { name: /Base de données clients/ });
     await expect(database.getByText(/lecture seule/).first()).toBeVisible();
     await expect(
       database.getByRole("button").filter({ hasText: "Actualiser la base" }),
     ).toBeVisible();
     await expect(database.getByRole("button", { name: "Synchroniser maintenant" })).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("les espaces de travail principaux s’ouvrent en page complète et reviennent à l’accueil", async ({
+  browser,
+}) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+  try {
+    const page = await connect(context, api, "admin");
+    const workspaces = [
+      { trigger: "Assistant IA", title: /Assistant IA d’import JSON/ },
+      { trigger: "Prompte", title: /Prompte maître CV/ },
+      { trigger: "Paramètres IA", title: /Paramètres IA simplifiés/ },
+      { trigger: "Commandes", title: /Commandes CV PRO TEAM/ },
+      { trigger: "Base de données", title: /Base de données clients/ },
+      { trigger: "Administrateur E2E", title: /Paramètres du compte/ },
+    ];
+
+    for (const workspace of workspaces) {
+      await page.getByRole("button", { name: workspace.trigger, exact: true }).click();
+      const fullPage = page.getByRole("main", { name: workspace.title });
+      await expect(fullPage).toBeVisible();
+      await fullPage.getByRole("button", { name: "Retour à l’accueil" }).click();
+      await expect(fullPage).toBeHidden();
+    }
   } finally {
     await context.close();
   }
@@ -1220,7 +1248,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
     const adminPage = await connect(adminContext, api, "admin");
     await expect(adminPage.getByText("Travail enregistré")).toBeVisible();
     await adminPage.getByRole("button", { name: "Administrateur E2E" }).click();
-    const accountSettings = adminPage.getByRole("dialog", { name: /Paramètres du compte/ });
+    const accountSettings = adminPage.getByRole("main", { name: /Paramètres du compte/ });
     await expect(accountSettings.getByText("Santé de l’application")).toBeVisible();
     await expect(accountSettings.getByText("Fonctionnement sain")).toBeVisible();
     await expect(accountSettings.getByText("Web Vitals réels — 75e percentile")).toBeVisible();
@@ -1253,10 +1281,10 @@ test("deux navigateurs partagent un client et protègent une modification concur
     ).toBeVisible();
     expect(api.profiles.get(profileId)?.createdBy.username).toBe("admin");
     await adminPage.getByRole("button", { name: "Base de données", exact: true }).click();
-    const adminDatabase = adminPage.getByRole("dialog", { name: /Base de données clients/ });
+    const adminDatabase = adminPage.getByRole("main", { name: /Base de données clients/ });
     await expect(adminDatabase.getByText("Corbeille sécurisée")).toBeVisible();
     await expect(adminDatabase.getByText("La corbeille est vide.")).toBeVisible();
-    await adminDatabase.getByRole("button", { name: "Close" }).click();
+    await adminDatabase.getByRole("button", { name: "Retour à l’accueil" }).click();
     await expect(adminPage.getByText("Travail enregistré")).toBeVisible();
     await adminPage.reload();
     await expect(adminPage.getByRole("button", { name: "Sauvegarder", exact: true })).toBeVisible();
@@ -1266,7 +1294,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
 
     const editorPage = await connect(editorContext, api, "editeur");
     await editorPage.getByRole("button", { name: "Base de données", exact: true }).click();
-    const database = editorPage.getByRole("dialog", { name: /Base de données clients/ });
+    const database = editorPage.getByRole("main", { name: /Base de données clients/ });
     await expect(database).toBeVisible();
     await database.getByRole("button", { name: "Synchroniser maintenant" }).click();
     await expect(database.getByRole("status")).toContainText("1 récupéré(s)");
@@ -1283,7 +1311,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
     expect(api.profiles.get(profileId)?.updatedBy.username).toBe("editeur");
 
     await editorPage.getByRole("button", { name: "Base de données", exact: true }).click();
-    const historyDatabase = editorPage.getByRole("dialog", { name: /Base de données clients/ });
+    const historyDatabase = editorPage.getByRole("main", { name: /Base de données clients/ });
     const historyRow = historyDatabase.locator("article").filter({ hasText: "Client E2E partagé" });
     await historyRow.getByRole("button", { name: "Historique" }).click();
     await expect(historyRow.getByText("Timeline des modifications")).toBeVisible();
@@ -1295,7 +1323,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await expect(comparison.getByText("CV › Français › Téléphone", { exact: true })).toBeVisible();
     await expect(comparison.getByText("+213 555 100 100", { exact: true })).toBeVisible();
     await expect(comparison.getByText("+213 555 200 200", { exact: true })).toBeVisible();
-    await historyDatabase.getByRole("button", { name: "Close" }).click();
+    await historyDatabase.getByRole("button", { name: "Retour à l’accueil" }).click();
 
     api.offlineUsers.add("editeur");
     await editorPage.getByPlaceholder("+1 514 000 0000").fill("+213 555 300 300");
@@ -1319,7 +1347,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
     expect(api.profiles.get(profileId)?.revision).toBe(3);
 
     await editorPage.getByRole("button", { name: "Base de données", exact: true }).click();
-    const editorWorkflowDatabase = editorPage.getByRole("dialog", {
+    const editorWorkflowDatabase = editorPage.getByRole("main", {
       name: /Base de données clients/,
     });
     const editorWorkflowRow = editorWorkflowDatabase
@@ -1342,7 +1370,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await editorWorkflowRow.getByRole("button", { name: "Valider" }).click();
     await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("approved");
     await expect(editorWorkflowRow.getByText("Validé", { exact: true })).toBeVisible();
-    await editorWorkflowDatabase.getByRole("button", { name: "Close" }).click();
+    await editorWorkflowDatabase.getByRole("button", { name: "Retour à l’accueil" }).click();
 
     await expect(editorPage.getByText(/CV validé et verrouillé/).first()).toBeVisible();
     await expect(
@@ -1351,7 +1379,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
     expect(api.profiles.get(profileId)?.phone).toBe("+213 555 300 300");
 
     await editorPage.getByRole("button", { name: "Base de données", exact: true }).click();
-    const reopenDatabase = editorPage.getByRole("dialog", { name: /Base de données clients/ });
+    const reopenDatabase = editorPage.getByRole("main", { name: /Base de données clients/ });
     const reopenRow = reopenDatabase.locator("article").filter({ hasText: "Client E2E partagé" });
     editorPage.once("dialog", async (dialog) => {
       await dialog.accept("Mettre à jour les coordonnées du client.");
@@ -1360,7 +1388,7 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await expect.poll(() => api.profiles.get(profileId)?.workflowStatus).toBe("draft");
     await expect(reopenRow.getByText("Brouillon", { exact: true })).toBeVisible();
     await expect(reopenRow.getByText(/Mettre à jour les coordonnées du client\./)).toBeVisible();
-    await reopenDatabase.getByRole("button", { name: "Close" }).click();
+    await reopenDatabase.getByRole("button", { name: "Retour à l’accueil" }).click();
     await editorPage.getByPlaceholder("+1 514 000 0000").fill("+213 555 888 888");
     await editorPage.getByRole("button", { name: "Sauvegarder", exact: true }).click();
     await expect.poll(() => api.profiles.get(profileId)?.phone).toBe("+213 555 888 888");

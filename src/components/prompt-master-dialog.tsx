@@ -2,15 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { BookOpenText, Check, Copy, Download, FileText } from "lucide-react";
 import masterPrompt from "../../PROMPT_MAITRE_CV_JSON_7_LANGUES.txt?raw";
 import { Button } from "@/components/ui/button";
+import { FullPageWorkspace } from "@/components/full-page-workspace";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogFooter } from "@/components/ui/dialog";
 
 const PROMPT_FILE_NAME = "PROMPT_MAITRE_CV_JSON_7_LANGUES.txt";
 const PROMPT_START_MARKER = "RÔLE ET OBJECTIF UNIQUE";
@@ -96,18 +90,16 @@ export function PromptMasterDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] max-w-5xl overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <BookOpenText className="h-5 w-5 text-amber-600" /> Prompte maître CV + JSON + Europass
-          </DialogTitle>
-          <DialogDescription>
-            L’IA produit un JSON ZGR enrichi pour Europass. Importez ensuite ce JSON dans ZGR CV,
-            puis générez directement le XML Candidate destiné au site officiel Europass.
-          </DialogDescription>
-        </DialogHeader>
-
+    <FullPageWorkspace
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Prompte maître CV + JSON + Europass"
+      description="L’IA produit un JSON ZGR enrichi pour Europass. Importez ensuite ce JSON dans ZGR CV, puis générez directement le XML Candidate destiné au site officiel Europass."
+      icon={<BookOpenText className="h-5 w-5" />}
+      iconClassName="bg-amber-100 text-amber-700"
+      bodyClassName="mx-auto w-full max-w-6xl gap-4 overflow-y-auto p-5 sm:p-8"
+    >
+      <div className="contents">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-900">
             <FileText className="mr-1 inline h-3.5 w-3.5" /> {PROMPT_FILE_NAME}
@@ -159,7 +151,7 @@ export function PromptMasterDialog({
             </Button>
           </div>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FullPageWorkspace>
   );
 }

@@ -25,13 +25,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FullPageWorkspace } from "@/components/full-page-workspace";
 import { Input } from "@/components/ui/input";
 import {
   createClientInvitation,
@@ -550,35 +544,32 @@ export function ClientOrdersDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] max-w-7xl overflow-y-auto">
-        <DialogHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
-            <div>
-              <DialogTitle className="flex items-center gap-2">
-                <PackageOpen className="h-5 w-5 text-cyan-700" /> Commandes CV PRO TEAM
-              </DialogTitle>
-              <DialogDescription className="mt-1">
-                Dossiers reçus par date, Pack IA, documents sources et versions JSON ZGR.
-              </DialogDescription>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              className="bg-cyan-700 hover:bg-cyan-800"
-              onClick={() => void createInvitation()}
-              disabled={Boolean(busy)}
-            >
-              {busy === "invite" ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Link2 className="mr-2 h-4 w-4" />
-              )}
-              Nouveau lien client
-            </Button>
-          </div>
-        </DialogHeader>
-
+    <FullPageWorkspace
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Commandes CV PRO TEAM"
+      description="Dossiers reçus par date, Pack IA, documents sources et versions JSON ZGR."
+      icon={<PackageOpen className="h-5 w-5" />}
+      iconClassName="bg-cyan-100 text-cyan-800"
+      actions={
+        <Button
+          type="button"
+          size="sm"
+          className="bg-cyan-700 hover:bg-cyan-800"
+          onClick={() => void createInvitation()}
+          disabled={Boolean(busy)}
+        >
+          {busy === "invite" ? (
+            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Link2 className="mr-2 h-4 w-4" />
+          )}
+          Nouveau lien client
+        </Button>
+      }
+      bodyClassName="mx-auto w-full max-w-[1800px] gap-4 overflow-y-auto p-5 sm:p-8"
+    >
+      <div className="contents">
         <input
           ref={jsonInputRef}
           type="file"
@@ -1400,7 +1391,7 @@ export function ClientOrdersDialog({
             )}
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FullPageWorkspace>
   );
 }

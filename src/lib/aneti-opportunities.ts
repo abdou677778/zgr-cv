@@ -12,13 +12,18 @@ export type AnetiOpportunity = {
   speciality: string;
   sourceUrl: string;
   applicationMethod: {
-    type: "external_form" | "official_page";
+    type: "external_form" | "email" | "official_page";
     label: string;
     url: string;
     loginRequired: boolean;
     note: string;
   };
   registrationRequirements: string[];
+  dataQuality?: {
+    status: "complete" | "partial";
+    missingFields: string[];
+  };
+  staleDetail?: boolean;
   checkedAt: string;
 };
 
@@ -31,6 +36,9 @@ export type AnetiOpportunitySearchResult = {
     scanned: number;
     verifiedAt: string;
     stale: boolean;
+    staleReason?: string | null;
+    cacheAgeMinutes?: number;
+    detailFailures?: number;
     sourceUrl: string;
     methodology: string;
   };

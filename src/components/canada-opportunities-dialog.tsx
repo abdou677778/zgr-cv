@@ -271,9 +271,21 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
   return (
     <article className="flex h-full flex-col rounded-2xl border border-sky-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-md">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">
-          <BadgeCheck className="h-3.5 w-3.5" /> Source publique ANETI vérifiée
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
+            opportunity.staleDetail ? "bg-amber-100 text-amber-900" : "bg-sky-100 text-sky-800"
+          }`}
+        >
+          <BadgeCheck className="h-3.5 w-3.5" />
+          {opportunity.staleDetail
+            ? "Dernière fiche ANETI vérifiée (cache)"
+            : "Source publique ANETI vérifiée"}
         </span>
+        {opportunity.dataQuality?.status === "partial" ? (
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+            Données partielles
+          </span>
+        ) : null}
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-bold ${
             opportunity.applicationMethod.loginRequired
@@ -349,7 +361,9 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
           <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
             {opportunity.applicationMethod.type === "external_form"
               ? "Ouvrir le formulaire officiel"
-              : "Voir comment postuler"}
+              : opportunity.applicationMethod.type === "email"
+                ? "Écrire pour postuler"
+                : "Voir comment postuler"}
             <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
           </a>
         </Button>
@@ -710,7 +724,17 @@ export function CanadaOpportunitiesDialog({
                   <p className="text-xs text-emerald-800">
                     Vérifiées le {new Date(anetiResult.meta.verifiedAt).toLocaleString("fr-FR")}
                     {anetiResult.meta.stale ? " · cache de secours" : ""}
+                    {anetiResult.meta.detailFailures
+                      ? ` · ${anetiResult.meta.detailFailures} fiche(s) conservée(s) du cache`
+                      : ""}
                   </p>
+                </div>
+              ) : null}
+              {anetiResult?.meta.staleReason ? (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  Actualisation directe indisponible : affichage temporaire du dernier cache
+                  vérifié.
                 </div>
               ) : null}
               {anetiLoading && !anetiResult ? (

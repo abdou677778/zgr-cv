@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -57,33 +57,36 @@ type Provider =
 
 type OpportunityCategory = "all" | "jobs" | "events" | "programs";
 
-function ProviderTab({
-  active,
-  children,
-  description,
-  onClick,
-}: {
-  active: boolean;
-  children: ReactNode;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      title={description}
-      onClick={onClick}
-      className={`flex h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-black whitespace-nowrap transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 ${
-        active
-          ? "border-red-400 bg-red-50 text-red-950 shadow-sm ring-1 ring-red-100"
-          : "border-slate-200 bg-white text-slate-800 hover:border-red-200 hover:bg-slate-50"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
+const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
+  all: [
+    "jobbank",
+    "europe_jobs",
+    "indeed",
+    "aneti",
+    "atct",
+    "destination_canada",
+    "francophone_canada",
+    "pei",
+    "new_brunswick",
+    "italy",
+  ],
+  jobs: ["jobbank", "europe_jobs", "indeed", "aneti", "atct"],
+  events: ["destination_canada"],
+  programs: ["francophone_canada", "pei", "new_brunswick", "italy"],
+};
+
+const PROVIDER_LABELS: Record<Provider, string> = {
+  jobbank: "🇨🇦 Guichet-Emplois Canada — recommandé",
+  europe_jobs: "🇪🇺 Emplois officiels Europe",
+  indeed: "🔎 Indeed Canada",
+  aneti: "🇹🇳 ANETI International",
+  atct: "🇹🇳 ATCT Tunisia",
+  destination_canada: "📅 Destination Canada",
+  francophone_canada: "🇨🇦 Programmes Canada francophone",
+  pei: "🇨🇦 Île-du-Prince-Édouard",
+  new_brunswick: "🇨🇦 Nouveau-Brunswick",
+  italy: "🇮🇹 Opportunités Italie",
+};
 
 const DESTINATION_CANADA_CANDIDATES_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/candidats.html";
@@ -1564,16 +1567,16 @@ export function CanadaOpportunitiesDialog({
       <div className="flex min-h-0 flex-1 flex-col">
         <nav
           aria-label="Sources d’opportunités"
-          className="shrink-0 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 [scrollbar-width:none] sm:px-5 [&::-webkit-scrollbar]:hidden"
+          className="shrink-0 border-b border-slate-200 bg-white px-3 py-2 sm:px-5"
         >
-          <div className="mx-auto flex w-max min-w-full max-w-[1800px] gap-2">
-            <label className="relative shrink-0">
+          <div className="mx-auto grid w-full max-w-[1800px] grid-cols-[minmax(130px,0.8fr)_minmax(175px,1.2fr)] gap-2 lg:max-w-4xl lg:grid-cols-[280px_minmax(360px,1fr)]">
+            <label className="min-w-0">
               <span className="sr-only">Catégorie d’opportunités</span>
               <select
                 aria-label="Catégorie d’opportunités"
                 value={category}
                 onChange={(event) => changeCategory(event.target.value as OpportunityCategory)}
-                className="h-11 min-w-44 rounded-xl border border-slate-300 bg-slate-900 px-3 pr-8 text-sm font-black text-white focus:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-200"
+                className="h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-slate-900 px-3 pr-8 text-sm font-black text-white focus:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-200"
               >
                 <option value="all">Toutes les catégories</option>
                 <option value="jobs">Emplois avec CV</option>
@@ -1581,98 +1584,21 @@ export function CanadaOpportunitiesDialog({
                 <option value="programs">Programmes officiels</option>
               </select>
             </label>
-
-            {category === "all" || category === "jobs" ? (
-              <>
-                <ProviderTab
-                  active={provider === "jobbank"}
-                  description="Offres gouvernementales vérifiées fiche par fiche"
-                  onClick={() => setProvider("jobbank")}
-                >
-                  <Landmark className="h-4 w-4 text-red-700" /> Guichet-Emplois
-                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] uppercase text-emerald-800">
-                    Recommandé
-                  </span>
-                </ProviderTab>
-                <ProviderTab
-                  active={provider === "europe_jobs"}
-                  description="Portails publics européens acceptant les candidatures internationales"
-                  onClick={() => setProvider("europe_jobs")}
-                >
-                  <Globe2 className="h-4 w-4 text-indigo-700" /> Emplois Europe
-                  <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] uppercase text-blue-800">
-                    Officiel
-                  </span>
-                </ProviderTab>
-                <ProviderTab
-                  active={provider === "indeed"}
-                  description="Recherche directe des offres récentes sur Indeed Canada"
-                  onClick={() => setProvider("indeed")}
-                >
-                  <Search className="h-4 w-4 text-blue-700" /> Indeed
-                </ProviderTab>
-                <ProviderTab
-                  active={provider === "aneti"}
-                  description="Offres publiques ANETI International"
-                  onClick={() => setProvider("aneti")}
-                >
-                  <Globe2 className="h-4 w-4 text-sky-700" /> ANETI
-                </ProviderTab>
-                <ProviderTab
-                  active={provider === "atct"}
-                  description="Recrutements internationaux officiels ATCT"
-                  onClick={() => setProvider("atct")}
-                >
-                  <Building2 className="h-4 w-4 text-teal-700" /> ATCT
-                </ProviderTab>
-              </>
-            ) : null}
-
-            {category === "all" || category === "events" ? (
-              <ProviderTab
-                active={provider === "destination_canada"}
-                description="Forum Mobilité et inscription officielle"
-                onClick={() => setProvider("destination_canada")}
+            <label className="min-w-0">
+              <span className="sr-only">Source ou programme</span>
+              <select
+                aria-label="Source ou programme"
+                value={provider}
+                onChange={(event) => setProvider(event.target.value as Provider)}
+                className="h-11 w-full min-w-0 rounded-xl border border-red-300 bg-red-50 px-3 pr-8 text-sm font-black text-red-950 shadow-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
               >
-                <CalendarDays className="h-4 w-4 text-violet-700" /> Destination Canada
-              </ProviderTab>
-            ) : null}
-
-            {category === "all" || category === "programs" ? (
-              <>
-                <ProviderTab
-                  active={provider === "francophone_canada"}
-                  description="Mobilité francophone, communautés francophones et Canada atlantique"
-                  onClick={() => setProvider("francophone_canada")}
-                >
-                  <CountryFlag country="CA" /> Canada francophone
-                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] uppercase text-emerald-800">
-                    Ouvert
-                  </span>
-                </ProviderTab>
-                <ProviderTab
-                  active={provider === "pei"}
-                  description="EOI et recrutement hors Canada à l’Île-du-Prince-Édouard"
-                  onClick={() => setProvider("pei")}
-                >
-                  <CountryFlag country="CA" /> Î.-P.-É.
-                </ProviderTab>
-                <ProviderTab
-                  active={provider === "new_brunswick"}
-                  description="Voies provinciales et restrictions du Nouveau-Brunswick"
-                  onClick={() => setProvider("new_brunswick")}
-                >
-                  <CountryFlag country="CA" /> Nouveau-Brunswick
-                </ProviderTab>
-                <ProviderTab
-                  active={provider === "italy"}
-                  description="Decreto Flussi, EURES et procédure employeur en Italie"
-                  onClick={() => setProvider("italy")}
-                >
-                  <CountryFlag country="IT" /> Italie
-                </ProviderTab>
-              </>
-            ) : null}
+                {PROVIDERS_BY_CATEGORY[category].map((providerOption) => (
+                  <option key={providerOption} value={providerOption}>
+                    {PROVIDER_LABELS[providerOption]}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </nav>
 

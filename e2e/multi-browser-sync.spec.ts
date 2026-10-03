@@ -964,6 +964,13 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(sourcesNavigation).toBeVisible();
     const sourcesNavigationBox = await sourcesNavigation.boundingBox();
     expect(sourcesNavigationBox?.height).toBeLessThanOrEqual(64);
+    const sourcesNavigationSize = await sourcesNavigation.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(sourcesNavigationSize.scrollWidth).toBeLessThanOrEqual(
+      sourcesNavigationSize.clientWidth + 1,
+    );
     await expect(dialog.getByText("senior accountant", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Candidat international vérifié", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Sans compte Indeed", { exact: true })).toBeVisible();
@@ -979,11 +986,15 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     const categorySelect = dialog.getByRole("combobox", {
       name: "Catégorie d’opportunités",
     });
+    const sourceSelect = dialog.getByRole("combobox", {
+      name: "Source ou programme",
+    });
     await expect(categorySelect).toHaveValue("all");
+    await expect(sourceSelect).toHaveValue("jobbank");
     await categorySelect.selectOption("jobs");
-    await expect(dialog.getByRole("button", { name: /Emplois Europe/ })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /Destination Canada/ })).toBeHidden();
-    await dialog.getByRole("button", { name: /Emplois Europe/ }).click();
+    await expect(sourceSelect.locator('option[value="europe_jobs"]')).toHaveCount(1);
+    await expect(sourceSelect.locator('option[value="destination_canada"]')).toHaveCount(0);
+    await sourceSelect.selectOption("europe_jobs");
     await expect(dialog.getByText("Make it in Germany", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Work in Finland", { exact: true })).toBeVisible();
     await expect(dialog.getByText("EURES", { exact: true })).toBeVisible();
@@ -997,6 +1008,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     );
 
     await categorySelect.selectOption("programs");
+    await expect(sourceSelect).toHaveValue("francophone_canada");
     await expect(dialog.getByText("Mobilité francophone", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/NCLC 5 minimum/)).toBeVisible();
     await expect(dialog.getByText(/code d’exemption C16/)).toBeVisible();
@@ -1008,21 +1020,21 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
 
     await categorySelect.selectOption("all");
 
-    await dialog.getByRole("button", { name: /^Indeed$/ }).click();
+    await sourceSelect.selectOption("indeed");
     await expect(dialog.getByText("Recherche Indeed conforme et durable")).toBeVisible();
     await expect(dialog.getByRole("link", { name: /Ouvrir Indeed/ })).toHaveAttribute(
       "href",
       /ca\.indeed\.com\/jobs\?/,
     );
 
-    await dialog.getByRole("button", { name: /Destination Canada/ }).click();
+    await sourceSelect.selectOption("destination_canada");
     await expect(dialog.getByText("Destination Canada Forum Mobilité 2026")).toBeVisible();
     await expect(dialog.getByText("10 et 11 décembre 2026")).toBeVisible();
     await expect(
       dialog.getByRole("link", { name: /Vérifier l’inscription candidat/ }),
     ).toHaveAttribute("href", /canada\.ca\/fr\/.*\/destination-canada\/candidats\.html/);
 
-    await dialog.getByRole("button", { name: /Î\.-P\.-É\./ }).click();
+    await sourceSelect.selectOption("pei");
     const peiCard = dialog
       .getByRole("article")
       .filter({ hasText: "Île-du-Prince-Édouard — EOI et recrutement international" });
@@ -1041,7 +1053,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "https://www.princeedwardisland.ca/en/information/office-of-immigration/skilled-workers-outside-canada",
     );
 
-    await dialog.getByRole("button", { name: /Nouveau-Brunswick/ }).click();
+    await sourceSelect.selectOption("new_brunswick");
     const nbCard = dialog
       .getByRole("article")
       .filter({ hasText: "Nouveau-Brunswick — compte INB et voies 2026" });
@@ -1056,7 +1068,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "https://www.gnb.ca/en/topic/family-home-community/immigration/important-notices.html",
     );
 
-    await dialog.getByRole("button", { name: /^ANETI$/ }).click();
+    await sourceSelect.selectOption("aneti");
     await expect(dialog.getByText("Opérateur socio-sanitaire", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Inscription ANETI requise", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 18 oct. 2026/)).toBeVisible();
@@ -1065,7 +1077,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://candidatures.aneti.tn/app/inscription/69");
 
-    await dialog.getByRole("button", { name: /^ATCT$/ }).click();
+    await sourceSelect.selectOption("atct");
     await expect(dialog.getByText(/personnel éducateur à la petite enfance/)).toBeVisible();
     await expect(dialog.getByText("Source publique ATCT vérifiée", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 01 nov. 2026/)).toBeVisible();
@@ -1074,7 +1086,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://connexion-pef.afeseo.ca/je-vis-a-lexterieur-du-canada/");
 
-    await dialog.getByRole("button", { name: /^Drapeau Italie Italie$/ }).click();
+    await sourceSelect.selectOption("italy");
     const italyCard = dialog.getByRole("article").filter({ hasText: "Decreto Flussi 2027" });
     await expect(italyCard.getByText("Decreto Flussi 2027 — 165 850 quotas légaux")).toBeVisible();
     await expect(italyCard.getByText(/ce ne sont pas 165 850 contrats/)).toBeVisible();

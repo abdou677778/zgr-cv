@@ -976,6 +976,38 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "mailto:careers@manningelliott.example",
     );
 
+    const categorySelect = dialog.getByRole("combobox", {
+      name: "Catégorie d’opportunités",
+    });
+    await expect(categorySelect).toHaveValue("all");
+    await categorySelect.selectOption("jobs");
+    await expect(dialog.getByRole("button", { name: /Emplois Europe/ })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /Destination Canada/ })).toBeHidden();
+    await dialog.getByRole("button", { name: /Emplois Europe/ }).click();
+    await expect(dialog.getByText("Make it in Germany", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Work in Finland", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("EURES", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: /Voir les offres/ })).toHaveAttribute(
+      "href",
+      "https://www.make-it-in-germany.com/en/working-in-germany/job-listings/job-listings",
+    );
+    await expect(dialog.getByRole("link", { name: /Rechercher les emplois/ })).toHaveAttribute(
+      "href",
+      "https://www.workinfinland.com/en/open-jobs/",
+    );
+
+    await categorySelect.selectOption("programs");
+    await expect(dialog.getByText("Mobilité francophone", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/NCLC 5 minimum/)).toBeVisible();
+    await expect(dialog.getByText(/code d’exemption C16/)).toBeVisible();
+    await expect(dialog.getByText("Programme ouvert", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: /Trouver les employeurs/ })).toHaveAttribute(
+      "href",
+      /rural-franco-pilots\/franco-immigration\/job-offer\.html/,
+    );
+
+    await categorySelect.selectOption("all");
+
     await dialog.getByRole("button", { name: /^Indeed$/ }).click();
     await expect(dialog.getByText("Recherche Indeed conforme et durable")).toBeVisible();
     await expect(dialog.getByRole("link", { name: /Ouvrir Indeed/ })).toHaveAttribute(

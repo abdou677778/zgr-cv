@@ -46,12 +46,16 @@ import {
 type Provider =
   | "jobbank"
   | "indeed"
+  | "europe_jobs"
   | "destination_canada"
+  | "francophone_canada"
   | "pei"
   | "new_brunswick"
   | "aneti"
   | "atct"
   | "italy";
+
+type OpportunityCategory = "all" | "jobs" | "events" | "programs";
 
 function ProviderTab({
   active,
@@ -107,6 +111,21 @@ const ITALY_OFFICIAL_GUIDE_URL =
 const ITALY_EURES_URL = "https://eures.europa.eu/jobseekers_it";
 const ITALY_WORK_PERMIT_URL =
   "https://home-affairs.ec.europa.eu/policies/migration-and-asylum/eu-immigration-portal/employed-worker-italy_en";
+const GERMANY_INTERNATIONAL_JOBS_URL =
+  "https://www.make-it-in-germany.com/en/working-in-germany/job-listings/job-listings";
+const GERMANY_APPLICATION_GUIDE_URL =
+  "https://www.make-it-in-germany.com/en/working-in-germany/job/application";
+const FINLAND_INTERNATIONAL_JOBS_URL = "https://www.workinfinland.com/en/open-jobs/";
+const EURES_JOBSEEKERS_URL = "https://eures.europa.eu/jobseekers_en";
+const JOB_BANK_FOREIGN_CANDIDATES_URL = "https://www.jobbank.gc.ca/findajob/foreign-candidates";
+const FRANCOPHONE_MOBILITY_URL =
+  "https://www.canada.ca/en/immigration-refugees-citizenship/services/work-canada/special-instructions/francophone-mobility/eligibility.html";
+const FRANCOPHONE_COMMUNITY_PILOT_URL =
+  "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/rural-franco-pilots/franco-immigration.html";
+const FRANCOPHONE_COMMUNITY_JOBS_URL =
+  "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/rural-franco-pilots/franco-immigration/job-offer.html";
+const ATLANTIC_IMMIGRATION_URL =
+  "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/atlantic-immigration.html";
 
 function CountryFlag({ country }: { country: "IT" | "TN" | "DZ" | "CA" }) {
   const labels = { IT: "Italie", TN: "Tunisie", DZ: "Algérie", CA: "Canada" } as const;
@@ -157,6 +176,291 @@ function CountryFlag({ country }: { country: "IT" | "TN" | "DZ" | "CA" }) {
         </>
       )}
     </svg>
+  );
+}
+
+function EuropeOfficialJobsPanel() {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+        <div className="mx-auto max-w-6xl space-y-4">
+          <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-emerald-50 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-blue-800">
+                  Emplois officiels · candidature depuis la Tunisie ou l’Algérie
+                </p>
+                <h2 className="mt-1 text-xl font-black text-slate-950">
+                  Europe — offres ouvertes aux talents internationaux
+                </h2>
+                <p className="mt-1 max-w-4xl text-sm leading-relaxed text-slate-600">
+                  Ces portails publics permettent de repérer une offre et d’envoyer un CV et une
+                  lettre. L’embauche reste soumise aux critères de l’annonce, à la reconnaissance du
+                  diplôme et au visa ou permis national.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase text-emerald-900">
+                <BadgeCheck className="h-4 w-4" /> Sources publiques contrôlées
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-3">
+            <article className="flex flex-col rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-lg">
+                  🇩🇪
+                </span>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-amber-800">
+                    Gouvernement fédéral allemand
+                  </p>
+                  <h3 className="text-lg font-black text-slate-950">Make it in Germany</h3>
+                </div>
+              </div>
+              <span className="mt-3 w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-900">
+                Candidatures de l’étranger explicitement acceptées
+              </span>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Offres de l’Agence fédérale pour l’emploi destinées aux professionnels qualifiés
+                étrangers. Les postes exigent généralement un diplôme universitaire ou une formation
+                professionnelle; les emplois non qualifiés et saisonniers sont exclus.
+              </p>
+              <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">
+                <strong>Dossier habituel :</strong> CV, lettre adaptée et justificatifs. La fiche
+                précise l’envoi par courriel ou sur le site de l’employeur.
+              </div>
+              <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                <Button asChild size="sm" className="bg-amber-700 text-white hover:bg-amber-800">
+                  <a href={GERMANY_INTERNATIONAL_JOBS_URL} target="_blank" rel="noreferrer">
+                    Voir les offres <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                  </a>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <a href={GERMANY_APPLICATION_GUIDE_URL} target="_blank" rel="noreferrer">
+                    Préparer la candidature <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              </div>
+            </article>
+
+            <article className="flex flex-col rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-lg">
+                  🇫🇮
+                </span>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-blue-800">
+                    Service public finlandais
+                  </p>
+                  <h3 className="text-lg font-black text-slate-950">Work in Finland</h3>
+                </div>
+              </div>
+              <span className="mt-3 w-fit rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-900">
+                Emplois anglophones · candidats non-UE inclus
+              </span>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Portail officiel Talent Boost pour les talents internationaux, avec des postes en
+                technologie, ingénierie, santé, industrie, construction et autres secteurs. Chaque
+                annonce renvoie vers la candidature de l’employeur.
+              </p>
+              <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">
+                <strong>À contrôler :</strong> certains métiers sont soumis au test du marché du
+                travail; les spécialistes peuvent relever d’un permis différent.
+              </div>
+              <Button
+                asChild
+                size="sm"
+                className="mt-auto w-fit bg-blue-700 text-white hover:bg-blue-800"
+              >
+                <a href={FINLAND_INTERNATIONAL_JOBS_URL} target="_blank" rel="noreferrer">
+                  Rechercher les emplois <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                </a>
+              </Button>
+            </article>
+
+            <article className="flex flex-col rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-100 text-lg">
+                  🇪🇺
+                </span>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-indigo-800">
+                    Autorité européenne du travail
+                  </p>
+                  <h3 className="text-lg font-black text-slate-950">EURES</h3>
+                </div>
+              </div>
+              <span className="mt-3 w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-900">
+                Vérification non-UE obligatoire par offre
+              </span>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Réseau officiel de 31 pays pour rechercher des emplois, contacter un employeur ou un
+                conseiller et préparer son CV Europass. Une annonce EURES n’accorde pas
+                automatiquement le droit de travailler à un ressortissant tunisien ou algérien.
+              </p>
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+                Retenir les offres mentionnant l’acceptation des candidats hors UE ou confirmer le
+                parrainage avec l’employeur avant d’envoyer le dossier.
+              </div>
+              <Button
+                asChild
+                size="sm"
+                className="mt-auto w-fit bg-indigo-700 text-white hover:bg-indigo-800"
+              >
+                <a href={EURES_JOBSEEKERS_URL} target="_blank" rel="noreferrer">
+                  Ouvrir EURES <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                </a>
+              </Button>
+            </article>
+          </div>
+
+          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            Aucun portail officiel ne garantit un contrat. Ne payez jamais une « offre garantie »;
+            vérifiez le domaine de l’employeur, le permis applicable et les coordonnées avant tout
+            envoi de documents.
+          </div>
+        </div>
+      </div>
+      <footer className="border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+        Sources et conditions vérifiées le 3 octobre 2026 · Les listes d’emplois restent dynamiques.
+      </footer>
+    </>
+  );
+}
+
+function FrancophoneCanadaPanel() {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+        <div className="mx-auto max-w-6xl space-y-4">
+          <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 via-white to-blue-50 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-red-800">
+                  Canada · parcours officiels pour candidats francophones à l’étranger
+                </p>
+                <h2 className="mt-1 text-xl font-black text-slate-950">
+                  Emploi d’abord, immigration ensuite
+                </h2>
+                <p className="mt-1 max-w-4xl text-sm leading-relaxed text-slate-600">
+                  Un Tunisien ou un Algérien peut candidater depuis son pays, mais ces programmes
+                  exigent une véritable offre d’un employeur admissible. Le CV et la lettre sont
+                  envoyés à l’employeur, jamais à IRCC pour « obtenir un emploi ».
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <CountryFlag country="TN" />
+                <CountryFlag country="DZ" />
+                <CountryFlag country="CA" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <article className="flex flex-col rounded-2xl border border-red-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-wide text-red-800">
+                Permis de travail · hors Québec
+              </p>
+              <h3 className="mt-1 text-lg font-black text-slate-950">Mobilité francophone</h3>
+              <span className="mt-3 w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-900">
+                Sans EIMT · offre obligatoire
+              </span>
+              <ul className="mt-3 space-y-2 text-sm leading-relaxed text-slate-600">
+                <li>• Français oral et compréhension : NCLC 5 minimum.</li>
+                <li>• Emploi dans une province ou un territoire hors Québec.</li>
+                <li>• Toute catégorie FEER, sauf agriculture primaire FEER 4 et 5.</li>
+                <li>• L’employeur utilise le code d’exemption C16 et paie 230 CAD.</li>
+              </ul>
+              <Button
+                asChild
+                size="sm"
+                className="mt-auto w-fit bg-red-700 text-white hover:bg-red-800"
+              >
+                <a href={FRANCOPHONE_MOBILITY_URL} target="_blank" rel="noreferrer">
+                  Vérifier l’admissibilité <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                </a>
+              </Button>
+            </article>
+
+            <article className="flex flex-col rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-wide text-blue-800">
+                Résidence permanente · statut ouvert
+              </p>
+              <h3 className="mt-1 text-lg font-black text-slate-950">
+                Projet pilote des communautés francophones
+              </h3>
+              <span className="mt-3 w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-900">
+                Programme ouvert
+              </span>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Il faut une offre d’un employeur désigné dans l’une des six communautés : Péninsule
+                acadienne, Sudbury, Timmins, région du lac Supérieur, St-Pierre-Jolys ou Kelowna.
+                Chaque communauté publie ses employeurs et postes disponibles.
+              </p>
+              <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                <Button asChild size="sm" className="bg-blue-700 text-white hover:bg-blue-800">
+                  <a href={FRANCOPHONE_COMMUNITY_JOBS_URL} target="_blank" rel="noreferrer">
+                    Trouver les employeurs <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                  </a>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <a href={FRANCOPHONE_COMMUNITY_PILOT_URL} target="_blank" rel="noreferrer">
+                    Conditions IRCC <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              </div>
+            </article>
+
+            <article className="flex flex-col rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-wide text-cyan-800">
+                Résidence permanente · provinces atlantiques
+              </p>
+              <h3 className="mt-1 text-lg font-black text-slate-950">
+                Programme d’immigration au Canada atlantique
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Les travailleurs qualifiés vivant à l’étranger sont admissibles s’ils obtiennent une
+                offre d’un employeur désigné au Nouveau-Brunswick, en Nouvelle-Écosse, à
+                Terre-Neuve-et-Labrador ou à l’Île-du-Prince-Édouard.
+              </p>
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+                Les restrictions provinciales et les secteurs recrutés changent. Vérifier la liste
+                de l’employeur désigné avant chaque candidature.
+              </div>
+              <Button
+                asChild
+                size="sm"
+                className="mt-auto w-fit bg-cyan-700 text-white hover:bg-cyan-800"
+              >
+                <a href={ATLANTIC_IMMIGRATION_URL} target="_blank" rel="noreferrer">
+                  Ouvrir le programme officiel <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                </a>
+              </Button>
+            </article>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <div>
+              <p className="font-black text-emerald-950">Point de départ recommandé</p>
+              <p className="mt-0.5 text-sm text-emerald-900">
+                Chercher uniquement les offres marquées ouvertes aux candidats internationaux, puis
+                envoyer le CV et la lettre selon la méthode indiquée.
+              </p>
+            </div>
+            <Button asChild size="sm" className="bg-emerald-700 text-white hover:bg-emerald-800">
+              <a href={JOB_BANK_FOREIGN_CANDIDATES_URL} target="_blank" rel="noreferrer">
+                Offres ouvertes à l’international <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+              </a>
+            </Button>
+          </div>
+        </div>
+      </div>
+      <footer className="border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+        Conditions IRCC vérifiées le 3 octobre 2026 · Aucun programme ne garantit une offre.
+      </footer>
+    </>
   );
 }
 
@@ -1094,6 +1398,7 @@ export function CanadaOpportunitiesDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [provider, setProvider] = useState<Provider>("jobbank");
+  const [category, setCategory] = useState<OpportunityCategory>("all");
   const [country, setCountry] = useState<"DZ" | "TN">("DZ");
   const [period, setPeriod] = useState<"week" | "recent">("week");
   const [query, setQuery] = useState("");
@@ -1109,6 +1414,17 @@ export function CanadaOpportunitiesDialog({
   const requestRef = useRef<AbortController | null>(null);
   const anetiRequestRef = useRef<AbortController | null>(null);
   const atctRequestRef = useRef<AbortController | null>(null);
+
+  const changeCategory = (nextCategory: OpportunityCategory) => {
+    const defaultProvider: Record<OpportunityCategory, Provider> = {
+      all: "jobbank",
+      jobs: "jobbank",
+      events: "destination_canada",
+      programs: "francophone_canada",
+    };
+    setCategory(nextCategory);
+    setProvider(defaultProvider[nextCategory]);
+  };
 
   const runSearch = useCallback(async () => {
     requestRef.current?.abort();
@@ -1238,8 +1554,8 @@ export function CanadaOpportunitiesDialog({
               Opportunités internationales
             </h1>
             <p className="mt-0.5 hidden text-xs text-slate-600 md:block">
-              Canada, provinces canadiennes, Italie, ANETI, ATCT, volontariat et événements
-              officiels avec parcours de candidature vérifié.
+              Emplois Europe et Canada, recrutements officiels, événements et programmes avec
+              parcours de candidature vérifié.
             </p>
           </div>
         </div>
@@ -1251,69 +1567,120 @@ export function CanadaOpportunitiesDialog({
           className="shrink-0 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 [scrollbar-width:none] sm:px-5 [&::-webkit-scrollbar]:hidden"
         >
           <div className="mx-auto flex w-max min-w-full max-w-[1800px] gap-2">
-            <ProviderTab
-              active={provider === "jobbank"}
-              description="Offres gouvernementales vérifiées fiche par fiche"
-              onClick={() => setProvider("jobbank")}
-            >
-              <Landmark className="h-4 w-4 text-red-700" /> Guichet-Emplois
-              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] uppercase text-emerald-800">
-                Recommandé
-              </span>
-            </ProviderTab>
-            <ProviderTab
-              active={provider === "indeed"}
-              description="Recherche directe des offres récentes sur Indeed Canada"
-              onClick={() => setProvider("indeed")}
-            >
-              <Search className="h-4 w-4 text-blue-700" /> Indeed
-            </ProviderTab>
-            <ProviderTab
-              active={provider === "destination_canada"}
-              description="Forum Mobilité et inscription officielle"
-              onClick={() => setProvider("destination_canada")}
-            >
-              <CalendarDays className="h-4 w-4 text-violet-700" /> Destination Canada
-            </ProviderTab>
-            <ProviderTab
-              active={provider === "pei"}
-              description="EOI et recrutement hors Canada à l’Île-du-Prince-Édouard"
-              onClick={() => setProvider("pei")}
-            >
-              <CountryFlag country="CA" /> Î.-P.-É.
-            </ProviderTab>
-            <ProviderTab
-              active={provider === "new_brunswick"}
-              description="Voies provinciales et restrictions du Nouveau-Brunswick"
-              onClick={() => setProvider("new_brunswick")}
-            >
-              <CountryFlag country="CA" /> Nouveau-Brunswick
-            </ProviderTab>
-            <ProviderTab
-              active={provider === "aneti"}
-              description="Offres publiques ANETI International"
-              onClick={() => setProvider("aneti")}
-            >
-              <Globe2 className="h-4 w-4 text-sky-700" /> ANETI
-            </ProviderTab>
-            <ProviderTab
-              active={provider === "atct"}
-              description="Recrutements internationaux officiels ATCT"
-              onClick={() => setProvider("atct")}
-            >
-              <Building2 className="h-4 w-4 text-teal-700" /> ATCT
-            </ProviderTab>
-            <ProviderTab
-              active={provider === "italy"}
-              description="Decreto Flussi, EURES et procédure employeur en Italie"
-              onClick={() => setProvider("italy")}
-            >
-              <CountryFlag country="IT" /> Italie
-            </ProviderTab>
+            <label className="relative shrink-0">
+              <span className="sr-only">Catégorie d’opportunités</span>
+              <select
+                aria-label="Catégorie d’opportunités"
+                value={category}
+                onChange={(event) => changeCategory(event.target.value as OpportunityCategory)}
+                className="h-11 min-w-44 rounded-xl border border-slate-300 bg-slate-900 px-3 pr-8 text-sm font-black text-white focus:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-200"
+              >
+                <option value="all">Toutes les catégories</option>
+                <option value="jobs">Emplois avec CV</option>
+                <option value="events">Événements recrutement</option>
+                <option value="programs">Programmes officiels</option>
+              </select>
+            </label>
+
+            {category === "all" || category === "jobs" ? (
+              <>
+                <ProviderTab
+                  active={provider === "jobbank"}
+                  description="Offres gouvernementales vérifiées fiche par fiche"
+                  onClick={() => setProvider("jobbank")}
+                >
+                  <Landmark className="h-4 w-4 text-red-700" /> Guichet-Emplois
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] uppercase text-emerald-800">
+                    Recommandé
+                  </span>
+                </ProviderTab>
+                <ProviderTab
+                  active={provider === "europe_jobs"}
+                  description="Portails publics européens acceptant les candidatures internationales"
+                  onClick={() => setProvider("europe_jobs")}
+                >
+                  <Globe2 className="h-4 w-4 text-indigo-700" /> Emplois Europe
+                  <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] uppercase text-blue-800">
+                    Officiel
+                  </span>
+                </ProviderTab>
+                <ProviderTab
+                  active={provider === "indeed"}
+                  description="Recherche directe des offres récentes sur Indeed Canada"
+                  onClick={() => setProvider("indeed")}
+                >
+                  <Search className="h-4 w-4 text-blue-700" /> Indeed
+                </ProviderTab>
+                <ProviderTab
+                  active={provider === "aneti"}
+                  description="Offres publiques ANETI International"
+                  onClick={() => setProvider("aneti")}
+                >
+                  <Globe2 className="h-4 w-4 text-sky-700" /> ANETI
+                </ProviderTab>
+                <ProviderTab
+                  active={provider === "atct"}
+                  description="Recrutements internationaux officiels ATCT"
+                  onClick={() => setProvider("atct")}
+                >
+                  <Building2 className="h-4 w-4 text-teal-700" /> ATCT
+                </ProviderTab>
+              </>
+            ) : null}
+
+            {category === "all" || category === "events" ? (
+              <ProviderTab
+                active={provider === "destination_canada"}
+                description="Forum Mobilité et inscription officielle"
+                onClick={() => setProvider("destination_canada")}
+              >
+                <CalendarDays className="h-4 w-4 text-violet-700" /> Destination Canada
+              </ProviderTab>
+            ) : null}
+
+            {category === "all" || category === "programs" ? (
+              <>
+                <ProviderTab
+                  active={provider === "francophone_canada"}
+                  description="Mobilité francophone, communautés francophones et Canada atlantique"
+                  onClick={() => setProvider("francophone_canada")}
+                >
+                  <CountryFlag country="CA" /> Canada francophone
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] uppercase text-emerald-800">
+                    Ouvert
+                  </span>
+                </ProviderTab>
+                <ProviderTab
+                  active={provider === "pei"}
+                  description="EOI et recrutement hors Canada à l’Île-du-Prince-Édouard"
+                  onClick={() => setProvider("pei")}
+                >
+                  <CountryFlag country="CA" /> Î.-P.-É.
+                </ProviderTab>
+                <ProviderTab
+                  active={provider === "new_brunswick"}
+                  description="Voies provinciales et restrictions du Nouveau-Brunswick"
+                  onClick={() => setProvider("new_brunswick")}
+                >
+                  <CountryFlag country="CA" /> Nouveau-Brunswick
+                </ProviderTab>
+                <ProviderTab
+                  active={provider === "italy"}
+                  description="Decreto Flussi, EURES et procédure employeur en Italie"
+                  onClick={() => setProvider("italy")}
+                >
+                  <CountryFlag country="IT" /> Italie
+                </ProviderTab>
+              </>
+            ) : null}
           </div>
         </nav>
 
-        {provider === "pei" ? (
+        {provider === "europe_jobs" ? (
+          <EuropeOfficialJobsPanel />
+        ) : provider === "francophone_canada" ? (
+          <FrancophoneCanadaPanel />
+        ) : provider === "pei" ? (
           <PrinceEdwardIslandOpportunitiesPanel />
         ) : provider === "new_brunswick" ? (
           <NewBrunswickOpportunitiesPanel />

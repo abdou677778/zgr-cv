@@ -62,10 +62,12 @@ commande, lire son brief et ses documents avec des liens privés de 15 minutes,
 charger le prompt maître, consulter une version JSON et enregistrer une nouvelle
 version validée.
 
-Quatre outils publics authentifiés complètent le traitement des commandes :
+Six outils publics authentifiés complètent le traitement des commandes :
 `search_volunteer_opportunities`, `inspect_volunteer_opportunity`,
-`search_canada_opportunities` et `inspect_canada_opportunity`. Une question
-générale déclenche la recherche correspondante. Un lien ou identifiant précis
+`search_canada_opportunities`, `inspect_canada_opportunity`,
+`search_aneti_opportunities` et `inspect_aneti_opportunity`. Une question
+générale déclenche la recherche correspondante. Les liens Facebook ANETI sont
+normalisés vers leur fiche publique officielle. Un lien ou identifiant précis
 déclenche obligatoirement l’inspection de la fiche officielle avant toute
 réponse sur l’admissibilité, l’échéance ou la méthode de candidature.
 

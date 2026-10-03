@@ -177,10 +177,19 @@ export type ObjectiveFormat = {
   color: string;
 };
 
+export type CanadianNocSelection = {
+  code: string;
+  title: string;
+  teer: string;
+  version: "CNP 2021 v1.0";
+  sourceUrl: string;
+};
+
 export type CV = {
   photo?: ProfilePhoto;
   nom_complet: string;
   titre_poste: string;
+  cnp?: CanadianNocSelection;
   telephone: string;
   email: string;
   adresse: string;

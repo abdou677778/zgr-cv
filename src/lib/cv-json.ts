@@ -92,6 +92,22 @@ const cefrLevel = (value: unknown): EuropassCefrLevel => {
 const booleanValue = (value: unknown) =>
   value === true || (typeof value === "string" && /^(true|oui|yes|1)$/i.test(value.trim()));
 
+const canadianNoc = (value: unknown): CV["cnp"] => {
+  const source = record(value);
+  const code = text(source.code).replace(/\D/g, "");
+  const title = firstText(source, "title", "titre", "label");
+  if (!/^\d{5}$/.test(code) || !title) return undefined;
+  const teerDigit = code[1];
+  return {
+    code,
+    title,
+    teer: firstText(source, "teer", "feer") || `FEER ${teerDigit}`,
+    version: "CNP 2021 v1.0",
+    sourceUrl:
+      text(source.sourceUrl) || "https://www.statcan.gc.ca/fr/sujets/norme/cnp/2021/indexV1",
+  };
+};
+
 const normalizeEuropassProfile = (value: unknown): EuropassProfile => {
   const source = record(value);
   const socialProfiles = Array.isArray(source.social_profiles)
@@ -226,6 +242,7 @@ function directCv(source: JsonRecord): CV {
     photo: normalizeProfilePhoto(source.photo),
     nom_complet: text(source.nom_complet),
     titre_poste: text(source.titre_poste),
+    cnp: canadianNoc(source.cnp ?? source.equivalence_cnp),
     telephone: text(source.telephone),
     email: text(source.email),
     adresse: text(source.adresse),

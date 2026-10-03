@@ -15,6 +15,7 @@ export function fieldAiPrompt(
   const context = {
     nom_complet: cv.nom_complet,
     titre_poste: cv.titre_poste,
+    cnp: cv.cnp,
     candidature: cv.candidature,
     objectif: cv.objectif,
     competences: cv.competences.filter(Boolean),
@@ -36,6 +37,13 @@ export function importAiPrompt(language: DocumentLanguage, source: unknown) {
     {
       nom_complet: "",
       titre_poste: "",
+      cnp: {
+        code: "",
+        title: "",
+        teer: "",
+        version: "CNP 2021 v1.0",
+        sourceUrl: "https://www.statcan.gc.ca/fr/sujets/norme/cnp/2021/indexV1",
+      },
       telephone: "",
       email: "",
       adresse: "",

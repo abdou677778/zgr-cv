@@ -8,6 +8,8 @@ import {
   CircleDollarSign,
   Copy,
   ExternalLink,
+  FileText,
+  Globe2,
   Landmark,
   LoaderCircle,
   LockKeyhole,
@@ -18,6 +20,7 @@ import {
   Search,
   ShieldCheck,
   TriangleAlert,
+  UserRoundCheck,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,8 +38,13 @@ import {
   type CanadaOpportunity,
   type CanadaOpportunitySearchResult,
 } from "@/lib/canada-opportunities";
+import {
+  searchAnetiOpportunities,
+  type AnetiOpportunity,
+  type AnetiOpportunitySearchResult,
+} from "@/lib/aneti-opportunities";
 
-type Provider = "jobbank" | "indeed" | "destination_canada";
+type Provider = "jobbank" | "indeed" | "destination_canada" | "aneti";
 
 const DESTINATION_CANADA_CANDIDATES_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/candidats.html";
@@ -259,6 +267,97 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
   );
 }
 
+function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }) {
+  return (
+    <article className="flex h-full flex-col rounded-2xl border border-sky-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-md">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">
+          <BadgeCheck className="h-3.5 w-3.5" /> Source publique ANETI vérifiée
+        </span>
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+            opportunity.applicationMethod.loginRequired
+              ? "bg-amber-100 text-amber-900"
+              : "bg-emerald-100 text-emerald-800"
+          }`}
+        >
+          {opportunity.applicationMethod.loginRequired
+            ? "Inscription ANETI requise"
+            : "Accès direct"}
+        </span>
+      </div>
+
+      <h3 className="text-base font-black leading-snug text-slate-950">{opportunity.title}</h3>
+      <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+        <p className="flex items-start gap-2">
+          <Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+          <span>{opportunity.country || "Pays non indiqué"}</span>
+        </p>
+        <p className="flex items-start gap-2">
+          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+          <span>Publiée le {formatDate(opportunity.postedAt, "date non indiquée")}</span>
+        </p>
+        {opportunity.cvLanguage ? (
+          <p className="flex items-start gap-2">
+            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+            <span>Langue du CV : {opportunity.cvLanguage}</span>
+          </p>
+        ) : null}
+      </div>
+
+      <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-red-900">
+        <p className="flex items-start gap-2 text-sm font-black">
+          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par ANETI")}</span>
+        </p>
+      </div>
+
+      <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-950">
+        <p className="flex items-start gap-2 text-sm font-black">
+          <UserRoundCheck className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{opportunity.applicationMethod.label}</span>
+        </p>
+        {opportunity.registrationRequirements.length ? (
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed text-amber-900">
+            {opportunity.registrationRequirements.map((requirement) => (
+              <li key={requirement}>{requirement}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-xs text-amber-900">{opportunity.applicationMethod.note}</p>
+        )}
+      </div>
+
+      {opportunity.speciality ? (
+        <p className="mt-3 text-xs font-bold uppercase tracking-wide text-sky-800">
+          {opportunity.speciality}
+        </p>
+      ) : null}
+      {opportunity.description ? (
+        <p className="mt-2 line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-slate-600">
+          {opportunity.description}
+        </p>
+      ) : null}
+
+      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-4">
+        <Button asChild size="sm" variant="outline">
+          <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
+            Vérifier la fiche <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+          </a>
+        </Button>
+        <Button asChild size="sm" className="bg-sky-700 text-white hover:bg-sky-800">
+          <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
+            {opportunity.applicationMethod.type === "external_form"
+              ? "Ouvrir le formulaire officiel"
+              : "Voir comment postuler"}
+            <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+          </a>
+        </Button>
+      </div>
+    </article>
+  );
+}
+
 export function CanadaOpportunitiesDialog({
   open,
   onOpenChange,
@@ -271,9 +370,13 @@ export function CanadaOpportunitiesDialog({
   const [period, setPeriod] = useState<"week" | "recent">("week");
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<CanadaOpportunitySearchResult | null>(null);
+  const [anetiResult, setAnetiResult] = useState<AnetiOpportunitySearchResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [anetiLoading, setAnetiLoading] = useState(false);
   const [error, setError] = useState("");
+  const [anetiError, setAnetiError] = useState("");
   const requestRef = useRef<AbortController | null>(null);
+  const anetiRequestRef = useRef<AbortController | null>(null);
 
   const runSearch = useCallback(async () => {
     requestRef.current?.abort();
@@ -299,10 +402,38 @@ export function CanadaOpportunitiesDialog({
     }
   }, [country, period, query]);
 
+  const runAnetiSearch = useCallback(async () => {
+    anetiRequestRef.current?.abort();
+    const controller = new AbortController();
+    anetiRequestRef.current = controller;
+    setAnetiLoading(true);
+    setAnetiError("");
+    try {
+      setAnetiResult(
+        await searchAnetiOpportunities({
+          period,
+          query,
+          limit: 24,
+          signal: controller.signal,
+        }),
+      );
+    } catch (failure) {
+      if ((failure as Error).name !== "AbortError")
+        setAnetiError(failure instanceof Error ? failure.message : "Recherche ANETI indisponible.");
+    } finally {
+      if (!controller.signal.aborted) setAnetiLoading(false);
+    }
+  }, [period, query]);
+
   useEffect(() => {
     if (open && provider === "jobbank") void runSearch();
     return () => requestRef.current?.abort();
   }, [open, country, period, provider, runSearch]);
+
+  useEffect(() => {
+    if (open && provider === "aneti") void runAnetiSearch();
+    return () => anetiRequestRef.current?.abort();
+  }, [open, period, provider, runAnetiSearch]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -312,15 +443,15 @@ export function CanadaOpportunitiesDialog({
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-red-100 text-red-800">
               <BriefcaseBusiness className="h-5 w-5" />
             </span>
-            Opportunités Canada
+            Opportunités internationales
           </DialogTitle>
           <DialogDescription className="text-sm text-slate-600">
-            Offres récentes, admissibilité internationale contrôlée et parcours de candidature
-            clair.
+            Canada, ANETI International, volontariat et événements officiels avec parcours de
+            candidature vérifié.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-3">
+        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-4">
           <button
             type="button"
             onClick={() => setProvider("jobbank")}
@@ -376,6 +507,25 @@ export function CanadaOpportunitiesDialog({
             </span>
             <span className="mt-1 block text-xs leading-relaxed text-slate-600">
               Forum Mobilité, dates officielles et accès au formulaire candidat dès son ouverture.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setProvider("aneti")}
+            className={`rounded-2xl border p-4 text-left transition ${
+              provider === "aneti"
+                ? "border-sky-400 bg-sky-50 ring-2 ring-sky-100"
+                : "border-slate-200 bg-white hover:border-sky-200"
+            }`}
+          >
+            <span className="flex items-center gap-2 font-black text-slate-950">
+              <Globe2 className="h-5 w-5 text-sky-700" /> ANETI International
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black uppercase text-sky-800">
+                Tunisie
+              </span>
+            </span>
+            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+              Offres publiques vérifiées avec formulaire, CIN, CV et inscription requise.
             </span>
           </button>
         </div>
@@ -498,6 +648,111 @@ export function CanadaOpportunitiesDialog({
               </p>
             </div>
           </div>
+        ) : provider === "aneti" ? (
+          <>
+            <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[230px_minmax(260px,1fr)_auto]">
+              <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                Période
+                <select
+                  value={period}
+                  onChange={(event) => setPeriod(event.target.value as "week" | "recent")}
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-100"
+                >
+                  <option value="week">Publiées ces 7 derniers jours</option>
+                  <option value="recent">Offres récentes encore ouvertes</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                Métier, pays ou spécialité
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void runAnetiSearch();
+                    }}
+                    className="pl-9 normal-case tracking-normal"
+                    placeholder="Ex. aide-soignant, Italie, cuisine…"
+                  />
+                </div>
+              </label>
+              <Button
+                className="self-end bg-sky-700 text-white hover:bg-sky-800"
+                onClick={() => void runAnetiSearch()}
+              >
+                {anetiLoading ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Actualiser ANETI
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="mb-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                Les fiches publiques sont actualisées automatiquement. Aucun mot de passe ni cookie
+                ANETI n’est conservé par ZGR ; la connexion reste personnelle au moment de postuler.
+              </div>
+              {anetiError ? (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {anetiError}
+                </div>
+              ) : null}
+              {anetiResult ? (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                  <p className="font-semibold text-emerald-950">
+                    <BadgeCheck className="mr-1.5 inline h-4 w-4" />
+                    {anetiResult.meta.totalMatches} offre(s) ANETI vérifiée(s)
+                  </p>
+                  <p className="text-xs text-emerald-800">
+                    Vérifiées le {new Date(anetiResult.meta.verifiedAt).toLocaleString("fr-FR")}
+                    {anetiResult.meta.stale ? " · cache de secours" : ""}
+                  </p>
+                </div>
+              ) : null}
+              {anetiLoading && !anetiResult ? (
+                <div className="grid min-h-64 place-items-center text-sm font-medium text-slate-500">
+                  <span className="flex items-center gap-2">
+                    <LoaderCircle className="h-5 w-5 animate-spin text-sky-700" /> Lecture des
+                    fiches ANETI officielles…
+                  </span>
+                </div>
+              ) : anetiResult?.opportunities.length ? (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {anetiResult.opportunities.map((opportunity) => (
+                    <AnetiOpportunityCard key={opportunity.id} opportunity={opportunity} />
+                  ))}
+                </div>
+              ) : !anetiLoading ? (
+                <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                  <div>
+                    <Globe2 className="mx-auto mb-3 h-9 w-9 text-slate-400" />
+                    <p className="font-bold text-slate-800">
+                      Aucune offre ANETI dans cette sélection.
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Choisissez « offres récentes » ou retirez le filtre texte.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+              <span>Source : Agence Nationale pour l’Emploi et le Travail Indépendant.</span>
+              <a
+                href={anetiResult?.meta.sourceUrl || "https://aneti-international.tn/offres"}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-sky-800 hover:underline"
+              >
+                Ouvrir ANETI International <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </footer>
+          </>
         ) : (
           <>
             <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[180px_230px_minmax(260px,1fr)_auto]">

@@ -194,6 +194,10 @@ const CanadaOpportunitiesDialog = lazy(async () => {
   const module = await import("@/components/canada-opportunities-dialog");
   return { default: module.CanadaOpportunitiesDialog };
 });
+const CanadianNocField = lazy(async () => {
+  const module = await import("@/components/canadian-noc-field");
+  return { default: module.CanadianNocField };
+});
 const AccountSettingsDialog = lazy(async () => {
   const module = await import("@/components/account-settings-dialog");
   return { default: module.AccountSettingsDialog };
@@ -3266,6 +3270,19 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   placeholder={form.jobTitle}
                   onChange={(e) => set("titre_poste", e.target.value.slice(0, 120))}
                 />
+              </Field>
+              <Field label="Équivalence professionnelle — CNP Canada">
+                <Suspense
+                  fallback={
+                    <div className="h-10 animate-pulse rounded-lg border border-slate-200 bg-slate-50" />
+                  }
+                >
+                  <CanadianNocField
+                    value={cv.cnp}
+                    jobTitle={cv.titre_poste}
+                    onChange={(value) => set("cnp", value)}
+                  />
+                </Suspense>
               </Field>
               <Field
                 label={form.phone}

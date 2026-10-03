@@ -31,3 +31,25 @@ test("normalizes string and structured software values with stable icons", () =>
   });
   assert.equal(result.cv.logiciels[2]?.icon, "generic");
 });
+
+test("normalizes and preserves the official Canadian NOC equivalence", () => {
+  const result = importCvJson(
+    {
+      nom_complet: "Profil Canada",
+      titre_poste: "Développeur logiciel",
+      cnp: {
+        code: "21232",
+        title: "Développeurs/développeuses et programmeurs/programmeuses de logiciels",
+      },
+    },
+    "auto",
+  );
+
+  assert.deepEqual(result.cv.cnp, {
+    code: "21232",
+    title: "Développeurs/développeuses et programmeurs/programmeuses de logiciels",
+    teer: "FEER 1",
+    version: "CNP 2021 v1.0",
+    sourceUrl: "https://www.statcan.gc.ca/fr/sujets/norme/cnp/2021/indexV1",
+  });
+});

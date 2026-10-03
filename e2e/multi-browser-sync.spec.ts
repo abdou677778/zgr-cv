@@ -306,6 +306,48 @@ class SharedClientApi {
       });
     }
 
+    if (url.pathname === "/api/aneti-opportunities/search" && method === "GET") {
+      return this.respond(route, 200, {
+        opportunities: [
+          {
+            id: "1055923",
+            title: "Opérateur socio-sanitaire",
+            country: "Italie",
+            postedAt: "2026-10-02T10:24:00+01:00",
+            deadlineAt: "2026-10-18T23:59:00+01:00",
+            description: "Assistance aux personnes âgées non autonomes.",
+            requirements: "Diplôme d’aide-soignant et baccalauréat.",
+            cvLanguage: "français",
+            speciality: "SOINS GÉNÉRAUX AUX PERSONNES ÂGÉES",
+            sourceUrl: "https://aneti-international.tn/node/1055923",
+            applicationMethod: {
+              type: "external_form",
+              label: "Formulaire officiel + inscription ANETI requise",
+              url: "https://candidatures.aneti.tn/app/inscription/69",
+              loginRequired: true,
+              note: "Formulaire publié dans la fiche officielle.",
+            },
+            registrationRequirements: [
+              "Être inscrit au bureau de l’emploi et du travail indépendant",
+              "Disposer d’un compte candidat ANETI International",
+              "Utiliser le numéro CIN pour l’inscription et le nom du fichier CV",
+            ],
+            checkedAt: "2026-10-03T07:00:00.000Z",
+          },
+        ],
+        meta: {
+          period: url.searchParams.get("period") || "week",
+          returned: 1,
+          totalMatches: 1,
+          scanned: 13,
+          verifiedAt: "2026-10-03T07:00:00.000Z",
+          stale: false,
+          sourceUrl: "https://aneti-international.tn/offres",
+          methodology: "Lecture des fiches publiques ANETI.",
+        },
+      });
+    }
+
     if (url.pathname === "/api/auth/login" && method === "POST") {
       const credentials = request.postDataJSON() as { username?: string; password?: string };
       const user =
@@ -864,7 +906,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
   try {
     const page = await connect(context, api, "admin");
     await page.getByRole("button", { name: "Opportunités Canada" }).click();
-    const dialog = page.getByRole("dialog", { name: "Opportunités Canada" });
+    const dialog = page.getByRole("dialog", { name: "Opportunités internationales" });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("senior accountant", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Candidat international vérifié", { exact: true })).toBeVisible();
@@ -891,6 +933,50 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(
       dialog.getByRole("link", { name: /Vérifier l’inscription candidat/ }),
     ).toHaveAttribute("href", /canada\.ca\/fr\/.*\/destination-canada\/candidats\.html/);
+
+    await dialog.getByRole("button", { name: /ANETI International/ }).click();
+    await expect(dialog.getByText("Opérateur socio-sanitaire", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Inscription ANETI requise", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/Dernier délai : 18 oct. 2026/)).toBeVisible();
+    await expect(dialog.getByText(/numéro CIN/)).toBeVisible();
+    await expect(
+      dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
+    ).toHaveAttribute("href", "https://candidatures.aneti.tn/app/inscription/69");
+  } finally {
+    await context.close();
+  }
+});
+
+test("sélectionne une équivalence officielle CNP dans le formulaire", async ({ browser }) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+  try {
+    const page = await connect(context, api, "admin");
+    await openPersonalDetails(page);
+    await page.getByPlaceholder("Titre du poste").fill("Développeur logiciel");
+    const nocSelector = page.getByRole("combobox", {
+      name: /Rechercher un code ou un intitulé CNP/,
+    });
+    await expect(nocSelector).toBeVisible();
+    await nocSelector.click();
+
+    const nocSearch = page.getByPlaceholder(/Code CNP ou métier/);
+    await expect(nocSearch).toBeVisible();
+    await nocSearch.fill("21232");
+
+    const nocOption = page.locator("[cmdk-item]").filter({ hasText: "21232" }).first();
+    await expect(nocOption).toContainText(/Développeurs.*programmeurs.*de logiciels/);
+    await nocOption.click();
+
+    await expect(
+      page.getByRole("combobox", { name: /21232.*Développeurs.*programmeurs.*de logiciels/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/FEER 1 · Diplôme universitaire généralement requis/),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /CNP 2021 v1.0 · source officielle/ }),
+    ).toHaveAttribute("href", /statcan\.gc\.ca\/fr\/sujets\/norme\/cnp\/2021/);
   } finally {
     await context.close();
   }

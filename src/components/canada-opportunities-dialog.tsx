@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowLeft,
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
@@ -24,13 +25,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   indeedCanadaSearchUrl,
@@ -609,22 +603,56 @@ export function CanadaOpportunitiesDialog({
     return () => atctRequestRef.current?.abort();
   }, [open, period, provider, runAtctSearch]);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] max-w-[min(1500px,96vw)] flex-col overflow-hidden border-red-200 bg-slate-50 p-0">
-        <DialogHeader className="border-b border-slate-200 bg-white px-6 py-5 pr-14">
-          <DialogTitle className="flex items-center gap-2 text-xl font-black text-slate-950">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-red-100 text-red-800">
-              <BriefcaseBusiness className="h-5 w-5" />
-            </span>
-            Opportunités internationales
-          </DialogTitle>
-          <DialogDescription className="text-sm text-slate-600">
-            Canada, ANETI, ATCT, volontariat et événements officiels avec parcours de candidature
-            vérifié.
-          </DialogDescription>
-        </DialogHeader>
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const returnHome = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", returnHome);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", returnHome);
+    };
+  }, [onOpenChange, open]);
 
+  if (!open) return null;
+
+  return (
+    <main
+      aria-labelledby="international-opportunities-title"
+      className="fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50"
+    >
+      <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
+        <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-fit shrink-0 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-100"
+            onClick={() => onOpenChange(false)}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l’accueil
+          </Button>
+          <div className="min-w-0">
+            <h1
+              id="international-opportunities-title"
+              className="flex items-center gap-2 text-xl font-black text-slate-950 sm:text-2xl"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-red-100 text-red-800">
+                <BriefcaseBusiness className="h-5 w-5" />
+              </span>
+              Opportunités internationales
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Canada, ANETI, ATCT, volontariat et événements officiels avec parcours de candidature
+              vérifié.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-5">
           <button
             type="button"
@@ -1198,7 +1226,7 @@ export function CanadaOpportunitiesDialog({
             </footer>
           </>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </main>
   );
 }

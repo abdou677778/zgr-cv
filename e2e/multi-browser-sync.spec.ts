@@ -952,8 +952,9 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
   try {
     const page = await connect(context, api, "admin");
     await page.getByRole("button", { name: "Opportunités Canada" }).click();
-    const dialog = page.getByRole("dialog", { name: "Opportunités internationales" });
+    const dialog = page.getByRole("main", { name: "Opportunités internationales" });
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Retour à l’accueil" })).toBeVisible();
     await expect(dialog.getByText("senior accountant", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Candidat international vérifié", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Sans compte Indeed", { exact: true })).toBeVisible();
@@ -997,6 +998,8 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://connexion-pef.afeseo.ca/je-vis-a-lexterieur-du-canada/");
+    await dialog.getByRole("button", { name: "Retour à l’accueil" }).click();
+    await expect(dialog).toBeHidden();
   } finally {
     await context.close();
   }

@@ -348,6 +348,52 @@ class SharedClientApi {
       });
     }
 
+    if (url.pathname === "/api/atct-opportunities/search" && method === "GET") {
+      return this.respond(route, 200, {
+        opportunities: [
+          {
+            id: "offre-de-recrutement-au-canada-de-personnel-educateur-la-petite-enfance-ontario",
+            title:
+              "Offre de recrutement au Canada de personnel éducateur à la petite enfance – Ontario",
+            country: "Canada — Ontario",
+            postedAt: "2026-10-02T12:00:00.000Z",
+            deadlineAt: "2026-11-01T22:59:00.000Z",
+            closedBySource: false,
+            category: "job",
+            positions: ["Éducatrice ou éducateur à la petite enfance"],
+            requirements: "Formation et expérience dans le domaine de la petite enfance.",
+            description: "Recrutement international officiel publié par l’ATCT.",
+            audience: "Candidats et compétences tunisiennes",
+            sourceUrl:
+              "https://www.atct.tn/fr/offre-de-recrutement-au-canada-de-personnel-educateur-la-petite-enfance-ontario",
+            applicationMethod: {
+              type: "external_form",
+              label: "Formulaire externe officiel publié par l’ATCT",
+              url: "https://connexion-pef.afeseo.ca/je-vis-a-lexterieur-du-canada/",
+              email: null,
+              loginRequired: false,
+              note: "Plateforme : connexion-pef.afeseo.ca",
+            },
+            requiredDocuments: ["CV", "Diplôme ou qualification"],
+            dataQuality: { status: "complete", missingFields: [] },
+            checkedAt: "2026-10-03T08:00:00.000Z",
+          },
+        ],
+        meta: {
+          period: url.searchParams.get("period") || "week",
+          returned: 1,
+          totalMatches: 1,
+          scanned: 30,
+          excludedNotices: 14,
+          verifiedAt: "2026-10-03T08:00:00.000Z",
+          stale: false,
+          sourceUrl: "https://www.atct.tn/fr/avis_ann",
+          candidatePortalUrl: "https://www.atct.tn/rh/fr/candidat",
+          methodology: "Lecture et classification des avis publics ATCT.",
+        },
+      });
+    }
+
     if (url.pathname === "/api/auth/login" && method === "POST") {
       const credentials = request.postDataJSON() as { username?: string; password?: string };
       const user =
@@ -934,7 +980,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Vérifier l’inscription candidat/ }),
     ).toHaveAttribute("href", /canada\.ca\/fr\/.*\/destination-canada\/candidats\.html/);
 
-    await dialog.getByRole("button", { name: /ANETI International/ }).click();
+    await dialog.getByRole("button", { name: /ANETI Tunisia/ }).click();
     await expect(dialog.getByText("Opérateur socio-sanitaire", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Inscription ANETI requise", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 18 oct. 2026/)).toBeVisible();
@@ -942,6 +988,15 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://candidatures.aneti.tn/app/inscription/69");
+
+    await dialog.getByRole("button", { name: /ATCT Tunisia/ }).click();
+    await expect(dialog.getByText(/personnel éducateur à la petite enfance/)).toBeVisible();
+    await expect(dialog.getByText("Source publique ATCT vérifiée", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/Dernier délai : 01 nov. 2026/)).toBeVisible();
+    await expect(dialog.getByText(/14 avis hors emploi écarté/)).toBeVisible();
+    await expect(
+      dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
+    ).toHaveAttribute("href", "https://connexion-pef.afeseo.ca/je-vis-a-lexterieur-du-canada/");
   } finally {
     await context.close();
   }

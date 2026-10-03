@@ -9,6 +9,7 @@ import {
   refreshCanadaOpportunityCache,
 } from "./canada-opportunities.js";
 import { handleAnetiOpportunityApi, refreshAnetiOpportunityCache } from "./aneti-opportunities.js";
+import { handleAtctOpportunityApi, refreshAtctOpportunityCache } from "./atct-opportunities.js";
 
 const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
@@ -3995,6 +3996,8 @@ async function route(request, env, ctx) {
     return handleCanadaOpportunityApi(request, env, origin);
   if (url.pathname.startsWith("/api/aneti-opportunities/"))
     return handleAnetiOpportunityApi(request, env, origin);
+  if (url.pathname.startsWith("/api/atct-opportunities/"))
+    return handleAtctOpportunityApi(request, env, origin);
   if (url.pathname === "/api/auth/login" && request.method === "POST")
     return login(request, env, origin, ctx);
 
@@ -4264,6 +4267,16 @@ export default {
         console.error(
           JSON.stringify({
             event: "aneti_opportunities_refresh_failed",
+            message: error instanceof Error ? error.message : "unknown",
+          }),
+        );
+      }),
+    );
+    ctx.waitUntil(
+      refreshAtctOpportunityCache(env).catch((error) => {
+        console.error(
+          JSON.stringify({
+            event: "atct_opportunities_refresh_failed",
             message: error instanceof Error ? error.message : "unknown",
           }),
         );

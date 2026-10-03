@@ -43,8 +43,13 @@ import {
   type AnetiOpportunity,
   type AnetiOpportunitySearchResult,
 } from "@/lib/aneti-opportunities";
+import {
+  searchAtctOpportunities,
+  type AtctOpportunity,
+  type AtctOpportunitySearchResult,
+} from "@/lib/atct-opportunities";
 
-type Provider = "jobbank" | "indeed" | "destination_canada" | "aneti";
+type Provider = "jobbank" | "indeed" | "destination_canada" | "aneti" | "atct";
 
 const DESTINATION_CANADA_CANDIDATES_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/candidats.html";
@@ -372,6 +377,129 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
   );
 }
 
+function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) {
+  const actionLabel =
+    opportunity.applicationMethod.type === "email"
+      ? "Écrire pour postuler"
+      : opportunity.applicationMethod.type === "external_form"
+        ? "Ouvrir le formulaire officiel"
+        : opportunity.applicationMethod.type === "atct_portal"
+          ? "Ouvrir l’espace candidat"
+          : "Voir comment postuler";
+  return (
+    <article className="flex h-full flex-col rounded-2xl border border-teal-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
+            opportunity.staleDetail ? "bg-amber-100 text-amber-900" : "bg-teal-100 text-teal-900"
+          }`}
+        >
+          <BadgeCheck className="h-3.5 w-3.5" />
+          {opportunity.staleDetail
+            ? "Dernière fiche ATCT vérifiée (cache)"
+            : "Source publique ATCT vérifiée"}
+        </span>
+        {opportunity.dataQuality?.status === "partial" ? (
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+            Données partielles
+          </span>
+        ) : null}
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+            opportunity.applicationMethod.loginRequired
+              ? "bg-amber-100 text-amber-900"
+              : "bg-emerald-100 text-emerald-800"
+          }`}
+        >
+          {opportunity.applicationMethod.loginRequired ? "Compte ATCT requis" : "Accès direct"}
+        </span>
+      </div>
+
+      <h3 className="text-base font-black leading-snug text-slate-950">{opportunity.title}</h3>
+      <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+        <p className="flex items-start gap-2">
+          <Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
+          <span>{opportunity.country || "Pays non indiqué"}</span>
+        </p>
+        <p className="flex items-start gap-2">
+          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
+          <span>Publiée le {formatDate(opportunity.postedAt, "date non indiquée")}</span>
+        </p>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-red-900">
+        <p className="flex items-start gap-2 text-sm font-black">
+          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par l’ATCT")}</span>
+        </p>
+      </div>
+
+      {opportunity.positions.length ? (
+        <div className="mt-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 text-teal-950">
+          <p className="text-xs font-black uppercase tracking-wide text-teal-800">
+            Poste{opportunity.positions.length > 1 ? "s" : ""} à pourvoir
+          </p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed">
+            {opportunity.positions.slice(0, 5).map((position) => (
+              <li key={position}>{position}</li>
+            ))}
+          </ul>
+          {opportunity.positions.length > 5 ? (
+            <p className="mt-1 text-xs font-bold text-teal-800">
+              + {opportunity.positions.length - 5} autre(s) poste(s)
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-950">
+        <p className="flex items-start gap-2 text-sm font-black">
+          <UserRoundCheck className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{opportunity.applicationMethod.label}</span>
+        </p>
+        {opportunity.applicationMethod.email ? (
+          <a
+            href={`mailto:${opportunity.applicationMethod.email}`}
+            className="mt-1.5 block break-all text-sm font-bold underline underline-offset-2"
+          >
+            {opportunity.applicationMethod.email}
+          </a>
+        ) : (
+          <p className="mt-1 text-xs leading-relaxed">{opportunity.applicationMethod.note}</p>
+        )}
+      </div>
+
+      {opportunity.requiredDocuments.length ? (
+        <p className="mt-2 text-xs leading-relaxed text-slate-600">
+          <strong>Pièces indiquées :</strong> {opportunity.requiredDocuments.join(" · ")}
+        </p>
+      ) : null}
+      {opportunity.requirements ? (
+        <p className="mt-2 line-clamp-4 whitespace-pre-line text-sm leading-relaxed text-slate-600">
+          {opportunity.requirements}
+        </p>
+      ) : opportunity.description ? (
+        <p className="mt-2 line-clamp-4 whitespace-pre-line text-sm leading-relaxed text-slate-600">
+          {opportunity.description}
+        </p>
+      ) : null}
+
+      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-4">
+        <Button asChild size="sm" variant="outline">
+          <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
+            Vérifier la fiche <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+          </a>
+        </Button>
+        <Button asChild size="sm" className="bg-teal-700 text-white hover:bg-teal-800">
+          <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
+            {actionLabel} <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+          </a>
+        </Button>
+      </div>
+    </article>
+  );
+}
+
 export function CanadaOpportunitiesDialog({
   open,
   onOpenChange,
@@ -385,12 +513,16 @@ export function CanadaOpportunitiesDialog({
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<CanadaOpportunitySearchResult | null>(null);
   const [anetiResult, setAnetiResult] = useState<AnetiOpportunitySearchResult | null>(null);
+  const [atctResult, setAtctResult] = useState<AtctOpportunitySearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [anetiLoading, setAnetiLoading] = useState(false);
+  const [atctLoading, setAtctLoading] = useState(false);
   const [error, setError] = useState("");
   const [anetiError, setAnetiError] = useState("");
+  const [atctError, setAtctError] = useState("");
   const requestRef = useRef<AbortController | null>(null);
   const anetiRequestRef = useRef<AbortController | null>(null);
+  const atctRequestRef = useRef<AbortController | null>(null);
 
   const runSearch = useCallback(async () => {
     requestRef.current?.abort();
@@ -439,6 +571,29 @@ export function CanadaOpportunitiesDialog({
     }
   }, [period, query]);
 
+  const runAtctSearch = useCallback(async () => {
+    atctRequestRef.current?.abort();
+    const controller = new AbortController();
+    atctRequestRef.current = controller;
+    setAtctLoading(true);
+    setAtctError("");
+    try {
+      setAtctResult(
+        await searchAtctOpportunities({
+          period,
+          query,
+          limit: 24,
+          signal: controller.signal,
+        }),
+      );
+    } catch (failure) {
+      if ((failure as Error).name !== "AbortError")
+        setAtctError(failure instanceof Error ? failure.message : "Recherche ATCT indisponible.");
+    } finally {
+      if (!controller.signal.aborted) setAtctLoading(false);
+    }
+  }, [period, query]);
+
   useEffect(() => {
     if (open && provider === "jobbank") void runSearch();
     return () => requestRef.current?.abort();
@@ -448,6 +603,11 @@ export function CanadaOpportunitiesDialog({
     if (open && provider === "aneti") void runAnetiSearch();
     return () => anetiRequestRef.current?.abort();
   }, [open, period, provider, runAnetiSearch]);
+
+  useEffect(() => {
+    if (open && provider === "atct") void runAtctSearch();
+    return () => atctRequestRef.current?.abort();
+  }, [open, period, provider, runAtctSearch]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -460,12 +620,12 @@ export function CanadaOpportunitiesDialog({
             Opportunités internationales
           </DialogTitle>
           <DialogDescription className="text-sm text-slate-600">
-            Canada, ANETI International, volontariat et événements officiels avec parcours de
-            candidature vérifié.
+            Canada, ANETI, ATCT, volontariat et événements officiels avec parcours de candidature
+            vérifié.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-5">
           <button
             type="button"
             onClick={() => setProvider("jobbank")}
@@ -533,13 +693,32 @@ export function CanadaOpportunitiesDialog({
             }`}
           >
             <span className="flex items-center gap-2 font-black text-slate-950">
-              <Globe2 className="h-5 w-5 text-sky-700" /> ANETI International
+              <Globe2 className="h-5 w-5 text-sky-700" /> ANETI Tunisia
               <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black uppercase text-sky-800">
                 Tunisie
               </span>
             </span>
             <span className="mt-1 block text-xs leading-relaxed text-slate-600">
               Offres publiques vérifiées avec formulaire, CIN, CV et inscription requise.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setProvider("atct")}
+            className={`rounded-2xl border p-4 text-left transition ${
+              provider === "atct"
+                ? "border-teal-400 bg-teal-50 ring-2 ring-teal-100"
+                : "border-slate-200 bg-white hover:border-teal-200"
+            }`}
+          >
+            <span className="flex items-center gap-2 font-black text-slate-950">
+              <Building2 className="h-5 w-5 text-teal-700" /> ATCT Tunisia
+              <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-black uppercase text-teal-900">
+                Officiel
+              </span>
+            </span>
+            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+              Recrutements internationaux officiels filtrés, avec délai et méthode de candidature.
             </span>
           </button>
         </div>
@@ -775,6 +954,133 @@ export function CanadaOpportunitiesDialog({
               >
                 Ouvrir ANETI International <ExternalLink className="h-3.5 w-3.5" />
               </a>
+            </footer>
+          </>
+        ) : provider === "atct" ? (
+          <>
+            <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[230px_minmax(260px,1fr)_auto]">
+              <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                Période
+                <select
+                  value={period}
+                  onChange={(event) => setPeriod(event.target.value as "week" | "recent")}
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
+                >
+                  <option value="week">Publiées ces 7 derniers jours</option>
+                  <option value="recent">Offres récentes encore ouvertes</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                Métier, pays ou critère
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void runAtctSearch();
+                    }}
+                    className="pl-9 normal-case tracking-normal"
+                    placeholder="Ex. Canada, éducateur, restauration…"
+                  />
+                </div>
+              </label>
+              <Button
+                className="self-end bg-teal-700 text-white hover:bg-teal-800"
+                onClick={() => void runAtctSearch()}
+              >
+                {atctLoading ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Actualiser ATCT
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="mb-4 flex items-start gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-teal-950">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                Les avis ATCT sont paginés puis relus fiche par fiche. Les marchés publics,
+                concours, ateliers et annonces sans emploi sont exclus automatiquement. Aucun
+                identifiant ATCT n’est enregistré par ZGR.
+              </div>
+              {atctError ? (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {atctError}
+                </div>
+              ) : null}
+              {atctResult ? (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                  <p className="font-semibold text-emerald-950">
+                    <BadgeCheck className="mr-1.5 inline h-4 w-4" />
+                    {atctResult.meta.totalMatches} offre(s) ATCT vérifiée(s) ·{" "}
+                    {atctResult.meta.excludedNotices} avis hors emploi écarté(s)
+                  </p>
+                  <p className="text-xs text-emerald-800">
+                    Vérifiées le {new Date(atctResult.meta.verifiedAt).toLocaleString("fr-FR")}
+                    {atctResult.meta.stale ? " · cache de secours" : ""}
+                    {atctResult.meta.detailFailures
+                      ? ` · ${atctResult.meta.detailFailures} fiche(s) conservée(s) du cache`
+                      : ""}
+                  </p>
+                </div>
+              ) : null}
+              {atctResult?.meta.staleReason ? (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  Actualisation directe indisponible : affichage temporaire du dernier cache
+                  vérifié.
+                </div>
+              ) : null}
+              {atctLoading && !atctResult ? (
+                <div className="grid min-h-64 place-items-center text-sm font-medium text-slate-500">
+                  <span className="flex items-center gap-2">
+                    <LoaderCircle className="h-5 w-5 animate-spin text-teal-700" /> Lecture et
+                    classification des avis ATCT officiels…
+                  </span>
+                </div>
+              ) : atctResult?.opportunities.length ? (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {atctResult.opportunities.map((opportunity) => (
+                    <AtctOpportunityCard key={opportunity.id} opportunity={opportunity} />
+                  ))}
+                </div>
+              ) : !atctLoading ? (
+                <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                  <div>
+                    <Building2 className="mx-auto mb-3 h-9 w-9 text-slate-400" />
+                    <p className="font-bold text-slate-800">
+                      Aucune offre ATCT dans cette sélection.
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Choisissez « offres récentes » ou retirez le filtre texte.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+              <span>Source : Agence Tunisienne de Coopération Technique.</span>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href={atctResult?.meta.candidatePortalUrl || "https://www.atct.tn/rh/fr/candidat"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-semibold text-teal-800 hover:underline"
+                >
+                  Espace candidat <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                <a
+                  href={atctResult?.meta.sourceUrl || "https://www.atct.tn/fr/avis_ann"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-semibold text-teal-800 hover:underline"
+                >
+                  Ouvrir les avis ATCT <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
             </footer>
           </>
         ) : (

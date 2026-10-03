@@ -62,12 +62,15 @@ commande, lire son brief et ses documents avec des liens privés de 15 minutes,
 charger le prompt maître, consulter une version JSON et enregistrer une nouvelle
 version validée.
 
-Six outils publics authentifiés complètent le traitement des commandes :
+Huit outils publics authentifiés complètent le traitement des commandes :
 `search_volunteer_opportunities`, `inspect_volunteer_opportunity`,
 `search_canada_opportunities`, `inspect_canada_opportunity`,
-`search_aneti_opportunities` et `inspect_aneti_opportunity`. Une question
+`search_aneti_opportunities`, `inspect_aneti_opportunity`,
+`search_atct_opportunities` et `inspect_atct_opportunity`. Une question
 générale déclenche la recherche correspondante. Les liens Facebook ANETI sont
-normalisés vers leur fiche publique officielle. Un lien ou identifiant précis
+normalisés vers leur fiche publique officielle, tout comme les redirections vers
+les avis ATCT. Les outils ATCT filtrent les marchés publics, concours et événements
+pour ne retourner que les recrutements internationaux. Un lien ou identifiant précis
 déclenche obligatoirement l’inspection de la fiche officielle avant toute
 réponse sur l’admissibilité, l’échéance ou la méthode de candidature.
 

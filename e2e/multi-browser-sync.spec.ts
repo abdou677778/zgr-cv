@@ -958,6 +958,12 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     const dialog = page.getByRole("main", { name: "Opportunités internationales" });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Retour à l’accueil" })).toBeVisible();
+    const sourcesNavigation = dialog.getByRole("navigation", {
+      name: "Sources d’opportunités",
+    });
+    await expect(sourcesNavigation).toBeVisible();
+    const sourcesNavigationBox = await sourcesNavigation.boundingBox();
+    expect(sourcesNavigationBox?.height).toBeLessThanOrEqual(64);
     await expect(dialog.getByText("senior accountant", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Candidat international vérifié", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Sans compte Indeed", { exact: true })).toBeVisible();
@@ -970,7 +976,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "mailto:careers@manningelliott.example",
     );
 
-    await dialog.getByRole("button", { name: /Indeed Canada/ }).click();
+    await dialog.getByRole("button", { name: /^Indeed$/ }).click();
     await expect(dialog.getByText("Recherche Indeed conforme et durable")).toBeVisible();
     await expect(dialog.getByRole("link", { name: /Ouvrir Indeed/ })).toHaveAttribute(
       "href",
@@ -984,7 +990,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Vérifier l’inscription candidat/ }),
     ).toHaveAttribute("href", /canada\.ca\/fr\/.*\/destination-canada\/candidats\.html/);
 
-    await dialog.getByRole("button", { name: /Î\.-P\.-É\. Canada/ }).click();
+    await dialog.getByRole("button", { name: /Î\.-P\.-É\./ }).click();
     const peiCard = dialog
       .getByRole("article")
       .filter({ hasText: "Île-du-Prince-Édouard — EOI et recrutement international" });
@@ -1018,7 +1024,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "https://www.gnb.ca/en/topic/family-home-community/immigration/important-notices.html",
     );
 
-    await dialog.getByRole("button", { name: /ANETI Tunisia/ }).click();
+    await dialog.getByRole("button", { name: /^ANETI$/ }).click();
     await expect(dialog.getByText("Opérateur socio-sanitaire", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Inscription ANETI requise", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 18 oct. 2026/)).toBeVisible();
@@ -1027,7 +1033,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://candidatures.aneti.tn/app/inscription/69");
 
-    await dialog.getByRole("button", { name: /ATCT Tunisia/ }).click();
+    await dialog.getByRole("button", { name: /^ATCT$/ }).click();
     await expect(dialog.getByText(/personnel éducateur à la petite enfance/)).toBeVisible();
     await expect(dialog.getByText("Source publique ATCT vérifiée", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 01 nov. 2026/)).toBeVisible();
@@ -1036,7 +1042,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://connexion-pef.afeseo.ca/je-vis-a-lexterieur-du-canada/");
 
-    await dialog.getByRole("button", { name: /Opportunités Italie/ }).click();
+    await dialog.getByRole("button", { name: /^Drapeau Italie Italie$/ }).click();
     const italyCard = dialog.getByRole("article").filter({ hasText: "Decreto Flussi 2027" });
     await expect(italyCard.getByText("Decreto Flussi 2027 — 165 850 quotas légaux")).toBeVisible();
     await expect(italyCard.getByText(/ce ne sont pas 165 850 contrats/)).toBeVisible();

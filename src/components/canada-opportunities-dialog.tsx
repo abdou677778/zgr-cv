@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -52,6 +52,34 @@ type Provider =
   | "aneti"
   | "atct"
   | "italy";
+
+function ProviderTab({
+  active,
+  children,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  children: ReactNode;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      title={description}
+      onClick={onClick}
+      className={`flex h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-black whitespace-nowrap transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 ${
+        active
+          ? "border-red-400 bg-red-50 text-red-950 shadow-sm ring-1 ring-red-100"
+          : "border-slate-200 bg-white text-slate-800 hover:border-red-200 hover:bg-slate-50"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
 const DESTINATION_CANADA_CANDIDATES_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/candidats.html";
@@ -1188,11 +1216,12 @@ export function CanadaOpportunitiesDialog({
       aria-labelledby="international-opportunities-title"
       className="fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50"
     >
-      <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
-        <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center">
+      <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-6">
+        <div className="mx-auto flex w-full max-w-[1800px] items-center gap-3">
           <Button
             type="button"
             variant="outline"
+            size="sm"
             className="w-fit shrink-0 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-100"
             onClick={() => onOpenChange(false)}
           >
@@ -1201,14 +1230,14 @@ export function CanadaOpportunitiesDialog({
           <div className="min-w-0">
             <h1
               id="international-opportunities-title"
-              className="flex items-center gap-2 text-xl font-black text-slate-950 sm:text-2xl"
+              className="flex items-center gap-2 text-lg font-black text-slate-950 sm:text-xl"
             >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-red-100 text-red-800">
+              <span className="hidden h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-100 text-red-800 sm:grid">
                 <BriefcaseBusiness className="h-5 w-5" />
               </span>
               Opportunités internationales
             </h1>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-0.5 hidden text-xs text-slate-600 md:block">
               Canada, provinces canadiennes, Italie, ANETI, ATCT, volontariat et événements
               officiels avec parcours de candidature vérifié.
             </p>
@@ -1217,161 +1246,72 @@ export function CanadaOpportunitiesDialog({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-4">
-          <button
-            type="button"
-            onClick={() => setProvider("jobbank")}
-            className={`rounded-2xl border p-4 text-left transition ${
-              provider === "jobbank"
-                ? "border-red-400 bg-red-50 ring-2 ring-red-100"
-                : "border-slate-200 bg-white hover:border-red-200"
-            }`}
-          >
-            <span className="flex items-center gap-2 font-black text-slate-950">
-              <Landmark className="h-5 w-5 text-red-700" /> Guichet-Emplois Canada
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+        <nav
+          aria-label="Sources d’opportunités"
+          className="shrink-0 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 [scrollbar-width:thin] sm:px-5"
+        >
+          <div className="mx-auto flex w-max min-w-full max-w-[1800px] gap-2">
+            <ProviderTab
+              active={provider === "jobbank"}
+              description="Offres gouvernementales vérifiées fiche par fiche"
+              onClick={() => setProvider("jobbank")}
+            >
+              <Landmark className="h-4 w-4 text-red-700" /> Guichet-Emplois
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] uppercase text-emerald-800">
                 Recommandé
               </span>
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
-              Cartes automatiques issues de la source gouvernementale, vérifiées fiche par fiche.
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setProvider("indeed")}
-            className={`rounded-2xl border p-4 text-left transition ${
-              provider === "indeed"
-                ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
-                : "border-slate-200 bg-white hover:border-blue-200"
-            }`}
-          >
-            <span className="flex items-center gap-2 font-black text-slate-950">
-              <Search className="h-5 w-5 text-blue-700" /> Indeed Canada
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black uppercase text-blue-800">
-                Recherche directe
-              </span>
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
-              Ouvre les offres les plus récentes sur Indeed sans recopier ni aspirer leurs données.
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setProvider("destination_canada")}
-            className={`rounded-2xl border p-4 text-left transition ${
-              provider === "destination_canada"
-                ? "border-violet-400 bg-violet-50 ring-2 ring-violet-100"
-                : "border-slate-200 bg-white hover:border-violet-200"
-            }`}
-          >
-            <span className="flex items-center gap-2 font-black text-slate-950">
-              <CalendarDays className="h-5 w-5 text-violet-700" /> Destination Canada
-              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black uppercase text-violet-800">
-                Événement officiel
-              </span>
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
-              Forum Mobilité, dates officielles et accès au formulaire candidat dès son ouverture.
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setProvider("pei")}
-            className={`rounded-2xl border p-4 text-left transition ${
-              provider === "pei"
-                ? "border-red-400 bg-red-50 ring-2 ring-red-100"
-                : "border-slate-200 bg-white hover:border-red-200"
-            }`}
-          >
-            <span className="flex items-center gap-2 font-black text-slate-950">
-              <CountryFlag country="CA" /> Î.-P.-É. Canada
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black uppercase text-red-800">
-                EOI provinciale
-              </span>
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
-              Recrutement hors Canada, priorités, coûts et autorisation employeur vérifiés.
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setProvider("new_brunswick")}
-            className={`rounded-2xl border p-4 text-left transition ${
-              provider === "new_brunswick"
-                ? "border-red-400 bg-red-50 ring-2 ring-red-100"
-                : "border-slate-200 bg-white hover:border-red-200"
-            }`}
-          >
-            <span className="flex items-center gap-2 font-black text-slate-950">
+            </ProviderTab>
+            <ProviderTab
+              active={provider === "indeed"}
+              description="Recherche directe des offres récentes sur Indeed Canada"
+              onClick={() => setProvider("indeed")}
+            >
+              <Search className="h-4 w-4 text-blue-700" /> Indeed
+            </ProviderTab>
+            <ProviderTab
+              active={provider === "destination_canada"}
+              description="Forum Mobilité et inscription officielle"
+              onClick={() => setProvider("destination_canada")}
+            >
+              <CalendarDays className="h-4 w-4 text-violet-700" /> Destination Canada
+            </ProviderTab>
+            <ProviderTab
+              active={provider === "pei"}
+              description="EOI et recrutement hors Canada à l’Île-du-Prince-Édouard"
+              onClick={() => setProvider("pei")}
+            >
+              <CountryFlag country="CA" /> Î.-P.-É.
+            </ProviderTab>
+            <ProviderTab
+              active={provider === "new_brunswick"}
+              description="Voies provinciales et restrictions du Nouveau-Brunswick"
+              onClick={() => setProvider("new_brunswick")}
+            >
               <CountryFlag country="CA" /> Nouveau-Brunswick
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
-                INB 2026
-              </span>
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
-              Voies provinciales, tirages et restrictions 2026 contrôlés sur GNB.
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setProvider("aneti")}
-            className={`rounded-2xl border p-4 text-left transition ${
-              provider === "aneti"
-                ? "border-sky-400 bg-sky-50 ring-2 ring-sky-100"
-                : "border-slate-200 bg-white hover:border-sky-200"
-            }`}
-          >
-            <span className="flex items-center gap-2 font-black text-slate-950">
-              <Globe2 className="h-5 w-5 text-sky-700" /> ANETI Tunisia
-              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black uppercase text-sky-800">
-                Tunisie
-              </span>
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
-              Offres publiques vérifiées avec formulaire, CIN, CV et inscription requise.
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setProvider("atct")}
-            className={`rounded-2xl border p-4 text-left transition ${
-              provider === "atct"
-                ? "border-teal-400 bg-teal-50 ring-2 ring-teal-100"
-                : "border-slate-200 bg-white hover:border-teal-200"
-            }`}
-          >
-            <span className="flex items-center gap-2 font-black text-slate-950">
-              <Building2 className="h-5 w-5 text-teal-700" /> ATCT Tunisia
-              <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-black uppercase text-teal-900">
-                Officiel
-              </span>
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
-              Recrutements internationaux officiels filtrés, avec délai et méthode de candidature.
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setProvider("italy")}
-            className={`rounded-2xl border p-4 text-left transition ${
-              provider === "italy"
-                ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100"
-                : "border-slate-200 bg-white hover:border-emerald-200"
-            }`}
-          >
-            <span className="flex items-center gap-2 font-black text-slate-950">
-              <CountryFlag country="IT" /> Opportunités Italie
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-900">
-                Officiel
-              </span>
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
-              Decreto Flussi 2027, EURES et procédure employeur vérifiée pour Tunisiens et
-              Algériens.
-            </span>
-          </button>
-        </div>
+            </ProviderTab>
+            <ProviderTab
+              active={provider === "aneti"}
+              description="Offres publiques ANETI International"
+              onClick={() => setProvider("aneti")}
+            >
+              <Globe2 className="h-4 w-4 text-sky-700" /> ANETI
+            </ProviderTab>
+            <ProviderTab
+              active={provider === "atct"}
+              description="Recrutements internationaux officiels ATCT"
+              onClick={() => setProvider("atct")}
+            >
+              <Building2 className="h-4 w-4 text-teal-700" /> ATCT
+            </ProviderTab>
+            <ProviderTab
+              active={provider === "italy"}
+              description="Decreto Flussi, EURES et procédure employeur en Italie"
+              onClick={() => setProvider("italy")}
+            >
+              <CountryFlag country="IT" /> Italie
+            </ProviderTab>
+          </div>
+        </nav>
 
         {provider === "pei" ? (
           <PrinceEdwardIslandOpportunitiesPanel />
@@ -1499,7 +1439,7 @@ export function CanadaOpportunitiesDialog({
           </div>
         ) : provider === "aneti" ? (
           <>
-            <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[230px_minmax(260px,1fr)_auto]">
+            <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[210px_minmax(260px,1fr)_auto]">
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
                 Période
                 <select
@@ -1539,7 +1479,7 @@ export function CanadaOpportunitiesDialog({
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               <div className="mb-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
                 Les fiches publiques sont actualisées automatiquement. Aucun mot de passe ni cookie
@@ -1551,7 +1491,7 @@ export function CanadaOpportunitiesDialog({
                 </div>
               ) : null}
               {anetiResult ? (
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
                   <p className="font-semibold text-emerald-950">
                     <BadgeCheck className="mr-1.5 inline h-4 w-4" />
                     {anetiResult.meta.totalMatches} offre(s) ANETI vérifiée(s)
@@ -1614,7 +1554,7 @@ export function CanadaOpportunitiesDialog({
           </>
         ) : provider === "atct" ? (
           <>
-            <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[230px_minmax(260px,1fr)_auto]">
+            <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[210px_minmax(260px,1fr)_auto]">
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
                 Période
                 <select
@@ -1654,7 +1594,7 @@ export function CanadaOpportunitiesDialog({
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               <div className="mb-4 flex items-start gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-teal-950">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
                 Les avis ATCT sont paginés puis relus fiche par fiche. Les marchés publics,
@@ -1667,7 +1607,7 @@ export function CanadaOpportunitiesDialog({
                 </div>
               ) : null}
               {atctResult ? (
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
                   <p className="font-semibold text-emerald-950">
                     <BadgeCheck className="mr-1.5 inline h-4 w-4" />
                     {atctResult.meta.totalMatches} offre(s) ATCT vérifiée(s) ·{" "}
@@ -1741,7 +1681,7 @@ export function CanadaOpportunitiesDialog({
           </>
         ) : (
           <>
-            <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[180px_230px_minmax(260px,1fr)_auto]">
+            <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[160px_210px_minmax(260px,1fr)_auto]">
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
                 Pays du candidat
                 <select
@@ -1792,14 +1732,14 @@ export function CanadaOpportunitiesDialog({
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               {error ? (
                 <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
                   <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {error}
                 </div>
               ) : null}
               {result ? (
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
                   <p className="font-semibold text-emerald-950">
                     <BadgeCheck className="mr-1.5 inline h-4 w-4" />
                     {result.meta.totalMatches} offre(s) ouverte(s) aux candidats internationaux

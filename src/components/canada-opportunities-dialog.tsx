@@ -43,12 +43,35 @@ import {
   type AtctOpportunitySearchResult,
 } from "@/lib/atct-opportunities";
 
-type Provider = "jobbank" | "indeed" | "destination_canada" | "aneti" | "atct" | "italy";
+type Provider =
+  | "jobbank"
+  | "indeed"
+  | "destination_canada"
+  | "pei"
+  | "new_brunswick"
+  | "aneti"
+  | "atct"
+  | "italy";
 
 const DESTINATION_CANADA_CANDIDATES_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/candidats.html";
 const DESTINATION_CANADA_EVENTS_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/a-propos.html";
+const PEI_EOI_REGISTER_URL = "https://eoi.princeedwardisland.ca/ieoi/register/register";
+const PEI_EOI_GUIDE_URL =
+  "https://www.princeedwardisland.ca/en/service/submit-your-expression-of-interest-profile";
+const PEI_OUTSIDE_CANADA_URL =
+  "https://www.princeedwardisland.ca/en/information/office-of-immigration/skilled-workers-outside-canada";
+const PEI_EMPLOYER_RULES_URL =
+  "https://www.princeedwardisland.ca/en/information/office-of-immigration/supporting-a-worker-for-immigration";
+const NB_INB_URL = "https://www.inb.gnb.ca/";
+const NB_IMMIGRATION_URL = "https://www.gnb.ca/en/topic/family-home-community/immigration.html";
+const NB_SKILLED_WORKER_URL =
+  "https://www.gnb.ca/en/topic/family-home-community/immigration/provincial-nominee-program/skilled-worker-stream.html";
+const NB_NOTICES_URL =
+  "https://www.gnb.ca/en/topic/family-home-community/immigration/important-notices.html";
+const NB_ROUNDS_URL =
+  "https://www.gnb.ca/en/topic/family-home-community/immigration/invitation-selection-rounds.html";
 const ITALY_ALI_PORTAL_URL = "https://portaleservizi.dlci.interno.it/AliSportello/ali/home.htm";
 const ITALY_DECREE_URL = "https://www.gazzettaufficiale.it/eli/id/2025/10/15/25A05656/SG";
 const ITALY_OFFICIAL_GUIDE_URL =
@@ -57,8 +80,8 @@ const ITALY_EURES_URL = "https://eures.europa.eu/jobseekers_it";
 const ITALY_WORK_PERMIT_URL =
   "https://home-affairs.ec.europa.eu/policies/migration-and-asylum/eu-immigration-portal/employed-worker-italy_en";
 
-function CountryFlag({ country }: { country: "IT" | "TN" | "DZ" }) {
-  const labels = { IT: "Italie", TN: "Tunisie", DZ: "Algérie" } as const;
+function CountryFlag({ country }: { country: "IT" | "TN" | "DZ" | "CA" }) {
+  const labels = { IT: "Italie", TN: "Tunisie", DZ: "Algérie", CA: "Canada" } as const;
   return (
     <svg
       viewBox="0 0 36 24"
@@ -66,7 +89,17 @@ function CountryFlag({ country }: { country: "IT" | "TN" | "DZ" }) {
       role="img"
       aria-label={`Drapeau ${labels[country]}`}
     >
-      {country === "IT" ? (
+      {country === "CA" ? (
+        <>
+          <rect width="36" height="24" fill="#fff" />
+          <rect width="8" height="24" fill="#d80621" />
+          <rect x="28" width="8" height="24" fill="#d80621" />
+          <path
+            d="m18 4.2 1.25 3.25 2.2-1.15-.55 3.15 2.6.15-2.2 2.2.9 1.25-3.35-.65.35 5.35h-2.4l.35-5.35-3.35.65.9-1.25-2.2-2.2 2.6-.15-.55-3.15 2.2 1.15z"
+            fill="#d80621"
+          />
+        </>
+      ) : country === "IT" ? (
         <>
           <rect width="12" height="24" fill="#009246" />
           <rect x="12" width="12" height="24" fill="#fff" />
@@ -283,6 +316,299 @@ function ItalyOpportunitiesPanel() {
             Procédure visa et permis <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
+      </footer>
+    </>
+  );
+}
+
+function PrinceEdwardIslandOpportunitiesPanel() {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-5">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <article className="overflow-hidden rounded-2xl border border-red-200 bg-white shadow-sm">
+            <div className="border-b border-red-100 bg-gradient-to-r from-red-50 via-white to-amber-50 p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <CountryFlag country="CA" />
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-red-800">
+                      Canada · programme provincial officiel
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">
+                      Île-du-Prince-Édouard — EOI et recrutement international
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Parcours employeur vérifié pour les travailleurs qualifiés hors Canada.
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase text-emerald-900">
+                  <BadgeCheck className="h-4 w-4" /> Sources PEI vérifiées
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-5 sm:p-6">
+              <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-red-950">
+                <p className="flex items-start gap-2 font-black">
+                  <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" /> Une déclaration d’intérêt
+                  n’est ni une candidature complète, ni un emploi garanti
+                </p>
+                <p className="mt-2 text-sm leading-relaxed">
+                  Pour le volet Travailleur qualifié hors Canada, il faut une offre à temps plein,
+                  non saisonnière, dans une profession FEER 0, 1, 2 ou 3. L’employeur de l’Î.-P.-É.
+                  doit obtenir l’autorisation du Bureau de l’immigration avant que le candidat crée
+                  son profil EOI.
+                </p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-emerald-800">
+                    <BriefcaseBusiness className="h-4 w-4" /> Priorités annoncées en 2026
+                  </p>
+                  <h3 className="mt-2 text-lg font-black text-emerald-950">
+                    Santé, métiers spécialisés et petite enfance
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-emerald-900">
+                    La province priorise la santé, les métiers spécialisés, la petite enfance et
+                    d’autres pénuries essentielles. Les ventes et services peuvent ne pas recevoir
+                    d’invitation actuellement : la liste diffusée sur les réseaux sociaux n’est donc
+                    pas une liste garantie de secteurs ouverts.
+                  </p>
+                </section>
+
+                <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-blue-800">
+                    <UserRoundCheck className="h-4 w-4" /> Conditions principales
+                  </p>
+                  <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-blue-950">
+                    <li>• 18 à 59 ans et statut légal dans le pays de résidence.</li>
+                    <li>• Deux ans d’expérience à temps plein sur les cinq dernières années.</li>
+                    <li>• Diplôme postsecondaire d’au moins deux ans.</li>
+                    <li>
+                      • Français ou anglais suffisant, généralement NCLC/CLB 4 ou preuve employeur.
+                    </li>
+                  </ul>
+                </section>
+              </div>
+
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                <p className="flex items-start gap-2 font-black">
+                  <CircleDollarSign className="mt-0.5 h-5 w-5 shrink-0" /> « L’employeur paie tout »
+                  est faux
+                </p>
+                <p className="mt-2 text-sm leading-relaxed">
+                  L’employeur paie les frais fédéraux de conformité de 230 CAD lorsqu’ils
+                  s’appliquent. Le candidat doit toutefois disposer de fonds suffisants pour ses
+                  frais d’immigration, de voyage et d’installation, y compris pour sa famille. Une
+                  entrevue en ligne dépend de l’employeur et n’est pas une garantie du programme.
+                </p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <strong className="block text-slate-950">1. Offre et autorisation</strong>
+                  <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+                    Un employeur PEI admissible obtient d’abord l’autorisation provinciale.
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <strong className="block text-slate-950">2. Profil EOI gratuit</strong>
+                  <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+                    Le profil reste actif six mois et peut être mis à jour avant invitation.
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <strong className="block text-slate-950">3. Invitation puis demande</strong>
+                  <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+                    Après ITA : 30 jours pour le dossier, frais provinciaux de 300 CAD.
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button asChild className="bg-red-700 text-white hover:bg-red-800">
+                  <a href={PEI_EOI_REGISTER_URL} target="_blank" rel="noreferrer">
+                    Créer le profil EOI officiel <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href={PEI_OUTSIDE_CANADA_URL} target="_blank" rel="noreferrer">
+                    Vérifier l’admissibilité hors Canada <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href={PEI_EMPLOYER_RULES_URL} target="_blank" rel="noreferrer">
+                    Obligations de l’employeur <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+        <span>Vérifié le 3 octobre 2026 · Gouvernement de l’Île-du-Prince-Édouard.</span>
+        <a
+          href={PEI_EOI_GUIDE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 font-semibold text-red-800 hover:underline"
+        >
+          Fonctionnement officiel de l’EOI <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      </footer>
+    </>
+  );
+}
+
+function NewBrunswickOpportunitiesPanel() {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-5">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <article className="overflow-hidden rounded-2xl border border-red-200 bg-white shadow-sm">
+            <div className="border-b border-red-100 bg-gradient-to-r from-red-50 via-white to-yellow-50 p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <CountryFlag country="CA" />
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-red-800">
+                      Canada · Immigration Nouveau-Brunswick
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">
+                      Nouveau-Brunswick — compte INB et voies 2026
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Conditions, restrictions et sélections provinciales contrôlées.
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase text-emerald-900">
+                  <BadgeCheck className="h-4 w-4" /> Sources GNB vérifiées
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-5 sm:p-6">
+              <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-red-950">
+                <p className="flex items-start gap-2 font-black">
+                  <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" /> Créer un compte INB ou une
+                  EOI ne garantit aucune invitation
+                </p>
+                <p className="mt-2 text-sm leading-relaxed">
+                  Les EOI restent dans le bassin jusqu’à 365 jours. La province sélectionne selon
+                  ses besoins, ses quotas et ses priorités. Une nomination provinciale n’est pas la
+                  résidence permanente : la décision finale appartient à IRCC.
+                </p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-blue-800">
+                    <UserRoundCheck className="h-4 w-4" /> Travailleur qualifié
+                  </p>
+                  <h3 className="mt-2 text-lg font-black text-blue-950">Admissibilité de base</h3>
+                  <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-blue-950">
+                    <li>• Avoir au moins 19 ans et NCLC/CLB 4 dans les quatre compétences.</li>
+                    <li>
+                      • Appui d’un employeur admissible actif au Nouveau-Brunswick depuis 24 mois.
+                    </li>
+                    <li>• Emploi à temps plein non saisonnier et exigences CNP respectées.</li>
+                    <li>
+                      • La voie « professions prioritaires » exige une mission officielle du GNB.
+                    </li>
+                  </ul>
+                </section>
+
+                <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-emerald-800">
+                    <CalendarClock className="h-4 w-4" /> Dernières sélections · septembre 2026
+                  </p>
+                  <h3 className="mt-2 text-lg font-black text-emerald-950">
+                    Secteurs observés, pas une admissibilité universelle
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-emerald-900">
+                    Construction, éducation et services sociaux, fabrication, métiers, professions
+                    et TI, ventes et services, transport selon le volet. La présence d’un secteur
+                    dans un tirage passé ne garantit pas sa sélection au prochain tirage.
+                  </p>
+                </section>
+              </div>
+
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                <p className="flex items-start gap-2 font-black">
+                  <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" /> Restrictions officielles en
+                  vigueur
+                </p>
+                <ul className="mt-2 space-y-1.5 text-sm leading-relaxed">
+                  <li>
+                    • Depuis le 4 mai 2026, la voie Expérience NB limite ses nouvelles invitations à
+                    la santé, l’éducation et la construction.
+                  </li>
+                  <li>
+                    • Depuis le 3 février 2026, l’hébergement et la restauration (SCIAN 72) sont
+                    exclus des invitations Travailleur qualifié et Entrée express, avec des
+                    restrictions CNP supplémentaires.
+                  </li>
+                  <li>
+                    • Pour les candidats hors Canada sous le Programme d’immigration au Canada
+                    atlantique, les postes sont limités aux initiatives GNB en santé, éducation et
+                    construction ; les nouvelles désignations d’employeurs sont suspendues pour le
+                    reste de 2026.
+                  </li>
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="font-black text-slate-950">Famille et résidence permanente</p>
+                <p className="mt-1 leading-relaxed">
+                  Le conjoint et les enfants à charge peuvent être déclarés lorsque les règles
+                  fédérales du dossier le permettent. Cela ne dispense pas des preuves, frais,
+                  examens et contrôles d’admissibilité applicables à chaque membre de la famille.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button asChild className="bg-red-700 text-white hover:bg-red-800">
+                  <a href={NB_INB_URL} target="_blank" rel="noreferrer">
+                    Créer ou ouvrir le compte INB <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href={NB_SKILLED_WORKER_URL} target="_blank" rel="noreferrer">
+                    Vérifier le volet qualifié <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href={NB_NOTICES_URL} target="_blank" rel="noreferrer">
+                    Restrictions en vigueur <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href={NB_ROUNDS_URL} target="_blank" rel="noreferrer">
+                    Dernières invitations <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+        <span>Vérifié le 3 octobre 2026 · Gouvernement du Nouveau-Brunswick.</span>
+        <a
+          href={NB_IMMIGRATION_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 font-semibold text-red-800 hover:underline"
+        >
+          Portail Immigration NB <ExternalLink className="h-3.5 w-3.5" />
+        </a>
       </footer>
     </>
   );
@@ -883,15 +1209,15 @@ export function CanadaOpportunitiesDialog({
               Opportunités internationales
             </h1>
             <p className="mt-1 text-sm text-slate-600">
-              Canada, Italie, ANETI, ATCT, volontariat et événements officiels avec parcours de
-              candidature vérifié.
+              Canada, provinces canadiennes, Italie, ANETI, ATCT, volontariat et événements
+              officiels avec parcours de candidature vérifié.
             </p>
           </div>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-4">
           <button
             type="button"
             onClick={() => setProvider("jobbank")}
@@ -947,6 +1273,44 @@ export function CanadaOpportunitiesDialog({
             </span>
             <span className="mt-1 block text-xs leading-relaxed text-slate-600">
               Forum Mobilité, dates officielles et accès au formulaire candidat dès son ouverture.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setProvider("pei")}
+            className={`rounded-2xl border p-4 text-left transition ${
+              provider === "pei"
+                ? "border-red-400 bg-red-50 ring-2 ring-red-100"
+                : "border-slate-200 bg-white hover:border-red-200"
+            }`}
+          >
+            <span className="flex items-center gap-2 font-black text-slate-950">
+              <CountryFlag country="CA" /> Î.-P.-É. Canada
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black uppercase text-red-800">
+                EOI provinciale
+              </span>
+            </span>
+            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+              Recrutement hors Canada, priorités, coûts et autorisation employeur vérifiés.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setProvider("new_brunswick")}
+            className={`rounded-2xl border p-4 text-left transition ${
+              provider === "new_brunswick"
+                ? "border-red-400 bg-red-50 ring-2 ring-red-100"
+                : "border-slate-200 bg-white hover:border-red-200"
+            }`}
+          >
+            <span className="flex items-center gap-2 font-black text-slate-950">
+              <CountryFlag country="CA" /> Nouveau-Brunswick
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
+                INB 2026
+              </span>
+            </span>
+            <span className="mt-1 block text-xs leading-relaxed text-slate-600">
+              Voies provinciales, tirages et restrictions 2026 contrôlés sur GNB.
             </span>
           </button>
           <button
@@ -1009,7 +1373,11 @@ export function CanadaOpportunitiesDialog({
           </button>
         </div>
 
-        {provider === "italy" ? (
+        {provider === "pei" ? (
+          <PrinceEdwardIslandOpportunitiesPanel />
+        ) : provider === "new_brunswick" ? (
+          <NewBrunswickOpportunitiesPanel />
+        ) : provider === "italy" ? (
           <ItalyOpportunitiesPanel />
         ) : provider === "indeed" ? (
           <div className="flex-1 overflow-y-auto p-5">

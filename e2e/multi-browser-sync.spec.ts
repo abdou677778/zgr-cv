@@ -984,6 +984,40 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Vérifier l’inscription candidat/ }),
     ).toHaveAttribute("href", /canada\.ca\/fr\/.*\/destination-canada\/candidats\.html/);
 
+    await dialog.getByRole("button", { name: /Î\.-P\.-É\. Canada/ }).click();
+    const peiCard = dialog
+      .getByRole("article")
+      .filter({ hasText: "Île-du-Prince-Édouard — EOI et recrutement international" });
+    await expect(
+      peiCard.getByText(/déclaration d’intérêt.*n’est ni une candidature/),
+    ).toBeVisible();
+    await expect(peiCard.getByText(/Santé, métiers spécialisés et petite enfance/)).toBeVisible();
+    await expect(peiCard.getByText(/L’employeur paie tout.*est faux/)).toBeVisible();
+    await expect(
+      peiCard.getByRole("link", { name: /Créer le profil EOI officiel/ }),
+    ).toHaveAttribute("href", "https://eoi.princeedwardisland.ca/ieoi/register/register");
+    await expect(
+      peiCard.getByRole("link", { name: /Vérifier l’admissibilité hors Canada/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://www.princeedwardisland.ca/en/information/office-of-immigration/skilled-workers-outside-canada",
+    );
+
+    await dialog.getByRole("button", { name: /Nouveau-Brunswick/ }).click();
+    const nbCard = dialog
+      .getByRole("article")
+      .filter({ hasText: "Nouveau-Brunswick — compte INB et voies 2026" });
+    await expect(nbCard.getByText(/ne garantit aucune invitation/)).toBeVisible();
+    await expect(nbCard.getByText(/santé, l’éducation et la construction/)).toBeVisible();
+    await expect(nbCard.getByText(/hébergement et la restauration.*SCIAN 72/)).toBeVisible();
+    await expect(
+      nbCard.getByRole("link", { name: /Créer ou ouvrir le compte INB/ }),
+    ).toHaveAttribute("href", "https://www.inb.gnb.ca/");
+    await expect(nbCard.getByRole("link", { name: /Restrictions en vigueur/ })).toHaveAttribute(
+      "href",
+      "https://www.gnb.ca/en/topic/family-home-community/immigration/important-notices.html",
+    );
+
     await dialog.getByRole("button", { name: /ANETI Tunisia/ }).click();
     await expect(dialog.getByText("Opérateur socio-sanitaire", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Inscription ANETI requise", { exact: true })).toBeVisible();

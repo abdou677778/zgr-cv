@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarDays,
   CalendarClock,
+  ChevronDown,
   CircleDollarSign,
   Copy,
   ExternalLink,
@@ -25,6 +26,14 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   indeedCanadaSearchUrl,
@@ -83,18 +92,139 @@ const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
 };
 
 const PROVIDER_LABELS: Record<Provider, string> = {
-  jobbank: "🇨🇦 Guichet-Emplois Canada — recommandé",
-  europe_jobs: "🇪🇺 Emplois officiels Europe",
-  indeed: "🔎 Indeed Canada",
-  aneti: "🇹🇳 ANETI International",
-  atct: "🇹🇳 ATCT Tunisia",
-  algeria: "🇩🇿 Opportunités Algérie",
-  destination_canada: "📅 Destination Canada",
-  francophone_canada: "🇨🇦 Programmes Canada francophone",
-  pei: "🇨🇦 Île-du-Prince-Édouard",
-  new_brunswick: "🇨🇦 Nouveau-Brunswick",
-  italy: "🇮🇹 Opportunités Italie",
+  jobbank: "Guichet-Emplois Canada",
+  europe_jobs: "Emplois officiels Europe",
+  indeed: "Indeed Canada",
+  aneti: "ANETI International",
+  atct: "ATCT Tunisia",
+  algeria: "Opportunités Algérie",
+  destination_canada: "Destination Canada",
+  francophone_canada: "Programmes Canada francophone",
+  pei: "Île-du-Prince-Édouard",
+  new_brunswick: "Nouveau-Brunswick",
+  italy: "Opportunités Italie",
 };
+
+const PROVIDER_CONTEXT: Record<Provider, string> = {
+  jobbank: "Gouvernement du Canada · recommandé",
+  europe_jobs: "EURES · Union européenne",
+  indeed: "Recherche d’emploi au Canada",
+  aneti: "Service public de l’emploi · Tunisie",
+  atct: "Coopération technique · Tunisie",
+  algeria: "Offres par wilaya · Algérie",
+  destination_canada: "Événement officiel du Canada",
+  francophone_canada: "Programmes officiels du Canada",
+  pei: "Programme provincial · Canada",
+  new_brunswick: "Programme provincial · Canada",
+  italy: "Emploi et immigration · Italie",
+};
+
+type ProviderTerritory = "canada" | "europe" | "tunisia" | "algeria" | "italy";
+
+function territoryForProvider(provider: Provider): ProviderTerritory {
+  if (provider === "europe_jobs") return "europe";
+  if (provider === "aneti" || provider === "atct") return "tunisia";
+  if (provider === "algeria") return "algeria";
+  if (provider === "italy") return "italy";
+  return "canada";
+}
+
+function ProviderTerritoryMark({ provider }: { provider: Provider }) {
+  const territory = territoryForProvider(provider);
+  const labels: Record<ProviderTerritory, string> = {
+    canada: "Drapeau du Canada",
+    europe: "Emblème de l’Union européenne",
+    tunisia: "Drapeau de la Tunisie",
+    algeria: "Drapeau de l’Algérie",
+    italy: "Drapeau de l’Italie",
+  };
+
+  return (
+    <span className="grid h-8 w-11 shrink-0 place-items-center overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <svg viewBox="0 0 44 30" role="img" aria-label={labels[territory]} className="h-full w-full">
+        {territory === "canada" ? (
+          <>
+            <rect width="44" height="30" fill="#fff" />
+            <rect width="11" height="30" fill="#d80621" />
+            <rect x="33" width="11" height="30" fill="#d80621" />
+            <path
+              d="M22 4.4l1.6 4.2 3-1.6-.8 4 3.4.2-3 3.2 1.3 2.3-4.4-.8.7 6.3h-3.6l.7-6.3-4.4.8 1.3-2.3-3-3.2 3.4-.2-.8-4 3 1.6L22 4.4z"
+              fill="#d80621"
+            />
+          </>
+        ) : territory === "europe" ? (
+          <>
+            <rect width="44" height="30" fill="#003399" />
+            {Array.from({ length: 12 }, (_, index) => {
+              const angle = (index * Math.PI) / 6 - Math.PI / 2;
+              return (
+                <circle
+                  key={index}
+                  cx={22 + Math.cos(angle) * 8.2}
+                  cy={15 + Math.sin(angle) * 8.2}
+                  r="1.15"
+                  fill="#ffcc00"
+                />
+              );
+            })}
+          </>
+        ) : territory === "tunisia" ? (
+          <>
+            <rect width="44" height="30" fill="#e70013" />
+            <circle cx="22" cy="15" r="8" fill="#fff" />
+            <circle cx="23.2" cy="15" r="5.2" fill="#e70013" />
+            <circle cx="25.1" cy="15" r="4.1" fill="#fff" />
+            <path
+              d="M24.9 11.5l1 2.1 2.3.3-1.7 1.6.4 2.3-2-1.1-2.1 1.1.4-2.3-1.6-1.6 2.3-.3 1-2.1z"
+              fill="#e70013"
+            />
+          </>
+        ) : territory === "algeria" ? (
+          <>
+            <rect width="22" height="30" fill="#006233" />
+            <rect x="22" width="22" height="30" fill="#fff" />
+            <circle cx="21" cy="15" r="7" fill="#d21034" />
+            <circle cx="23.2" cy="15" r="5.7" fill="#fff" />
+            <path
+              d="M24.3 10.9l1.1 2.3 2.5.4-1.8 1.7.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.7 2.5-.4 1.1-2.3z"
+              fill="#d21034"
+            />
+          </>
+        ) : (
+          <>
+            <rect width="14.67" height="30" fill="#009246" />
+            <rect x="14.67" width="14.67" height="30" fill="#fff" />
+            <rect x="29.34" width="14.66" height="30" fill="#ce2b37" />
+          </>
+        )}
+      </svg>
+    </span>
+  );
+}
+
+function ProviderIdentity({
+  provider,
+  compact = false,
+}: {
+  provider: Provider;
+  compact?: boolean;
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-3 text-left">
+      <ProviderTerritoryMark provider={provider} />
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-black text-slate-950">
+          {PROVIDER_LABELS[provider]}
+        </span>
+        {!compact && (
+          <span className="block truncate text-[11px] font-semibold text-slate-500">
+            {PROVIDER_CONTEXT[provider]}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
 
 const DESTINATION_CANADA_CANDIDATES_URL =
   "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec/destination-canada/candidats.html";
@@ -1962,21 +2092,46 @@ export function CanadaOpportunitiesDialog({
                 <option value="programs">Programmes officiels</option>
               </select>
             </label>
-            <label className="min-w-0">
-              <span className="sr-only">Source ou programme</span>
-              <select
-                aria-label="Source ou programme"
-                value={provider}
-                onChange={(event) => setProvider(event.target.value as Provider)}
-                className="h-11 w-full min-w-0 rounded-xl border border-red-300 bg-red-50 px-3 pr-8 text-sm font-black text-red-950 shadow-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Source ou programme"
+                  className="flex h-11 min-w-0 items-center justify-between gap-2 rounded-xl border border-red-300 bg-red-50 px-2.5 text-red-950 shadow-sm outline-none transition hover:bg-red-100 focus:border-red-500 focus:ring-2 focus:ring-red-200"
+                >
+                  <ProviderIdentity provider={provider} compact />
+                  <ChevronDown className="h-4 w-4 shrink-0 text-red-700" aria-hidden="true" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-[min(430px,calc(100vw-1.5rem))] rounded-xl border-slate-200 bg-white p-1.5 shadow-xl"
               >
-                {PROVIDERS_BY_CATEGORY[category].map((providerOption) => (
-                  <option key={providerOption} value={providerOption}>
-                    {PROVIDER_LABELS[providerOption]}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <DropdownMenuLabel className="px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500">
+                  Choisir une source ou un programme
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {PROVIDERS_BY_CATEGORY[category].map((providerOption) => {
+                  const selected = providerOption === provider;
+                  return (
+                    <DropdownMenuItem
+                      key={providerOption}
+                      aria-current={selected ? "true" : undefined}
+                      className="min-h-12 cursor-pointer gap-3 rounded-lg px-2.5 py-2 focus:bg-red-50 data-[highlighted]:bg-red-50"
+                      onSelect={() => setProvider(providerOption)}
+                    >
+                      <ProviderIdentity provider={providerOption} />
+                      {selected && (
+                        <BadgeCheck
+                          className="ml-auto h-5 w-5 shrink-0 text-emerald-600"
+                          aria-label="Sélection active"
+                        />
+                      )}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </nav>
 

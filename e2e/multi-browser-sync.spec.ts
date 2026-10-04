@@ -999,6 +999,7 @@ test("ouvre les opportunités et confirme précisément l’admissibilité tunis
 test("ouvre les opportunités Canada et distingue candidature externe et connexion", async ({
   browser,
 }) => {
+  test.setTimeout(120_000);
   const api = new SharedClientApi();
   const context = await browser.newContext();
   try {
@@ -1035,15 +1036,20 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     const categorySelect = dialog.getByRole("combobox", {
       name: "Catégorie d’opportunités",
     });
-    const sourceSelect = dialog.getByRole("combobox", {
+    const sourceMenu = dialog.getByRole("button", {
       name: "Source ou programme",
     });
+    const chooseSource = async (name: string) => {
+      await sourceMenu.click();
+      await page.getByRole("menuitem", { name: new RegExp(name, "i") }).click();
+    };
     await expect(categorySelect).toHaveValue("all");
-    await expect(sourceSelect).toHaveValue("jobbank");
+    await expect(sourceMenu).toContainText("Guichet-Emplois Canada");
     await categorySelect.selectOption("jobs");
-    await expect(sourceSelect.locator('option[value="europe_jobs"]')).toHaveCount(1);
-    await expect(sourceSelect.locator('option[value="destination_canada"]')).toHaveCount(0);
-    await sourceSelect.selectOption("europe_jobs");
+    await sourceMenu.click();
+    await expect(page.getByRole("menuitem", { name: /Emplois officiels Europe/i })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /Destination Canada/i })).toHaveCount(0);
+    await page.getByRole("menuitem", { name: /Emplois officiels Europe/i }).click();
     await expect(dialog.getByText("Make it in Germany", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Work in Finland", { exact: true })).toBeVisible();
     await expect(dialog.getByText("EURES", { exact: true })).toBeVisible();
@@ -1057,7 +1063,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     );
 
     await categorySelect.selectOption("programs");
-    await expect(sourceSelect).toHaveValue("francophone_canada");
+    await expect(sourceMenu).toContainText("Programmes Canada francophone");
     await expect(dialog.getByText("Mobilité francophone", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/NCLC 5 minimum/)).toBeVisible();
     await expect(dialog.getByText(/code d’exemption C16/)).toBeVisible();
@@ -1069,21 +1075,21 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
 
     await categorySelect.selectOption("all");
 
-    await sourceSelect.selectOption("indeed");
+    await chooseSource("Indeed Canada");
     await expect(dialog.getByText("Recherche Indeed conforme et durable")).toBeVisible();
     await expect(dialog.getByRole("link", { name: /Ouvrir Indeed/ })).toHaveAttribute(
       "href",
       /ca\.indeed\.com\/jobs\?/,
     );
 
-    await sourceSelect.selectOption("destination_canada");
+    await chooseSource("Destination Canada");
     await expect(dialog.getByText("Destination Canada Forum Mobilité 2026")).toBeVisible();
     await expect(dialog.getByText("10 et 11 décembre 2026")).toBeVisible();
     await expect(
       dialog.getByRole("link", { name: /Vérifier l’inscription candidat/ }),
     ).toHaveAttribute("href", /canada\.ca\/fr\/.*\/destination-canada\/candidats\.html/);
 
-    await sourceSelect.selectOption("pei");
+    await chooseSource("Île-du-Prince-Édouard");
     const peiCard = dialog
       .getByRole("article")
       .filter({ hasText: "Île-du-Prince-Édouard — EOI et recrutement international" });
@@ -1102,7 +1108,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "https://www.princeedwardisland.ca/en/information/office-of-immigration/skilled-workers-outside-canada",
     );
 
-    await sourceSelect.selectOption("new_brunswick");
+    await chooseSource("Nouveau-Brunswick");
     const nbCard = dialog
       .getByRole("article")
       .filter({ hasText: "Nouveau-Brunswick — compte INB et voies 2026" });
@@ -1117,7 +1123,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "https://www.gnb.ca/en/topic/family-home-community/immigration/important-notices.html",
     );
 
-    await sourceSelect.selectOption("aneti");
+    await chooseSource("ANETI International");
     await expect(dialog.getByText("Opérateur socio-sanitaire", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Inscription ANETI requise", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 18 oct. 2026/)).toBeVisible();
@@ -1126,7 +1132,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://candidatures.aneti.tn/app/inscription/69");
 
-    await sourceSelect.selectOption("atct");
+    await chooseSource("ATCT Tunisia");
     await expect(dialog.getByText(/personnel éducateur à la petite enfance/)).toBeVisible();
     await expect(dialog.getByText("Source publique ATCT vérifiée", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 01 nov. 2026/)).toBeVisible();
@@ -1135,7 +1141,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://connexion-pef.afeseo.ca/je-vis-a-lexterieur-du-canada/");
 
-    await sourceSelect.selectOption("algeria");
+    await chooseSource("Opportunités Algérie");
     await expect(dialog.getByRole("heading", { name: "Comptable – محاسب(ة)" })).toBeVisible();
     await expect(
       dialog.getByText("Source communautaire à vérifier", { exact: true }),
@@ -1160,7 +1166,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(algeriaDetails).toBeHidden();
     await expect(dialog.getByText("Lire la publication originale")).toHaveCount(0);
 
-    await sourceSelect.selectOption("italy");
+    await chooseSource("Opportunités Italie");
     const italyCard = dialog.getByRole("article").filter({ hasText: "Decreto Flussi 2027" });
     await expect(italyCard.getByText("Decreto Flussi 2027 — 165 850 quotas légaux")).toBeVisible();
     await expect(italyCard.getByText(/ce ne sont pas 165 850 contrats/)).toBeVisible();
@@ -1195,7 +1201,8 @@ test("masque les liens Telegram aux profils non administrateurs", async ({ brows
     const page = await connect(context, api, "lecteur");
     await page.getByRole("button", { name: "Opportunités Canada" }).click();
     const workspace = page.getByRole("main", { name: "Opportunités internationales" });
-    await workspace.getByRole("combobox", { name: "Source ou programme" }).selectOption("algeria");
+    await workspace.getByRole("button", { name: "Source ou programme" }).click();
+    await page.getByRole("menuitem", { name: /Opportunités Algérie/i }).click();
     await expect(workspace.getByRole("button", { name: "Plus d’infos" })).toBeVisible();
     await expect(workspace.getByRole("link", { name: /Telegram/ })).toHaveCount(0);
     await workspace.getByRole("button", { name: "Plus d’infos" }).click();

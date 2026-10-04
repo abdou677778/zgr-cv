@@ -4391,6 +4391,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           <CanadaOpportunitiesDialog
             open={canadaOpportunitiesOpen}
             onOpenChange={setCanadaOpportunitiesOpen}
+            isAdmin={user.role === "admin"}
           />
         ) : null}
       </Suspense>

@@ -38,6 +38,8 @@ export type AlgeriaOpportunitySearchResult = {
     returned: number;
     totalMatches: number;
     scanned: number;
+    cachedTotal: number;
+    hasMoreHistory: boolean;
     verifiedAt: string;
     stale: boolean;
     staleReason?: string | null;
@@ -61,6 +63,7 @@ export async function searchAlgeriaOpportunities(options: {
   wilaya?: string;
   query?: string;
   limit?: number;
+  refresh?: boolean;
   signal?: AbortSignal;
 }) {
   const params = new URLSearchParams({
@@ -69,6 +72,7 @@ export async function searchAlgeriaOpportunities(options: {
     limit: String(options.limit || 30),
   });
   if (options.query?.trim()) params.set("q", options.query.trim());
+  if (options.refresh) params.set("refresh", "1");
   const response = await fetch(apiUrl(`/api/algeria-opportunities/search?${params.toString()}`), {
     headers: { Accept: "application/json" },
     signal: options.signal,

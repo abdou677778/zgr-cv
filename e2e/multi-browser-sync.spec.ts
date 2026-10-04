@@ -406,7 +406,8 @@ class SharedClientApi {
             commune: "Boumerdès",
             location: "Boumerdès",
             positions: ["Comptable – محاسب(ة)"],
-            description: "Une école privée recrute un comptable à Boumerdès.",
+            description:
+              "📢 إعلان توظيف | Recrutement\n🏫 مدرسة خاصة ببومرداس\n💼 Comptable – محاسب(ة)\n📩 يرجى إرسال السيرة الذاتية عبر البريد الإلكتروني.",
             publishedAt: "2026-10-03T12:25:00.000Z",
             sourceUrl: "https://t.me/rcrdz1/22072",
             applicationMethod: {
@@ -430,6 +431,8 @@ class SharedClientApi {
           returned: 1,
           totalMatches: 1,
           scanned: 26,
+          cachedTotal: 42,
+          hasMoreHistory: true,
           verifiedAt: "2026-10-03T21:30:00.000Z",
           stale: false,
           sourceUrl: "https://t.me/rcrdz1",
@@ -1147,6 +1150,15 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "href",
       "https://t.me/rcrdz1/22072",
     );
+    await dialog.getByRole("button", { name: "Plus d’infos" }).click();
+    const algeriaDetails = page.getByRole("dialog", { name: /Comptable/ });
+    await expect(algeriaDetails).toBeVisible();
+    await expect(algeriaDetails.getByText("Informations complètes de l’offre")).toBeVisible();
+    await expect(algeriaDetails.locator('[dir="rtl"][lang="ar"]').first()).toBeVisible();
+    await expect(algeriaDetails.getByRole("link", { name: /Vérifier sur Telegram/ })).toBeVisible();
+    await algeriaDetails.getByRole("button", { name: "Retour aux offres" }).click();
+    await expect(algeriaDetails).toBeHidden();
+    await expect(dialog.getByText("Lire la publication originale")).toHaveCount(0);
 
     await sourceSelect.selectOption("italy");
     const italyCard = dialog.getByRole("article").filter({ hasText: "Decreto Flussi 2027" });
@@ -1171,6 +1183,29 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     );
     await dialog.getByRole("button", { name: "Retour à l’accueil" }).click();
     await expect(dialog).toBeHidden();
+  } finally {
+    await context.close();
+  }
+});
+
+test("masque les liens Telegram aux profils non administrateurs", async ({ browser }) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext();
+  try {
+    const page = await connect(context, api, "lecteur");
+    await page.getByRole("button", { name: "Opportunités Canada" }).click();
+    const workspace = page.getByRole("main", { name: "Opportunités internationales" });
+    await workspace.getByRole("combobox", { name: "Source ou programme" }).selectOption("algeria");
+    await expect(workspace.getByRole("button", { name: "Plus d’infos" })).toBeVisible();
+    await expect(workspace.getByRole("link", { name: /Telegram/ })).toHaveCount(0);
+    await workspace.getByRole("button", { name: "Plus d’infos" }).click();
+    const details = page.getByRole("dialog", { name: /Comptable/ });
+    await expect(details).toBeVisible();
+    await expect(details.getByRole("link", { name: /Telegram/ })).toHaveCount(0);
+    await expect(details.getByRole("link", { name: /Envoyer la candidature/ })).toHaveAttribute(
+      "href",
+      "mailto:recrutement.ecole@example.com",
+    );
   } finally {
     await context.close();
   }

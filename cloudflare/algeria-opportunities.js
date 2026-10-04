@@ -579,6 +579,16 @@ export async function refreshAlgeriaOpportunityCache(env) {
     previousCache?.version === CACHE_VERSION ? Number(previousCache?.highWaterMark || 0) : 0;
   const initial = previousHighWater < 1;
   const start = initial ? SEED_POST_ID - INITIAL_HISTORY_SIZE + 1 : previousHighWater + 1;
+  const previousMinimumId = previousItems.reduce(
+    (minimum, item) => Math.min(minimum, Number(item.id) || minimum),
+    Number.POSITIVE_INFINITY,
+  );
+  let backfillCursor =
+    previousCache?.version === CACHE_VERSION && Number(previousCache?.backfillCursor) > 0
+      ? Number(previousCache.backfillCursor)
+      : Number.isFinite(previousMinimumId)
+        ? previousMinimumId - 1
+        : start - 1;
   let highestFound = previousHighWater || SEED_POST_ID;
   let misses = 0;
   let scanned = 0;
@@ -595,6 +605,13 @@ export async function refreshAlgeriaOpportunityCache(env) {
         misses += 1;
         if ((!initial || id > SEED_POST_ID) && misses >= STOP_AFTER_MISSES) break;
       }
+    }
+    while (scanned < MAX_FORWARD_REQUESTS && backfillCursor > 0) {
+      const id = backfillCursor;
+      backfillCursor -= 1;
+      const item = await fetchPost(id);
+      scanned += 1;
+      if (item && !previousById.has(item.id)) fetched.push(item);
     }
     if (!fetched.length && !previousItems.length)
       throw new Error("Aucune publication publique exploitable n’a été trouvée.");
@@ -615,6 +632,7 @@ export async function refreshAlgeriaOpportunityCache(env) {
       version: CACHE_VERSION,
       fetchedAt: new Date().toISOString(),
       highWaterMark: highestFound,
+      backfillCursor,
       scanned,
       opportunities,
     };
@@ -625,6 +643,7 @@ export async function refreshAlgeriaOpportunityCache(env) {
         lastAttemptAt: attemptedAt,
         lastSuccessAt: payload.fetchedAt,
         highWaterMark: highestFound,
+        backfillCursor,
         scanned,
         opportunities: opportunities.length,
         consecutiveFailures: 0,
@@ -646,9 +665,10 @@ export async function refreshAlgeriaOpportunityCache(env) {
   }
 }
 
-async function latestAlgeriaOpportunities(env) {
+async function latestAlgeriaOpportunities(env, forceRefresh = false) {
   const cached = await readJsonObject(env, CACHE_KEY);
   if (
+    !forceRefresh &&
     cached?.version === CACHE_VERSION &&
     Array.isArray(cached.opportunities) &&
     timestampAge(cached.fetchedAt) < CACHE_TTL_MS
@@ -678,7 +698,7 @@ function parseLimit(value, fallback = 24) {
 }
 
 export async function searchAlgeriaOpportunities(env, options = {}) {
-  const payload = await latestAlgeriaOpportunities(env);
+  const payload = await latestAlgeriaOpportunities(env, options.refresh === true);
   const queryTokens = fold(options.query).split(/\s+/).filter(Boolean);
   const wilaya = String(options.wilaya || "all");
   const period = options.period === "week" ? "week" : "recent";
@@ -718,6 +738,8 @@ export async function searchAlgeriaOpportunities(env, options = {}) {
       returned: Math.min(limit, matches.length),
       totalMatches: matches.length,
       scanned: Number(payload.scanned || 0),
+      cachedTotal: payload.opportunities.length,
+      hasMoreHistory: Number(payload.backfillCursor || 0) > 0,
       verifiedAt: payload.fetchedAt,
       stale: payload.stale === true,
       staleReason: payload.staleReason || null,
@@ -761,6 +783,7 @@ export async function handleAlgeriaOpportunityApi(request, env, origin) {
           query: url.searchParams.get("q") || "",
           wilaya: url.searchParams.get("wilaya") || "all",
           limit: url.searchParams.get("limit") || "24",
+          refresh: url.searchParams.get("refresh") === "1",
         }),
         200,
         origin,

@@ -7,11 +7,12 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const SEED_POST_ID = 22072;
 const INITIAL_HISTORY_SIZE = 8;
-// Keep a full refresh under the 50 subrequest limit of a free Cloudflare Worker:
-// at most 18 post pages plus 6 optional date lookups. Small batches also stay
-// inside the CPU allowance of a free Worker; the high-water mark resumes later.
-const MAX_FORWARD_REQUESTS = 18;
-const MAX_DATE_LOOKUPS = 6;
+// Keep each refresh comfortably inside the Cloudflare Workers Free CPU budget.
+// Four probes are normally used to detect the end of the channel; the remaining
+// requests progressively enrich older history. At most 10 post pages plus 2
+// optional date lookups are fetched; the persisted cursor resumes on the next run.
+const MAX_FORWARD_REQUESTS = 10;
+const MAX_DATE_LOOKUPS = 2;
 const STOP_AFTER_MISSES = 4;
 const MAX_CACHED_OPPORTUNITIES = 120;
 const REQUEST_TIMEOUT_MS = 9_000;

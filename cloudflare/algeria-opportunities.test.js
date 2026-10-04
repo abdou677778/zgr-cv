@@ -194,7 +194,7 @@ test("conserve le cache vérifié quand aucun nouveau message n’est publié", 
     const refreshed = await refreshAlgeriaOpportunityCache({ CLIENTS_BUCKET: bucket });
     assert.equal(refreshed.highWaterMark, 22072);
     assert.equal(refreshed.opportunities.length, 1);
-    assert.equal(refreshed.scanned, 8);
+    assert.equal(refreshed.scanned, 4);
   } finally {
     globalThis.fetch = previousFetch;
   }

@@ -6,12 +6,13 @@ const CACHE_VERSION = 1;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const SEED_POST_ID = 22072;
-const INITIAL_HISTORY_SIZE = 18;
+const INITIAL_HISTORY_SIZE = 8;
 // Keep a full refresh under the 50 subrequest limit of a free Cloudflare Worker:
-// at most 32 post pages plus 12 optional date lookups.
-const MAX_FORWARD_REQUESTS = 32;
-const MAX_DATE_LOOKUPS = 12;
-const STOP_AFTER_MISSES = 8;
+// at most 18 post pages plus 6 optional date lookups. Small batches also stay
+// inside the CPU allowance of a free Worker; the high-water mark resumes later.
+const MAX_FORWARD_REQUESTS = 18;
+const MAX_DATE_LOOKUPS = 6;
+const STOP_AFTER_MISSES = 4;
 const MAX_CACHED_OPPORTUNITIES = 120;
 const REQUEST_TIMEOUT_MS = 9_000;
 const MAX_HTML_BYTES = 1_500_000;
@@ -297,10 +298,10 @@ function extractEmployer(text) {
 }
 
 function detectWilaya(text) {
-  const searchable = fold(text);
+  const searchable = ` ${fold(text)} `;
   const matches = [];
   for (const [alias, wilaya] of WILAYA_ALIASES) {
-    if (new RegExp(`(?:^| )${alias.replace(/ /g, " +")}(?: |$)`, "u").test(searchable)) {
+    if (searchable.includes(` ${alias} `)) {
       matches.push({ alias, wilaya });
     }
   }

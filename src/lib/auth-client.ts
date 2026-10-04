@@ -7,7 +7,8 @@ const AUTH_NETWORK_ATTEMPTS = 2;
 const API_REQUEST_TIMEOUT_MS = 30_000;
 const API_READ_ATTEMPTS = 3;
 const API_PUT_ATTEMPTS = 2;
-const CLOUD_API_ROOT = "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev";
+const CLOUD_API_ROOT = "https://zgr-cv.pages.dev";
+const LEGACY_WORKER_API_ROOT = "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev";
 export const CLOUD_APP_URL = `${CLOUD_API_ROOT}/`;
 const FILE_CLIENTS_API_ENDPOINT = `${CLOUD_API_ROOT}/api/clients`;
 // GitHub Pages and the local Vite preview are static frontends: neither owns
@@ -221,7 +222,7 @@ function normalizeSessionUser(value: unknown): SessionUser | null {
 }
 
 async function fetchAuthentication(path: string, init: RequestInit, timeoutMs: number) {
-  const roots = [...new Set([API_ROOT, CLOUD_API_ROOT].filter(Boolean))];
+  const roots = [...new Set([API_ROOT, CLOUD_API_ROOT, LEGACY_WORKER_API_ROOT].filter(Boolean))];
   let lastFailure: unknown;
   let lastStatus = 0;
   for (let attempt = 0; attempt < AUTH_NETWORK_ATTEMPTS; attempt += 1) {

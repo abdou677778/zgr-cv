@@ -29,7 +29,7 @@ jobs:
       - name: Validate and build application
         run: npm run quality
         env:
-          VITE_ZGR_API_URL: https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/api/clients
+          VITE_ZGR_API_URL: https://zgr-cv.pages.dev/api/clients
           VITE_ZGR_BUILD_ID: "${{ github.sha }}"
       - name: Publish build version marker
         run: |

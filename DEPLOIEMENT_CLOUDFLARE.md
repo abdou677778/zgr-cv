@@ -15,23 +15,30 @@
 
 L'adresse de production est :
 
-`https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/`
+`https://zgr-cv.pages.dev/`
 
 Cette adresse reste identique après chaque modification. Il n'est pas nécessaire
 d'ajouter `?release=...` ou `?refresh=...`. Le service worker et les ressources
 versionnées gèrent le renouvellement du cache.
 
+Cloudflare Pages relaie `/api/*` vers le Worker par un Service Binding interne.
+Le navigateur n'a donc plus besoin d'accéder directement à `workers.dev`, qui
+peut être filtré par certains réseaux. Les données restent dans les mêmes R2 et
+D1 et le Worker historique reste disponible uniquement comme secours technique.
+
 ## Configuration
 
 1. Créer un bucket R2 nommé `zgr-cv-clients`.
 2. Construire l'application avec `npm run build:spa`.
-3. Déployer le Worker et les ressources avec
+3. Déployer le Worker avec
    `npx wrangler deploy --config wrangler.worker.jsonc`.
-4. Ajouter le binding R2 `CLIENTS_BUCKET` vers `zgr-cv-clients`.
-5. Définir `ADMIN_PASSWORD` et une valeur aléatoire d'au moins 40 caractères pour
+4. Déployer l'application et sa passerelle accessible avec
+   `npx wrangler pages deploy dist-spa --project-name zgr-cv --branch main`.
+5. Ajouter le binding R2 `CLIENTS_BUCKET` vers `zgr-cv-clients`.
+6. Définir `ADMIN_PASSWORD` et une valeur aléatoire d'au moins 40 caractères pour
    `SESSION_SECRET` avec `wrangler secret put`.
-6. Définir `GEMINI_API_KEYS` et `OPENROUTER_API_KEYS` sous forme de tableaux JSON.
-7. Tester `/health`, la connexion, la synchronisation R2 et les deux fournisseurs IA.
+7. Définir `GEMINI_API_KEYS` et `OPENROUTER_API_KEYS` sous forme de tableaux JSON.
+8. Tester la connexion Pages, la synchronisation R2 et les deux fournisseurs IA.
 
 ## Déploiement continu GitHub
 

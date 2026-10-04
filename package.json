@@ -15,7 +15,7 @@
     "lint": "eslint src cloudflare/*.js e2e playwright.config.ts --max-warnings 8",
     "test": "npm run test:unit && npm run test:worker",
     "test:unit": "tsx --test \"src/lib/*.test.ts\"",
-    "test:worker": "node --test cloudflare/worker.test.js cloudflare/volunteer-opportunities.test.js cloudflare/canada-opportunities.test.js cloudflare/aneti-opportunities.test.js cloudflare/atct-opportunities.test.js cloudflare/algeria-opportunities.test.js",
+    "test:worker": "node --test cloudflare/worker.test.js cloudflare/pages-api-proxy.test.js cloudflare/volunteer-opportunities.test.js cloudflare/canada-opportunities.test.js cloudflare/aneti-opportunities.test.js cloudflare/atct-opportunities.test.js cloudflare/algeria-opportunities.test.js",
     "test:e2e": "playwright test",
     "test:e2e:auth:browsers": "playwright test --config playwright.auth.config.ts",
     "check:bundle": "node scripts/check-bundle-size.mjs",

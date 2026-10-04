@@ -19,6 +19,7 @@ dist-ssr
 
 # Wrangler / Cloudflare
 .wrangler/
+_worker.bundle
 .dev.vars
 .local-secrets/
 

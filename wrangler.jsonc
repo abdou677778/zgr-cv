@@ -3,10 +3,10 @@
   "name": "zgr-cv",
   "compatibility_date": "2026-08-24",
   "pages_build_output_dir": "./dist-spa",
-  "r2_buckets": [
+  "services": [
     {
-      "binding": "CLIENTS_BUCKET",
-      "bucket_name": "zgr-cv-clients",
+      "binding": "ZGR_API",
+      "service": "zgr-cv-storage-api",
     },
   ],
 }

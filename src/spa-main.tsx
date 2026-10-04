@@ -8,6 +8,14 @@ import "./styles.css";
 
 const queryClient = new QueryClient();
 
+// `release` is only a cache-busting diagnostic parameter. Removing it keeps the
+// address bar on the permanent team URL after an old shared link is opened.
+const shareUrl = new URL(window.location.href);
+if (shareUrl.searchParams.has("release")) {
+  shareUrl.searchParams.delete("release");
+  window.history.replaceState(window.history.state, "", shareUrl);
+}
+
 void registerPwa();
 startObservability();
 

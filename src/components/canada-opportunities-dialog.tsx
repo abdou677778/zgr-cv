@@ -2097,6 +2097,7 @@ export function CanadaOpportunitiesDialog({
                 <button
                   type="button"
                   aria-label="Source ou programme"
+                  title="Ouvrir la liste des sources et programmes"
                   className="flex h-11 min-w-0 items-center justify-between gap-2 rounded-xl border border-red-300 bg-red-50 px-2.5 text-red-950 shadow-sm outline-none transition hover:bg-red-100 focus:border-red-500 focus:ring-2 focus:ring-red-200"
                 >
                   <ProviderIdentity provider={provider} compact />
@@ -2105,7 +2106,7 @@ export function CanadaOpportunitiesDialog({
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="w-[min(430px,calc(100vw-1.5rem))] rounded-xl border-slate-200 bg-white p-1.5 shadow-xl"
+                className="z-[150] w-[min(430px,calc(100vw-1.5rem))] rounded-xl border-slate-200 bg-white p-1.5 shadow-xl"
               >
                 <DropdownMenuLabel className="px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500">
                   Choisir une source ou un programme

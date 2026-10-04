@@ -1047,6 +1047,13 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(sourceMenu).toContainText("Guichet-Emplois Canada");
     await categorySelect.selectOption("jobs");
     await sourceMenu.click();
+    const sourcePopup = page.getByRole("menu", { name: "Source ou programme" });
+    await expect(sourcePopup).toBeVisible();
+    expect(
+      await sourcePopup.evaluate((element) =>
+        Number.parseInt(getComputedStyle(element).zIndex, 10),
+      ),
+    ).toBeGreaterThan(100);
     await expect(page.getByRole("menuitem", { name: /Emplois officiels Europe/i })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: /Destination Canada/i })).toHaveCount(0);
     await page.getByRole("menuitem", { name: /Emplois officiels Europe/i }).click();

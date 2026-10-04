@@ -25,6 +25,17 @@ let status: PwaStatus = {
   updateAvailable: false,
 };
 
+function activateWaitingWorkerWhenLoggedOut(nextRegistration: ServiceWorkerRegistration) {
+  if (!nextRegistration.waiting) return;
+  try {
+    if (localStorage.getItem("zgr-cv-admin-session")) return;
+  } catch {
+    // Browsers with storage disabled are necessarily treated as logged out.
+  }
+  refreshRequested = true;
+  nextRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
+}
+
 function publish(next: Partial<PwaStatus>) {
   status = { ...status, ...next };
   listeners.forEach((listener) => listener());
@@ -33,6 +44,7 @@ function publish(next: Partial<PwaStatus>) {
 function watchRegistration(nextRegistration: ServiceWorkerRegistration) {
   registration = nextRegistration;
   publish({ updateAvailable: Boolean(nextRegistration.waiting) });
+  activateWaitingWorkerWhenLoggedOut(nextRegistration);
 
   nextRegistration.addEventListener("updatefound", () => {
     const worker = nextRegistration.installing;
@@ -40,6 +52,7 @@ function watchRegistration(nextRegistration: ServiceWorkerRegistration) {
     worker.addEventListener("statechange", () => {
       if (worker.state === "installed" && navigator.serviceWorker.controller) {
         publish({ updateAvailable: true });
+        activateWaitingWorkerWhenLoggedOut(nextRegistration);
       }
     });
   });
@@ -67,9 +80,10 @@ export function registerPwa(): Promise<void> {
   const serviceWorkerUrl = new URL("./sw.js", window.location.href);
   const scopeUrl = new URL("./", window.location.href);
   registrationPromise = navigator.serviceWorker
-    .register(serviceWorkerUrl, { scope: scopeUrl.pathname })
+    .register(serviceWorkerUrl, { scope: scopeUrl.pathname, updateViaCache: "none" })
     .then((nextRegistration) => {
       watchRegistration(nextRegistration);
+      void nextRegistration.update();
       window.addEventListener("focus", () => void nextRegistration.update());
       window.setInterval(() => void nextRegistration.update(), 60 * 60 * 1000);
     })

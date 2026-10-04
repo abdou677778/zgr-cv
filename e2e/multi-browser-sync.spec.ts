@@ -394,6 +394,51 @@ class SharedClientApi {
       });
     }
 
+    if (url.pathname === "/api/algeria-opportunities/search" && method === "GET") {
+      return this.respond(route, 200, {
+        opportunities: [
+          {
+            id: "22072",
+            title: "Comptable – محاسب(ة)",
+            employer: "École privée à Boumerdès",
+            wilaya: "Boumerdès",
+            commune: "Boumerdès",
+            location: "Boumerdès",
+            positions: ["Comptable – محاسب(ة)"],
+            description: "Une école privée recrute un comptable à Boumerdès.",
+            publishedAt: "2026-10-03T12:25:00.000Z",
+            sourceUrl: "https://t.me/rcrdz1/22072",
+            applicationMethod: {
+              type: "email",
+              label: "Candidature par e-mail indiquée dans l’annonce",
+              url: "mailto:recrutement.ecole@example.com",
+              email: "recrutement.ecole@example.com",
+              phone: null,
+              loginRequired: false,
+              note: "Vérifiez l’adresse dans la publication Telegram avant l’envoi.",
+            },
+            requiredDocuments: ["CV"],
+            dataQuality: { status: "complete", missingFields: [] },
+            checkedAt: "2026-10-03T21:30:00.000Z",
+          },
+        ],
+        wilayas: ["Adrar", "Alger", "Boumerdès", "Ouargla"],
+        meta: {
+          period: url.searchParams.get("period") || "week",
+          wilaya: url.searchParams.get("wilaya") || "all",
+          returned: 1,
+          totalMatches: 1,
+          scanned: 26,
+          verifiedAt: "2026-10-03T21:30:00.000Z",
+          stale: false,
+          sourceUrl: "https://t.me/rcrdz1",
+          sourceType: "community_aggregator",
+          methodology: "Lecture des publications individuelles publiques.",
+          territorialReference: "69 wilayas et 1 541 communes.",
+        },
+      });
+    }
+
     if (url.pathname === "/api/auth/login" && method === "POST") {
       const credentials = request.postDataJSON() as { username?: string; password?: string };
       const user =
@@ -1085,6 +1130,22 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(
       dialog.getByRole("link", { name: /Ouvrir le formulaire officiel/ }),
     ).toHaveAttribute("href", "https://connexion-pef.afeseo.ca/je-vis-a-lexterieur-du-canada/");
+
+    await sourceSelect.selectOption("algeria");
+    await expect(dialog.getByRole("heading", { name: "Comptable – محاسب(ة)" })).toBeVisible();
+    await expect(
+      dialog.getByText("Source communautaire à vérifier", { exact: true }),
+    ).toBeVisible();
+    await expect(dialog.getByLabel("Wilaya Algérie")).toBeVisible();
+    await expect(dialog.getByText("recrutement.ecole@example.com", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: /Écrire pour postuler/ })).toHaveAttribute(
+      "href",
+      "mailto:recrutement.ecole@example.com",
+    );
+    await expect(dialog.getByRole("link", { name: /Vérifier sur Telegram/ })).toHaveAttribute(
+      "href",
+      "https://t.me/rcrdz1/22072",
+    );
 
     await sourceSelect.selectOption("italy");
     const italyCard = dialog.getByRole("article").filter({ hasText: "Decreto Flussi 2027" });

@@ -10,6 +10,10 @@ import {
 } from "./canada-opportunities.js";
 import { handleAnetiOpportunityApi, refreshAnetiOpportunityCache } from "./aneti-opportunities.js";
 import { handleAtctOpportunityApi, refreshAtctOpportunityCache } from "./atct-opportunities.js";
+import {
+  handleAlgeriaOpportunityApi,
+  refreshAlgeriaOpportunityCache,
+} from "./algeria-opportunities.js";
 
 const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
@@ -3998,6 +4002,8 @@ async function route(request, env, ctx) {
     return handleAnetiOpportunityApi(request, env, origin);
   if (url.pathname.startsWith("/api/atct-opportunities/"))
     return handleAtctOpportunityApi(request, env, origin);
+  if (url.pathname.startsWith("/api/algeria-opportunities/"))
+    return handleAlgeriaOpportunityApi(request, env, origin);
   if (url.pathname === "/api/auth/login" && request.method === "POST")
     return login(request, env, origin, ctx);
 
@@ -4277,6 +4283,16 @@ export default {
         console.error(
           JSON.stringify({
             event: "atct_opportunities_refresh_failed",
+            message: error instanceof Error ? error.message : "unknown",
+          }),
+        );
+      }),
+    );
+    ctx.waitUntil(
+      refreshAlgeriaOpportunityCache(env).catch((error) => {
+        console.error(
+          JSON.stringify({
+            event: "algeria_opportunities_refresh_failed",
             message: error instanceof Error ? error.message : "unknown",
           }),
         );

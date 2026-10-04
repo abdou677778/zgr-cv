@@ -42,6 +42,11 @@ import {
   type AtctOpportunity,
   type AtctOpportunitySearchResult,
 } from "@/lib/atct-opportunities";
+import {
+  searchAlgeriaOpportunities,
+  type AlgeriaOpportunity,
+  type AlgeriaOpportunitySearchResult,
+} from "@/lib/algeria-opportunities";
 
 type Provider =
   | "jobbank"
@@ -53,6 +58,7 @@ type Provider =
   | "new_brunswick"
   | "aneti"
   | "atct"
+  | "algeria"
   | "italy";
 
 type OpportunityCategory = "all" | "jobs" | "events" | "programs";
@@ -64,13 +70,14 @@ const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
     "indeed",
     "aneti",
     "atct",
+    "algeria",
     "destination_canada",
     "francophone_canada",
     "pei",
     "new_brunswick",
     "italy",
   ],
-  jobs: ["jobbank", "europe_jobs", "indeed", "aneti", "atct"],
+  jobs: ["jobbank", "europe_jobs", "indeed", "aneti", "atct", "algeria"],
   events: ["destination_canada"],
   programs: ["francophone_canada", "pei", "new_brunswick", "italy"],
 };
@@ -81,6 +88,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   indeed: "🔎 Indeed Canada",
   aneti: "🇹🇳 ANETI International",
   atct: "🇹🇳 ATCT Tunisia",
+  algeria: "🇩🇿 Opportunités Algérie",
   destination_canada: "📅 Destination Canada",
   francophone_canada: "🇨🇦 Programmes Canada francophone",
   pei: "🇨🇦 Île-du-Prince-Édouard",
@@ -1393,6 +1401,124 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
   );
 }
 
+function AlgeriaOpportunityCard({ opportunity }: { opportunity: AlgeriaOpportunity }) {
+  const actionLabel =
+    opportunity.applicationMethod.type === "email"
+      ? "Écrire pour postuler"
+      : opportunity.applicationMethod.type === "phone"
+        ? "Appeler le contact"
+        : opportunity.applicationMethod.type === "external_link"
+          ? "Ouvrir le lien de candidature"
+          : "Lire la publication originale";
+  return (
+    <article className="flex h-full flex-col rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
+          🇩🇿 Offre locale Algérie
+        </span>
+        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-950">
+          Source communautaire à vérifier
+        </span>
+        {opportunity.dataQuality.status === "partial" ? (
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+            Données partielles
+          </span>
+        ) : null}
+      </div>
+
+      <h3 className="text-base font-black leading-snug text-slate-950">{opportunity.title}</h3>
+      <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+        {opportunity.employer ? (
+          <p className="flex items-start gap-2">
+            <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+            <span>{opportunity.employer}</span>
+          </p>
+        ) : null}
+        <p className="flex items-start gap-2">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+          <span>
+            {opportunity.commune ? `${opportunity.commune} · ` : ""}
+            {opportunity.wilaya || "Wilaya non déterminée"}
+          </span>
+        </p>
+        <p className="flex items-start gap-2">
+          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+          <span>
+            Publication Telegram : {formatDate(opportunity.publishedAt, "date non exposée")}
+          </span>
+        </p>
+      </div>
+
+      {opportunity.positions.length ? (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-emerald-950">
+          <p className="text-xs font-black uppercase tracking-wide text-emerald-800">
+            Poste{opportunity.positions.length > 1 ? "s" : ""}
+          </p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed">
+            {opportunity.positions.slice(0, 6).map((position) => (
+              <li key={position}>{position}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-blue-950">
+        <p className="flex items-start gap-2 text-sm font-black">
+          {opportunity.applicationMethod.type === "email" ? (
+            <Mail className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : opportunity.applicationMethod.type === "phone" ? (
+            <Phone className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : (
+            <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" />
+          )}
+          <span>{opportunity.applicationMethod.label}</span>
+        </p>
+        {opportunity.applicationMethod.email ? (
+          <a
+            href={`mailto:${opportunity.applicationMethod.email}`}
+            className="mt-1.5 block break-all text-sm font-bold underline underline-offset-2"
+          >
+            {opportunity.applicationMethod.email}
+          </a>
+        ) : null}
+        {opportunity.applicationMethod.phone ? (
+          <a
+            href={`tel:${opportunity.applicationMethod.phone.replace(/[^+\d]/g, "")}`}
+            className="mt-1.5 block text-sm font-bold underline underline-offset-2"
+          >
+            {opportunity.applicationMethod.phone}
+          </a>
+        ) : null}
+        {!opportunity.applicationMethod.email && !opportunity.applicationMethod.phone ? (
+          <p className="mt-1 text-xs leading-relaxed">{opportunity.applicationMethod.note}</p>
+        ) : null}
+      </div>
+
+      {opportunity.requiredDocuments.length ? (
+        <p className="mt-2 text-xs leading-relaxed text-slate-600">
+          <strong>Pièces mentionnées :</strong> {opportunity.requiredDocuments.join(" · ")}
+        </p>
+      ) : null}
+      <p className="mt-2 line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-slate-600">
+        {opportunity.description}
+      </p>
+
+      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-4">
+        <Button asChild size="sm" variant="outline">
+          <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
+            Vérifier sur Telegram <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+          </a>
+        </Button>
+        <Button asChild size="sm" className="bg-emerald-700 text-white hover:bg-emerald-800">
+          <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
+            {actionLabel} <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+          </a>
+        </Button>
+      </div>
+    </article>
+  );
+}
+
 export function CanadaOpportunitiesDialog({
   open,
   onOpenChange,
@@ -1408,15 +1534,20 @@ export function CanadaOpportunitiesDialog({
   const [result, setResult] = useState<CanadaOpportunitySearchResult | null>(null);
   const [anetiResult, setAnetiResult] = useState<AnetiOpportunitySearchResult | null>(null);
   const [atctResult, setAtctResult] = useState<AtctOpportunitySearchResult | null>(null);
+  const [algeriaResult, setAlgeriaResult] = useState<AlgeriaOpportunitySearchResult | null>(null);
+  const [algeriaWilaya, setAlgeriaWilaya] = useState("all");
   const [loading, setLoading] = useState(false);
   const [anetiLoading, setAnetiLoading] = useState(false);
   const [atctLoading, setAtctLoading] = useState(false);
+  const [algeriaLoading, setAlgeriaLoading] = useState(false);
   const [error, setError] = useState("");
   const [anetiError, setAnetiError] = useState("");
   const [atctError, setAtctError] = useState("");
+  const [algeriaError, setAlgeriaError] = useState("");
   const requestRef = useRef<AbortController | null>(null);
   const anetiRequestRef = useRef<AbortController | null>(null);
   const atctRequestRef = useRef<AbortController | null>(null);
+  const algeriaRequestRef = useRef<AbortController | null>(null);
 
   const changeCategory = (nextCategory: OpportunityCategory) => {
     const defaultProvider: Record<OpportunityCategory, Provider> = {
@@ -1499,6 +1630,32 @@ export function CanadaOpportunitiesDialog({
     }
   }, [period, query]);
 
+  const runAlgeriaSearch = useCallback(async () => {
+    algeriaRequestRef.current?.abort();
+    const controller = new AbortController();
+    algeriaRequestRef.current = controller;
+    setAlgeriaLoading(true);
+    setAlgeriaError("");
+    try {
+      setAlgeriaResult(
+        await searchAlgeriaOpportunities({
+          period,
+          wilaya: algeriaWilaya,
+          query,
+          limit: 30,
+          signal: controller.signal,
+        }),
+      );
+    } catch (failure) {
+      if ((failure as Error).name !== "AbortError")
+        setAlgeriaError(
+          failure instanceof Error ? failure.message : "Recherche Algérie indisponible.",
+        );
+    } finally {
+      if (!controller.signal.aborted) setAlgeriaLoading(false);
+    }
+  }, [algeriaWilaya, period, query]);
+
   useEffect(() => {
     if (open && provider === "jobbank") void runSearch();
     return () => requestRef.current?.abort();
@@ -1513,6 +1670,11 @@ export function CanadaOpportunitiesDialog({
     if (open && provider === "atct") void runAtctSearch();
     return () => atctRequestRef.current?.abort();
   }, [open, period, provider, runAtctSearch]);
+
+  useEffect(() => {
+    if (open && provider === "algeria") void runAlgeriaSearch();
+    return () => algeriaRequestRef.current?.abort();
+  }, [algeriaWilaya, open, period, provider, runAlgeriaSearch]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -1730,6 +1892,138 @@ export function CanadaOpportunitiesDialog({
               </p>
             </div>
           </div>
+        ) : provider === "algeria" ? (
+          <>
+            <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[190px_220px_minmax(260px,1fr)_auto]">
+              <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                Période
+                <select
+                  value={period}
+                  onChange={(event) => setPeriod(event.target.value as "week" | "recent")}
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                >
+                  <option value="week">Publiées ces 7 derniers jours</option>
+                  <option value="recent">Publications récentes disponibles</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                Wilaya (69)
+                <select
+                  aria-label="Wilaya Algérie"
+                  value={algeriaWilaya}
+                  onChange={(event) => setAlgeriaWilaya(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                >
+                  <option value="all">Toutes les wilayas</option>
+                  {(algeriaResult?.wilayas || []).map((wilaya) => (
+                    <option key={wilaya} value={wilaya}>
+                      {wilaya}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                Poste, commune ou employeur
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void runAlgeriaSearch();
+                    }}
+                    className="pl-9 normal-case tracking-normal"
+                    placeholder="Ex. comptable, Hassi Messaoud, école…"
+                  />
+                </div>
+              </label>
+              <Button
+                className="self-end bg-emerald-700 text-white hover:bg-emerald-800"
+                onClick={() => void runAlgeriaSearch()}
+              >
+                {algeriaLoading ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Actualiser Algérie
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+              <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Les annonces proviennent du canal communautaire Recrutement DZ, pas d’un organisme
+                  public. Vérifiez l’employeur, le contact et la publication originale ; ne payez
+                  jamais pour obtenir un poste. ZGR ne conserve aucun compte Telegram.
+                </span>
+              </div>
+              {algeriaError ? (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {algeriaError}
+                </div>
+              ) : null}
+              {algeriaResult ? (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
+                  <p className="font-semibold text-emerald-950">
+                    <BadgeCheck className="mr-1.5 inline h-4 w-4" />
+                    {algeriaResult.meta.totalMatches} annonce(s) classée(s)
+                    {algeriaWilaya !== "all" ? ` · ${algeriaWilaya}` : " · 69 wilayas"}
+                  </p>
+                  <p className="text-xs text-emerald-800">
+                    Source relue le{" "}
+                    {new Date(algeriaResult.meta.verifiedAt).toLocaleString("fr-FR")}
+                    {algeriaResult.meta.stale ? " · cache de secours" : ""}
+                  </p>
+                </div>
+              ) : null}
+              {algeriaResult?.meta.staleReason ? (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  Telegram est momentanément indisponible : le dernier cache vérifié est affiché.
+                </div>
+              ) : null}
+              {algeriaLoading && !algeriaResult ? (
+                <div className="grid min-h-64 place-items-center text-sm font-medium text-slate-500">
+                  <span className="flex items-center gap-2">
+                    <LoaderCircle className="h-5 w-5 animate-spin text-emerald-700" /> Lecture et
+                    classement des publications Telegram…
+                  </span>
+                </div>
+              ) : algeriaResult?.opportunities.length ? (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {algeriaResult.opportunities.map((opportunity) => (
+                    <AlgeriaOpportunityCard key={opportunity.id} opportunity={opportunity} />
+                  ))}
+                </div>
+              ) : !algeriaLoading ? (
+                <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                  <div>
+                    <BriefcaseBusiness className="mx-auto mb-3 h-9 w-9 text-slate-400" />
+                    <p className="font-bold text-slate-800">Aucune annonce dans cette sélection.</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Essayez toutes les wilayas, « publications récentes » ou retirez le mot-clé.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+              <span>
+                Source communautaire Telegram · classement ZGR par wilaya, commune et poste.
+              </span>
+              <a
+                href={algeriaResult?.meta.sourceUrl || "https://t.me/rcrdz1"}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:underline"
+              >
+                Ouvrir Recrutement DZ <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </footer>
+          </>
         ) : provider === "aneti" ? (
           <>
             <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[210px_minmax(260px,1fr)_auto]">

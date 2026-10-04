@@ -1,25 +1,50 @@
-# Déploiement de l'API ZGR CV avec Cloudflare Worker et R2
+# Déploiement principal ZGR CV avec Cloudflare Workers
 
 ## Architecture
 
-- GitHub Pages : application Vite statique.
-- `cloudflare/worker.js` : API privée Cloudflare Worker.
+- Cloudflare Workers Static Assets : application Vite statique principale.
+- `cloudflare/worker.js` : API privée servie par la même origine HTTPS.
+- GitHub Pages : copie de secours uniquement.
 - `CLIENTS_BUCKET` : binding R2 pour les clients, comptes, audits et secrets IA
   chiffrés, séparés par préfixes.
 - `ADMIN_USERNAME` : nom du compte administrateur d’amorçage.
 - `ADMIN_PASSWORD` et `SESSION_SECRET` : secrets d'authentification serveur.
 - `GEMINI_API_KEYS` et `OPENROUTER_API_KEYS` : tableaux JSON de clés, côté serveur.
 
+## Adresse permanente
+
+L'adresse de production est :
+
+`https://zgr-cv-storage-api.zgrcv-wizi.workers.dev/`
+
+Cette adresse reste identique après chaque modification. Il n'est pas nécessaire
+d'ajouter `?release=...` ou `?refresh=...`. Le service worker et les ressources
+versionnées gèrent le renouvellement du cache.
+
 ## Configuration
 
 1. Créer un bucket R2 nommé `zgr-cv-clients`.
-2. Déployer le Worker défini dans `wrangler.worker.jsonc`.
-3. Ajouter le binding R2 `CLIENTS_BUCKET` vers `zgr-cv-clients`.
-4. Définir `ADMIN_PASSWORD` et une valeur aléatoire d'au moins 40 caractères pour
+2. Construire l'application avec `npm run build:spa`.
+3. Déployer le Worker et les ressources avec
+   `npx wrangler deploy --config wrangler.worker.jsonc`.
+4. Ajouter le binding R2 `CLIENTS_BUCKET` vers `zgr-cv-clients`.
+5. Définir `ADMIN_PASSWORD` et une valeur aléatoire d'au moins 40 caractères pour
    `SESSION_SECRET` avec `wrangler secret put`.
-5. Définir `GEMINI_API_KEYS` et `OPENROUTER_API_KEYS` sous forme de tableaux JSON.
-6. Autoriser uniquement l'origine GitHub Pages et les origines locales de développement.
+6. Définir `GEMINI_API_KEYS` et `OPENROUTER_API_KEYS` sous forme de tableaux JSON.
 7. Tester `/health`, la connexion, la synchronisation R2 et les deux fournisseurs IA.
+
+## Déploiement continu GitHub
+
+Le workflow `.github/workflows/deploy-cloudflare.yml` est prêt. Pour l'activer une
+seule fois dans les paramètres du dépôt GitHub :
+
+1. Ajouter les secrets `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID`.
+2. Ajouter la variable `CLOUDFLARE_DEPLOY_ENABLED` avec la valeur `true`.
+
+Le jeton doit être limité à ce compte et disposer uniquement des droits Workers
+Scripts, D1 et R2 nécessaires. La variable d'activation évite qu'un dépôt sans
+secrets fasse échouer la branche principale. Chaque push validé sur `main` publie
+ensuite automatiquement la même URL de production.
 
 Il n’existe aucune inscription publique. Les profils administrateurs peuvent créer
 d’autres administrateurs ou des utilisateurs standards et réinitialiser leurs mots

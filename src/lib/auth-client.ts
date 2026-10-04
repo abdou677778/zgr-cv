@@ -1,8 +1,8 @@
 const SESSION_KEY = "zgr-cv-admin-session";
 const SESSION_USER_KEY = "zgr-cv-session-user";
 const SESSION_CHANGED_EVENT = "zgr-cv-session-changed";
-const SESSION_VERIFY_TIMEOUT_MS = 12_000;
-const SESSION_LOGIN_TIMEOUT_MS = 25_000;
+const SESSION_VERIFY_TIMEOUT_MS = 8_000;
+const SESSION_LOGIN_TIMEOUT_MS = 12_000;
 const AUTH_NETWORK_ATTEMPTS = 2;
 const API_REQUEST_TIMEOUT_MS = 30_000;
 const API_READ_ATTEMPTS = 3;
@@ -19,6 +19,61 @@ const configuredClientsEndpoint =
 
 export const API_ROOT = configuredClientsEndpoint.replace(/\/api\/clients\/?$/, "");
 export const CLIENTS_API_ENDPOINT = `${API_ROOT}/api/clients`;
+
+const memorySession = new Map<string, string>();
+
+function availableStorage(kind: "local" | "session") {
+  if (typeof window === "undefined") return null;
+  try {
+    return kind === "local" ? window.localStorage : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readSessionValue(key: string) {
+  for (const storage of [availableStorage("local"), availableStorage("session")]) {
+    try {
+      const value = storage?.getItem(key);
+      if (value) return value;
+    } catch {
+      // Continue vers le stockage suivant puis vers la mémoire de l'onglet.
+    }
+  }
+  return memorySession.get(key) || "";
+}
+
+function removeSessionValue(key: string) {
+  for (const storage of [availableStorage("local"), availableStorage("session")]) {
+    try {
+      storage?.removeItem(key);
+    } catch {
+      // Certains navigateurs privés exposent Storage mais refusent toute écriture.
+    }
+  }
+  memorySession.delete(key);
+}
+
+function persistSessionPair(token: string, user: SessionUser) {
+  const serializedUser = JSON.stringify(user);
+  for (const storage of [availableStorage("local"), availableStorage("session")]) {
+    if (!storage) continue;
+    try {
+      storage.setItem(SESSION_KEY, token);
+      storage.setItem(SESSION_USER_KEY, serializedUser);
+      return;
+    } catch {
+      try {
+        storage.removeItem(SESSION_KEY);
+        storage.removeItem(SESSION_USER_KEY);
+      } catch {
+        // Le dernier recours en mémoire permet au moins la session courante.
+      }
+    }
+  }
+  memorySession.set(SESSION_KEY, token);
+  memorySession.set(SESSION_USER_KEY, serializedUser);
+}
 
 export const apiUrl = (path: string) => `${API_ROOT}${path.startsWith("/") ? path : `/${path}`}`;
 
@@ -91,14 +146,21 @@ export type SessionUser = {
 
 function migrateLegacySession() {
   if (typeof window === "undefined") return;
-  if (!localStorage.getItem(SESSION_KEY)) {
-    const legacyToken = sessionStorage.getItem(SESSION_KEY);
-    const legacyUser = sessionStorage.getItem(SESSION_USER_KEY);
-    if (legacyToken) localStorage.setItem(SESSION_KEY, legacyToken);
-    if (legacyUser) localStorage.setItem(SESSION_USER_KEY, legacyUser);
+  const local = availableStorage("local");
+  const session = availableStorage("session");
+  if (!local || !session) return;
+  try {
+    if (local.getItem(SESSION_KEY)) return;
+    const legacyToken = session.getItem(SESSION_KEY);
+    const legacyUser = session.getItem(SESSION_USER_KEY);
+    if (!legacyToken || !legacyUser) return;
+    local.setItem(SESSION_KEY, legacyToken);
+    local.setItem(SESSION_USER_KEY, legacyUser);
+    session.removeItem(SESSION_KEY);
+    session.removeItem(SESSION_USER_KEY);
+  } catch {
+    // La session de l'onglet reste utilisable si la migration est interdite.
   }
-  sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(SESSION_USER_KEY);
 }
 
 function tokenHasExpired(token: string) {
@@ -204,17 +266,16 @@ function notifySessionChange() {
 }
 
 function saveSession(token: string, user: SessionUser) {
-  localStorage.setItem(SESSION_KEY, token);
-  localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
-  sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(SESSION_USER_KEY);
+  removeSessionValue(SESSION_KEY);
+  removeSessionValue(SESSION_USER_KEY);
+  persistSessionPair(token, user);
   notifySessionChange();
 }
 
 export function getAdminSession() {
   if (typeof window === "undefined") return "";
   migrateLegacySession();
-  const token = localStorage.getItem(SESSION_KEY) || "";
+  const token = readSessionValue(SESSION_KEY);
   if (token && tokenHasExpired(token)) {
     clearAdminSession();
     return "";
@@ -224,10 +285,8 @@ export function getAdminSession() {
 
 export function clearAdminSession() {
   if (typeof window !== "undefined") {
-    localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem(SESSION_USER_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_USER_KEY);
+    removeSessionValue(SESSION_KEY);
+    removeSessionValue(SESSION_USER_KEY);
     notifySessionChange();
   }
 }
@@ -236,10 +295,10 @@ export function getCurrentUser(): SessionUser | null {
   if (typeof window === "undefined") return null;
   if (!getAdminSession()) return null;
   try {
-    const user = JSON.parse(localStorage.getItem(SESSION_USER_KEY) || "null") as unknown;
+    const user = JSON.parse(readSessionValue(SESSION_USER_KEY) || "null") as unknown;
     const normalized = normalizeSessionUser(user);
     if (normalized) {
-      localStorage.setItem(SESSION_USER_KEY, JSON.stringify(normalized));
+      persistSessionPair(getAdminSession(), normalized);
       return normalized;
     }
   } catch {

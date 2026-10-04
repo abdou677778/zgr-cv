@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { clearAdminSession, CLOUD_APP_URL, loginAdmin, type SessionUser } from "@/lib/auth-client";
 
-const ONLINE_APP_URL = "https://abdou677778.github.io/zgr-cv/";
+const BACKUP_APP_URL = "https://abdou677778.github.io/zgr-cv/";
 
 export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
   const [username, setUsername] = useState("admin");
@@ -40,7 +40,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
   }, []);
 
   const openOnlineVersion = () => {
-    const target = new URL(ONLINE_APP_URL);
+    const target = new URL(CLOUD_APP_URL);
     if (username.trim()) target.searchParams.set("login", username.trim());
     target.searchParams.set("refresh", Date.now().toString());
     window.location.assign(target.toString());
@@ -51,7 +51,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
     const cloudTarget = new URL(CLOUD_APP_URL);
     const target =
       fileMode || localMode
-        ? new URL(ONLINE_APP_URL)
+        ? new URL(CLOUD_APP_URL)
         : cloudMode
           ? new URL(window.location.href)
           : cloudTarget;
@@ -62,17 +62,29 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const fields = new FormData(form);
+    const submittedUsername = String(fields.get("username") || username).trim();
+    const submittedPassword = String(fields.get("password") || password);
+    if (!submittedUsername || !submittedPassword) {
+      setError("Saisissez l’utilisateur et le mot de passe.");
+      return;
+    }
+    setUsername(submittedUsername);
+    setPassword(submittedPassword);
     setBusy(true);
     setError("");
     setNetworkFailure(false);
     try {
-      onAuthenticated(await loginAdmin(username, password));
+      onAuthenticated(await loginAdmin(submittedUsername, submittedPassword));
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : "Connexion impossible.";
       const isNetworkFailure =
         failure instanceof TypeError ||
         failure instanceof DOMException ||
-        /failed to fetch|networkerror|load failed|abort|timeout|délai/i.test(message);
+        /failed to fetch|networkerror|load failed|abort|timeout|délai|cloudflare|joignable|bloqu/i.test(
+          message,
+        );
       setNetworkFailure(isNetworkFailure);
       setError(
         isNetworkFailure
@@ -103,7 +115,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             </div>
           </div>
         </div>
-        <form className="space-y-5 p-7" onSubmit={submit}>
+        <form className="space-y-5 p-7" onSubmit={submit} aria-busy={busy}>
           <div className="flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-900">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
             <p>Accès privé. Seul l’administrateur peut créer, modifier ou désactiver un profil.</p>
@@ -121,6 +133,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             <Label htmlFor="admin-username">Utilisateur</Label>
             <Input
               id="admin-username"
+              name="username"
               value={username}
               autoComplete="username"
               autoCapitalize="none"
@@ -137,6 +150,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             <Label htmlFor="admin-password">Mot de passe</Label>
             <Input
               id="admin-password"
+              name="password"
               type="password"
               value={password}
               autoComplete="current-password"
@@ -147,7 +161,11 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
           </div>
           {error && (
             <div className="space-y-2">
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+              <p
+                className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700"
+                role="alert"
+                aria-live="assertive"
+              >
                 {error}
               </p>
               {networkFailure && (
@@ -171,17 +189,13 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
               )}
             </div>
           )}
-          <Button
-            type="submit"
-            className="h-11 w-full rounded-xl"
-            disabled={busy || !username || !password}
-          >
+          <Button type="submit" className="h-11 w-full rounded-xl" disabled={busy}>
             {busy ? (
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <LockKeyhole className="mr-2 h-4 w-4" />
             )}
-            Se connecter
+            {busy ? "Connexion sécurisée…" : "Se connecter"}
           </Button>
           <p className="text-center text-[11px] leading-5 text-muted-foreground">
             Le même profil peut être utilisé sur plusieurs ordinateurs. Chaque navigateur crée sa
@@ -196,6 +210,22 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
             >
               <ExternalLink className="mr-2 h-4 w-4" /> Ouvrir la version en ligne
             </Button>
+          )}
+          {!cloudMode && !fileMode && !localMode && (
+            <a
+              href={CLOUD_APP_URL}
+              className="block text-center text-xs font-medium text-indigo-700 underline-offset-4 hover:underline"
+            >
+              Utiliser l’adresse Cloudflare officielle
+            </a>
+          )}
+          {cloudMode && (
+            <a
+              href={BACKUP_APP_URL}
+              className="block text-center text-[11px] text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Accès de secours GitHub Pages
+            </a>
           )}
         </form>
       </section>

@@ -1,0 +1,39 @@
+name: Deploy ZGR CV to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # Activation volontaire après ajout des deux secrets GitHub et de la
+    # variable CLOUDFLARE_DEPLOY_ENABLED=true. Tant qu'elle est absente,
+    # le déploiement local Wrangler reste disponible sans faire échouer main.
+    if: ${{ vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Validate application and Worker
+        run: npm run typecheck && npm test && npm run check:worker
+      - name: Build production application
+        run: npm run build:spa
+        env:
+          VITE_ZGR_BUILD_ID: "${{ github.sha }}"
+      - name: Publish production Worker and static assets
+        run: npx wrangler deploy --config wrangler.worker.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

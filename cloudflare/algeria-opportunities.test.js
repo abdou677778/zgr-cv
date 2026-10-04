@@ -118,6 +118,24 @@ test("identifie Hassi Messaoud comme commune de Ouargla", () => {
   assert.equal(item.applicationMethod.type, "external_link");
 });
 
+test("conserve toutes les wilayas d’une offre multi-régions sans confondre Algérie avec Alger", () => {
+  const item = parseTelegramPostHtml(
+    telegramHtml(
+      22067,
+      `إعلان توظيف في الجزائر
+💼 Business Development Manager
+📍 مكان العمل:
+🔹 M’Sila – المسيلة
+🔹 Jijel – جيجل
+إرسال CV عبر LinkedIn`,
+    ),
+    22067,
+  );
+  assert.deepEqual(item.wilayas, ["M’Sila", "Jijel"]);
+  assert.equal(item.wilaya, "M’Sila");
+  assert.match(item.commune, /M’Sila.*Jijel/);
+});
+
 test("signale honnêtement les champs absents au lieu de les inventer", () => {
   const item = parseTelegramPostHtml(
     telegramHtml(
@@ -156,7 +174,7 @@ test("filtre le cache par wilaya, commune et poste", async () => {
   );
   const bucket = memoryBucket({
     "public-cache/algeria-telegram-jobs-latest.json": JSON.stringify({
-      version: 1,
+      version: 2,
       fetchedAt: new Date().toISOString(),
       highWaterMark: 22072,
       scanned: 26,
@@ -181,7 +199,7 @@ test("conserve le cache vérifié quand aucun nouveau message n’est publié", 
   const cached = parseTelegramPostHtml(boumerdesPost, 22072, "2026-10-03T12:25:00.000Z");
   const bucket = memoryBucket({
     "public-cache/algeria-telegram-jobs-latest.json": JSON.stringify({
-      version: 1,
+      version: 2,
       fetchedAt: "2026-10-03T00:00:00.000Z",
       highWaterMark: 22072,
       scanned: 26,

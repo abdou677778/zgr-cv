@@ -402,6 +402,7 @@ class SharedClientApi {
             title: "Comptable – محاسب(ة)",
             employer: "École privée à Boumerdès",
             wilaya: "Boumerdès",
+            wilayas: ["Boumerdès"],
             commune: "Boumerdès",
             location: "Boumerdès",
             positions: ["Comptable – محاسب(ة)"],

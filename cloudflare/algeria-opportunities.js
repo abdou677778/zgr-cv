@@ -2,7 +2,7 @@ const TELEGRAM_CHANNEL = "rcrdz1";
 const TELEGRAM_CHANNEL_URL = `https://t.me/${TELEGRAM_CHANNEL}`;
 const CACHE_KEY = "public-cache/algeria-telegram-jobs-latest.json";
 const HEALTH_KEY = "system/monitoring/algeria-opportunities.json";
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const SEED_POST_ID = 22072;
@@ -93,7 +93,6 @@ const WILAYA_ALIASES = new Map(
   [
     ["alger", "Alger"],
     ["algiers", "Alger"],
-    ["الجزائر", "Alger"],
     ["bordj el kiffan", "Alger"],
     ["باب الزوار", "Alger"],
     ["dar el beida", "Alger"],
@@ -263,7 +262,7 @@ function extractPositions(text) {
   const heading =
     /(postes?.*(a pourvoir|recherches?|demandes?)|المناصب? المطلوبة|المنصب المطلوب|الوظائف المطلوبة|التخصصات المطلوبة|specialites)/;
   const stop =
-    /^(lieu|localisation|مكان|الموقع|نظام|profil|الشروط|المهام|candidature|طريقة التقديم|للتقديم|contact)/;
+    /^(lieu|localisation|مكان|المناطق|regions|الموقع|نظام|profil|الشروط|المهام|candidature|طريقة التقديم|للتقديم|contact)/;
   const block = linesAfterHeading(lines, heading, stop);
   const emojiPositions = lines
     .filter((line) => /^\s*(?:💼|👨‍🍳|👩‍🍳|👨‍🏫|👩‍🏫)/u.test(line))
@@ -297,34 +296,52 @@ function extractEmployer(text) {
   return null;
 }
 
-function detectWilaya(text) {
+function detectWilayas(text) {
   const searchable = ` ${fold(text)} `;
   const matches = [];
   for (const [alias, wilaya] of WILAYA_ALIASES) {
-    if (searchable.includes(` ${alias} `)) {
-      matches.push({ alias, wilaya });
+    const index = searchable.indexOf(` ${alias} `);
+    if (index >= 0) {
+      matches.push({ alias, wilaya, index });
     }
   }
-  matches.sort((left, right) => right.alias.length - left.alias.length);
-  return matches[0]?.wilaya || null;
+  matches.sort((left, right) => left.index - right.index || right.alias.length - left.alias.length);
+  return [...new Set(matches.map((match) => match.wilaya))];
 }
 
-function extractLocation(text, wilaya) {
+function extractLocation(text, wilayas) {
   const lines = text
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
   const labelledIndex = lines.findIndex((line) =>
-    /(?:مكان العمل|lieu de travail|localisation|location|wilaya|الولاية)\s*[:：-]/i.test(line),
+    /(?:مكان العمل|lieu de travail|localisation|location|wilaya|الولاية|المناطق المعنية|régions)\s*(?:\|[^:：]*)?[:：-]/i.test(
+      line,
+    ),
   );
   const labelled = lines[labelledIndex];
   if (labelled) {
     const value = labelled.replace(/^.*?(?:[:：]|\s[-–—]\s)/, "").trim();
     if (value) return value.slice(0, 180);
     const next = lines[labelledIndex + 1]?.replace(/^[^\p{L}\p{N}]+/u, "").trim();
-    if (next && next.length < 180) return next;
+    if (next && next.length < 180) {
+      const locations = [];
+      for (
+        let index = labelledIndex + 1;
+        index < lines.length && locations.length < 12;
+        index += 1
+      ) {
+        if (/^[━═]{5,}/u.test(lines[index])) break;
+        const candidate = lines[index].replace(/^[^\p{L}\p{N}]+/u, "").trim();
+        if (!candidate) continue;
+        if (/^(profil|المهام|الشروط|candidature|طريقة التقديم|للتقديم)/i.test(fold(candidate)))
+          break;
+        if (candidate.length < 180) locations.push(candidate);
+      }
+      return locations.join(" · ").slice(0, 500);
+    }
   }
-  return wilaya;
+  return wilayas.join(" · ") || null;
 }
 
 function extractEmails(text) {
@@ -426,8 +443,9 @@ export function parseTelegramPostHtml(html, id, publishedAt = null) {
   )
     return null;
   const employer = extractEmployer(description);
-  const wilaya = detectWilaya(description);
-  const location = extractLocation(description, wilaya);
+  const wilayas = detectWilayas(description);
+  const wilaya = wilayas[0] || null;
+  const location = extractLocation(description, wilayas);
   const method = applicationMethod(description, canonicalUrl);
   const missingFields = [];
   if (!wilaya) missingFields.push("wilaya");
@@ -438,6 +456,7 @@ export function parseTelegramPostHtml(html, id, publishedAt = null) {
     title: titleFromText(description, positions, employer),
     employer,
     wilaya,
+    wilayas,
     commune: location && location !== wilaya ? location : null,
     location,
     positions,
@@ -551,11 +570,13 @@ export async function refreshAlgeriaOpportunityCache(env) {
     readJsonObject(env, CACHE_KEY),
     readJsonObject(env, HEALTH_KEY),
   ]);
-  const previousItems = Array.isArray(previousCache?.opportunities)
-    ? previousCache.opportunities
-    : [];
+  const previousItems =
+    previousCache?.version === CACHE_VERSION && Array.isArray(previousCache?.opportunities)
+      ? previousCache.opportunities
+      : [];
   const previousById = new Map(previousItems.map((item) => [String(item.id), item]));
-  const previousHighWater = Number(previousCache?.highWaterMark || 0);
+  const previousHighWater =
+    previousCache?.version === CACHE_VERSION ? Number(previousCache?.highWaterMark || 0) : 0;
   const initial = previousHighWater < 1;
   const start = initial ? SEED_POST_ID - INITIAL_HISTORY_SIZE + 1 : previousHighWater + 1;
   let highestFound = previousHighWater || SEED_POST_ID;
@@ -663,7 +684,12 @@ export async function searchAlgeriaOpportunities(env, options = {}) {
   const period = options.period === "week" ? "week" : "recent";
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const matches = payload.opportunities
-    .filter((item) => wilaya === "all" || item.wilaya === wilaya)
+    .filter(
+      (item) =>
+        wilaya === "all" ||
+        item.wilaya === wilaya ||
+        (Array.isArray(item.wilayas) && item.wilayas.includes(wilaya)),
+    )
     .filter(
       (item) => period !== "week" || !item.publishedAt || Date.parse(item.publishedAt) >= weekAgo,
     )

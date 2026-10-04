@@ -5,6 +5,7 @@ export type AlgeriaOpportunity = {
   title: string;
   employer: string | null;
   wilaya: string | null;
+  wilayas: string[];
   commune: string | null;
   location: string | null;
   positions: string[];

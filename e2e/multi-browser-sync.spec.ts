@@ -976,21 +976,29 @@ test("ouvre les opportunités et confirme précisément l’admissibilité tunis
   const context = await browser.newContext();
   try {
     const page = await connect(context, api, "admin");
-    await page.getByRole("button", { name: "Opportunités volontariat" }).click();
-    const dialog = page.getByRole("main", { name: "Opportunités de volontariat" });
+    await page.getByRole("button", { name: "Opportunités", exact: true }).click();
+    const workspace = page.getByRole("main", { name: "Opportunités internationales" });
+    await workspace
+      .getByRole("combobox", { name: "Catégorie d’opportunités" })
+      .selectOption("volunteering");
+    const dialog = workspace.getByRole("region", { name: "Opportunités de volontariat" });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Retour à l’accueil" })).toBeVisible();
     await expect(dialog.getByText("Buon cammino", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Tunisie admissible", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 04\/10\/2026 23:00/)).toBeVisible();
     await expect(dialog.getByText(/Âge : 18–29 ans/)).toBeVisible();
+    await dialog
+      .getByRole("article")
+      .filter({ hasText: "Buon cammino" })
+      .getByRole("button", { name: "Afficher plus d’infos" })
+      .click();
     await expect(dialog.getByText("Connexion EU Login requise", { exact: true })).toBeVisible();
     await expect(dialog.getByRole("link", { name: /Offre officielle/ })).toHaveAttribute(
       "href",
       "https://youth.europa.eu/solidarity/opportunity/54646_en",
     );
-    await dialog.getByRole("button", { name: "Retour à l’accueil" }).click();
-    await expect(dialog).toBeHidden();
+    await workspace.getByRole("button", { name: "Retour à l’accueil" }).click();
+    await expect(workspace).toBeHidden();
   } finally {
     await context.close();
   }
@@ -1004,7 +1012,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
   const context = await browser.newContext();
   try {
     const page = await connect(context, api, "admin");
-    await page.getByRole("button", { name: "Opportunités Canada" }).click();
+    await page.getByRole("button", { name: "Opportunités", exact: true }).click();
     const dialog = page.getByRole("main", { name: "Opportunités internationales" });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Retour à l’accueil" })).toBeVisible();
@@ -1025,8 +1033,15 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
     await expect(dialog.getByText("Candidat international vérifié", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Sans compte Indeed", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 16 oct. 2026/)).toBeVisible();
-    await expect(dialog.getByText("careers@manningelliott.example", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("Autres méthodes officielles disponibles")).toBeVisible();
+    const canadaCard = dialog.getByRole("article").filter({ hasText: "senior accountant" });
+    await expect(
+      canadaCard.getByText("careers@manningelliott.example", { exact: true }),
+    ).toBeHidden();
+    await canadaCard.getByRole("button", { name: "Afficher plus d’infos" }).click();
+    await expect(
+      canadaCard.getByText("careers@manningelliott.example", { exact: true }),
+    ).toBeVisible();
+    await expect(canadaCard.getByText("Autres méthodes officielles")).toBeVisible();
     await expect(dialog.getByText(/Candidature directe Guichet-Emplois/)).toBeVisible();
     await expect(dialog.getByRole("link", { name: /Écrire à l’employeur/ })).toHaveAttribute(
       "href",
@@ -1132,6 +1147,11 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
 
     await chooseSource("ANETI International");
     await expect(dialog.getByText("Opérateur socio-sanitaire", { exact: true })).toBeVisible();
+    await dialog
+      .getByRole("article")
+      .filter({ hasText: "Opérateur socio-sanitaire" })
+      .getByRole("button", { name: "Afficher plus d’infos" })
+      .click();
     await expect(dialog.getByText("Inscription ANETI requise", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 18 oct. 2026/)).toBeVisible();
     await expect(dialog.getByText(/numéro CIN/)).toBeVisible();
@@ -1141,6 +1161,11 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
 
     await chooseSource("ATCT Tunisia");
     await expect(dialog.getByText(/personnel éducateur à la petite enfance/)).toBeVisible();
+    await dialog
+      .getByRole("article")
+      .filter({ hasText: /personnel éducateur à la petite enfance/ })
+      .getByRole("button", { name: "Afficher plus d’infos" })
+      .click();
     await expect(dialog.getByText("Source publique ATCT vérifiée", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/Dernier délai : 01 nov. 2026/)).toBeVisible();
     await expect(dialog.getByText(/14 avis hors emploi écarté/)).toBeVisible();
@@ -1206,7 +1231,7 @@ test("masque les liens Telegram aux profils non administrateurs", async ({ brows
   const context = await browser.newContext();
   try {
     const page = await connect(context, api, "lecteur");
-    await page.getByRole("button", { name: "Opportunités Canada" }).click();
+    await page.getByRole("button", { name: "Opportunités", exact: true }).click();
     const workspace = page.getByRole("main", { name: "Opportunités internationales" });
     await workspace.getByRole("button", { name: "Source ou programme" }).click();
     await page.getByRole("menuitem", { name: /Opportunités Algérie/i }).click();

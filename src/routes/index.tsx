@@ -44,7 +44,6 @@ import {
   UserCog,
   BookOpenText,
   ClipboardList,
-  HeartHandshake,
   BriefcaseBusiness,
   CloudCheck,
   CloudOff,
@@ -185,10 +184,6 @@ const ClientDatabaseDialog = lazy(async () => {
 const ClientOrdersDialog = lazy(async () => {
   const module = await import("@/components/client-orders-dialog");
   return { default: module.ClientOrdersDialog };
-});
-const VolunteerOpportunitiesDialog = lazy(async () => {
-  const module = await import("@/components/volunteer-opportunities-dialog");
-  return { default: module.VolunteerOpportunitiesDialog };
 });
 const CanadaOpportunitiesDialog = lazy(async () => {
   const module = await import("@/components/canada-opportunities-dialog");
@@ -607,7 +602,6 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     approved: 0,
   });
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
-  const [volunteerOpportunitiesOpen, setVolunteerOpportunitiesOpen] = useState(false);
   const [canadaOpportunitiesOpen, setCanadaOpportunitiesOpen] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [activeProfileWorkflowStatus, setActiveProfileWorkflowStatus] =
@@ -2815,18 +2809,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             <Button
               variant="outline"
               size="sm"
-              className="border-emerald-200 bg-emerald-50/80 text-emerald-900 hover:bg-emerald-100"
-              onClick={() => setVolunteerOpportunitiesOpen(true)}
-            >
-              <HeartHandshake className="mr-2 h-4 w-4" /> Opportunités volontariat
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
               className="border-red-200 bg-red-50/80 text-red-900 hover:bg-red-100"
               onClick={() => setCanadaOpportunitiesOpen(true)}
             >
-              <BriefcaseBusiness className="mr-2 h-4 w-4" /> Opportunités Canada
+              <BriefcaseBusiness className="mr-2 h-4 w-4" /> Opportunités
             </Button>
             {user.permissions.aiUse && (
               <>
@@ -4379,12 +4365,6 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             onOpenJson={openClientOrderJson}
             activeOrderId={activeClientOrder?.id}
             onCreateCurrentDeliverable={createCurrentOrderDeliverable}
-          />
-        ) : null}
-        {volunteerOpportunitiesOpen ? (
-          <VolunteerOpportunitiesDialog
-            open={volunteerOpportunitiesOpen}
-            onOpenChange={setVolunteerOpportunitiesOpen}
           />
         ) : null}
         {canadaOpportunitiesOpen ? (

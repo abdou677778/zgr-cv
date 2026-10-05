@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { VolunteerOpportunitiesDialog } from "@/components/volunteer-opportunities-dialog";
 import {
   indeedCanadaSearchUrl,
   searchCanadaOpportunities,
@@ -68,9 +69,10 @@ type Provider =
   | "aneti"
   | "atct"
   | "algeria"
-  | "italy";
+  | "italy"
+  | "volunteer";
 
-type OpportunityCategory = "all" | "jobs" | "events" | "programs";
+type OpportunityCategory = "all" | "jobs" | "volunteering" | "events" | "programs";
 
 const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
   all: [
@@ -85,8 +87,10 @@ const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
     "pei",
     "new_brunswick",
     "italy",
+    "volunteer",
   ],
   jobs: ["jobbank", "europe_jobs", "indeed", "aneti", "atct", "algeria"],
+  volunteering: ["volunteer"],
   events: ["destination_canada"],
   programs: ["francophone_canada", "pei", "new_brunswick", "italy"],
 };
@@ -103,6 +107,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   pei: "Île-du-Prince-Édouard",
   new_brunswick: "Nouveau-Brunswick",
   italy: "Opportunités Italie",
+  volunteer: "Volontariat international",
 };
 
 const PROVIDER_CONTEXT: Record<Provider, string> = {
@@ -117,12 +122,13 @@ const PROVIDER_CONTEXT: Record<Provider, string> = {
   pei: "Programme provincial · Canada",
   new_brunswick: "Programme provincial · Canada",
   italy: "Emploi et immigration · Italie",
+  volunteer: "Corps européen de solidarité",
 };
 
 type ProviderTerritory = "canada" | "europe" | "tunisia" | "algeria" | "italy";
 
 function territoryForProvider(provider: Provider): ProviderTerritory {
-  if (provider === "europe_jobs") return "europe";
+  if (provider === "europe_jobs" || provider === "volunteer") return "europe";
   if (provider === "aneti" || provider === "atct") return "tunisia";
   if (provider === "algeria") return "algeria";
   if (provider === "italy") return "italy";
@@ -1106,6 +1112,7 @@ function lmiaLabel(value: CanadaOpportunity["lmiaStatus"]) {
 function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity }) {
   const noAccount = !opportunity.applicationMethod.loginRequired;
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const contact = opportunity.applicationContact;
   const copyEmail = async () => {
     if (!contact?.email) return;
@@ -1118,8 +1125,8 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
     }
   };
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-red-300 hover:shadow-md">
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
           <BadgeCheck className="h-3.5 w-3.5" /> Candidat international vérifié
         </span>
@@ -1138,7 +1145,7 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
         <span>{opportunity.employer || "Employeur non indiqué"}</span>
       </p>
 
-      <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+      <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p className="flex items-start gap-2">
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
           <span>{opportunity.location || "Lieu non indiqué"}</span>
@@ -1155,137 +1162,144 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
         </p>
       </div>
 
-      <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-red-900">
-        <p className="flex items-start gap-2 text-sm font-black">
-          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par l’employeur")}
-          </span>
-        </p>
-      </div>
+      <p className="mt-3 flex items-start gap-2 border-t border-slate-200 pt-2.5 text-sm font-black text-red-700">
+        <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>
+          Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par l’employeur")}
+        </span>
+      </p>
 
-      <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-emerald-950">
-        <p className="flex items-start gap-2 text-sm font-bold">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{opportunity.eligibilityEvidence}</span>
-        </p>
-        <p className="mt-1 text-xs font-semibold text-emerald-800">
-          {lmiaLabel(opportunity.lmiaStatus)}
-        </p>
-      </div>
+      {expanded ? (
+        <div className="mt-3 space-y-3 border-t border-slate-200 pt-3 text-sm text-slate-700">
+          <section>
+            <p className="flex items-start gap-2 font-bold text-slate-900">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+              <span>{opportunity.eligibilityEvidence}</span>
+            </p>
+            <p className="mt-1 pl-6 text-xs font-semibold text-emerald-700">
+              {lmiaLabel(opportunity.lmiaStatus)}
+            </p>
+          </section>
 
-      <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sky-950">
-        <p className="flex items-start gap-2 text-sm font-bold">
-          {opportunity.applicationMethod.loginRequired ? (
-            <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : (
-            <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" />
-          )}
-          <span>{opportunity.applicationMethod.label}</span>
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-sky-800">
-          {opportunity.applicationMethod.note}
-        </p>
-      </div>
+          <section>
+            <p className="flex items-start gap-2 font-bold text-slate-900">
+              {opportunity.applicationMethod.loginRequired ? (
+                <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+              ) : (
+                <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+              )}
+              <span>{opportunity.applicationMethod.label}</span>
+            </p>
+            {!contact ? (
+              <p className="mt-1 pl-6 text-xs leading-relaxed text-slate-600">
+                {opportunity.applicationMethod.note}
+              </p>
+            ) : null}
+          </section>
 
-      {contact?.email ? (
-        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-950">
-          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-violet-700">
-            <Mail className="h-4 w-4" /> E-mail officiel pour postuler
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          {contact?.email ? (
+            <section className="border-l-2 border-violet-300 pl-3">
+              <p className="text-xs font-black uppercase tracking-wide text-violet-700">
+                E-mail officiel pour postuler
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <a
+                  href={`mailto:${contact.email}`}
+                  className="min-w-0 flex-1 break-all font-bold text-violet-950 underline"
+                >
+                  {contact.email}
+                </a>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={() => void copyEmail()}
+                >
+                  <Copy className="mr-1.5 h-3.5 w-3.5" /> {copied ? "Copié" : "Copier"}
+                </Button>
+              </div>
+            </section>
+          ) : contact?.type === "external_form" && contact.url ? (
             <a
-              href={`mailto:${contact.email}`}
-              className="min-w-0 flex-1 break-all text-sm font-bold text-violet-950 underline decoration-violet-300 underline-offset-2"
+              href={contact.url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 font-bold text-violet-800 underline"
             >
-              {contact.email}
+              <ExternalLink className="h-4 w-4" /> Formulaire officiel pour postuler
             </a>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 border-violet-300 bg-white text-violet-900"
-              onClick={() => void copyEmail()}
+          ) : contact?.phone ? (
+            <a
+              href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`}
+              className="flex items-center gap-2 font-bold text-violet-800 underline"
             >
-              <Copy className="mr-1.5 h-3.5 w-3.5" /> {copied ? "Copié" : "Copier"}
-            </Button>
-          </div>
-        </div>
-      ) : contact?.type === "external_form" && contact.url ? (
-        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-950">
-          <p className="flex items-center gap-2 text-sm font-black">
-            <ExternalLink className="h-4 w-4" /> Formulaire officiel pour postuler
-          </p>
+              <Phone className="h-4 w-4" /> {contact.phone}
+            </a>
+          ) : contact?.type === "mail" || contact?.type === "in_person" ? (
+            <section className="border-l-2 border-violet-300 pl-3">
+              <p className="font-bold text-slate-900">{contact.label}</p>
+              <p className="mt-1 whitespace-pre-line text-xs leading-relaxed">{contact.details}</p>
+            </section>
+          ) : null}
+
+          {opportunity.applicationOptions?.length > 1 ? (
+            <section>
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
+                Autres méthodes officielles
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                {opportunity.applicationOptions
+                  .filter(
+                    (option) =>
+                      option.type !== contact?.type ||
+                      option.url !== contact?.url ||
+                      option.email !== contact?.email,
+                  )
+                  .map((option) => (
+                    <a
+                      key={`${option.type}-${option.url}-${option.email}`}
+                      href={option.url}
+                      target={option.url.startsWith("http") ? "_blank" : undefined}
+                      rel={option.url.startsWith("http") ? "noreferrer" : undefined}
+                      className="text-xs font-bold text-sky-800 underline"
+                      title={option.details}
+                    >
+                      {option.label}
+                      {option.loginRequired ? " · connexion requise" : ""}
+                    </a>
+                  ))}
+              </div>
+            </section>
+          ) : null}
+
+          {opportunity.description ? (
+            <p className="whitespace-pre-line leading-relaxed text-slate-600">
+              {opportunity.description}
+            </p>
+          ) : null}
+
           <a
-            href={contact.url}
+            href={opportunity.sourceUrl}
             target="_blank"
             rel="noreferrer"
-            className="mt-1 block break-all text-xs font-semibold text-violet-800 underline underline-offset-2"
+            className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 underline"
           >
-            {contact.url}
+            Vérifier la fiche officielle <ExternalLink className="h-3.5 w-3.5" />
           </a>
-        </div>
-      ) : contact?.phone ? (
-        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-950">
-          <p className="flex items-center gap-2 text-sm font-black">
-            <Phone className="h-4 w-4" /> Téléphone de candidature : {contact.phone}
-          </p>
-        </div>
-      ) : contact?.type === "mail" || contact?.type === "in_person" ? (
-        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-950">
-          <p className="text-sm font-black">{contact.label}</p>
-          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-violet-800">
-            {contact.details}
-          </p>
-        </div>
-      ) : (
-        <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
-          Coordonnées directes non publiées : utilisez le bouton officiel ci-dessous pour suivre la
-          méthode choisie par l’employeur.
-        </p>
-      )}
-
-      {opportunity.applicationOptions?.length > 1 ? (
-        <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-          <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-            Autres méthodes officielles disponibles
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {opportunity.applicationOptions
-              .filter(
-                (option) =>
-                  option.type !== contact?.type ||
-                  option.url !== contact?.url ||
-                  option.email !== contact?.email,
-              )
-              .map((option) => (
-                <a
-                  key={`${option.type}-${option.url}-${option.email}`}
-                  href={option.url}
-                  target={option.url.startsWith("http") ? "_blank" : undefined}
-                  rel={option.url.startsWith("http") ? "noreferrer" : undefined}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:border-violet-300 hover:text-violet-800"
-                  title={option.details}
-                >
-                  {option.label}
-                  {option.loginRequired ? " · connexion requise" : ""}
-                </a>
-              ))}
-          </div>
         </div>
       ) : null}
 
-      {opportunity.description ? (
-        <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-slate-600">
-          {opportunity.description}
-        </p>
-      ) : null}
-
-      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-4">
-        <Button asChild size="sm" variant="outline">
-          <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
-            Vérifier la fiche <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-          </a>
+      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+        >
+          <FileText className="mr-1.5 h-3.5 w-3.5" />
+          {expanded ? "Réduire" : "Afficher plus d’infos"}
         </Button>
         <Button asChild size="sm" className="bg-red-700 text-white hover:bg-red-800">
           <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
@@ -1304,9 +1318,10 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
 }
 
 function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }) {
+  const [expanded, setExpanded] = useState(false);
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-sky-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-md">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-sky-300 hover:shadow-md">
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
             opportunity.staleDetail ? "bg-amber-100 text-amber-900" : "bg-sky-100 text-sky-800"
@@ -1336,7 +1351,7 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
       </div>
 
       <h3 className="text-base font-black leading-snug text-slate-950">{opportunity.title}</h3>
-      <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+      <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p className="flex items-start gap-2">
           <Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
           <span>{opportunity.country || "Pays non indiqué"}</span>
@@ -1353,45 +1368,59 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
         ) : null}
       </div>
 
-      <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-red-900">
-        <p className="flex items-start gap-2 text-sm font-black">
-          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par ANETI")}</span>
-        </p>
-      </div>
+      <p className="mt-3 flex items-start gap-2 border-t border-slate-200 pt-2.5 text-sm font-black text-red-700">
+        <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par ANETI")}</span>
+      </p>
 
-      <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-950">
-        <p className="flex items-start gap-2 text-sm font-black">
-          <UserRoundCheck className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{opportunity.applicationMethod.label}</span>
-        </p>
-        {opportunity.registrationRequirements.length ? (
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed text-amber-900">
-            {opportunity.registrationRequirements.map((requirement) => (
-              <li key={requirement}>{requirement}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-1 text-xs text-amber-900">{opportunity.applicationMethod.note}</p>
-        )}
-      </div>
-
-      {opportunity.speciality ? (
-        <p className="mt-3 text-xs font-bold uppercase tracking-wide text-sky-800">
-          {opportunity.speciality}
-        </p>
-      ) : null}
-      {opportunity.description ? (
-        <p className="mt-2 line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-slate-600">
-          {opportunity.description}
-        </p>
-      ) : null}
-
-      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-4">
-        <Button asChild size="sm" variant="outline">
-          <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
-            Vérifier la fiche <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+      {expanded ? (
+        <div className="mt-3 space-y-3 border-t border-slate-200 pt-3 text-sm text-slate-700">
+          <section>
+            <p className="flex items-start gap-2 font-bold text-slate-900">
+              <UserRoundCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <span>{opportunity.applicationMethod.label}</span>
+            </p>
+            {opportunity.registrationRequirements.length ? (
+              <ul className="mt-2 list-disc space-y-1 pl-6 text-xs leading-relaxed">
+                {opportunity.registrationRequirements.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 pl-6 text-xs">{opportunity.applicationMethod.note}</p>
+            )}
+          </section>
+          {opportunity.speciality ? (
+            <p className="text-xs font-bold uppercase tracking-wide text-sky-800">
+              {opportunity.speciality}
+            </p>
+          ) : null}
+          {opportunity.description ? (
+            <p className="whitespace-pre-line leading-relaxed text-slate-600">
+              {opportunity.description}
+            </p>
+          ) : null}
+          <a
+            href={opportunity.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 underline"
+          >
+            Vérifier la fiche officielle <ExternalLink className="h-3.5 w-3.5" />
           </a>
+        </div>
+      ) : null}
+
+      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+        >
+          <FileText className="mr-1.5 h-3.5 w-3.5" />{" "}
+          {expanded ? "Réduire" : "Afficher plus d’infos"}
         </Button>
         <Button asChild size="sm" className="bg-sky-700 text-white hover:bg-sky-800">
           <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
@@ -1409,6 +1438,7 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
 }
 
 function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) {
+  const [expanded, setExpanded] = useState(false);
   const actionLabel =
     opportunity.applicationMethod.type === "email"
       ? "Écrire pour postuler"
@@ -1418,8 +1448,8 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
           ? "Ouvrir l’espace candidat"
           : "Voir comment postuler";
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-teal-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-teal-300 hover:shadow-md">
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
             opportunity.staleDetail ? "bg-amber-100 text-amber-900" : "bg-teal-100 text-teal-900"
@@ -1447,7 +1477,7 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
       </div>
 
       <h3 className="text-base font-black leading-snug text-slate-950">{opportunity.title}</h3>
-      <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+      <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p className="flex items-start gap-2">
           <Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
           <span>{opportunity.country || "Pays non indiqué"}</span>
@@ -1458,68 +1488,84 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
         </p>
       </div>
 
-      <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-red-900">
-        <p className="flex items-start gap-2 text-sm font-black">
-          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par l’ATCT")}</span>
-        </p>
-      </div>
+      <p className="mt-3 flex items-start gap-2 border-t border-slate-200 pt-2.5 text-sm font-black text-red-700">
+        <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par l’ATCT")}</span>
+      </p>
 
-      {opportunity.positions.length ? (
-        <div className="mt-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 text-teal-950">
-          <p className="text-xs font-black uppercase tracking-wide text-teal-800">
-            Poste{opportunity.positions.length > 1 ? "s" : ""} à pourvoir
-          </p>
-          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed">
-            {opportunity.positions.slice(0, 5).map((position) => (
-              <li key={position}>{position}</li>
-            ))}
-          </ul>
-          {opportunity.positions.length > 5 ? (
-            <p className="mt-1 text-xs font-bold text-teal-800">
-              + {opportunity.positions.length - 5} autre(s) poste(s)
+      {expanded ? (
+        <div className="mt-3 space-y-3 border-t border-slate-200 pt-3 text-sm text-slate-700">
+          {opportunity.positions.length ? (
+            <section>
+              <p className="text-xs font-black uppercase tracking-wide text-teal-800">
+                Poste{opportunity.positions.length > 1 ? "s" : ""} à pourvoir
+              </p>
+              <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed">
+                {opportunity.positions.slice(0, 5).map((position) => (
+                  <li key={position}>{position}</li>
+                ))}
+              </ul>
+              {opportunity.positions.length > 5 ? (
+                <p className="mt-1 text-xs font-bold text-teal-800">
+                  + {opportunity.positions.length - 5} autre(s) poste(s)
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          <section>
+            <p className="flex items-start gap-2 text-sm font-black">
+              <UserRoundCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{opportunity.applicationMethod.label}</span>
+            </p>
+            {opportunity.applicationMethod.email ? (
+              <a
+                href={`mailto:${opportunity.applicationMethod.email}`}
+                className="mt-1.5 block break-all text-sm font-bold underline underline-offset-2"
+              >
+                {opportunity.applicationMethod.email}
+              </a>
+            ) : (
+              <p className="mt-1 text-xs leading-relaxed">{opportunity.applicationMethod.note}</p>
+            )}
+          </section>
+
+          {opportunity.requiredDocuments.length ? (
+            <p className="text-xs leading-relaxed text-slate-600">
+              <strong>Pièces indiquées :</strong> {opportunity.requiredDocuments.join(" · ")}
             </p>
           ) : null}
+          {opportunity.requirements ? (
+            <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600">
+              {opportunity.requirements}
+            </p>
+          ) : opportunity.description ? (
+            <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600">
+              {opportunity.description}
+            </p>
+          ) : null}
+
+          <a
+            href={opportunity.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 underline"
+          >
+            Vérifier la fiche officielle <ExternalLink className="h-3.5 w-3.5" />
+          </a>
         </div>
       ) : null}
 
-      <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-950">
-        <p className="flex items-start gap-2 text-sm font-black">
-          <UserRoundCheck className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{opportunity.applicationMethod.label}</span>
-        </p>
-        {opportunity.applicationMethod.email ? (
-          <a
-            href={`mailto:${opportunity.applicationMethod.email}`}
-            className="mt-1.5 block break-all text-sm font-bold underline underline-offset-2"
-          >
-            {opportunity.applicationMethod.email}
-          </a>
-        ) : (
-          <p className="mt-1 text-xs leading-relaxed">{opportunity.applicationMethod.note}</p>
-        )}
-      </div>
-
-      {opportunity.requiredDocuments.length ? (
-        <p className="mt-2 text-xs leading-relaxed text-slate-600">
-          <strong>Pièces indiquées :</strong> {opportunity.requiredDocuments.join(" · ")}
-        </p>
-      ) : null}
-      {opportunity.requirements ? (
-        <p className="mt-2 line-clamp-4 whitespace-pre-line text-sm leading-relaxed text-slate-600">
-          {opportunity.requirements}
-        </p>
-      ) : opportunity.description ? (
-        <p className="mt-2 line-clamp-4 whitespace-pre-line text-sm leading-relaxed text-slate-600">
-          {opportunity.description}
-        </p>
-      ) : null}
-
-      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-4">
-        <Button asChild size="sm" variant="outline">
-          <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
-            Vérifier la fiche <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-          </a>
+      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+        >
+          <FileText className="mr-1.5 h-3.5 w-3.5" />{" "}
+          {expanded ? "Réduire" : "Afficher plus d’infos"}
         </Button>
         <Button asChild size="sm" className="bg-teal-700 text-white hover:bg-teal-800">
           <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
@@ -1893,6 +1939,7 @@ export function CanadaOpportunitiesDialog({
     const defaultProvider: Record<OpportunityCategory, Provider> = {
       all: "jobbank",
       jobs: "jobbank",
+      volunteering: "volunteer",
       events: "destination_canada",
       programs: "francophone_canada",
     };
@@ -2065,8 +2112,8 @@ export function CanadaOpportunitiesDialog({
               Opportunités internationales
             </h1>
             <p className="mt-0.5 hidden text-xs text-slate-600 md:block">
-              Emplois Europe et Canada, recrutements officiels, événements et programmes avec
-              parcours de candidature vérifié.
+              Emplois, volontariat, recrutements officiels, événements et programmes avec parcours
+              de candidature vérifié.
             </p>
           </div>
         </div>
@@ -2088,6 +2135,7 @@ export function CanadaOpportunitiesDialog({
               >
                 <option value="all">Toutes les catégories</option>
                 <option value="jobs">Emplois avec CV</option>
+                <option value="volunteering">Volontariat</option>
                 <option value="events">Événements recrutement</option>
                 <option value="programs">Programmes officiels</option>
               </select>
@@ -2136,7 +2184,9 @@ export function CanadaOpportunitiesDialog({
           </div>
         </nav>
 
-        {provider === "europe_jobs" ? (
+        {provider === "volunteer" ? (
+          <VolunteerOpportunitiesDialog open embedded onOpenChange={() => undefined} />
+        ) : provider === "europe_jobs" ? (
           <EuropeOfficialJobsPanel />
         ) : provider === "francophone_canada" ? (
           <FrancophoneCanadaPanel />

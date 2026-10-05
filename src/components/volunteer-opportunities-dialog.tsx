@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ExternalLink,
+  FileText,
   Globe2,
   HeartHandshake,
   Hourglass,
@@ -66,12 +67,13 @@ function formatDeadline(value: string | null) {
 }
 
 function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity }) {
+  const [expanded, setExpanded] = useState(false);
   const location = [opportunity.destination.town, opportunity.destination.countryName]
     .filter(Boolean)
     .join(", ");
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-md">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-cyan-300 hover:shadow-md">
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
           <CheckCircle2 className="h-3.5 w-3.5" /> {opportunity.eligibleCountry.name} admissible
         </span>
@@ -85,7 +87,7 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
       {opportunity.organization && (
         <p className="mt-1 text-sm font-semibold text-cyan-800">{opportunity.organization}</p>
       )}
-      <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+      <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p className="flex items-start gap-2">
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-cyan-700" />
           <span>{location || "Destination non indiquée"}</span>
@@ -108,64 +110,78 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
           </span>
         </p>
       </div>
-      <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-red-800">
-        <p className="flex items-start gap-2 text-sm font-black">
-          <Hourglass className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Dernier délai : {formatDeadline(opportunity.deadlineAt)}</span>
-        </p>
-      </div>
-      <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-violet-900">
-        <p className="flex items-start gap-2 text-sm font-bold">
-          <LogIn className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{opportunity.applicationMethod?.label || "Connexion EU Login requise"}</span>
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-violet-800">
-          {opportunity.applicationMethod?.note ||
-            "Connectez-vous ou rejoignez le Corps européen de solidarité avant de postuler."}
-        </p>
-        {opportunity.applicationRequirements?.cv ||
-        opportunity.applicationRequirements?.motivationStatement ? (
-          <p className="mt-1.5 text-xs font-semibold text-violet-900">
-            Documents annoncés : {opportunity.applicationRequirements.cv ? "CV" : ""}
-            {opportunity.applicationRequirements.cv &&
-            opportunity.applicationRequirements.motivationStatement
-              ? " + "
-              : ""}
-            {opportunity.applicationRequirements.motivationStatement
-              ? "lettre/texte de motivation"
-              : ""}
-          </p>
-        ) : null}
-      </div>
-      {opportunity.description && (
-        <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-slate-600">
-          {opportunity.description}
-        </p>
-      )}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4">
-        <span className="text-[11px] text-slate-500">ID {opportunity.id}</span>
-        <div className="flex flex-wrap justify-end gap-2">
-          {opportunity.applicationMethod?.url ? (
-            <Button
-              asChild
-              size="sm"
-              variant="outline"
-              className="border-violet-300 text-violet-800 hover:bg-violet-50"
-            >
-              <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
-                {opportunity.applicationMethod.type === "portal_account"
-                  ? "Connexion / inscription"
-                  : "Candidater"}
-                <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-              </a>
-            </Button>
+      <p className="mt-3 flex items-start gap-2 border-t border-slate-200 pt-2.5 text-sm font-black text-red-700">
+        <Hourglass className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>Dernier délai : {formatDeadline(opportunity.deadlineAt)}</span>
+      </p>
+
+      {expanded ? (
+        <div className="mt-3 space-y-3 border-t border-slate-200 pt-3 text-sm text-slate-700">
+          <section>
+            <p className="flex items-start gap-2 font-bold text-slate-900">
+              <LogIn className="mt-0.5 h-4 w-4 shrink-0 text-violet-700" />
+              <span>{opportunity.applicationMethod?.label || "Connexion EU Login requise"}</span>
+            </p>
+            <p className="mt-1 pl-6 text-xs leading-relaxed text-slate-600">
+              {opportunity.applicationMethod?.note ||
+                "Connectez-vous ou rejoignez le Corps européen de solidarité avant de postuler."}
+            </p>
+          </section>
+          {opportunity.applicationRequirements?.cv ||
+          opportunity.applicationRequirements?.motivationStatement ? (
+            <p className="text-xs font-semibold text-violet-800">
+              Documents annoncés : {opportunity.applicationRequirements.cv ? "CV" : ""}
+              {opportunity.applicationRequirements.cv &&
+              opportunity.applicationRequirements.motivationStatement
+                ? " + "
+                : ""}
+              {opportunity.applicationRequirements.motivationStatement
+                ? "lettre/texte de motivation"
+                : ""}
+            </p>
           ) : null}
+          {opportunity.description ? (
+            <p className="whitespace-pre-line leading-relaxed text-slate-600">
+              {opportunity.description}
+            </p>
+          ) : null}
+          <span className="block text-[11px] text-slate-500">ID {opportunity.id}</span>
+        </div>
+      ) : null}
+
+      <div className="mt-auto flex flex-wrap justify-end gap-2 pt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+        >
+          <FileText className="mr-1.5 h-3.5 w-3.5" />
+          {expanded ? "Réduire" : "Afficher plus d’infos"}
+        </Button>
+        {opportunity.applicationMethod?.url ? (
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="border-violet-300 text-violet-800 hover:bg-violet-50"
+          >
+            <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
+              {opportunity.applicationMethod.type === "portal_account"
+                ? "Connexion / inscription"
+                : "Candidater"}
+              <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+            </a>
+          </Button>
+        ) : null}
+        {expanded ? (
           <Button asChild size="sm" className="bg-cyan-700 text-white hover:bg-cyan-800">
             <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
               Offre officielle <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
             </a>
           </Button>
-        </div>
+        ) : null}
       </div>
     </article>
   );
@@ -174,9 +190,11 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
 export function VolunteerOpportunitiesDialog({
   open,
   onOpenChange,
+  embedded = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  embedded?: boolean;
 }) {
   const [country, setCountry] = useState("TN");
   const [period, setPeriod] = useState<"week" | "recent">("week");
@@ -238,7 +256,7 @@ export function VolunteerOpportunitiesDialog({
   );
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || embedded) return undefined;
     const previousOverflow = document.body.style.overflow;
     const returnHome = (event: KeyboardEvent) => {
       if (event.key === "Escape") onOpenChange(false);
@@ -249,41 +267,51 @@ export function VolunteerOpportunitiesDialog({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", returnHome);
     };
-  }, [onOpenChange, open]);
+  }, [embedded, onOpenChange, open]);
 
   if (!open) return null;
 
+  const Root = embedded ? "section" : "main";
+
   return (
-    <main
-      aria-labelledby="volunteer-opportunities-title"
-      className="fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50"
+    <Root
+      aria-labelledby={embedded ? undefined : "volunteer-opportunities-title"}
+      aria-label={embedded ? "Opportunités de volontariat" : undefined}
+      className={
+        embedded
+          ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50"
+          : "fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50"
+      }
     >
-      <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
-        <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-fit shrink-0 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-100"
-            onClick={() => onOpenChange(false)}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l’accueil
-          </Button>
-          <div className="min-w-0">
-            <h1
-              id="volunteer-opportunities-title"
-              className="flex items-center gap-2 text-xl font-black text-slate-950 sm:text-2xl"
+      {!embedded ? (
+        <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
+          <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-fit shrink-0 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-100"
+              onClick={() => onOpenChange(false)}
             >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-100 text-cyan-800">
-                <HeartHandshake className="h-5 w-5" />
-              </span>
-              Opportunités de volontariat
-            </h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Recherche officielle et contrôle exact du pays dans « Looking for participants from ».
-            </p>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l’accueil
+            </Button>
+            <div className="min-w-0">
+              <h1
+                id="volunteer-opportunities-title"
+                className="flex items-center gap-2 text-xl font-black text-slate-950 sm:text-2xl"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-100 text-cyan-800">
+                  <HeartHandshake className="h-5 w-5" />
+                </span>
+                Opportunités de volontariat
+              </h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Recherche officielle et contrôle exact du pays dans « Looking for participants from
+                ».
+              </p>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[180px_220px_minmax(260px,1fr)_auto]">
@@ -425,6 +453,6 @@ export function VolunteerOpportunitiesDialog({
           </a>
         </footer>
       </div>
-    </main>
+    </Root>
   );
 }

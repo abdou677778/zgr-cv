@@ -1125,7 +1125,7 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
     }
   };
   return (
-    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-red-300 hover:shadow-md">
+    <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-red-300 hover:shadow-md">
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
           <BadgeCheck className="h-3.5 w-3.5" /> Candidat international vérifié
@@ -1320,7 +1320,7 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
 function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-sky-300 hover:shadow-md">
+    <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-sky-300 hover:shadow-md">
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
@@ -1448,7 +1448,7 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
           ? "Ouvrir l’espace candidat"
           : "Voir comment postuler";
   return (
-    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-teal-300 hover:shadow-md">
+    <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-teal-300 hover:shadow-md">
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
@@ -2417,7 +2417,7 @@ export function CanadaOpportunitiesDialog({
                   </span>
                 </div>
               ) : algeriaResult?.opportunities.length ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {algeriaResult.opportunities.map((opportunity) => (
                     <AlgeriaOpportunityCard
                       key={opportunity.id}
@@ -2539,7 +2539,7 @@ export function CanadaOpportunitiesDialog({
                   </span>
                 </div>
               ) : anetiResult?.opportunities.length ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {anetiResult.opportunities.map((opportunity) => (
                     <AnetiOpportunityCard key={opportunity.id} opportunity={opportunity} />
                   ))}
@@ -2656,7 +2656,7 @@ export function CanadaOpportunitiesDialog({
                   </span>
                 </div>
               ) : atctResult?.opportunities.length ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {atctResult.opportunities.map((opportunity) => (
                     <AtctOpportunityCard key={opportunity.id} opportunity={opportunity} />
                   ))}

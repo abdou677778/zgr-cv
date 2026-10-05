@@ -72,7 +72,7 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
     .filter(Boolean)
     .join(", ");
   return (
-    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-cyan-300 hover:shadow-md">
+    <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-cyan-300 hover:shadow-md">
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
           <CheckCircle2 className="h-3.5 w-3.5" /> {opportunity.eligibleCountry.name} admissible
@@ -421,7 +421,7 @@ export function VolunteerOpportunitiesDialog({
               </span>
             </div>
           ) : shown.length ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
               {shown.map((opportunity) => (
                 <OpportunityCard key={opportunity.id} opportunity={opportunity} />
               ))}

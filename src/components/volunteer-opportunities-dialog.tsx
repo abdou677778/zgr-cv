@@ -28,14 +28,14 @@ import {
 } from "@/lib/volunteer-opportunities";
 
 const COUNTRIES = [
-  { code: "TN", label: "Tunisie" },
-  { code: "DZ", label: "Algérie" },
-  { code: "MA", label: "Maroc" },
-  { code: "LY", label: "Libye" },
-  { code: "FR", label: "France" },
-  { code: "BE", label: "Belgique" },
-  { code: "IT", label: "Italie" },
-  { code: "ES", label: "Espagne" },
+  { code: "TN", label: "Tunisie", ar: "تونس" },
+  { code: "DZ", label: "Algérie", ar: "الجزائر" },
+  { code: "MA", label: "Maroc", ar: "المغرب" },
+  { code: "LY", label: "Libye", ar: "ليبيا" },
+  { code: "FR", label: "France", ar: "فرنسا" },
+  { code: "BE", label: "Belgique", ar: "بلجيكا" },
+  { code: "IT", label: "Italie", ar: "إيطاليا" },
+  { code: "ES", label: "Espagne", ar: "إسبانيا" },
 ];
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -43,9 +43,20 @@ const ACTIVITY_LABELS: Record<string, string> = {
   teams: "Équipe de volontaires",
 };
 
-function formatDate(value: string | null, fallback = "Non indiquée") {
+const ACTIVITY_LABELS_AR: Record<string, string> = {
+  individual: "تطوع فردي",
+  teams: "فريق متطوعين",
+};
+
+type OpportunitiesLanguage = "fr" | "ar";
+
+function formatDate(
+  value: string | null,
+  language: OpportunitiesLanguage,
+  fallback = language === "ar" ? "غير مذكور" : "Non indiquée",
+) {
   if (!value) return fallback;
-  return new Intl.DateTimeFormat("fr-FR", {
+  return new Intl.DateTimeFormat(language === "ar" ? "ar-DZ" : "fr-FR", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -53,9 +64,9 @@ function formatDate(value: string | null, fallback = "Non indiquée") {
   }).format(new Date(value));
 }
 
-function formatDeadline(value: string | null) {
-  if (!value) return "Sans échéance indiquée";
-  return new Intl.DateTimeFormat("fr-FR", {
+function formatDeadline(value: string | null, language: OpportunitiesLanguage) {
+  if (!value) return language === "ar" ? "لا يوجد أجل منشور" : "Sans échéance indiquée";
+  return new Intl.DateTimeFormat(language === "ar" ? "ar-DZ" : "fr-FR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -66,20 +77,33 @@ function formatDeadline(value: string | null) {
   }).format(new Date(value));
 }
 
-function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity }) {
+function OpportunityCard({
+  opportunity,
+  language,
+}: {
+  opportunity: VolunteerOpportunity;
+  language: OpportunitiesLanguage;
+}) {
+  const ar = language === "ar";
   const [expanded, setExpanded] = useState(false);
   const location = [opportunity.destination.town, opportunity.destination.countryName]
     .filter(Boolean)
     .join(", ");
   return (
-    <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-cyan-300 hover:shadow-md">
+    <article
+      dir={ar ? "rtl" : "ltr"}
+      lang={ar ? "ar" : "fr"}
+      className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-cyan-300 hover:shadow-md"
+    >
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-          <CheckCircle2 className="h-3.5 w-3.5" /> {opportunity.eligibleCountry.name} admissible
+          <CheckCircle2 className="h-3.5 w-3.5" /> {opportunity.eligibleCountry.name}{" "}
+          {ar ? "مقبولة" : "admissible"}
         </span>
         {opportunity.activityType && (
           <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">
-            {ACTIVITY_LABELS[opportunity.activityType] || opportunity.activityType}
+            {(ar ? ACTIVITY_LABELS_AR : ACTIVITY_LABELS)[opportunity.activityType] ||
+              opportunity.activityType}
           </span>
         )}
       </div>
@@ -90,29 +114,41 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
       <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p className="flex items-start gap-2">
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-cyan-700" />
-          <span>{location || "Destination non indiquée"}</span>
+          <span>{location || (ar ? "الوجهة غير مذكورة" : "Destination non indiquée")}</span>
         </p>
         <p className="flex items-start gap-2">
           <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-cyan-700" />
           <span>
-            Du {formatDate(opportunity.startAt)} au {formatDate(opportunity.endAt)}
+            {ar ? "من " : "Du "}
+            {formatDate(opportunity.startAt, language)} {ar ? "إلى " : "au "}
+            {formatDate(opportunity.endAt, language)}
           </span>
         </p>
         <p className="flex items-start gap-2">
           <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-cyan-700" />
           <span>
-            Âge : <strong>{opportunity.ageRequirement?.label || "18–30 ans"}</strong>
+            {ar ? "العمر: " : "Âge : "}
+            <strong>{opportunity.ageRequirement?.label || (ar ? "18–30 سنة" : "18–30 ans")}</strong>
             {opportunity.ageRequirement?.source === "participant_profile"
-              ? " (précisé par l’organisme)"
+              ? ar
+                ? " (حددته المنظمة)"
+                : " (précisé par l’organisme)"
               : opportunity.ageRequirement?.source === "profile_and_programme"
-                ? " (profil + règle du programme)"
-                : " (règle du programme)"}
+                ? ar
+                  ? " (الملف + قاعدة البرنامج)"
+                  : " (profil + règle du programme)"
+                : ar
+                  ? " (قاعدة البرنامج)"
+                  : " (règle du programme)"}
           </span>
         </p>
       </div>
       <p className="mt-3 flex items-start gap-2 border-t border-slate-200 pt-2.5 text-sm font-black text-red-700">
         <Hourglass className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>Dernier délai : {formatDeadline(opportunity.deadlineAt)}</span>
+        <span>
+          {ar ? "آخر أجل: " : "Dernier délai : "}
+          {formatDeadline(opportunity.deadlineAt, language)}
+        </span>
       </p>
 
       {expanded ? (
@@ -120,23 +156,34 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
           <section>
             <p className="flex items-start gap-2 font-bold text-slate-900">
               <LogIn className="mt-0.5 h-4 w-4 shrink-0 text-violet-700" />
-              <span>{opportunity.applicationMethod?.label || "Connexion EU Login requise"}</span>
+              <span>
+                {ar
+                  ? opportunity.applicationMethod?.type === "portal_account"
+                    ? "يتطلب حساب EU Login"
+                    : "طريقة التقديم الرسمية"
+                  : opportunity.applicationMethod?.label || "Connexion EU Login requise"}
+              </span>
             </p>
             <p className="mt-1 pl-6 text-xs leading-relaxed text-slate-600">
-              {opportunity.applicationMethod?.note ||
-                "Connectez-vous ou rejoignez le Corps européen de solidarité avant de postuler."}
+              {ar
+                ? "سجل الدخول أو انضم إلى فيلق التضامن الأوروبي قبل إرسال الطلب، واتبع التعليمات في الصفحة الرسمية."
+                : opportunity.applicationMethod?.note ||
+                  "Connectez-vous ou rejoignez le Corps européen de solidarité avant de postuler."}
             </p>
           </section>
           {opportunity.applicationRequirements?.cv ||
           opportunity.applicationRequirements?.motivationStatement ? (
             <p className="text-xs font-semibold text-violet-800">
-              Documents annoncés : {opportunity.applicationRequirements.cv ? "CV" : ""}
+              {ar ? "الوثائق المذكورة: " : "Documents annoncés : "}
+              {opportunity.applicationRequirements.cv ? (ar ? "سيرة ذاتية" : "CV") : ""}
               {opportunity.applicationRequirements.cv &&
               opportunity.applicationRequirements.motivationStatement
                 ? " + "
                 : ""}
               {opportunity.applicationRequirements.motivationStatement
-                ? "lettre/texte de motivation"
+                ? ar
+                  ? "رسالة أو نص دافع"
+                  : "lettre/texte de motivation"
                 : ""}
             </p>
           ) : null}
@@ -157,8 +204,8 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
         >
-          <FileText className="mr-1.5 h-3.5 w-3.5" />
-          {expanded ? "Réduire" : "Afficher plus d’infos"}
+          <FileText className="h-3.5 w-3.5" />
+          {expanded ? (ar ? "عرض أقل" : "Réduire") : ar ? "عرض المزيد" : "Afficher plus d’infos"}
         </Button>
         {opportunity.applicationMethod?.url ? (
           <Button
@@ -169,16 +216,20 @@ function OpportunityCard({ opportunity }: { opportunity: VolunteerOpportunity })
           >
             <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
               {opportunity.applicationMethod.type === "portal_account"
-                ? "Connexion / inscription"
-                : "Candidater"}
-              <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                ? ar
+                  ? "تسجيل الدخول / إنشاء حساب"
+                  : "Connexion / inscription"
+                : ar
+                  ? "التقديم"
+                  : "Candidater"}
+              <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </Button>
         ) : null}
         {expanded ? (
           <Button asChild size="sm" className="bg-cyan-700 text-white hover:bg-cyan-800">
             <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
-              Offre officielle <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+              {ar ? "الإعلان الرسمي" : "Offre officielle"} <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </Button>
         ) : null}
@@ -191,11 +242,14 @@ export function VolunteerOpportunitiesDialog({
   open,
   onOpenChange,
   embedded = false,
+  interfaceLanguage = "fr",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   embedded?: boolean;
+  interfaceLanguage?: OpportunitiesLanguage;
 }) {
+  const ar = interfaceLanguage === "ar";
   const [country, setCountry] = useState("TN");
   const [period, setPeriod] = useState<"week" | "recent">("week");
   const [query, setQuery] = useState("");
@@ -276,7 +330,9 @@ export function VolunteerOpportunitiesDialog({
   return (
     <Root
       aria-labelledby={embedded ? undefined : "volunteer-opportunities-title"}
-      aria-label={embedded ? "Opportunités de volontariat" : undefined}
+      aria-label={embedded ? (ar ? "فرص التطوع" : "Opportunités de volontariat") : undefined}
+      dir={ar ? "rtl" : "ltr"}
+      lang={ar ? "ar" : "fr"}
       className={
         embedded
           ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50"
@@ -292,7 +348,8 @@ export function VolunteerOpportunitiesDialog({
               className="w-fit shrink-0 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-100"
               onClick={() => onOpenChange(false)}
             >
-              <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l’accueil
+              <ArrowLeft className={`h-4 w-4 ${ar ? "rotate-180" : ""}`} />
+              {ar ? "العودة إلى الرئيسية" : "Retour à l’accueil"}
             </Button>
             <div className="min-w-0">
               <h1
@@ -302,11 +359,12 @@ export function VolunteerOpportunitiesDialog({
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-100 text-cyan-800">
                   <HeartHandshake className="h-5 w-5" />
                 </span>
-                Opportunités de volontariat
+                {ar ? "فرص التطوع" : "Opportunités de volontariat"}
               </h1>
               <p className="mt-1 text-sm text-slate-600">
-                Recherche officielle et contrôle exact du pays dans « Looking for participants from
-                ».
+                {ar
+                  ? "بحث رسمي مع التحقق الدقيق من وجود بلد المترشح ضمن خانة Looking for participants from."
+                  : "Recherche officielle et contrôle exact du pays dans « Looking for participants from »."}
               </p>
             </div>
           </div>
@@ -316,7 +374,7 @@ export function VolunteerOpportunitiesDialog({
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="grid gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:grid-cols-[180px_220px_minmax(260px,1fr)_auto]">
           <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-            Pays du participant
+            {ar ? "بلد المشارك" : "Pays du participant"}
             <select
               value={country}
               onChange={(event) => setCountry(event.target.value)}
@@ -324,24 +382,28 @@ export function VolunteerOpportunitiesDialog({
             >
               {COUNTRIES.map((item) => (
                 <option key={item.code} value={item.code}>
-                  {item.label}
+                  {ar ? item.ar : item.label}
                 </option>
               ))}
             </select>
           </label>
           <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-            Période
+            {ar ? "الفترة" : "Période"}
             <select
               value={period}
               onChange={(event) => setPeriod(event.target.value as "week" | "recent")}
               className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100"
             >
-              <option value="week">Publiées ces 7 derniers jours</option>
-              <option value="recent">Opportunités récentes actives</option>
+              <option value="week">
+                {ar ? "منشورة خلال آخر 7 أيام" : "Publiées ces 7 derniers jours"}
+              </option>
+              <option value="recent">
+                {ar ? "فرص حديثة ما زالت نشطة" : "Opportunités récentes actives"}
+              </option>
             </select>
           </label>
           <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-            Mots-clés
+            {ar ? "الكلمات المفتاحية" : "Mots-clés"}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
@@ -350,8 +412,10 @@ export function VolunteerOpportunitiesDialog({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void runSearch();
                 }}
-                className="pl-9 normal-case tracking-normal"
-                placeholder="Titre, organisme, destination…"
+                className={`${ar ? "pr-9 text-right" : "pl-9"} normal-case tracking-normal`}
+                placeholder={
+                  ar ? "العنوان أو المنظمة أو الوجهة…" : "Titre, organisme, destination…"
+                }
               />
             </div>
           </label>
@@ -364,7 +428,7 @@ export function VolunteerOpportunitiesDialog({
             ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
             )}
-            Rechercher
+            {ar ? "بحث" : "Rechercher"}
           </Button>
         </div>
 
@@ -378,17 +442,21 @@ export function VolunteerOpportunitiesDialog({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void inspectLink();
                 }}
-                placeholder="Coller un lien officiel ou un ID pour vérifier son admissibilité"
+                placeholder={
+                  ar
+                    ? "ألصق رابطا رسميا أو معرف فرصة للتحقق من الأهلية"
+                    : "Coller un lien officiel ou un ID pour vérifier son admissibilité"
+                }
                 className="bg-white"
               />
               <Button variant="outline" onClick={() => void inspectLink()} disabled={checking}>
                 {checking ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Vérifier
+                {ar ? "تحقق" : "Vérifier"}
               </Button>
             </div>
             {inspected ? (
               <Button variant="ghost" size="sm" onClick={() => setInspected(null)}>
-                Revenir aux résultats
+                {ar ? "العودة إلى النتائج" : "Revenir aux résultats"}
               </Button>
             ) : null}
           </div>
@@ -404,26 +472,32 @@ export function VolunteerOpportunitiesDialog({
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
               <p className="font-semibold text-emerald-900">
                 <CheckCircle2 className="mr-1.5 inline h-4 w-4" />
-                {result.meta.totalMatches} opportunité(s) vérifiée(s) pour{" "}
+                {result.meta.totalMatches}{" "}
+                {ar ? "فرصة متحقق منها للمترشحين من " : "opportunité(s) vérifiée(s) pour "}
                 {result.meta.participantCountry.name}
               </p>
               <p className="text-xs text-emerald-800">
-                Source actualisée le {new Date(result.meta.verifiedAt).toLocaleString("fr-FR")}
-                {result.meta.stale ? " · cache de secours" : ""}
+                {ar ? "آخر تحديث للمصدر: " : "Source actualisée le "}
+                {new Date(result.meta.verifiedAt).toLocaleString(ar ? "ar-DZ" : "fr-FR")}
+                {result.meta.stale ? (ar ? " · نسخة احتياطية" : " · cache de secours") : ""}
               </p>
             </div>
           ) : null}
           {loading && !result ? (
             <div className="grid min-h-64 place-items-center text-sm font-medium text-slate-500">
               <span className="flex items-center gap-2">
-                <LoaderCircle className="h-5 w-5 animate-spin text-cyan-700" /> Lecture du portail
-                officiel…
+                <LoaderCircle className="h-5 w-5 animate-spin text-cyan-700" />
+                {ar ? "جارٍ قراءة البوابة الرسمية…" : "Lecture du portail officiel…"}
               </span>
             </div>
           ) : shown.length ? (
             <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
               {shown.map((opportunity) => (
-                <OpportunityCard key={opportunity.id} opportunity={opportunity} />
+                <OpportunityCard
+                  key={opportunity.id}
+                  opportunity={opportunity}
+                  language={interfaceLanguage}
+                />
               ))}
             </div>
           ) : !loading ? (
@@ -431,10 +505,14 @@ export function VolunteerOpportunitiesDialog({
               <div>
                 <Globe2 className="mx-auto mb-3 h-9 w-9 text-slate-400" />
                 <p className="font-bold text-slate-800">
-                  Aucune offre vérifiée dans cette sélection.
+                  {ar
+                    ? "لا توجد فرص متحقق منها ضمن هذا الاختيار."
+                    : "Aucune offre vérifiée dans cette sélection."}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Essayez « opportunités récentes actives » ou retirez les mots-clés.
+                  {ar
+                    ? "جرب الفرص الحديثة النشطة أو احذف الكلمات المفتاحية."
+                    : "Essayez « opportunités récentes actives » ou retirez les mots-clés."}
                 </p>
               </div>
             </div>
@@ -442,14 +520,19 @@ export function VolunteerOpportunitiesDialog({
         </div>
 
         <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
-          <span>Les résultats proviennent directement du Portail européen de la jeunesse.</span>
+          <span>
+            {ar
+              ? "تأتي النتائج مباشرة من البوابة الأوروبية للشباب."
+              : "Les résultats proviennent directement du Portail européen de la jeunesse."}
+          </span>
           <a
             href="https://youth.europa.eu/go-abroad/volunteering/opportunities_en"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 font-semibold text-cyan-800 hover:underline"
           >
-            Ouvrir la source officielle <ExternalLink className="h-3.5 w-3.5" />
+            {ar ? "فتح المصدر الرسمي" : "Ouvrir la source officielle"}{" "}
+            <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </footer>
       </div>

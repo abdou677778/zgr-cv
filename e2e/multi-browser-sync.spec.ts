@@ -1013,7 +1013,7 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
   try {
     const page = await connect(context, api, "admin");
     await page.getByRole("button", { name: "Opportunités", exact: true }).click();
-    const dialog = page.getByRole("main", { name: "Opportunités internationales" });
+    const dialog = page.locator('main[aria-labelledby="international-opportunities-title"]');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Retour à l’accueil" })).toBeVisible();
     const sourcesNavigation = dialog.getByRole("navigation", {
@@ -1252,8 +1252,43 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "href",
       "https://portaleservizi.dlci.interno.it/AliSportello/ali/home.htm",
     );
-    await dialog.getByRole("button", { name: "Retour à l’accueil" }).click();
+
+    await dialog.getByRole("button", { name: "عرض الفرص باللغة العربية" }).click();
+    await expect(dialog).toHaveAttribute("dir", "rtl");
+    await expect(dialog).toHaveAttribute("lang", "ar");
+    await expect(dialog.getByRole("heading", { name: "الفرص الدولية" })).toBeVisible();
+    await expect(dialog.getByRole("combobox", { name: "فئة الفرص" })).toHaveValue("all");
+    await expect(dialog.getByRole("button", { name: "المصدر أو البرنامج" })).toContainText(
+      "فرص العمل في إيطاليا",
+    );
+    await expect(
+      dialog.getByRole("heading", { name: "حصص دخول العمال الأجانب وإجراءات صاحب العمل" }),
+    ).toBeVisible();
+    await expect(dialog.getByText(/العامل الموجود خارج إيطاليا لا يسجل نفسه/)).toBeVisible();
+    await expect(dialog.getByRole("link", { name: /التعليمات الرسمية لسنة 2027/ })).toHaveAttribute(
+      "href",
+      /lavoro\.gov\.it/,
+    );
+    expect(
+      await page.evaluate(() => window.localStorage.getItem("zgr-opportunities-language")),
+    ).toBe("ar");
+
+    await dialog.getByRole("button", { name: "العودة إلى الرئيسية" }).click();
     await expect(dialog).toBeHidden();
+    await page.getByRole("button", { name: "Opportunités", exact: true }).click();
+    const reopenedArabicDialog = page.locator(
+      'main[aria-labelledby="international-opportunities-title"]',
+    );
+    await expect(reopenedArabicDialog).toHaveAttribute("dir", "rtl");
+    await reopenedArabicDialog
+      .getByRole("combobox", { name: "فئة الفرص" })
+      .selectOption("volunteering");
+    await expect(reopenedArabicDialog.getByRole("combobox", { name: "بلد المشارك" })).toBeVisible();
+    await expect(reopenedArabicDialog.getByRole("button", { name: "بحث" })).toBeVisible();
+    await reopenedArabicDialog
+      .getByRole("button", { name: "Afficher les opportunités en français" })
+      .click();
+    await reopenedArabicDialog.getByRole("button", { name: "Retour à l’accueil" }).click();
   } finally {
     await context.close();
   }

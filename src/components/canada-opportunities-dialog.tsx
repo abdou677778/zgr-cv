@@ -15,6 +15,7 @@ import {
   Landmark,
   LoaderCircle,
   LockKeyhole,
+  Languages,
   Mail,
   MapPin,
   Phone,
@@ -76,6 +77,9 @@ type Provider =
   | "volunteer";
 
 type OpportunityCategory = "all" | "jobs" | "volunteering" | "events" | "programs";
+type OpportunitiesLanguage = "fr" | "ar";
+
+const OPPORTUNITIES_LANGUAGE_STORAGE_KEY = "zgr-opportunities-language";
 
 const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
   all: [
@@ -146,6 +150,50 @@ const PROVIDER_CONTEXT: Record<Provider, string> = {
   volunteer: "Corps européen de solidarité",
 };
 
+const PROVIDER_LABELS_AR: Record<Provider, string> = {
+  jobbank: "بنك الوظائف الكندي",
+  europe_jobs: "الوظائف الرسمية في أوروبا",
+  indeed: "إنديد كندا",
+  aneti: "الوكالة الوطنية للتشغيل بالخارج",
+  atct: "الوكالة التونسية للتعاون الفني",
+  algeria: "فرص العمل في الجزائر",
+  destination_canada: "وجهة كندا",
+  francophone_canada: "برامج كندا الفرنكوفونية",
+  pei: "جزيرة الأمير إدوارد",
+  newfoundland: "نيوفاوندلاند ولابرادور",
+  new_brunswick: "نيو برونزويك",
+  ontario_public_jobs: "وظائف القطاع العام في أونتاريو",
+  thamm_plus: "THAMM+ تونس–إيطاليا",
+  italy: "فرص العمل في إيطاليا",
+  volunteer: "التطوع الدولي",
+};
+
+const PROVIDER_CONTEXT_AR: Record<Provider, string> = {
+  jobbank: "حكومة كندا · موصى به",
+  europe_jobs: "EURES · الاتحاد الأوروبي",
+  indeed: "البحث عن عمل في كندا",
+  aneti: "مرفق التشغيل العمومي · تونس",
+  atct: "التعاون الفني · تونس",
+  algeria: "عروض مصنفة حسب الولاية · الجزائر",
+  destination_canada: "فعالية رسمية للحكومة الكندية",
+  francophone_canada: "برامج رسمية للحكومة الكندية",
+  pei: "برنامج إقليمي · كندا",
+  newfoundland: "NLPNP وبرنامج الهجرة الأطلسي",
+  new_brunswick: "برنامج إقليمي · كندا",
+  ontario_public_jobs: "الخدمة العمومية في أونتاريو",
+  thamm_plus: "البناء · للكفاءات التونسية",
+  italy: "العمل والهجرة · إيطاليا",
+  volunteer: "فيلق التضامن الأوروبي",
+};
+
+function providerLabel(provider: Provider, language: OpportunitiesLanguage) {
+  return language === "ar" ? PROVIDER_LABELS_AR[provider] : PROVIDER_LABELS[provider];
+}
+
+function providerContext(provider: Provider, language: OpportunitiesLanguage) {
+  return language === "ar" ? PROVIDER_CONTEXT_AR[provider] : PROVIDER_CONTEXT[provider];
+}
+
 type ProviderTerritory = "canada" | "europe" | "tunisia" | "algeria" | "italy";
 
 function territoryForProvider(provider: Provider): ProviderTerritory {
@@ -156,15 +204,30 @@ function territoryForProvider(provider: Provider): ProviderTerritory {
   return "canada";
 }
 
-function ProviderTerritoryMark({ provider }: { provider: Provider }) {
+function ProviderTerritoryMark({
+  provider,
+  language = "fr",
+}: {
+  provider: Provider;
+  language?: OpportunitiesLanguage;
+}) {
   const territory = territoryForProvider(provider);
-  const labels: Record<ProviderTerritory, string> = {
-    canada: "Drapeau du Canada",
-    europe: "Emblème de l’Union européenne",
-    tunisia: "Drapeau de la Tunisie",
-    algeria: "Drapeau de l’Algérie",
-    italy: "Drapeau de l’Italie",
-  };
+  const labels: Record<ProviderTerritory, string> =
+    language === "ar"
+      ? {
+          canada: "علم كندا",
+          europe: "شعار الاتحاد الأوروبي",
+          tunisia: "علم تونس",
+          algeria: "علم الجزائر",
+          italy: "علم إيطاليا",
+        }
+      : {
+          canada: "Drapeau du Canada",
+          europe: "Emblème de l’Union européenne",
+          tunisia: "Drapeau de la Tunisie",
+          algeria: "Drapeau de l’Algérie",
+          italy: "Drapeau de l’Italie",
+        };
 
   return (
     <span className="grid h-8 w-11 shrink-0 place-items-center overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
@@ -231,21 +294,23 @@ function ProviderTerritoryMark({ provider }: { provider: Provider }) {
 
 function ProviderIdentity({
   provider,
+  language = "fr",
   compact = false,
 }: {
   provider: Provider;
+  language?: OpportunitiesLanguage;
   compact?: boolean;
 }) {
   return (
-    <span className="flex min-w-0 items-center gap-3 text-left">
-      <ProviderTerritoryMark provider={provider} />
+    <span className="flex min-w-0 items-center gap-3 text-start">
+      <ProviderTerritoryMark provider={provider} language={language} />
       <span className="min-w-0">
         <span className="block truncate text-sm font-black text-slate-950">
-          {PROVIDER_LABELS[provider]}
+          {providerLabel(provider, language)}
         </span>
         {!compact && (
           <span className="block truncate text-[11px] font-semibold text-slate-500">
-            {PROVIDER_CONTEXT[provider]}
+            {providerContext(provider, language)}
           </span>
         )}
       </span>
@@ -1459,9 +1524,429 @@ function NewBrunswickOpportunitiesPanel() {
   );
 }
 
-function formatDate(value: string | null, fallback: string) {
+type ArabicOfficialPanel = {
+  eyebrow: string;
+  title: string;
+  intro: string;
+  status: string;
+  warning?: string;
+  sections: Array<{ title: string; items: string[] }>;
+  actions: Array<{ label: string; url: string; primary?: boolean }>;
+  footer: string;
+};
+
+const ARABIC_OFFICIAL_PANELS: Partial<Record<Provider, ArabicOfficialPanel>> = {
+  europe_jobs: {
+    eyebrow: "الاتحاد الأوروبي · مصادر توظيف رسمية",
+    title: "فرص العمل الرسمية في أوروبا",
+    intro:
+      "روابط بحث موثوقة للتقديم المباشر لدى صاحب العمل. يجب التحقق داخل كل إعلان من قبول مرشح موجود خارج الاتحاد الأوروبي ومن شروط تصريح العمل.",
+    status: "مصادر رسمية تم التحقق منها",
+    warning:
+      "وجود الإعلان على منصة رسمية لا يعني أن صاحب العمل يضمن التأشيرة أو يقبل تلقائيا مرشحا من تونس أو الجزائر.",
+    sections: [
+      {
+        title: "EURES",
+        items: [
+          "شبكة التوظيف الأوروبية الرسمية وتعرض وظائف من دول الاتحاد الأوروبي والمنطقة الاقتصادية الأوروبية.",
+          "اقرأ شروط الجنسية والإقامة وطريقة التقديم داخل الإعلان قبل إرسال السيرة الذاتية.",
+        ],
+      },
+      {
+        title: "ألمانيا وفنلندا",
+        items: [
+          "بوابة Make it in Germany مخصصة للمعلومات والوظائف المرتبطة بالهجرة المهنية إلى ألمانيا.",
+          "Work in Finland تجمع فرصا دولية، لكن أهلية تصريح العمل تبقى مرتبطة بكل وظيفة وملف.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "البحث في EURES", url: EURES_JOBSEEKERS_URL, primary: true },
+      { label: "وظائف ألمانيا", url: GERMANY_INTERNATIONAL_JOBS_URL },
+      { label: "وظائف فنلندا", url: FINLAND_INTERNATIONAL_JOBS_URL },
+    ],
+    footer: "تحقق دائما من الإعلان الأصلي ومن موقع الشركة قبل إرسال أي وثيقة شخصية.",
+  },
+  francophone_canada: {
+    eyebrow: "حكومة كندا · الهجرة الفرنكوفونية",
+    title: "مسارات كندا للعمال الناطقين بالفرنسية",
+    intro:
+      "برامج رسمية يمكن أن تهم التونسيين والجزائريين، لكنها ليست قوائم وظائف ولا تمنح قبولا آليا.",
+    status: "برامج حكومية رسمية",
+    warning: "يلزم عرض عمل حقيقي واستيفاء شروط اللغة والخبرة والتعليم والأهلية الخاصة بكل مسار.",
+    sections: [
+      {
+        title: "التنقل الفرنكوفوني",
+        items: [
+          "يسمح لبعض أصحاب العمل خارج كيبيك بتوظيف عامل ناطق بالفرنسية دون دراسة تأثير سوق العمل، إذا استوفيت الشروط.",
+          "صاحب العمل هو الذي يقدم عرض التوظيف ويدفع رسوم الامتثال قبل طلب تصريح العمل.",
+        ],
+      },
+      {
+        title: "مشروع المجتمعات الفرنكوفونية وبرنامج الأطلسي",
+        items: [
+          "كل برنامج يحدد المجتمعات أو أصحاب العمل المشاركين وشروط عرض العمل.",
+          "تأكد من أن صاحب العمل معتمد وأن الوظيفة تستوفي شروط البرنامج قبل دفع أي مصروف.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "التنقل الفرنكوفوني", url: FRANCOPHONE_MOBILITY_URL, primary: true },
+      { label: "المجتمعات الفرنكوفونية", url: FRANCOPHONE_COMMUNITY_PILOT_URL },
+      { label: "برنامج الهجرة الأطلسي", url: ATLANTIC_IMMIGRATION_URL },
+    ],
+    footer: "المصدر: دائرة الهجرة واللاجئين والمواطنة الكندية.",
+  },
+  pei: {
+    eyebrow: "كندا · برنامج إقليمي رسمي",
+    title: "جزيرة الأمير إدوارد — العمل وإبداء الاهتمام",
+    intro:
+      "إبداء الاهتمام EOI ليس طلب هجرة نهائيا ولا يضمن الدعوة. الاختيار مرتبط بأولويات المقاطعة وبعرض عمل مؤهل.",
+    status: "شروط المقاطعة مؤكدة",
+    warning:
+      "الادعاء بأن صاحب العمل يدفع جميع التكاليف غير صحيح كقاعدة عامة. راجع العرض والعقد والرسوم الرسمية فقط.",
+    sections: [
+      {
+        title: "العامل الماهر من خارج كندا",
+        items: [
+          "عرض عمل دائم وغير موسمي ضمن TEER 0 إلى 3 وموافقة صاحب العمل قبل إنشاء EOI.",
+          "خبرة بدوام كامل لمدة سنتين خلال آخر خمس سنوات وشهادة بعد الثانوية لمدة سنتين على الأقل.",
+          "العمر من 18 إلى 59 سنة وإثبات اللغة أو تقييم صاحب العمل حسب الحالة.",
+        ],
+      },
+      {
+        title: "المهن المطلوبة",
+        items: [
+          "المسار يخص ثمانية رموز NOC محددة، وليس كل قطاعات الصحة والبناء والنقل.",
+          "يشترط عادة سنة خبرة مرتبطة بالمهنة، تعليما ثانويا واختبار لغة CLB/NCLC 4.",
+          "ملف EOI مجاني ونشط ستة أشهر؛ رسوم الطلب بعد الدعوة 300 دولار كندي وفق الصفحة الرسمية.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "دليل إبداء الاهتمام", url: PEI_EOI_GUIDE_URL, primary: true },
+      { label: "إنشاء حساب EOI", url: PEI_EOI_REGISTER_URL },
+      { label: "المهن المطلوبة", url: PEI_OCCUPATIONS_DEMAND_URL },
+    ],
+    footer: "تم التحقق في 6 أكتوبر 2026 من موقع حكومة جزيرة الأمير إدوارد.",
+  },
+  newfoundland: {
+    eyebrow: "كندا · برنامج إقليمي رسمي",
+    title: "نيوفاوندلاند ولابرادور — NLPNP والهجرة الأطلسية",
+    intro:
+      "مساران حقيقيان، لكنهما يعتمدان على عرض عمل مؤهل. قوائم القطاعات المتداولة ليست عقود عمل جاهزة.",
+    status: "مصادر حكومية مؤكدة",
+    warning:
+      "صفة صاحب عمل معتمد في برنامج الأطلسي لا تعني أنه يوظف حاليا. تحقق من إعلان مفتوح وطريقة التقديم الرسمية.",
+    sections: [
+      {
+        title: "مسار العامل الماهر NLPNP",
+        items: [
+          "وظيفة أو عرض عمل بدوام كامل لا يقل عن 30 ساعة أسبوعيا ولمدة سنة على الأقل مع احتمال التمديد.",
+          "العمر الرسمي من 21 إلى 59 سنة، مع مؤهلات مطابقة للمهنة ورمز NOC.",
+          "اختبار اللغة مطلوب حسب المسار، وهو إلزامي لوظائف TEER 4 و5.",
+        ],
+      },
+      {
+        title: "برنامج الهجرة الأطلسي AIP",
+        items: [
+          "يجب أن يكون صاحب العمل معتمدا وأن تحصل الوظيفة على تأييد المقاطعة.",
+          "بعد التأييد يمكن للعامل تقديم طلب الإقامة الدائمة وفق الشروط الفدرالية.",
+          "الجنسية التونسية أو الجزائرية ليست مستبعدة، لكنها لا تمنح أهلية تلقائية.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "وظائف للمرشحين الأجانب", url: NL_FOREIGN_JOBS_URL, primary: true },
+      { label: "شروط NLPNP", url: NL_SKILLED_WORKER_URL },
+      { label: "أصحاب العمل المعتمدون AIP", url: NL_AIP_EMPLOYERS_URL },
+    ],
+    footer: "تم التحقق في 6 أكتوبر 2026 من حكومة نيوفاوندلاند ولابرادور.",
+  },
+  new_brunswick: {
+    eyebrow: "كندا · الهجرة إلى نيو برونزويك",
+    title: "نيو برونزويك — حساب INB والمسارات الإقليمية",
+    intro:
+      "حساب INB وإبداء الاهتمام لا يضمنان الدعوة. المقاطعة تختار الملفات حسب المسار والأولوية والحصص المتاحة.",
+    status: "مصادر GNB رسمية",
+    warning:
+      "لا تعتمد على قوائم المهن في شبكات التواصل وحدها؛ راجع إشعارات 2026 وجولات الاختيار وشروط المسار قبل التسجيل.",
+    sections: [
+      {
+        title: "قبل إنشاء الملف",
+        items: [
+          "حدد رمز NOC الصحيح وتحقق من الخبرة واللغة والتعليم وشروط عرض العمل.",
+          "بعض المسارات تتطلب عرض عمل من صاحب عمل مؤهل داخل المقاطعة.",
+        ],
+      },
+      {
+        title: "العائلة والإقامة الدائمة",
+        items: [
+          "يمكن التصريح بالزوج أو الزوجة والأطفال المعالين وفق شروط البرنامج والملف الفدرالي.",
+          "إنشاء حساب أو إرسال EOI ليس موافقة على الإقامة الدائمة.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "فتح بوابة INB", url: NB_INB_URL, primary: true },
+      { label: "شروط العامل الماهر", url: NB_SKILLED_WORKER_URL },
+      { label: "الإشعارات المهمة", url: NB_NOTICES_URL },
+      { label: "جولات الاختيار", url: NB_ROUNDS_URL },
+    ],
+    footer: "المصدر: حكومة نيو برونزويك. تحقق من أحدث إشعار قبل كل خطوة.",
+  },
+  ontario_public_jobs: {
+    eyebrow: "حكومة أونتاريو · وظائف القطاع العام",
+    title: "الوظائف الرسمية في الخدمة العمومية بأونتاريو",
+    intro:
+      "الرابط رسمي للبحث في مسابقات ووظائف حكومة أونتاريو، لكنه ليس برنامجا للهجرة أو وعدا بالكفالة.",
+    status: "بوابة رسمية مؤكدة",
+    warning:
+      "رقم 52 ألف وظيفة المتداول غير مؤكد في البوابة الرسمية. يمكن التقديم من الخارج، لكن يجب إثبات حق العمل في كندا قبل بدء الوظيفة.",
+    sections: [
+      {
+        title: "ملف الترشح",
+        items: [
+          "تتم غالبية الطلبات عبر الإنترنت، وغالبا يرفع السيرة الذاتية ورسالة الدافع في ملف واحد.",
+          "اقرأ شروط كل مسابقة ولا تعتبر نشرها دليلا على قبول مرشح دولي أو توفير تصريح عمل.",
+        ],
+      },
+      {
+        title: "اللغة والتقييم",
+        items: [
+          "الإعلانات متاحة بالإنجليزية والفرنسية، لكن التقييم يجري بالإنجليزية عادة.",
+          "الوظائف الثنائية اللغة قد تتطلب اختبارا رسميا للفرنسية.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "البحث في الوظائف المفتوحة", url: ONTARIO_PUBLIC_JOBS_URL, primary: true },
+      { label: "مسار التوظيف الرسمي", url: ONTARIO_HIRING_PROCESS_URL },
+    ],
+    footer: "تم التحقق في 6 أكتوبر 2026. تصريح العمل إلزامي قبل مباشرة الوظيفة.",
+  },
+  thamm_plus: {
+    eyebrow: "تونس ← إيطاليا · تنقل مهني منظم",
+    title: "THAMM+ — تأهيل وتشغيل مهنيي البناء",
+    intro:
+      "برنامج حقيقي لعمال البناء التونسيين المؤهلين بالتعاون مع المنظمة الدولية للهجرة وANCE وELIS وANETI وATFP.",
+    status: "البرنامج مؤكد",
+    warning:
+      "لا ترسل طلبا عشوائيا إلى عناوين ANCE أو ELIS المتداولة. طريق المترشح الآمن هو إعلان ANETI مفتوح يحدد المهنة والسن والخبرة والموعد النهائي.",
+    sections: [
+      {
+        title: "الأهلية والمسار",
+        items: [
+          "المكون مخصص للتونسيين وليس للجزائريين، وغالبا للفئة 18–35 سنة حسب الإعلان.",
+          "يلزم تكوين مهني تونسي وخبرة في البناء، ثم تكوين في الإيطالية والسلامة والمهارات الفنية.",
+          "اختيار العامل يتم عبر مطابقة فعلية مع شركة إيطالية وليس بمجرد إرسال بريد إلكتروني.",
+        ],
+      },
+      {
+        title: "المهن الموثقة في 2026",
+        items: [
+          "أعلنت ANCE في 5 مارس 2026 توفر 469 عاملا مكونا: بناؤون ونجارو بناء وكهربائيون ومبلطون.",
+          "قد تشمل حملات أخرى سائقي الرافعات وفنيي الأنظمة الحرارية والمائية وسائقي الآليات وعمال الطرق.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "التحقق من إعلانات ANETI المفتوحة", url: THAMM_ANETI_URL, primary: true },
+      { label: "وضع البرنامج لدى ANCE", url: THAMM_ANCE_URL },
+      { label: "عرض البرنامج لدى ELIS", url: THAMM_ELIS_URL },
+    ],
+    footer: "برنامج قائم، لكن الترشح لا يكون إلا عبر إعلان ANETI مفتوح.",
+  },
+  italy: {
+    eyebrow: "إيطاليا · Decreto Flussi 2027",
+    title: "حصص دخول العمال الأجانب وإجراءات صاحب العمل",
+    intro:
+      "العدد 165,850 يمثل حصص دخول قانونية وليس عقود عمل جاهزة. صاحب العمل أو الوسيط المخول هو من يقدم طلب Nulla Osta عبر بوابة ALI.",
+    status: "التقويم الرسمي مؤكد",
+    warning:
+      "العامل الموجود خارج إيطاليا لا يسجل نفسه في بوابة ALI للحصول على عقد. لا تدفع مقابل حصة أو عقد مضمون.",
+    sections: [
+      {
+        title: "حصص سنة 2027",
+        items: [
+          "76,200 للعمل غير الموسمي، منها 14,000 للمساعدة العائلية.",
+          "89,000 للعمل الموسمي في الفلاحة والسياحة، و650 للعمل المستقل.",
+        ],
+      },
+      {
+        title: "التواريخ الرسمية",
+        items: [
+          "التحضير من 23 أكتوبر 2026 الساعة 09:00 إلى 7 ديسمبر 2026 الساعة 20:00 بتوقيت إيطاليا.",
+          "إعادة الفتح من 9 إلى 13 ديسمبر لإكمال وحفظ الملفات المنشأة سابقا فقط.",
+          "Click Day: 12 يناير للفلاحة، 9 فبراير للسياحة، 16 فبراير للعمل غير الموسمي، و18 فبراير للمساعدة العائلية.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "التعليمات الرسمية لسنة 2027", url: ITALY_OFFICIAL_GUIDE_URL, primary: true },
+      { label: "بوابة ALI لأصحاب العمل", url: ITALY_ALI_PORTAL_URL },
+      { label: "البحث عن وظائف عبر EURES", url: ITALY_EURES_URL },
+    ],
+    footer: "تم التحقق في 6 أكتوبر 2026 من المنشور والجدول التشغيلي الإيطاليين.",
+  },
+  destination_canada: {
+    eyebrow: "حكومة كندا · النسخة الثانية والعشرون",
+    title: "Destination Canada Forum Mobilité 2026",
+    intro:
+      "فعالية مجانية للعمال المهرة الناطقين بالفرنسية أو الثنائيي اللغة للقاء أصحاب العمل والمقاطعات والهيئات الفرنكوفونية خارج كيبيك.",
+    status: "فعالية رسمية مؤكدة",
+    warning:
+      "التسجيل يفتح عبر الصفحة الحكومية الرسمية وعدد الأماكن محدود. ZGR لا ينشئ استمارات بديلة ولا يجمع طلبات المشاركة.",
+    sections: [
+      {
+        title: "المواعيد",
+        items: ["بروكسل: 5 ديسمبر 2026.", "مرسيليا: 7 ديسمبر 2026.", "تونس: 10 و11 ديسمبر 2026."],
+      },
+      {
+        title: "قبل التسجيل",
+        items: [
+          "جهز سيرة ذاتية كندية واضحة وحدد مهنتك ورمز NOC ومستوى الفرنسية والإنجليزية.",
+          "المشاركة في المنتدى لا تضمن عرض عمل أو تصريح عمل أو إقامة دائمة.",
+        ],
+      },
+    ],
+    actions: [
+      { label: "التحقق من تسجيل المرشحين", url: DESTINATION_CANADA_CANDIDATES_URL, primary: true },
+      { label: "المواعيد والمعلومات الرسمية", url: DESTINATION_CANADA_EVENTS_URL },
+    ],
+    footer: "جميع طلبات المشاركة تتم حصرا على Canada.ca.",
+  },
+};
+
+function ArabicOfficialProviderPanel({
+  provider,
+  query,
+  onQueryChange,
+}: {
+  provider: Provider;
+  query: string;
+  onQueryChange: (value: string) => void;
+}) {
+  if (provider === "indeed") {
+    return (
+      <div className="flex-1 overflow-y-auto p-5" dir="rtl" lang="ar">
+        <article className="mx-auto max-w-4xl space-y-5 rounded-2xl border border-blue-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-blue-700" />
+            <div>
+              <h2 className="text-xl font-black text-slate-950">
+                بحث آمن ومتوافق عبر Indeed Canada
+              </h2>
+              <p className="mt-2 text-sm leading-7 text-slate-700">
+                لا تسمح Indeed بالنسخ الآلي دون ترخيص مكتوب. لذلك يفتح ZGR البحث الرسمي مرتباً حسب
+                الأحدث ولا يعيد نشر بيانات الإعلانات. ظهور وظيفة في النتائج لا يثبت وحده أن صاحب
+                العمل يقبل مرشحاً من خارج كندا.
+              </p>
+            </div>
+          </div>
+          <label className="block space-y-2 text-sm font-bold text-slate-800">
+            المهنة أو الكلمات المفتاحية
+            <Input
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="مثال: مطور برمجيات، محاسب، طباخ"
+              className="text-right"
+              dir="rtl"
+            />
+          </label>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-950">
+            تحقق من قبول المرشحين الدوليين ومن الكفالة أو EIMT/LMIA أو عبارة قبول العامل مع أو دون
+            تصريح كندي صالح. استبعد الإعلان الذي يشترط مسبقاً حق العمل في كندا دون كفالة.
+          </div>
+          <Button asChild className="w-full bg-blue-700 text-white hover:bg-blue-800">
+            <a href={indeedCanadaSearchUrl(query)} target="_blank" rel="noreferrer">
+              فتح أحدث النتائج على Indeed <ExternalLink className="mr-2 h-4 w-4" />
+            </a>
+          </Button>
+        </article>
+      </div>
+    );
+  }
+
+  const panel = ARABIC_OFFICIAL_PANELS[provider];
+  if (!panel) return null;
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5" dir="rtl" lang="ar">
+        <article className="mx-auto max-w-6xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <header className="border-b border-slate-200 bg-gradient-to-l from-red-50 via-white to-slate-50 p-5 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <ProviderTerritoryMark provider={provider} language="ar" />
+                <div>
+                  <p className="text-xs font-black text-red-800">{panel.eyebrow}</p>
+                  <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">
+                    {panel.title}
+                  </h2>
+                  <p className="mt-2 max-w-4xl text-sm leading-7 text-slate-700">{panel.intro}</p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-900">
+                <BadgeCheck className="h-4 w-4" /> {panel.status}
+              </span>
+            </div>
+          </header>
+          <div className="space-y-5 p-5 sm:p-6">
+            {panel.warning ? (
+              <div className="flex items-start gap-2 rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm font-bold leading-7 text-red-950">
+                <TriangleAlert className="mt-1 h-5 w-5 shrink-0" />
+                <p>{panel.warning}</p>
+              </div>
+            ) : null}
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              {panel.sections.map((section) => (
+                <section
+                  key={section.title}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+                >
+                  <h3 className="font-black text-slate-950">{section.title}</h3>
+                  <ul className="mt-3 list-disc space-y-2 pr-5 text-sm leading-7 text-slate-700">
+                    {section.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {panel.actions.map((action) => (
+                <Button
+                  key={action.url}
+                  asChild
+                  variant={action.primary ? "default" : "outline"}
+                  className={action.primary ? "bg-red-700 text-white hover:bg-red-800" : undefined}
+                >
+                  <a href={action.url} target="_blank" rel="noreferrer">
+                    {action.label} <ExternalLink className="mr-2 h-4 w-4" />
+                  </a>
+                </Button>
+              ))}
+            </div>
+          </div>
+        </article>
+      </div>
+      <footer
+        className="border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500"
+        dir="rtl"
+      >
+        {panel.footer}
+      </footer>
+    </>
+  );
+}
+
+function formatDate(
+  value: string | null,
+  fallback: string,
+  language: OpportunitiesLanguage = "fr",
+) {
   if (!value) return fallback;
-  return new Intl.DateTimeFormat("fr-FR", {
+  return new Intl.DateTimeFormat(language === "ar" ? "ar-DZ" : "fr-FR", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -1469,13 +1954,25 @@ function formatDate(value: string | null, fallback: string) {
   }).format(new Date(value));
 }
 
-function lmiaLabel(value: CanadaOpportunity["lmiaStatus"]) {
+function lmiaLabel(value: CanadaOpportunity["lmiaStatus"], language: OpportunitiesLanguage) {
+  if (language === "ar") {
+    if (value === "approved") return "دراسة EIMT/LMIA مصادق عليها";
+    if (value === "requested") return "تم طلب دراسة EIMT/LMIA";
+    return "حالة EIMT/LMIA غير محددة";
+  }
   if (value === "approved") return "EIMT/LMIA approuvée";
   if (value === "requested") return "EIMT/LMIA demandée";
   return "EIMT/LMIA non précisée";
 }
 
-function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity }) {
+function CanadaOpportunityCard({
+  opportunity,
+  language,
+}: {
+  opportunity: CanadaOpportunity;
+  language: OpportunitiesLanguage;
+}) {
+  const ar = language === "ar";
   const noAccount = !opportunity.applicationMethod.loginRequired;
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -1491,30 +1988,43 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
     }
   };
   return (
-    <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-red-300 hover:shadow-md">
+    <article
+      dir={ar ? "rtl" : "ltr"}
+      lang={ar ? "ar" : "fr"}
+      className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-red-300 hover:shadow-md"
+    >
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-          <BadgeCheck className="h-3.5 w-3.5" /> Candidat international vérifié
+          <BadgeCheck className="h-3.5 w-3.5" />
+          {ar ? "قبول المرشح الدولي مؤكد" : "Candidat international vérifié"}
         </span>
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-bold ${
             noAccount ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-900"
           }`}
         >
-          {noAccount ? "Sans compte Indeed" : "Compte requis"}
+          {noAccount
+            ? ar
+              ? "دون حساب Indeed"
+              : "Sans compte Indeed"
+            : ar
+              ? "يتطلب حسابا"
+              : "Compte requis"}
         </span>
       </div>
 
       <h3 className="text-base font-black leading-snug text-slate-950">{opportunity.title}</h3>
       <p className="mt-1 flex items-start gap-1.5 text-sm font-semibold text-red-800">
         <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>{opportunity.employer || "Employeur non indiqué"}</span>
+        <span>
+          {opportunity.employer || (ar ? "صاحب العمل غير مذكور" : "Employeur non indiqué")}
+        </span>
       </p>
 
       <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p className="flex items-start gap-2">
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
-          <span>{opportunity.location || "Lieu non indiqué"}</span>
+          <span>{opportunity.location || (ar ? "المكان غير مذكور" : "Lieu non indiqué")}</span>
         </p>
         {opportunity.salary ? (
           <p className="flex items-start gap-2">
@@ -1524,14 +2034,22 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
         ) : null}
         <p className="flex items-start gap-2">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
-          <span>Publiée le {formatDate(opportunity.postedAt, "date non indiquée")}</span>
+          <span>
+            {ar ? "تاريخ النشر: " : "Publiée le "}
+            {formatDate(opportunity.postedAt, ar ? "غير مذكور" : "date non indiquée", language)}
+          </span>
         </p>
       </div>
 
       <p className="mt-3 flex items-start gap-2 border-t border-slate-200 pt-2.5 text-sm font-black text-red-700">
         <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par l’employeur")}
+          {ar ? "آخر أجل: " : "Dernier délai : "}
+          {formatDate(
+            opportunity.deadlineAt,
+            ar ? "غير منشور من صاحب العمل" : "non publié par l’employeur",
+            language,
+          )}
         </span>
       </p>
 
@@ -1543,7 +2061,7 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
               <span>{opportunity.eligibilityEvidence}</span>
             </p>
             <p className="mt-1 pl-6 text-xs font-semibold text-emerald-700">
-              {lmiaLabel(opportunity.lmiaStatus)}
+              {lmiaLabel(opportunity.lmiaStatus, language)}
             </p>
           </section>
 
@@ -1566,7 +2084,7 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
           {contact?.email ? (
             <section className="border-l-2 border-violet-300 pl-3">
               <p className="text-xs font-black uppercase tracking-wide text-violet-700">
-                E-mail officiel pour postuler
+                {ar ? "البريد الإلكتروني الرسمي للتقديم" : "E-mail officiel pour postuler"}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <a
@@ -1582,7 +2100,8 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
                   className="h-8"
                   onClick={() => void copyEmail()}
                 >
-                  <Copy className="mr-1.5 h-3.5 w-3.5" /> {copied ? "Copié" : "Copier"}
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied ? (ar ? "تم النسخ" : "Copié") : ar ? "نسخ" : "Copier"}
                 </Button>
               </div>
             </section>
@@ -1593,7 +2112,8 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
               rel="noreferrer"
               className="flex items-center gap-2 font-bold text-violet-800 underline"
             >
-              <ExternalLink className="h-4 w-4" /> Formulaire officiel pour postuler
+              <ExternalLink className="h-4 w-4" />
+              {ar ? "استمارة التقديم الرسمية" : "Formulaire officiel pour postuler"}
             </a>
           ) : contact?.phone ? (
             <a
@@ -1612,7 +2132,7 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
           {opportunity.applicationOptions?.length > 1 ? (
             <section>
               <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-                Autres méthodes officielles
+                {ar ? "طرق رسمية أخرى" : "Autres méthodes officielles"}
               </p>
               <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
                 {opportunity.applicationOptions
@@ -1632,7 +2152,11 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
                       title={option.details}
                     >
                       {option.label}
-                      {option.loginRequired ? " · connexion requise" : ""}
+                      {option.loginRequired
+                        ? ar
+                          ? " · يتطلب تسجيل الدخول"
+                          : " · connexion requise"
+                        : ""}
                     </a>
                   ))}
               </div>
@@ -1651,7 +2175,8 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 underline"
           >
-            Vérifier la fiche officielle <ExternalLink className="h-3.5 w-3.5" />
+            {ar ? "التحقق من الإعلان الرسمي" : "Vérifier la fiche officielle"}{" "}
+            <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
       ) : null}
@@ -1664,18 +2189,24 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
         >
-          <FileText className="mr-1.5 h-3.5 w-3.5" />
-          {expanded ? "Réduire" : "Afficher plus d’infos"}
+          <FileText className="h-3.5 w-3.5" />
+          {expanded ? (ar ? "عرض أقل" : "Réduire") : ar ? "عرض المزيد" : "Afficher plus d’infos"}
         </Button>
         <Button asChild size="sm" className="bg-red-700 text-white hover:bg-red-800">
           <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
             {opportunity.applicationMethod.type === "email"
-              ? "Écrire à l’employeur"
+              ? ar
+                ? "مراسلة صاحب العمل"
+                : "Écrire à l’employeur"
               : opportunity.applicationMethod.type === "company_site" ||
                   opportunity.applicationMethod.type === "external_form"
-                ? "Postuler sur le site officiel"
-                : "Voir comment postuler"}
-            <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                ? ar
+                  ? "التقديم على الموقع الرسمي"
+                  : "Postuler sur le site officiel"
+                : ar
+                  ? "معرفة طريقة التقديم"
+                  : "Voir comment postuler"}
+            <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </Button>
       </div>
@@ -1683,10 +2214,21 @@ function CanadaOpportunityCard({ opportunity }: { opportunity: CanadaOpportunity
   );
 }
 
-function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }) {
+function AnetiOpportunityCard({
+  opportunity,
+  language,
+}: {
+  opportunity: AnetiOpportunity;
+  language: OpportunitiesLanguage;
+}) {
+  const ar = language === "ar";
   const [expanded, setExpanded] = useState(false);
   return (
-    <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-sky-300 hover:shadow-md">
+    <article
+      dir={ar ? "rtl" : "ltr"}
+      lang={ar ? "ar" : "fr"}
+      className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-sky-300 hover:shadow-md"
+    >
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
@@ -1695,12 +2237,16 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
         >
           <BadgeCheck className="h-3.5 w-3.5" />
           {opportunity.staleDetail
-            ? "Dernière fiche ANETI vérifiée (cache)"
-            : "Source publique ANETI vérifiée"}
+            ? ar
+              ? "آخر إعلان ANETI متحقق منه (نسخة محفوظة)"
+              : "Dernière fiche ANETI vérifiée (cache)"
+            : ar
+              ? "مصدر ANETI العمومي متحقق منه"
+              : "Source publique ANETI vérifiée"}
         </span>
         {opportunity.dataQuality?.status === "partial" ? (
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-            Données partielles
+            {ar ? "بيانات جزئية" : "Données partielles"}
           </span>
         ) : null}
         <span
@@ -1711,8 +2257,12 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
           }`}
         >
           {opportunity.applicationMethod.loginRequired
-            ? "Inscription ANETI requise"
-            : "Accès direct"}
+            ? ar
+              ? "التسجيل في ANETI مطلوب"
+              : "Inscription ANETI requise"
+            : ar
+              ? "وصول مباشر"
+              : "Accès direct"}
         </span>
       </div>
 
@@ -1720,23 +2270,36 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
       <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p className="flex items-start gap-2">
           <Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-          <span>{opportunity.country || "Pays non indiqué"}</span>
+          <span>{opportunity.country || (ar ? "البلد غير مذكور" : "Pays non indiqué")}</span>
         </p>
         <p className="flex items-start gap-2">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-          <span>Publiée le {formatDate(opportunity.postedAt, "date non indiquée")}</span>
+          <span>
+            {ar ? "تاريخ النشر: " : "Publiée le "}
+            {formatDate(opportunity.postedAt, ar ? "غير مذكور" : "date non indiquée", language)}
+          </span>
         </p>
         {opportunity.cvLanguage ? (
           <p className="flex items-start gap-2">
             <FileText className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-            <span>Langue du CV : {opportunity.cvLanguage}</span>
+            <span>
+              {ar ? "لغة السيرة الذاتية: " : "Langue du CV : "}
+              {opportunity.cvLanguage}
+            </span>
           </p>
         ) : null}
       </div>
 
       <p className="mt-3 flex items-start gap-2 border-t border-slate-200 pt-2.5 text-sm font-black text-red-700">
         <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par ANETI")}</span>
+        <span>
+          {ar ? "آخر أجل: " : "Dernier délai : "}
+          {formatDate(
+            opportunity.deadlineAt,
+            ar ? "غير منشور من ANETI" : "non publié par ANETI",
+            language,
+          )}
+        </span>
       </p>
 
       {expanded ? (
@@ -1772,7 +2335,8 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 underline"
           >
-            Vérifier la fiche officielle <ExternalLink className="h-3.5 w-3.5" />
+            {ar ? "التحقق من الإعلان الرسمي" : "Vérifier la fiche officielle"}{" "}
+            <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
       ) : null}
@@ -1785,17 +2349,23 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
         >
-          <FileText className="mr-1.5 h-3.5 w-3.5" />{" "}
-          {expanded ? "Réduire" : "Afficher plus d’infos"}
+          <FileText className="h-3.5 w-3.5" />{" "}
+          {expanded ? (ar ? "عرض أقل" : "Réduire") : ar ? "عرض المزيد" : "Afficher plus d’infos"}
         </Button>
         <Button asChild size="sm" className="bg-sky-700 text-white hover:bg-sky-800">
           <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
             {opportunity.applicationMethod.type === "external_form"
-              ? "Ouvrir le formulaire officiel"
+              ? ar
+                ? "فتح الاستمارة الرسمية"
+                : "Ouvrir le formulaire officiel"
               : opportunity.applicationMethod.type === "email"
-                ? "Écrire pour postuler"
-                : "Voir comment postuler"}
-            <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                ? ar
+                  ? "إرسال طلب عبر البريد"
+                  : "Écrire pour postuler"
+                : ar
+                  ? "معرفة طريقة التقديم"
+                  : "Voir comment postuler"}
+            <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </Button>
       </div>
@@ -1803,18 +2373,37 @@ function AnetiOpportunityCard({ opportunity }: { opportunity: AnetiOpportunity }
   );
 }
 
-function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) {
+function AtctOpportunityCard({
+  opportunity,
+  language,
+}: {
+  opportunity: AtctOpportunity;
+  language: OpportunitiesLanguage;
+}) {
+  const ar = language === "ar";
   const [expanded, setExpanded] = useState(false);
   const actionLabel =
     opportunity.applicationMethod.type === "email"
-      ? "Écrire pour postuler"
+      ? ar
+        ? "إرسال طلب عبر البريد"
+        : "Écrire pour postuler"
       : opportunity.applicationMethod.type === "external_form"
-        ? "Ouvrir le formulaire officiel"
+        ? ar
+          ? "فتح الاستمارة الرسمية"
+          : "Ouvrir le formulaire officiel"
         : opportunity.applicationMethod.type === "atct_portal"
-          ? "Ouvrir l’espace candidat"
-          : "Voir comment postuler";
+          ? ar
+            ? "فتح فضاء المترشح"
+            : "Ouvrir l’espace candidat"
+          : ar
+            ? "معرفة طريقة التقديم"
+            : "Voir comment postuler";
   return (
-    <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-teal-300 hover:shadow-md">
+    <article
+      dir={ar ? "rtl" : "ltr"}
+      lang={ar ? "ar" : "fr"}
+      className="flex flex-col rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-teal-300 hover:shadow-md"
+    >
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
@@ -1823,12 +2412,16 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
         >
           <BadgeCheck className="h-3.5 w-3.5" />
           {opportunity.staleDetail
-            ? "Dernière fiche ATCT vérifiée (cache)"
-            : "Source publique ATCT vérifiée"}
+            ? ar
+              ? "آخر إعلان ATCT متحقق منه (نسخة محفوظة)"
+              : "Dernière fiche ATCT vérifiée (cache)"
+            : ar
+              ? "مصدر ATCT العمومي متحقق منه"
+              : "Source publique ATCT vérifiée"}
         </span>
         {opportunity.dataQuality?.status === "partial" ? (
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-            Données partielles
+            {ar ? "بيانات جزئية" : "Données partielles"}
           </span>
         ) : null}
         <span
@@ -1838,7 +2431,13 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
               : "bg-emerald-100 text-emerald-800"
           }`}
         >
-          {opportunity.applicationMethod.loginRequired ? "Compte ATCT requis" : "Accès direct"}
+          {opportunity.applicationMethod.loginRequired
+            ? ar
+              ? "حساب ATCT مطلوب"
+              : "Compte ATCT requis"
+            : ar
+              ? "وصول مباشر"
+              : "Accès direct"}
         </span>
       </div>
 
@@ -1846,17 +2445,27 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
       <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p className="flex items-start gap-2">
           <Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
-          <span>{opportunity.country || "Pays non indiqué"}</span>
+          <span>{opportunity.country || (ar ? "البلد غير مذكور" : "Pays non indiqué")}</span>
         </p>
         <p className="flex items-start gap-2">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
-          <span>Publiée le {formatDate(opportunity.postedAt, "date non indiquée")}</span>
+          <span>
+            {ar ? "تاريخ النشر: " : "Publiée le "}
+            {formatDate(opportunity.postedAt, ar ? "غير مذكور" : "date non indiquée", language)}
+          </span>
         </p>
       </div>
 
       <p className="mt-3 flex items-start gap-2 border-t border-slate-200 pt-2.5 text-sm font-black text-red-700">
         <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>Dernier délai : {formatDate(opportunity.deadlineAt, "non publié par l’ATCT")}</span>
+        <span>
+          {ar ? "آخر أجل: " : "Dernier délai : "}
+          {formatDate(
+            opportunity.deadlineAt,
+            ar ? "غير منشور من ATCT" : "non publié par l’ATCT",
+            language,
+          )}
+        </span>
       </p>
 
       {expanded ? (
@@ -1864,7 +2473,9 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
           {opportunity.positions.length ? (
             <section>
               <p className="text-xs font-black uppercase tracking-wide text-teal-800">
-                Poste{opportunity.positions.length > 1 ? "s" : ""} à pourvoir
+                {ar
+                  ? "المناصب المطلوبة"
+                  : `Poste${opportunity.positions.length > 1 ? "s" : ""} à pourvoir`}
               </p>
               <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed">
                 {opportunity.positions.slice(0, 5).map((position) => (
@@ -1873,7 +2484,7 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
               </ul>
               {opportunity.positions.length > 5 ? (
                 <p className="mt-1 text-xs font-bold text-teal-800">
-                  + {opportunity.positions.length - 5} autre(s) poste(s)
+                  + {opportunity.positions.length - 5} {ar ? "منصب إضافي" : "autre(s) poste(s)"}
                 </p>
               ) : null}
             </section>
@@ -1898,7 +2509,8 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
 
           {opportunity.requiredDocuments.length ? (
             <p className="text-xs leading-relaxed text-slate-600">
-              <strong>Pièces indiquées :</strong> {opportunity.requiredDocuments.join(" · ")}
+              <strong>{ar ? "الوثائق المطلوبة:" : "Pièces indiquées :"}</strong>{" "}
+              {opportunity.requiredDocuments.join(" · ")}
             </p>
           ) : null}
           {opportunity.requirements ? (
@@ -1917,7 +2529,8 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 underline"
           >
-            Vérifier la fiche officielle <ExternalLink className="h-3.5 w-3.5" />
+            {ar ? "التحقق من الإعلان الرسمي" : "Vérifier la fiche officielle"}{" "}
+            <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
       ) : null}
@@ -1930,12 +2543,12 @@ function AtctOpportunityCard({ opportunity }: { opportunity: AtctOpportunity }) 
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
         >
-          <FileText className="mr-1.5 h-3.5 w-3.5" />{" "}
-          {expanded ? "Réduire" : "Afficher plus d’infos"}
+          <FileText className="h-3.5 w-3.5" />{" "}
+          {expanded ? (ar ? "عرض أقل" : "Réduire") : ar ? "عرض المزيد" : "Afficher plus d’infos"}
         </Button>
         <Button asChild size="sm" className="bg-teal-700 text-white hover:bg-teal-800">
           <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
-            {actionLabel} <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+            {actionLabel} <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </Button>
       </div>
@@ -1951,9 +2564,11 @@ function contentDirection(value: string): "rtl" | "ltr" {
 
 function AlgeriaOfferText({
   description,
+  language = "fr",
   compact = false,
 }: {
   description: string;
+  language?: OpportunitiesLanguage;
   compact?: boolean;
 }) {
   const lines = description
@@ -1989,7 +2604,8 @@ function AlgeriaOfferText({
       })}
       {compact && lines.length > visibleLines.length ? (
         <p className="text-xs font-semibold text-emerald-800">
-          + {lines.length - visibleLines.length} ligne(s) dans la fiche complète
+          + {lines.length - visibleLines.length}{" "}
+          {language === "ar" ? "سطر إضافي في الإعلان الكامل" : "ligne(s) dans la fiche complète"}
         </p>
       ) : null}
     </div>
@@ -1998,33 +2614,46 @@ function AlgeriaOfferText({
 
 function AlgeriaOpportunityCard({
   opportunity,
+  language,
   isAdmin,
   onDetails,
 }: {
   opportunity: AlgeriaOpportunity;
+  language: OpportunitiesLanguage;
   isAdmin: boolean;
   onDetails: () => void;
 }) {
+  const ar = language === "ar";
   const directActionLabel =
     opportunity.applicationMethod.type === "email"
-      ? "Écrire pour postuler"
+      ? ar
+        ? "إرسال طلب عبر البريد"
+        : "Écrire pour postuler"
       : opportunity.applicationMethod.type === "phone"
-        ? "Appeler le contact"
+        ? ar
+          ? "الاتصال بالرقم"
+          : "Appeler le contact"
         : opportunity.applicationMethod.type === "external_link"
-          ? "Ouvrir la candidature"
+          ? ar
+            ? "فتح رابط التقديم"
+            : "Ouvrir la candidature"
           : null;
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md">
+    <article
+      dir={ar ? "rtl" : "ltr"}
+      lang={ar ? "ar" : "fr"}
+      className="flex h-full flex-col rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md"
+    >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
-          🇩🇿 Offre locale Algérie
+          {ar ? "🇩🇿 عرض عمل محلي في الجزائر" : "🇩🇿 Offre locale Algérie"}
         </span>
         <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-950">
-          Source communautaire à vérifier
+          {ar ? "مصدر مجتمعي يجب التحقق منه" : "Source communautaire à vérifier"}
         </span>
         {opportunity.dataQuality.status === "partial" ? (
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-            Données partielles
+            {ar ? "بيانات جزئية" : "Données partielles"}
           </span>
         ) : null}
       </div>
@@ -2047,13 +2676,16 @@ function AlgeriaOpportunityCard({
             {opportunity.commune ||
               (opportunity.wilayas.length
                 ? opportunity.wilayas.join(" · ")
-                : "Wilaya non déterminée")}
+                : ar
+                  ? "الولاية غير محددة"
+                  : "Wilaya non déterminée")}
           </span>
         </p>
         <p className="flex items-start gap-2">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
           <span>
-            Publication Telegram : {formatDate(opportunity.publishedAt, "date non exposée")}
+            {ar ? "تاريخ نشر تيليغرام: " : "Publication Telegram : "}
+            {formatDate(opportunity.publishedAt, ar ? "غير ظاهر" : "date non exposée", language)}
           </span>
         </p>
       </div>
@@ -2061,7 +2693,7 @@ function AlgeriaOpportunityCard({
       {opportunity.positions.length ? (
         <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-emerald-950">
           <p className="text-xs font-black uppercase tracking-wide text-emerald-800">
-            Poste{opportunity.positions.length > 1 ? "s" : ""}
+            {ar ? "المناصب" : `Poste${opportunity.positions.length > 1 ? "s" : ""}`}
           </p>
           <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed">
             {opportunity.positions.slice(0, 6).map((position) => (
@@ -2107,28 +2739,30 @@ function AlgeriaOpportunityCard({
 
       {opportunity.requiredDocuments.length ? (
         <p className="mt-2 text-xs leading-relaxed text-slate-600">
-          <strong>Pièces mentionnées :</strong> {opportunity.requiredDocuments.join(" · ")}
+          <strong>{ar ? "الوثائق المذكورة:" : "Pièces mentionnées :"}</strong>{" "}
+          {opportunity.requiredDocuments.join(" · ")}
         </p>
       ) : null}
       <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <AlgeriaOfferText description={opportunity.description} compact />
+        <AlgeriaOfferText description={opportunity.description} language={language} compact />
       </div>
 
       <div className="mt-auto flex flex-wrap justify-end gap-2 pt-4">
         {isAdmin ? (
           <Button asChild size="sm" variant="outline">
             <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
-              Vérifier sur Telegram <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+              {ar ? "التحقق عبر تيليغرام" : "Vérifier sur Telegram"}{" "}
+              <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </Button>
         ) : null}
         <Button type="button" size="sm" variant="outline" onClick={onDetails}>
-          <FileText className="mr-1.5 h-3.5 w-3.5" /> Plus d’infos
+          <FileText className="h-3.5 w-3.5" /> {ar ? "معلومات إضافية" : "Plus d’infos"}
         </Button>
         {directActionLabel ? (
           <Button asChild size="sm" className="bg-emerald-700 text-white hover:bg-emerald-800">
             <a href={opportunity.applicationMethod.url} target="_blank" rel="noreferrer">
-              {directActionLabel} <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+              {directActionLabel} <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </Button>
         ) : null}
@@ -2139,36 +2773,48 @@ function AlgeriaOpportunityCard({
 
 function AlgeriaOpportunityDetails({
   opportunity,
+  language,
   isAdmin,
   onClose,
 }: {
   opportunity: AlgeriaOpportunity;
+  language: OpportunitiesLanguage;
   isAdmin: boolean;
   onClose: () => void;
 }) {
+  const ar = language === "ar";
   const directActionLabel =
     opportunity.applicationMethod.type === "email"
-      ? "Envoyer la candidature par e-mail"
+      ? ar
+        ? "إرسال الطلب عبر البريد الإلكتروني"
+        : "Envoyer la candidature par e-mail"
       : opportunity.applicationMethod.type === "phone"
-        ? "Appeler le contact"
+        ? ar
+          ? "الاتصال بالرقم"
+          : "Appeler le contact"
         : opportunity.applicationMethod.type === "external_link"
-          ? "Ouvrir le formulaire de candidature"
+          ? ar
+            ? "فتح استمارة التقديم"
+            : "Ouvrir le formulaire de candidature"
           : null;
   return (
     <section
       role="dialog"
       aria-modal="true"
       aria-labelledby="algeria-opportunity-details-title"
+      dir={ar ? "rtl" : "ltr"}
+      lang={ar ? "ar" : "fr"}
       className="fixed inset-0 z-[130] flex min-h-0 flex-col bg-slate-50"
     >
       <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-6">
         <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Retour aux offres
+            <ArrowLeft className={`h-4 w-4 ${ar ? "rotate-180" : ""}`} />
+            {ar ? "العودة إلى العروض" : "Retour aux offres"}
           </Button>
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-wide text-emerald-700">
-              Fiche complète · Opportunité Algérie
+              {ar ? "التفاصيل الكاملة · فرصة في الجزائر" : "Fiche complète · Opportunité Algérie"}
             </p>
             <h2
               id="algeria-opportunity-details-title"
@@ -2185,32 +2831,43 @@ function AlgeriaOpportunityDetails({
         <div className="mx-auto max-w-5xl space-y-4">
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wide text-slate-500">Employeur</p>
+              <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                {ar ? "صاحب العمل" : "Employeur"}
+              </p>
               <p dir="auto" className="mt-1 text-start font-bold text-slate-950">
-                {opportunity.employer || "Non indiqué dans l’annonce"}
+                {opportunity.employer ||
+                  (ar ? "غير مذكور في الإعلان" : "Non indiqué dans l’annonce")}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Commune / wilaya
+                {ar ? "البلدية / الولاية" : "Commune / wilaya"}
               </p>
               <p dir="auto" className="mt-1 text-start font-bold text-slate-950">
-                {opportunity.location || opportunity.wilayas.join(" · ") || "Non déterminée"}
+                {opportunity.location ||
+                  opportunity.wilayas.join(" · ") ||
+                  (ar ? "غير محددة" : "Non déterminée")}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Publication
+                {ar ? "تاريخ النشر" : "Publication"}
               </p>
               <p className="mt-1 font-bold text-slate-950">
-                {formatDate(opportunity.publishedAt, "Date non exposée")}
+                {formatDate(
+                  opportunity.publishedAt,
+                  ar ? "التاريخ غير ظاهر" : "Date non exposée",
+                  language,
+                )}
               </p>
             </div>
           </div>
 
           {opportunity.positions.length ? (
             <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <h3 className="font-black text-emerald-950">Postes et spécialités</h3>
+              <h3 className="font-black text-emerald-950">
+                {ar ? "المناصب والتخصصات" : "Postes et spécialités"}
+              </h3>
               <ul className="mt-2 grid gap-2 md:grid-cols-2">
                 {opportunity.positions.map((position) => (
                   <li
@@ -2227,17 +2884,18 @@ function AlgeriaOpportunityDetails({
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <h3 className="mb-4 border-b border-slate-200 pb-3 text-lg font-black text-slate-950">
-              Informations complètes de l’offre
+              {ar ? "المعلومات الكاملة للإعلان" : "Informations complètes de l’offre"}
             </h3>
-            <AlgeriaOfferText description={opportunity.description} />
+            <AlgeriaOfferText description={opportunity.description} language={language} />
           </section>
 
           <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-            <h3 className="font-black text-blue-950">Candidature</h3>
+            <h3 className="font-black text-blue-950">{ar ? "طريقة التقديم" : "Candidature"}</h3>
             <p className="mt-1 text-sm text-blue-900">{opportunity.applicationMethod.label}</p>
             {opportunity.requiredDocuments.length ? (
               <p className="mt-2 text-sm text-blue-950">
-                <strong>Pièces mentionnées :</strong> {opportunity.requiredDocuments.join(" · ")}
+                <strong>{ar ? "الوثائق المذكورة:" : "Pièces mentionnées :"}</strong>{" "}
+                {opportunity.requiredDocuments.join(" · ")}
               </p>
             ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
@@ -2249,13 +2907,16 @@ function AlgeriaOpportunityDetails({
                 </Button>
               ) : (
                 <p className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-700">
-                  Aucun contact distinct n’a été extrait avec certitude.
+                  {ar
+                    ? "لم يتم استخراج وسيلة اتصال مستقلة بشكل مؤكد."
+                    : "Aucun contact distinct n’a été extrait avec certitude."}
                 </p>
               )}
               {isAdmin ? (
                 <Button asChild variant="outline">
                   <a href={opportunity.sourceUrl} target="_blank" rel="noreferrer">
-                    Vérifier sur Telegram <ExternalLink className="ml-2 h-4 w-4" />
+                    {ar ? "التحقق عبر تيليغرام" : "Vérifier sur Telegram"}{" "}
+                    <ExternalLink className="h-4 w-4" />
                   </a>
                 </Button>
               ) : null}
@@ -2276,6 +2937,10 @@ export function CanadaOpportunitiesDialog({
   onOpenChange: (open: boolean) => void;
   isAdmin: boolean;
 }) {
+  const [interfaceLanguage, setInterfaceLanguage] = useState<OpportunitiesLanguage>(() => {
+    if (typeof window === "undefined") return "fr";
+    return window.localStorage.getItem(OPPORTUNITIES_LANGUAGE_STORAGE_KEY) === "ar" ? "ar" : "fr";
+  });
   const [provider, setProvider] = useState<Provider>("jobbank");
   const [category, setCategory] = useState<OpportunityCategory>("all");
   const [country, setCountry] = useState<"DZ" | "TN">("DZ");
@@ -2300,6 +2965,11 @@ export function CanadaOpportunitiesDialog({
   const anetiRequestRef = useRef<AbortController | null>(null);
   const atctRequestRef = useRef<AbortController | null>(null);
   const algeriaRequestRef = useRef<AbortController | null>(null);
+  const ar = interfaceLanguage === "ar";
+
+  useEffect(() => {
+    window.localStorage.setItem(OPPORTUNITIES_LANGUAGE_STORAGE_KEY, interfaceLanguage);
+  }, [interfaceLanguage]);
 
   const changeCategory = (nextCategory: OpportunityCategory) => {
     const defaultProvider: Record<OpportunityCategory, Provider> = {
@@ -2454,7 +3124,11 @@ export function CanadaOpportunitiesDialog({
   return (
     <main
       aria-labelledby="international-opportunities-title"
-      className="fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50"
+      dir={ar ? "rtl" : "ltr"}
+      lang={ar ? "ar" : "fr"}
+      className={`fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50 ${
+        ar ? "[font-family:Arial,'Noto_Sans_Arabic',sans-serif]" : ""
+      }`}
     >
       <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-6">
         <div className="mx-auto flex w-full max-w-[1800px] items-center gap-3">
@@ -2465,7 +3139,8 @@ export function CanadaOpportunitiesDialog({
             className="w-fit shrink-0 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-100"
             onClick={() => onOpenChange(false)}
           >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l’accueil
+            <ArrowLeft className={`h-4 w-4 ${ar ? "rotate-180" : ""}`} />
+            {ar ? "العودة إلى الرئيسية" : "Retour à l’accueil"}
           </Button>
           <div className="min-w-0">
             <h1
@@ -2475,55 +3150,70 @@ export function CanadaOpportunitiesDialog({
               <span className="hidden h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-100 text-red-800 sm:grid">
                 <BriefcaseBusiness className="h-5 w-5" />
               </span>
-              Opportunités internationales
+              {ar ? "الفرص الدولية" : "Opportunités internationales"}
             </h1>
             <p className="mt-0.5 hidden text-xs text-slate-600 md:block">
-              Emplois, volontariat, recrutements officiels, événements et programmes avec parcours
-              de candidature vérifié.
+              {ar
+                ? "وظائف وتطوع وبرامج وفعاليات رسمية مع مسار تقديم متحقق منه."
+                : "Emplois, volontariat, recrutements officiels, événements et programmes avec parcours de candidature vérifié."}
             </p>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ms-auto shrink-0 border-slate-300 bg-white font-black text-slate-800 hover:bg-slate-100"
+            aria-label={ar ? "Afficher les opportunités en français" : "عرض الفرص باللغة العربية"}
+            title={ar ? "Afficher en français" : "العرض باللغة العربية"}
+            onClick={() => setInterfaceLanguage(ar ? "fr" : "ar")}
+          >
+            <Languages className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">{ar ? "FR" : "العربية"}</span>
+          </Button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
         <nav
-          aria-label="Sources d’opportunités"
+          aria-label={ar ? "مصادر الفرص" : "Sources d’opportunités"}
           className="shrink-0 border-b border-slate-200 bg-white px-3 py-2 sm:px-5"
         >
           <div className="mx-auto grid w-full max-w-[1800px] grid-cols-[minmax(130px,0.8fr)_minmax(175px,1.2fr)] gap-2 lg:max-w-4xl lg:grid-cols-[280px_minmax(360px,1fr)]">
             <label className="min-w-0">
-              <span className="sr-only">Catégorie d’opportunités</span>
+              <span className="sr-only">{ar ? "فئة الفرص" : "Catégorie d’opportunités"}</span>
               <select
-                aria-label="Catégorie d’opportunités"
+                aria-label={ar ? "فئة الفرص" : "Catégorie d’opportunités"}
                 value={category}
                 onChange={(event) => changeCategory(event.target.value as OpportunityCategory)}
                 className="h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-slate-900 px-3 pr-8 text-sm font-black text-white focus:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-200"
               >
-                <option value="all">Toutes les catégories</option>
-                <option value="jobs">Emplois avec CV</option>
-                <option value="volunteering">Volontariat</option>
-                <option value="events">Événements recrutement</option>
-                <option value="programs">Programmes officiels</option>
+                <option value="all">{ar ? "كل الفئات" : "Toutes les catégories"}</option>
+                <option value="jobs">{ar ? "وظائف بالسيرة الذاتية" : "Emplois avec CV"}</option>
+                <option value="volunteering">{ar ? "التطوع" : "Volontariat"}</option>
+                <option value="events">{ar ? "فعاليات التوظيف" : "Événements recrutement"}</option>
+                <option value="programs">{ar ? "البرامج الرسمية" : "Programmes officiels"}</option>
               </select>
             </label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  aria-label="Source ou programme"
-                  title="Ouvrir la liste des sources et programmes"
+                  aria-label={ar ? "المصدر أو البرنامج" : "Source ou programme"}
+                  title={
+                    ar ? "فتح قائمة المصادر والبرامج" : "Ouvrir la liste des sources et programmes"
+                  }
                   className="flex h-11 min-w-0 items-center justify-between gap-2 rounded-xl border border-red-300 bg-red-50 px-2.5 text-red-950 shadow-sm outline-none transition hover:bg-red-100 focus:border-red-500 focus:ring-2 focus:ring-red-200"
                 >
-                  <ProviderIdentity provider={provider} compact />
+                  <ProviderIdentity provider={provider} language={interfaceLanguage} compact />
                   <ChevronDown className="h-4 w-4 shrink-0 text-red-700" aria-hidden="true" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                align="end"
+                align={ar ? "start" : "end"}
                 className="z-[150] w-[min(430px,calc(100vw-1.5rem))] rounded-xl border-slate-200 bg-white p-1.5 shadow-xl"
               >
                 <DropdownMenuLabel className="px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500">
-                  Choisir une source ou un programme
+                  {ar ? "اختر مصدرا أو برنامجا" : "Choisir une source ou un programme"}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {PROVIDERS_BY_CATEGORY[category].map((providerOption) => {
@@ -2535,11 +3225,11 @@ export function CanadaOpportunitiesDialog({
                       className="min-h-12 cursor-pointer gap-3 rounded-lg px-2.5 py-2 focus:bg-red-50 data-[highlighted]:bg-red-50"
                       onSelect={() => setProvider(providerOption)}
                     >
-                      <ProviderIdentity provider={providerOption} />
+                      <ProviderIdentity provider={providerOption} language={interfaceLanguage} />
                       {selected && (
                         <BadgeCheck
-                          className="ml-auto h-5 w-5 shrink-0 text-emerald-600"
-                          aria-label="Sélection active"
+                          className="ms-auto h-5 w-5 shrink-0 text-emerald-600"
+                          aria-label={ar ? "الخيار النشط" : "Sélection active"}
                         />
                       )}
                     </DropdownMenuItem>
@@ -2551,7 +3241,24 @@ export function CanadaOpportunitiesDialog({
         </nav>
 
         {provider === "volunteer" ? (
-          <VolunteerOpportunitiesDialog open embedded onOpenChange={() => undefined} />
+          <VolunteerOpportunitiesDialog
+            open
+            embedded
+            interfaceLanguage={interfaceLanguage}
+            onOpenChange={() => undefined}
+          />
+        ) : ar &&
+          (provider === "europe_jobs" ||
+            provider === "francophone_canada" ||
+            provider === "pei" ||
+            provider === "newfoundland" ||
+            provider === "new_brunswick" ||
+            provider === "ontario_public_jobs" ||
+            provider === "thamm_plus" ||
+            provider === "italy" ||
+            provider === "indeed" ||
+            provider === "destination_canada") ? (
+          <ArabicOfficialProviderPanel provider={provider} query={query} onQueryChange={setQuery} />
         ) : provider === "europe_jobs" ? (
           <EuropeOfficialJobsPanel />
         ) : provider === "francophone_canada" ? (
@@ -2690,25 +3397,29 @@ export function CanadaOpportunitiesDialog({
           <>
             <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[190px_220px_minmax(260px,1fr)_auto]">
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Période
+                {ar ? "الفترة" : "Période"}
                 <select
                   value={period}
                   onChange={(event) => setPeriod(event.target.value as "week" | "recent")}
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                 >
-                  <option value="week">Publiées ces 7 derniers jours</option>
-                  <option value="recent">Publications récentes disponibles</option>
+                  <option value="week">
+                    {ar ? "منشورة خلال آخر 7 أيام" : "Publiées ces 7 derniers jours"}
+                  </option>
+                  <option value="recent">
+                    {ar ? "منشورات حديثة متاحة" : "Publications récentes disponibles"}
+                  </option>
                 </select>
               </label>
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Wilaya (69)
+                {ar ? "الولاية (69)" : "Wilaya (69)"}
                 <select
                   aria-label="Wilaya Algérie"
                   value={algeriaWilaya}
                   onChange={(event) => setAlgeriaWilaya(event.target.value)}
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                 >
-                  <option value="all">Toutes les wilayas</option>
+                  <option value="all">{ar ? "كل الولايات" : "Toutes les wilayas"}</option>
                   {(algeriaResult?.wilayas || []).map((wilaya) => (
                     <option key={wilaya} value={wilaya}>
                       {wilaya}
@@ -2717,7 +3428,7 @@ export function CanadaOpportunitiesDialog({
                 </select>
               </label>
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Poste, commune ou employeur
+                {ar ? "المنصب أو البلدية أو صاحب العمل" : "Poste, commune ou employeur"}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
@@ -2726,8 +3437,12 @@ export function CanadaOpportunitiesDialog({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void runAlgeriaSearch();
                     }}
-                    className="pl-9 normal-case tracking-normal"
-                    placeholder="Ex. comptable, Hassi Messaoud, école…"
+                    className={`${ar ? "pr-9 text-right" : "pl-9"} normal-case tracking-normal`}
+                    placeholder={
+                      ar
+                        ? "مثال: محاسب، حاسي مسعود، مدرسة…"
+                        : "Ex. comptable, Hassi Messaoud, école…"
+                    }
                   />
                 </div>
               </label>
@@ -2740,7 +3455,7 @@ export function CanadaOpportunitiesDialog({
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Charger plus d’offres
+                {ar ? "تحميل عروض إضافية" : "Charger plus d’offres"}
               </Button>
             </div>
 
@@ -2748,9 +3463,9 @@ export function CanadaOpportunitiesDialog({
               <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  Les annonces proviennent du canal communautaire Recrutement DZ, pas d’un organisme
-                  public. Vérifiez l’employeur, le contact et la publication originale ; ne payez
-                  jamais pour obtenir un poste. ZGR ne conserve aucun compte Telegram.
+                  {ar
+                    ? "تأتي الإعلانات من قناة Recrutement DZ المجتمعية وليست من هيئة حكومية. تحقق من صاحب العمل ووسيلة الاتصال والمنشور الأصلي، ولا تدفع أبدا مقابل الحصول على وظيفة. لا يحتفظ ZGR بأي حساب تيليغرام."
+                    : "Les annonces proviennent du canal communautaire Recrutement DZ, pas d’un organisme public. Vérifiez l’employeur, le contact et la publication originale ; ne payez jamais pour obtenir un poste. ZGR ne conserve aucun compte Telegram."}
                 </span>
               </div>
               {algeriaError ? (
@@ -2762,30 +3477,44 @@ export function CanadaOpportunitiesDialog({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
                   <p className="font-semibold text-emerald-950">
                     <BadgeCheck className="mr-1.5 inline h-4 w-4" />
-                    {algeriaResult.meta.totalMatches} annonce(s) classée(s)
-                    {algeriaWilaya !== "all" ? ` · ${algeriaWilaya}` : " · 69 wilayas"}
+                    {algeriaResult.meta.totalMatches} {ar ? "إعلان مصنف" : "annonce(s) classée(s)"}
+                    {algeriaWilaya !== "all"
+                      ? ` · ${algeriaWilaya}`
+                      : ar
+                        ? " · 69 ولاية"
+                        : " · 69 wilayas"}
                     {algeriaResult.meta.cachedTotal > algeriaResult.meta.totalMatches
-                      ? ` · ${algeriaResult.meta.cachedTotal} dans l’historique`
+                      ? ar
+                        ? ` · ${algeriaResult.meta.cachedTotal} في السجل`
+                        : ` · ${algeriaResult.meta.cachedTotal} dans l’historique`
                       : ""}
                   </p>
                   <p className="text-xs text-emerald-800">
-                    Source relue le{" "}
-                    {new Date(algeriaResult.meta.verifiedAt).toLocaleString("fr-FR")}
-                    {algeriaResult.meta.stale ? " · cache de secours" : ""}
+                    {ar ? "آخر تحقق من المصدر: " : "Source relue le "}
+                    {new Date(algeriaResult.meta.verifiedAt).toLocaleString(ar ? "ar-DZ" : "fr-FR")}
+                    {algeriaResult.meta.stale
+                      ? ar
+                        ? " · نسخة احتياطية"
+                        : " · cache de secours"
+                      : ""}
                   </p>
                 </div>
               ) : null}
               {algeriaResult?.meta.staleReason ? (
                 <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                   <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                  Telegram est momentanément indisponible : le dernier cache vérifié est affiché.
+                  {ar
+                    ? "تيليغرام غير متاح مؤقتا: يتم عرض آخر نسخة متحقق منها."
+                    : "Telegram est momentanément indisponible : le dernier cache vérifié est affiché."}
                 </div>
               ) : null}
               {algeriaLoading && !algeriaResult ? (
                 <div className="grid min-h-64 place-items-center text-sm font-medium text-slate-500">
                   <span className="flex items-center gap-2">
-                    <LoaderCircle className="h-5 w-5 animate-spin text-emerald-700" /> Lecture et
-                    classement des publications Telegram…
+                    <LoaderCircle className="h-5 w-5 animate-spin text-emerald-700" />
+                    {ar
+                      ? "جارٍ قراءة منشورات تيليغرام وتصنيفها…"
+                      : "Lecture et classement des publications Telegram…"}
                   </span>
                 </div>
               ) : algeriaResult?.opportunities.length ? (
@@ -2794,6 +3523,7 @@ export function CanadaOpportunitiesDialog({
                     <AlgeriaOpportunityCard
                       key={opportunity.id}
                       opportunity={opportunity}
+                      language={interfaceLanguage}
                       isAdmin={isAdmin}
                       onDetails={() => setSelectedAlgeriaOpportunity(opportunity)}
                     />
@@ -2803,9 +3533,15 @@ export function CanadaOpportunitiesDialog({
                 <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
                   <div>
                     <BriefcaseBusiness className="mx-auto mb-3 h-9 w-9 text-slate-400" />
-                    <p className="font-bold text-slate-800">Aucune annonce dans cette sélection.</p>
+                    <p className="font-bold text-slate-800">
+                      {ar
+                        ? "لا توجد إعلانات ضمن هذا الاختيار."
+                        : "Aucune annonce dans cette sélection."}
+                    </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Essayez toutes les wilayas, « publications récentes » ou retirez le mot-clé.
+                      {ar
+                        ? "جرب كل الولايات أو المنشورات الحديثة أو احذف الكلمة المفتاحية."
+                        : "Essayez toutes les wilayas, « publications récentes » ou retirez le mot-clé."}
                     </p>
                   </div>
                 </div>
@@ -2814,7 +3550,9 @@ export function CanadaOpportunitiesDialog({
 
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
               <span>
-                Source communautaire Telegram · classement ZGR par wilaya, commune et poste.
+                {ar
+                  ? "مصدر تيليغرام مجتمعي · تصنيف ZGR حسب الولاية والبلدية والمنصب."
+                  : "Source communautaire Telegram · classement ZGR par wilaya, commune et poste."}
               </span>
               {isAdmin ? (
                 <a
@@ -2823,7 +3561,8 @@ export function CanadaOpportunitiesDialog({
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:underline"
                 >
-                  Ouvrir la source Telegram <ExternalLink className="h-3.5 w-3.5" />
+                  {ar ? "فتح مصدر تيليغرام" : "Ouvrir la source Telegram"}{" "}
+                  <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               ) : null}
             </footer>
@@ -2832,18 +3571,22 @@ export function CanadaOpportunitiesDialog({
           <>
             <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[210px_minmax(260px,1fr)_auto]">
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Période
+                {ar ? "الفترة" : "Période"}
                 <select
                   value={period}
                   onChange={(event) => setPeriod(event.target.value as "week" | "recent")}
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-100"
                 >
-                  <option value="week">Publiées ces 7 derniers jours</option>
-                  <option value="recent">Offres récentes encore ouvertes</option>
+                  <option value="week">
+                    {ar ? "منشورة خلال آخر 7 أيام" : "Publiées ces 7 derniers jours"}
+                  </option>
+                  <option value="recent">
+                    {ar ? "عروض حديثة ما زالت مفتوحة" : "Offres récentes encore ouvertes"}
+                  </option>
                 </select>
               </label>
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Métier, pays ou spécialité
+                {ar ? "المهنة أو البلد أو التخصص" : "Métier, pays ou spécialité"}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
@@ -2852,8 +3595,10 @@ export function CanadaOpportunitiesDialog({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void runAnetiSearch();
                     }}
-                    className="pl-9 normal-case tracking-normal"
-                    placeholder="Ex. aide-soignant, Italie, cuisine…"
+                    className={`${ar ? "pr-9 text-right" : "pl-9"} normal-case tracking-normal`}
+                    placeholder={
+                      ar ? "مثال: مساعد صحي، إيطاليا، طبخ…" : "Ex. aide-soignant, Italie, cuisine…"
+                    }
                   />
                 </div>
               </label>
@@ -2866,15 +3611,16 @@ export function CanadaOpportunitiesDialog({
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Actualiser ANETI
+                {ar ? "تحديث ANETI" : "Actualiser ANETI"}
               </Button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               <div className="mb-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                Les fiches publiques sont actualisées automatiquement. Aucun mot de passe ni cookie
-                ANETI n’est conservé par ZGR ; la connexion reste personnelle au moment de postuler.
+                {ar
+                  ? "يتم تحديث الإعلانات العمومية آليا. لا يحتفظ ZGR بكلمة مرور أو ملف تعريف ارتباط تابع لـ ANETI؛ ويبقى تسجيل الدخول شخصيا عند التقديم."
+                  : "Les fiches publiques sont actualisées automatiquement. Aucun mot de passe ni cookie ANETI n’est conservé par ZGR ; la connexion reste personnelle au moment de postuler."}
               </div>
               {anetiError ? (
                 <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
@@ -2885,13 +3631,21 @@ export function CanadaOpportunitiesDialog({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
                   <p className="font-semibold text-emerald-950">
                     <BadgeCheck className="mr-1.5 inline h-4 w-4" />
-                    {anetiResult.meta.totalMatches} offre(s) ANETI vérifiée(s)
+                    {anetiResult.meta.totalMatches}{" "}
+                    {ar ? "عرض ANETI متحقق منه" : "offre(s) ANETI vérifiée(s)"}
                   </p>
                   <p className="text-xs text-emerald-800">
-                    Vérifiées le {new Date(anetiResult.meta.verifiedAt).toLocaleString("fr-FR")}
-                    {anetiResult.meta.stale ? " · cache de secours" : ""}
+                    {ar ? "آخر تحقق: " : "Vérifiées le "}
+                    {new Date(anetiResult.meta.verifiedAt).toLocaleString(ar ? "ar-DZ" : "fr-FR")}
+                    {anetiResult.meta.stale
+                      ? ar
+                        ? " · نسخة احتياطية"
+                        : " · cache de secours"
+                      : ""}
                     {anetiResult.meta.detailFailures
-                      ? ` · ${anetiResult.meta.detailFailures} fiche(s) conservée(s) du cache`
+                      ? ar
+                        ? ` · ${anetiResult.meta.detailFailures} إعلان محفوظ من النسخة الاحتياطية`
+                        : ` · ${anetiResult.meta.detailFailures} fiche(s) conservée(s) du cache`
                       : ""}
                   </p>
                 </div>
@@ -2899,21 +3653,28 @@ export function CanadaOpportunitiesDialog({
               {anetiResult?.meta.staleReason ? (
                 <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                   <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                  Actualisation directe indisponible : affichage temporaire du dernier cache
-                  vérifié.
+                  {ar
+                    ? "التحديث المباشر غير متاح: يتم مؤقتا عرض آخر نسخة متحقق منها."
+                    : "Actualisation directe indisponible : affichage temporaire du dernier cache vérifié."}
                 </div>
               ) : null}
               {anetiLoading && !anetiResult ? (
                 <div className="grid min-h-64 place-items-center text-sm font-medium text-slate-500">
                   <span className="flex items-center gap-2">
-                    <LoaderCircle className="h-5 w-5 animate-spin text-sky-700" /> Lecture des
-                    fiches ANETI officielles…
+                    <LoaderCircle className="h-5 w-5 animate-spin text-sky-700" />
+                    {ar
+                      ? "جارٍ قراءة إعلانات ANETI الرسمية…"
+                      : "Lecture des fiches ANETI officielles…"}
                   </span>
                 </div>
               ) : anetiResult?.opportunities.length ? (
                 <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {anetiResult.opportunities.map((opportunity) => (
-                    <AnetiOpportunityCard key={opportunity.id} opportunity={opportunity} />
+                    <AnetiOpportunityCard
+                      key={opportunity.id}
+                      opportunity={opportunity}
+                      language={interfaceLanguage}
+                    />
                   ))}
                 </div>
               ) : !anetiLoading ? (
@@ -2921,10 +3682,14 @@ export function CanadaOpportunitiesDialog({
                   <div>
                     <Globe2 className="mx-auto mb-3 h-9 w-9 text-slate-400" />
                     <p className="font-bold text-slate-800">
-                      Aucune offre ANETI dans cette sélection.
+                      {ar
+                        ? "لا توجد عروض ANETI ضمن هذا الاختيار."
+                        : "Aucune offre ANETI dans cette sélection."}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Choisissez « offres récentes » ou retirez le filtre texte.
+                      {ar
+                        ? "اختر العروض الحديثة أو احذف مرشح البحث النصي."
+                        : "Choisissez « offres récentes » ou retirez le filtre texte."}
                     </p>
                   </div>
                 </div>
@@ -2932,14 +3697,19 @@ export function CanadaOpportunitiesDialog({
             </div>
 
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
-              <span>Source : Agence Nationale pour l’Emploi et le Travail Indépendant.</span>
+              <span>
+                {ar
+                  ? "المصدر: الوكالة الوطنية للتشغيل والعمل المستقل."
+                  : "Source : Agence Nationale pour l’Emploi et le Travail Indépendant."}
+              </span>
               <a
                 href={anetiResult?.meta.sourceUrl || "https://aneti-international.tn/offres"}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 font-semibold text-sky-800 hover:underline"
               >
-                Ouvrir ANETI International <ExternalLink className="h-3.5 w-3.5" />
+                {ar ? "فتح ANETI International" : "Ouvrir ANETI International"}{" "}
+                <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </footer>
           </>
@@ -2947,18 +3717,22 @@ export function CanadaOpportunitiesDialog({
           <>
             <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[210px_minmax(260px,1fr)_auto]">
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Période
+                {ar ? "الفترة" : "Période"}
                 <select
                   value={period}
                   onChange={(event) => setPeriod(event.target.value as "week" | "recent")}
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100"
                 >
-                  <option value="week">Publiées ces 7 derniers jours</option>
-                  <option value="recent">Offres récentes encore ouvertes</option>
+                  <option value="week">
+                    {ar ? "منشورة خلال آخر 7 أيام" : "Publiées ces 7 derniers jours"}
+                  </option>
+                  <option value="recent">
+                    {ar ? "عروض حديثة ما زالت مفتوحة" : "Offres récentes encore ouvertes"}
+                  </option>
                 </select>
               </label>
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Métier, pays ou critère
+                {ar ? "المهنة أو البلد أو الشرط" : "Métier, pays ou critère"}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
@@ -2967,8 +3741,10 @@ export function CanadaOpportunitiesDialog({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void runAtctSearch();
                     }}
-                    className="pl-9 normal-case tracking-normal"
-                    placeholder="Ex. Canada, éducateur, restauration…"
+                    className={`${ar ? "pr-9 text-right" : "pl-9"} normal-case tracking-normal`}
+                    placeholder={
+                      ar ? "مثال: كندا، مربي طفولة، مطاعم…" : "Ex. Canada, éducateur, restauration…"
+                    }
                   />
                 </div>
               </label>
@@ -2981,16 +3757,16 @@ export function CanadaOpportunitiesDialog({
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Actualiser ATCT
+                {ar ? "تحديث ATCT" : "Actualiser ATCT"}
               </Button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               <div className="mb-4 flex items-start gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-teal-950">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                Les avis ATCT sont paginés puis relus fiche par fiche. Les marchés publics,
-                concours, ateliers et annonces sans emploi sont exclus automatiquement. Aucun
-                identifiant ATCT n’est enregistré par ZGR.
+                {ar
+                  ? "تتم قراءة صفحات إعلانات ATCT ثم التحقق من كل إعلان على حدة. وتستبعد آليا الصفقات العمومية والمناظرات والورشات والمنشورات التي لا تتضمن وظيفة. لا يحفظ ZGR أي بيانات دخول إلى ATCT."
+                  : "Les avis ATCT sont paginés puis relus fiche par fiche. Les marchés publics, concours, ateliers et annonces sans emploi sont exclus automatiquement. Aucun identifiant ATCT n’est enregistré par ZGR."}
               </div>
               {atctError ? (
                 <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
@@ -3001,14 +3777,19 @@ export function CanadaOpportunitiesDialog({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
                   <p className="font-semibold text-emerald-950">
                     <BadgeCheck className="mr-1.5 inline h-4 w-4" />
-                    {atctResult.meta.totalMatches} offre(s) ATCT vérifiée(s) ·{" "}
-                    {atctResult.meta.excludedNotices} avis hors emploi écarté(s)
+                    {atctResult.meta.totalMatches}{" "}
+                    {ar ? "عرض ATCT متحقق منه" : "offre(s) ATCT vérifiée(s)"} ·{" "}
+                    {atctResult.meta.excludedNotices}{" "}
+                    {ar ? "منشور غير وظيفي مستبعد" : "avis hors emploi écarté(s)"}
                   </p>
                   <p className="text-xs text-emerald-800">
-                    Vérifiées le {new Date(atctResult.meta.verifiedAt).toLocaleString("fr-FR")}
-                    {atctResult.meta.stale ? " · cache de secours" : ""}
+                    {ar ? "آخر تحقق: " : "Vérifiées le "}
+                    {new Date(atctResult.meta.verifiedAt).toLocaleString(ar ? "ar-DZ" : "fr-FR")}
+                    {atctResult.meta.stale ? (ar ? " · نسخة احتياطية" : " · cache de secours") : ""}
                     {atctResult.meta.detailFailures
-                      ? ` · ${atctResult.meta.detailFailures} fiche(s) conservée(s) du cache`
+                      ? ar
+                        ? ` · ${atctResult.meta.detailFailures} إعلان محفوظ من النسخة الاحتياطية`
+                        : ` · ${atctResult.meta.detailFailures} fiche(s) conservée(s) du cache`
                       : ""}
                   </p>
                 </div>
@@ -3016,21 +3797,28 @@ export function CanadaOpportunitiesDialog({
               {atctResult?.meta.staleReason ? (
                 <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                   <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                  Actualisation directe indisponible : affichage temporaire du dernier cache
-                  vérifié.
+                  {ar
+                    ? "التحديث المباشر غير متاح: يتم مؤقتا عرض آخر نسخة متحقق منها."
+                    : "Actualisation directe indisponible : affichage temporaire du dernier cache vérifié."}
                 </div>
               ) : null}
               {atctLoading && !atctResult ? (
                 <div className="grid min-h-64 place-items-center text-sm font-medium text-slate-500">
                   <span className="flex items-center gap-2">
-                    <LoaderCircle className="h-5 w-5 animate-spin text-teal-700" /> Lecture et
-                    classification des avis ATCT officiels…
+                    <LoaderCircle className="h-5 w-5 animate-spin text-teal-700" />
+                    {ar
+                      ? "جارٍ قراءة إعلانات ATCT الرسمية وتصنيفها…"
+                      : "Lecture et classification des avis ATCT officiels…"}
                   </span>
                 </div>
               ) : atctResult?.opportunities.length ? (
                 <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {atctResult.opportunities.map((opportunity) => (
-                    <AtctOpportunityCard key={opportunity.id} opportunity={opportunity} />
+                    <AtctOpportunityCard
+                      key={opportunity.id}
+                      opportunity={opportunity}
+                      language={interfaceLanguage}
+                    />
                   ))}
                 </div>
               ) : !atctLoading ? (
@@ -3038,10 +3826,14 @@ export function CanadaOpportunitiesDialog({
                   <div>
                     <Building2 className="mx-auto mb-3 h-9 w-9 text-slate-400" />
                     <p className="font-bold text-slate-800">
-                      Aucune offre ATCT dans cette sélection.
+                      {ar
+                        ? "لا توجد عروض ATCT ضمن هذا الاختيار."
+                        : "Aucune offre ATCT dans cette sélection."}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Choisissez « offres récentes » ou retirez le filtre texte.
+                      {ar
+                        ? "اختر العروض الحديثة أو احذف مرشح البحث النصي."
+                        : "Choisissez « offres récentes » ou retirez le filtre texte."}
                     </p>
                   </div>
                 </div>
@@ -3049,7 +3841,11 @@ export function CanadaOpportunitiesDialog({
             </div>
 
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
-              <span>Source : Agence Tunisienne de Coopération Technique.</span>
+              <span>
+                {ar
+                  ? "المصدر: الوكالة التونسية للتعاون الفني."
+                  : "Source : Agence Tunisienne de Coopération Technique."}
+              </span>
               <div className="flex flex-wrap gap-3">
                 <a
                   href={atctResult?.meta.candidatePortalUrl || "https://www.atct.tn/rh/fr/candidat"}
@@ -3057,7 +3853,7 @@ export function CanadaOpportunitiesDialog({
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 font-semibold text-teal-800 hover:underline"
                 >
-                  Espace candidat <ExternalLink className="h-3.5 w-3.5" />
+                  {ar ? "فضاء المترشح" : "Espace candidat"} <ExternalLink className="h-3.5 w-3.5" />
                 </a>
                 <a
                   href={atctResult?.meta.sourceUrl || "https://www.atct.tn/fr/avis_ann"}
@@ -3065,7 +3861,8 @@ export function CanadaOpportunitiesDialog({
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 font-semibold text-teal-800 hover:underline"
                 >
-                  Ouvrir les avis ATCT <ExternalLink className="h-3.5 w-3.5" />
+                  {ar ? "فتح إعلانات ATCT" : "Ouvrir les avis ATCT"}{" "}
+                  <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </div>
             </footer>
@@ -3074,29 +3871,33 @@ export function CanadaOpportunitiesDialog({
           <>
             <div className="grid shrink-0 gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 lg:grid-cols-[160px_210px_minmax(260px,1fr)_auto]">
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Pays du candidat
+                {ar ? "بلد المترشح" : "Pays du candidat"}
                 <select
                   value={country}
                   onChange={(event) => setCountry(event.target.value as "DZ" | "TN")}
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100"
                 >
-                  <option value="DZ">Algérie</option>
-                  <option value="TN">Tunisie</option>
+                  <option value="DZ">{ar ? "الجزائر" : "Algérie"}</option>
+                  <option value="TN">{ar ? "تونس" : "Tunisie"}</option>
                 </select>
               </label>
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Période
+                {ar ? "الفترة" : "Période"}
                 <select
                   value={period}
                   onChange={(event) => setPeriod(event.target.value as "week" | "recent")}
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100"
                 >
-                  <option value="week">Publiées ces 7 derniers jours</option>
-                  <option value="recent">Offres récentes encore ouvertes</option>
+                  <option value="week">
+                    {ar ? "منشورة خلال آخر 7 أيام" : "Publiées ces 7 derniers jours"}
+                  </option>
+                  <option value="recent">
+                    {ar ? "عروض حديثة ما زالت مفتوحة" : "Offres récentes encore ouvertes"}
+                  </option>
                 </select>
               </label>
               <label className="space-y-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                Filtrer les cartes chargées
+                {ar ? "تصفية العروض المحملة" : "Filtrer les cartes chargées"}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
@@ -3105,8 +3906,8 @@ export function CanadaOpportunitiesDialog({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void runSearch();
                     }}
-                    className="pl-9 normal-case tracking-normal"
-                    placeholder="Titre, entreprise, ville…"
+                    className={`${ar ? "pr-9 text-right" : "pl-9"} normal-case tracking-normal`}
+                    placeholder={ar ? "المسمى أو الشركة أو المدينة…" : "Titre, entreprise, ville…"}
                   />
                 </div>
               </label>
@@ -3119,7 +3920,7 @@ export function CanadaOpportunitiesDialog({
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Actualiser
+                {ar ? "تحديث" : "Actualiser"}
               </Button>
             </div>
 
@@ -3133,34 +3934,48 @@ export function CanadaOpportunitiesDialog({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
                   <p className="font-semibold text-emerald-950">
                     <BadgeCheck className="mr-1.5 inline h-4 w-4" />
-                    {result.meta.totalMatches} offre(s) ouverte(s) aux candidats internationaux
+                    {result.meta.totalMatches}{" "}
+                    {ar
+                      ? "عرض مفتوح للمرشحين الدوليين"
+                      : "offre(s) ouverte(s) aux candidats internationaux"}
                   </p>
                   <p className="text-xs text-emerald-800">
-                    Vérifiées le {new Date(result.meta.verifiedAt).toLocaleString("fr-FR")}
-                    {result.meta.stale ? " · cache de secours" : ""}
+                    {ar ? "آخر تحقق: " : "Vérifiées le "}
+                    {new Date(result.meta.verifiedAt).toLocaleString(ar ? "ar-DZ" : "fr-FR")}
+                    {result.meta.stale ? (ar ? " · نسخة احتياطية" : " · cache de secours") : ""}
                   </p>
                 </div>
               ) : null}
               {loading && !result ? (
                 <div className="grid min-h-64 place-items-center text-sm font-medium text-slate-500">
                   <span className="flex items-center gap-2">
-                    <LoaderCircle className="h-5 w-5 animate-spin text-red-700" /> Vérification des
-                    fiches officielles…
+                    <LoaderCircle className="h-5 w-5 animate-spin text-red-700" />
+                    {ar
+                      ? "جارٍ التحقق من الإعلانات الرسمية…"
+                      : "Vérification des fiches officielles…"}
                   </span>
                 </div>
               ) : result?.opportunities.length ? (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {result.opportunities.map((opportunity) => (
-                    <CanadaOpportunityCard key={opportunity.id} opportunity={opportunity} />
+                    <CanadaOpportunityCard
+                      key={opportunity.id}
+                      opportunity={opportunity}
+                      language={interfaceLanguage}
+                    />
                   ))}
                 </div>
               ) : !loading ? (
                 <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
                   <div>
                     <BriefcaseBusiness className="mx-auto mb-3 h-9 w-9 text-slate-400" />
-                    <p className="font-bold text-slate-800">Aucune offre dans cette sélection.</p>
+                    <p className="font-bold text-slate-800">
+                      {ar ? "لا توجد عروض ضمن هذا الاختيار." : "Aucune offre dans cette sélection."}
+                    </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Essayez « offres récentes » ou retirez le filtre texte.
+                      {ar
+                        ? "جرب العروض الحديثة أو احذف مرشح البحث النصي."
+                        : "Essayez « offres récentes » ou retirez le filtre texte."}
                     </p>
                   </div>
                 </div>
@@ -3169,7 +3984,9 @@ export function CanadaOpportunitiesDialog({
 
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
               <span>
-                Source : Guichet-Emplois du gouvernement du Canada · candidature humaine uniquement.
+                {ar
+                  ? "المصدر: بنك الوظائف التابع لحكومة كندا · التقديم يتم من طرف المستخدم فقط."
+                  : "Source : Guichet-Emplois du gouvernement du Canada · candidature humaine uniquement."}
               </span>
               <a
                 href={
@@ -3180,7 +3997,8 @@ export function CanadaOpportunitiesDialog({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 font-semibold text-red-800 hover:underline"
               >
-                Ouvrir la source officielle <ExternalLink className="h-3.5 w-3.5" />
+                {ar ? "فتح المصدر الرسمي" : "Ouvrir la source officielle"}{" "}
+                <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </footer>
           </>
@@ -3189,6 +4007,7 @@ export function CanadaOpportunitiesDialog({
       {selectedAlgeriaOpportunity ? (
         <AlgeriaOpportunityDetails
           opportunity={selectedAlgeriaOpportunity}
+          language={interfaceLanguage}
           isAdmin={isAdmin}
           onClose={() => setSelectedAlgeriaOpportunity(null)}
         />

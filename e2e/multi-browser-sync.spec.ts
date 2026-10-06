@@ -1130,6 +1130,39 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
       "https://www.princeedwardisland.ca/en/information/office-of-immigration/skilled-workers-outside-canada",
     );
 
+    await chooseSource("Terre-Neuve-et-Labrador");
+    const newfoundlandCard = dialog
+      .getByRole("article")
+      .filter({ hasText: "Terre-Neuve-et-Labrador — NLPNP et Programme atlantique" });
+    await expect(newfoundlandCard.getByText(/Âge officiel : 21 à 59 ans/)).toBeVisible();
+    await expect(newfoundlandCard.getByText(/FEER 4 et 5/)).toBeVisible();
+    await expect(
+      newfoundlandCard.getByRole("link", { name: /Employeurs AIP désignés/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://www.gov.nl.ca/immigration/immigrating-to-newfoundland-and-labrador/atlantic-immigration-program/designated-employers/",
+    );
+
+    await chooseSource("Emplois publics Ontario");
+    const ontarioCard = dialog
+      .getByRole("article")
+      .filter({ hasText: "Carrières dans la fonction publique de l’Ontario" });
+    await expect(ontarioCard.getByText(/52 000.*n’est pas confirmée/)).toBeVisible();
+    await expect(ontarioCard.getByText(/autorisation légale de travailler/)).toBeVisible();
+    await expect(
+      ontarioCard.getByRole("link", { name: /Rechercher les concours actifs/ }),
+    ).toHaveAttribute("href", "https://www.gojobs.gov.on.ca/Search.aspx");
+
+    await chooseSource("THAMM");
+    const thammCard = dialog
+      .getByRole("article")
+      .filter({ hasText: "THAMM+ — Building Talents and Crafts" });
+    await expect(thammCard.getByText(/469 travailleurs déjà formés/)).toBeVisible();
+    await expect(thammCard.getByText(/ne doit pas être affichée.*Algériens/)).toBeVisible();
+    await expect(
+      thammCard.getByRole("link", { name: /Vérifier les appels ANETI actifs/ }),
+    ).toHaveAttribute("href", "https://www.aneti-international.tn/");
+
     await chooseSource("Nouveau-Brunswick");
     const nbCard = dialog
       .getByRole("article")

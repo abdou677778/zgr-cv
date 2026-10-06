@@ -65,9 +65,12 @@ type Provider =
   | "destination_canada"
   | "francophone_canada"
   | "pei"
+  | "newfoundland"
   | "new_brunswick"
+  | "ontario_public_jobs"
   | "aneti"
   | "atct"
+  | "thamm_plus"
   | "algeria"
   | "italy"
   | "volunteer";
@@ -85,14 +88,26 @@ const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
     "destination_canada",
     "francophone_canada",
     "pei",
+    "newfoundland",
     "new_brunswick",
+    "ontario_public_jobs",
+    "thamm_plus",
     "italy",
     "volunteer",
   ],
-  jobs: ["jobbank", "europe_jobs", "indeed", "aneti", "atct", "algeria"],
+  jobs: [
+    "jobbank",
+    "europe_jobs",
+    "indeed",
+    "ontario_public_jobs",
+    "aneti",
+    "atct",
+    "thamm_plus",
+    "algeria",
+  ],
   volunteering: ["volunteer"],
   events: ["destination_canada"],
-  programs: ["francophone_canada", "pei", "new_brunswick", "italy"],
+  programs: ["francophone_canada", "pei", "newfoundland", "new_brunswick", "thamm_plus", "italy"],
 };
 
 const PROVIDER_LABELS: Record<Provider, string> = {
@@ -105,7 +120,10 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   destination_canada: "Destination Canada",
   francophone_canada: "Programmes Canada francophone",
   pei: "Île-du-Prince-Édouard",
+  newfoundland: "Terre-Neuve-et-Labrador",
   new_brunswick: "Nouveau-Brunswick",
+  ontario_public_jobs: "Emplois publics Ontario",
+  thamm_plus: "THAMM+ Tunisie–Italie",
   italy: "Opportunités Italie",
   volunteer: "Volontariat international",
 };
@@ -120,7 +138,10 @@ const PROVIDER_CONTEXT: Record<Provider, string> = {
   destination_canada: "Événement officiel du Canada",
   francophone_canada: "Programmes officiels du Canada",
   pei: "Programme provincial · Canada",
+  newfoundland: "NLPNP et Atlantique · Canada",
   new_brunswick: "Programme provincial · Canada",
+  ontario_public_jobs: "Fonction publique de l’Ontario",
+  thamm_plus: "Construction · Tunisiens qualifiés",
   italy: "Emploi et immigration · Italie",
   volunteer: "Corps européen de solidarité",
 };
@@ -129,7 +150,7 @@ type ProviderTerritory = "canada" | "europe" | "tunisia" | "algeria" | "italy";
 
 function territoryForProvider(provider: Provider): ProviderTerritory {
   if (provider === "europe_jobs" || provider === "volunteer") return "europe";
-  if (provider === "aneti" || provider === "atct") return "tunisia";
+  if (provider === "aneti" || provider === "atct" || provider === "thamm_plus") return "tunisia";
   if (provider === "algeria") return "algeria";
   if (provider === "italy") return "italy";
   return "canada";
@@ -243,6 +264,21 @@ const PEI_OUTSIDE_CANADA_URL =
   "https://www.princeedwardisland.ca/en/information/office-of-immigration/skilled-workers-outside-canada";
 const PEI_EMPLOYER_RULES_URL =
   "https://www.princeedwardisland.ca/en/information/office-of-immigration/supporting-a-worker-for-immigration";
+const PEI_OCCUPATIONS_DEMAND_URL =
+  "https://www.princeedwardisland.ca/en/information/office-of-immigration/occupations-in-demand";
+const NL_IMMIGRATION_URL = "https://www.gov.nl.ca/immigration/";
+const NL_SKILLED_WORKER_URL =
+  "https://www.gov.nl.ca/immigration/immigrating-to-newfoundland-and-labrador/provincial-nominee-program/applicants/skilled-worker/";
+const NL_AIP_EMPLOYERS_URL =
+  "https://www.gov.nl.ca/immigration/immigrating-to-newfoundland-and-labrador/atlantic-immigration-program/designated-employers/";
+const NL_FOREIGN_JOBS_URL = "https://www.jobbank.gc.ca/jobsearch/jobsearch?fprov=NL&fsrc=32&sort=M";
+const ONTARIO_PUBLIC_JOBS_URL = "https://www.gojobs.gov.on.ca/Search.aspx";
+const ONTARIO_HIRING_PROCESS_URL = "https://www.ontario.ca/page/careers-hiring-process";
+const THAMM_ANCE_URL =
+  "https://ance.it/2026/03/progetto-thamm-plus-towards-a-holistic-approach-to-labour-migration-governance-and-labour-mobility-in-italy-and-north-africa/";
+const THAMM_ELIS_URL =
+  "https://www.elis.org/sociale-e-sostenibilita/progetti-nel-mondo/thamm-plus/";
+const THAMM_ANETI_URL = "https://www.aneti-international.tn/";
 const NB_INB_URL = "https://www.inb.gnb.ca/";
 const NB_IMMIGRATION_URL = "https://www.gnb.ca/en/topic/family-home-community/immigration.html";
 const NB_SKILLED_WORKER_URL =
@@ -254,7 +290,7 @@ const NB_ROUNDS_URL =
 const ITALY_ALI_PORTAL_URL = "https://portaleservizi.dlci.interno.it/AliSportello/ali/home.htm";
 const ITALY_DECREE_URL = "https://www.gazzettaufficiale.it/eli/id/2025/10/15/25A05656/SG";
 const ITALY_OFFICIAL_GUIDE_URL =
-  "https://prefettura.interno.gov.it/it/prefetture/belluno/immigrazione-decreto-flussi-2026-2028";
+  "https://www.lavoro.gov.it/notizie/pagine/decreto-flussi-2027-pubblicata-la-circolare-con-le-indicazioni-operative";
 const ITALY_EURES_URL = "https://eures.europa.eu/jobseekers_it";
 const ITALY_WORK_PERMIT_URL =
   "https://home-affairs.ec.europa.eu/policies/migration-and-asylum/eu-immigration-portal/employed-worker-italy_en";
@@ -695,8 +731,9 @@ function ItalyOpportunitiesPanel() {
                   ))}
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  Heures italiennes. Les dates sont fixées par le DPCM 2026–2028 ; le calendrier de
-                  préremplissage 2027 devra être contrôlé dans la future circulaire d’application.
+                  Heures italiennes. La circulaire opérationnelle 2027 confirme la précompilation du
+                  23 octobre 2026 à 09:00 au 7 décembre 2026 à 20:00. La plateforme rouvre du 9 au
+                  13 décembre uniquement pour compléter et sauvegarder les dossiers déjà créés.
                 </p>
               </section>
 
@@ -768,7 +805,9 @@ function ItalyOpportunitiesPanel() {
       </div>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
-        <span>Vérifié le 3 octobre 2026 · DPCM italien du 2 octobre 2025.</span>
+        <span>
+          Vérifié le 6 octobre 2026 · Circulaire opérationnelle publiée le 1er octobre 2026.
+        </span>
         <div className="flex flex-wrap gap-3">
           <a
             href={ITALY_DECREE_URL}
@@ -784,7 +823,7 @@ function ItalyOpportunitiesPanel() {
             rel="noreferrer"
             className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:underline"
           >
-            Guide Préfecture <ExternalLink className="h-3.5 w-3.5" />
+            Instructions 2027 <ExternalLink className="h-3.5 w-3.5" />
           </a>
           <a
             href={ITALY_WORK_PERMIT_URL}
@@ -873,6 +912,18 @@ function PrinceEdwardIslandOpportunitiesPanel() {
                 </section>
               </div>
 
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="font-black text-slate-950">Deux volets à ne pas mélanger</p>
+                <p className="mt-1 leading-relaxed">
+                  Le volet Travailleur qualifié hors Canada vise les emplois FEER 0 à 3 avec deux
+                  ans d’expérience et un diplôme postsecondaire d’au moins deux ans. Le volet
+                  Professions en demande vise actuellement huit CNP précis — notamment aides-
+                  soignants, camionneurs, aides de métiers de la construction, nettoyeurs, ouvriers
+                  de transformation, manutentionnaires, opérateurs alimentaires et bouchers
+                  industriels — avec un an d’expérience, diplôme secondaire et test NCLC/CLB 4.
+                </p>
+              </div>
+
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
                 <p className="flex items-start gap-2 font-black">
                   <CircleDollarSign className="mt-0.5 h-5 w-5 shrink-0" /> « L’employeur paie tout »
@@ -923,6 +974,11 @@ function PrinceEdwardIslandOpportunitiesPanel() {
                     Obligations de l’employeur <ExternalLink className="ml-2 h-4 w-4" />
                   </a>
                 </Button>
+                <Button asChild variant="outline">
+                  <a href={PEI_OCCUPATIONS_DEMAND_URL} target="_blank" rel="noreferrer">
+                    Professions en demande <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
               </div>
             </div>
           </article>
@@ -930,7 +986,7 @@ function PrinceEdwardIslandOpportunitiesPanel() {
       </div>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
-        <span>Vérifié le 3 octobre 2026 · Gouvernement de l’Île-du-Prince-Édouard.</span>
+        <span>Vérifié le 6 octobre 2026 · Gouvernement de l’Île-du-Prince-Édouard.</span>
         <a
           href={PEI_EOI_GUIDE_URL}
           target="_blank"
@@ -939,6 +995,316 @@ function PrinceEdwardIslandOpportunitiesPanel() {
         >
           Fonctionnement officiel de l’EOI <ExternalLink className="h-3.5 w-3.5" />
         </a>
+      </footer>
+    </>
+  );
+}
+
+function NewfoundlandOpportunitiesPanel() {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-5">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <article className="overflow-hidden rounded-2xl border border-red-200 bg-white shadow-sm">
+            <div className="border-b border-red-100 bg-gradient-to-r from-red-50 via-white to-blue-50 p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <CountryFlag country="CA" />
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-red-800">
+                      Canada · programme provincial officiel
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">
+                      Terre-Neuve-et-Labrador — NLPNP et Programme atlantique
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Deux parcours réels, mais tous deux reposent sur une offre d’emploi
+                      admissible.
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase text-emerald-900">
+                  <BadgeCheck className="h-4 w-4" /> Sources NL vérifiées
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-5 sm:p-6">
+              <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-red-950">
+                <p className="flex items-start gap-2 font-black">
+                  <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" /> Une liste de métiers en
+                  demande n’est pas une liste de contrats disponibles
+                </p>
+                <p className="mt-2 text-sm leading-relaxed">
+                  Les secteurs cités sur les réseaux sociaux sont plausibles, mais la province ne
+                  garantit aucun poste par secteur. Le candidat doit trouver une annonce réelle,
+                  obtenir une offre admissible et respecter les conditions du volet choisi.
+                </p>
+              </div>
+
+              <div className="grid items-start gap-4 lg:grid-cols-2">
+                <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-blue-800">
+                    <UserRoundCheck className="h-4 w-4" /> NLPNP · Travailleur qualifié
+                  </p>
+                  <ul className="mt-3 space-y-2 text-sm leading-relaxed text-blue-950">
+                    <li>• Emploi ou offre à temps plein d’au moins 30 heures par semaine.</li>
+                    <li>• Durée minimale d’un an avec perspective raisonnable de prolongation.</li>
+                    <li>• Âge officiel : 21 à 59 ans.</li>
+                    <li>• Qualifications et exigences CNP correspondant réellement au poste.</li>
+                    <li>• Test d’anglais ou de français valide lorsque le volet l’exige.</li>
+                    <li>• Pour les emplois FEER 4 et 5, le test linguistique est obligatoire.</li>
+                  </ul>
+                </section>
+
+                <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-emerald-800">
+                    <Building2 className="h-4 w-4" /> Programme d’immigration au Canada atlantique
+                  </p>
+                  <ul className="mt-3 space-y-2 text-sm leading-relaxed text-emerald-950">
+                    <li>
+                      • L’employeur doit figurer sur la liste provinciale des employeurs désignés.
+                    </li>
+                    <li>
+                      • La désignation de l’entreprise ne signifie pas qu’elle recrute actuellement.
+                    </li>
+                    <li>• L’employeur demande ensuite l’approbation provinciale de l’offre.</li>
+                    <li>
+                      • Après l’endossement, le travailleur peut demander la résidence permanente.
+                    </li>
+                    <li>• Un permis temporaire éventuel nécessite aussi l’appui de la province.</li>
+                  </ul>
+                </section>
+              </div>
+
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-black">Candidats tunisiens et algériens</p>
+                <p className="mt-1 leading-relaxed">
+                  La nationalité tunisienne ou algérienne n’est pas exclue. Elle ne donne toutefois
+                  aucun accès automatique : l’offre, l’employeur, le CNP, la langue, les fonds et
+                  l’admissibilité fédérale restent déterminants. Le conjoint et les enfants à charge
+                  peuvent être déclarés lorsque le programme et le dossier le permettent.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button asChild className="bg-red-700 text-white hover:bg-red-800">
+                  <a href={NL_FOREIGN_JOBS_URL} target="_blank" rel="noreferrer">
+                    Offres ouvertes aux candidats étrangers{" "}
+                    <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href={NL_SKILLED_WORKER_URL} target="_blank" rel="noreferrer">
+                    Conditions NLPNP <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href={NL_AIP_EMPLOYERS_URL} target="_blank" rel="noreferrer">
+                    Employeurs AIP désignés <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+        <span>Vérifié le 6 octobre 2026 · Gouvernement de Terre-Neuve-et-Labrador.</span>
+        <a
+          href={NL_IMMIGRATION_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 font-semibold text-red-800 hover:underline"
+        >
+          Portail officiel de l’immigration <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      </footer>
+    </>
+  );
+}
+
+function OntarioPublicJobsPanel() {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-5">
+        <article className="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-red-200 bg-white shadow-sm">
+          <div className="border-b border-red-100 bg-gradient-to-r from-red-50 via-white to-slate-50 p-5 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <CountryFlag country="CA" />
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-red-800">
+                    Gouvernement de l’Ontario · offres publiques
+                  </p>
+                  <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">
+                    Carrières dans la fonction publique de l’Ontario
+                  </h2>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase text-emerald-900">
+                <BadgeCheck className="h-4 w-4" /> Portail officiel vérifié
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-5 p-5 sm:p-6">
+            <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-red-950">
+              <p className="flex items-start gap-2 font-black">
+                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" /> L’affirmation « plus de 52 000
+                postes » n’est pas confirmée
+              </p>
+              <p className="mt-2 text-sm leading-relaxed">
+                Le lien fourni est bien le portail officiel des emplois de la fonction publique de
+                l’Ontario, mais il ne publie pas ce chiffre et ne constitue pas un programme
+                d’immigration ni une promesse de parrainage.
+              </p>
+            </div>
+
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                <h3 className="font-black text-blue-950">Candidature depuis l’étranger</h3>
+                <p className="mt-2 text-sm leading-relaxed text-blue-900">
+                  La politique officielle autorise une personne résidant hors du Canada à postuler
+                  avant d’avoir le droit de travailler. En revanche, elle devra prouver son
+                  autorisation légale de travailler au Canada avant de commencer l’emploi.
+                </p>
+              </section>
+              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <h3 className="font-black text-slate-950">Dossier et langue</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                  La majorité des concours utilisent une candidature en ligne avec CV et lettre de
+                  motivation réunis dans un même fichier. Les postes sont publiés en français et en
+                  anglais, mais l’évaluation se fait en anglais, avec test de français pour les
+                  postes bilingues désignés.
+                </p>
+              </section>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button asChild className="bg-red-700 text-white hover:bg-red-800">
+                <a href={ONTARIO_PUBLIC_JOBS_URL} target="_blank" rel="noreferrer">
+                  Rechercher les concours actifs <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+              <Button asChild variant="outline">
+                <a href={ONTARIO_HIRING_PROCESS_URL} target="_blank" rel="noreferrer">
+                  Conditions de candidature <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </article>
+      </div>
+      <footer className="border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+        Vérifié le 6 octobre 2026 · L’autorisation de travail reste obligatoire avant l’entrée en
+        poste.
+      </footer>
+    </>
+  );
+}
+
+function ThammPlusOpportunitiesPanel() {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-5">
+        <article className="mx-auto max-w-6xl overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+          <div className="border-b border-emerald-100 bg-gradient-to-r from-red-50 via-white to-emerald-50 p-5 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <CountryFlag country="TN" />
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-red-800">
+                    Tunisie → Italie · mobilité professionnelle encadrée
+                  </p>
+                  <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">
+                    THAMM+ — Building Talents and Crafts
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Programme officiel pour des travailleurs tunisiens qualifiés du bâtiment.
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase text-emerald-900">
+                <BadgeCheck className="h-4 w-4" /> Programme confirmé
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-5 p-5 sm:p-6">
+            <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-red-950">
+              <p className="flex items-start gap-2 font-black">
+                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" /> Ne pas envoyer un CV aux
+                adresses ANCE ou ELIS publiées sur les réseaux sociaux
+              </p>
+              <p className="mt-2 text-sm leading-relaxed">
+                Ces contacts servent principalement aux entreprises italiennes et à la gestion du
+                projet. Pour un travailleur, la voie sûre est un appel à candidatures ANETI en
+                cours, avec sa date limite et sa procédure officielle. Aucun appel actif ne doit
+                être déduit d’un simple article de présentation du programme.
+              </p>
+            </div>
+
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <h3 className="font-black text-emerald-950">Ce qui est officiellement confirmé</h3>
+                <ul className="mt-3 space-y-2 text-sm leading-relaxed text-emerald-950">
+                  <li>
+                    • Programme coordonné avec l’OIM, ANCE, ELIS, CESF, Formedil, ANETI et ATFP.
+                  </li>
+                  <li>• Public tunisien, généralement âgé de 18 à 35 ans selon les appels.</li>
+                  <li>
+                    • Certification professionnelle tunisienne et expérience du bâtiment exigées.
+                  </li>
+                  <li>
+                    • Formation en italien, sécurité et compétences techniques avant le départ.
+                  </li>
+                  <li>• Entrée régulière hors quotas Flussi pour les candidats sélectionnés.</li>
+                </ul>
+              </section>
+              <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                <h3 className="font-black text-blue-950">Profils réellement documentés en 2026</h3>
+                <p className="mt-2 text-sm leading-relaxed text-blue-900">
+                  ANCE déclarait le 5 mars 2026 que 469 travailleurs déjà formés restaient
+                  disponibles : maçons, charpentiers, électriciens et carreleurs. Le projet couvre
+                  aussi, selon les campagnes, grutiers, installateurs thermo-hydrauliques,
+                  conducteurs d’engins et ouvriers routiers.
+                </p>
+              </section>
+            </div>
+
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+              <p className="font-black">Admissibilité géographique</p>
+              <p className="mt-1 leading-relaxed">
+                Cette composante vise les ressortissants tunisiens. Elle ne doit pas être affichée
+                comme opportunité accessible aux Algériens. Les candidats doivent suivre exactement
+                le métier, l’âge, le diplôme, l’expérience et la date limite du nouvel appel ANETI.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button asChild className="bg-red-700 text-white hover:bg-red-800">
+                <a href={THAMM_ANETI_URL} target="_blank" rel="noreferrer">
+                  Vérifier les appels ANETI actifs <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+              <Button asChild variant="outline">
+                <a href={THAMM_ANCE_URL} target="_blank" rel="noreferrer">
+                  État officiel du programme <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+              <Button asChild variant="outline">
+                <a href={THAMM_ELIS_URL} target="_blank" rel="noreferrer">
+                  Présentation ELIS <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </article>
+      </div>
+      <footer className="border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
+        Vérifié le 6 octobre 2026 · Programme actif, mais candidature uniquement via un appel ANETI
+        en cours.
       </footer>
     </>
   );
@@ -2192,8 +2558,14 @@ export function CanadaOpportunitiesDialog({
           <FrancophoneCanadaPanel />
         ) : provider === "pei" ? (
           <PrinceEdwardIslandOpportunitiesPanel />
+        ) : provider === "newfoundland" ? (
+          <NewfoundlandOpportunitiesPanel />
         ) : provider === "new_brunswick" ? (
           <NewBrunswickOpportunitiesPanel />
+        ) : provider === "ontario_public_jobs" ? (
+          <OntarioPublicJobsPanel />
+        ) : provider === "thamm_plus" ? (
+          <ThammPlusOpportunitiesPanel />
         ) : provider === "italy" ? (
           <ItalyOpportunitiesPanel />
         ) : provider === "indeed" ? (

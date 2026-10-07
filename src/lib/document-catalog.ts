@@ -3,6 +3,7 @@ import {
   COVER_LETTER_TEMPLATES,
   CV_TEMPLATES,
   EUROPASS_TEMPLATE_ID,
+  OPPORTUNITY_PLAN_TEMPLATE_ID,
   getCvTemplatesForLanguage,
   type PdfTemplateId,
 } from "./document-templates";
@@ -13,7 +14,7 @@ export type { PdfTemplateId } from "./document-templates";
 
 export const COMPLETE_PACK_DOCUMENT_COUNT = DOCUMENT_LANGUAGES.reduce(
   (total, language) =>
-    total + getCvTemplatesForLanguage(language.id).length + COVER_LETTER_TEMPLATES.length + 1,
+    total + getCvTemplatesForLanguage(language.id).length + COVER_LETTER_TEMPLATES.length + 2,
   0,
 );
 
@@ -36,7 +37,11 @@ export function getDocumentKinds(language: DocumentLanguage) {
 
 export function getTemplates(kind: DocumentKind, language?: DocumentLanguage) {
   if (kind === "cover-letter") return COVER_LETTER_TEMPLATES;
-  if (kind === "advises") return [{ id: ADVISES_TEMPLATE_ID, name: "Template Advises" }] as const;
+  if (kind === "advises")
+    return [
+      { id: ADVISES_TEMPLATE_ID, name: "Plan de développement" },
+      { id: OPPORTUNITY_PLAN_TEMPLATE_ID, name: "Plan d’opportunités cliquable" },
+    ] as const;
   const cvTemplates = language ? getCvTemplatesForLanguage(language) : CV_TEMPLATES;
   return [...cvTemplates, { id: EUROPASS_TEMPLATE_ID, name: "CV Europass" }] as const;
 }

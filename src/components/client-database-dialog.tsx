@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArchiveRestore,
+  BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
   Cloud,
@@ -288,6 +289,7 @@ export function ClientDatabaseDialog({
   activeProfileId,
   onOpenProfile,
   onDownloadPdf,
+  onOpenOpportunities,
   onSyncStatusChange,
   onWorkflowCountsChange,
 }: {
@@ -297,6 +299,7 @@ export function ClientDatabaseDialog({
   activeProfileId: string | null;
   onOpenProfile: (profile: ClientProfile) => void;
   onDownloadPdf: (profile: ClientProfile) => Promise<void>;
+  onOpenOpportunities: (profile: ClientProfile) => void;
   onSyncStatusChange?: (status: ClientSyncStatus) => void;
   onWorkflowCountsChange?: (counts: ClientWorkflowCounts) => void;
 }) {
@@ -583,6 +586,19 @@ export function ClientDatabaseDialog({
       setMessage(`PDF généré pour ${profile.name}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "PDF impossible à générer.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const openOpportunities = async (summary: ClientProfileSummary) => {
+    setBusy(`opportunities:${summary.id}`);
+    try {
+      const profile = await resolveProfile(summary);
+      onOpenOpportunities(profile);
+      onOpenChange(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Ouverture des opportunités impossible.");
     } finally {
       setBusy("");
     }
@@ -1173,6 +1189,20 @@ export function ClientDatabaseDialog({
                               Télécharger PDF
                             </Button>
                           )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void openOpportunities(profile)}
+                            disabled={Boolean(busy)}
+                          >
+                            {busy === `opportunities:${profile.id}` ? (
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <BriefcaseBusiness className="mr-2 h-4 w-4" />
+                            )}
+                            Opportunités
+                          </Button>
                           <Button
                             type="button"
                             size="sm"

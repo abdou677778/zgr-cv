@@ -4,6 +4,7 @@ import type { HiddenCvElements } from "./cv-visibility";
 import type { DocumentKind, PdfTemplateId } from "./document-pdf";
 import type { TemplateColorMap } from "./pdf-theme";
 import type { TemplateDesignerSettings } from "./template-designer";
+import type { OpportunityPlan } from "./profile-opportunities";
 import {
   blobToProfilePhotoDataUrl,
   normalizeProfilePhoto,
@@ -46,6 +47,7 @@ export type ClientProfile = {
   templateColors: TemplateColorMap;
   templateDesign?: TemplateDesignerSettings;
   sectionAppearance?: Record<string, { title: string; icon: string }>;
+  opportunityPlan?: OpportunityPlan;
   photoAsset?: Omit<ProfilePhoto, "dataUrl">;
 };
 
@@ -171,6 +173,7 @@ export async function listClientProfiles(): Promise<ClientProfileSummary[]> {
         templateColors: _colors,
         templateDesign: _design,
         sectionAppearance: _sectionAppearance,
+        opportunityPlan: _opportunityPlan,
         photoAsset,
         ...summary
       }) => ({

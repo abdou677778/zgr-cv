@@ -15,6 +15,7 @@ export const TEMPLATE_DEFAULT_COLORS = {
   "cover-letter-v4": "#0064a7",
   "cover-letter-v5": "#063b9f",
   "advises-v1": "#149d6a",
+  "opportunity-plan-v1": "#b91c1c",
 } as const;
 
 export type ThemeTemplateId = keyof typeof TEMPLATE_DEFAULT_COLORS;
@@ -91,6 +92,7 @@ const themedReplacements = (templateId: ThemeTemplateId, selectedColor: string) 
       "#8ed827": mix(accent, "#d8f238", 0.58),
       "#e6fff4": pale,
     },
+    "opportunity-plan-v1": { "#b91c1c": accent, "#7f1d1d": darker, "#fee2e2": pale },
   };
   return replacementSets[templateId];
 };

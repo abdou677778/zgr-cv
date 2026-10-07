@@ -1740,3 +1740,36 @@ test("deux navigateurs partagent un client et protègent une modification concur
     await editorContext.close();
   }
 });
+
+test("classe les opportunités du profil et génère le plan PDF cliquable", async ({ browser }) => {
+  const api = new SharedClientApi();
+  const context = await browser.newContext({ acceptDownloads: true });
+  try {
+    const page = await connect(context, api, "admin");
+    await page.getByRole("button", { name: "Exemple" }).click();
+    await openPersonalDetails(page);
+    await page.getByRole("button", { name: "Trouver les opportunités" }).click();
+
+    const workspace = page.getByRole("dialog", { name: "Opportunités adaptées au profil" });
+    await expect(workspace).toBeVisible();
+    const opportunity = workspace.locator("article").filter({ hasText: "senior accountant" });
+    await expect(opportunity).toBeVisible();
+    await opportunity.getByRole("button", { name: "Ajouter au PDF" }).click();
+    await expect(workspace.getByText("1 sélectionnée(s) pour le PDF")).toBeVisible();
+    await workspace.getByRole("button", { name: "Retour au CV" }).click();
+
+    await page.getByLabel("Document", { exact: true }).selectOption("advises");
+    await page.getByLabel("Modèle", { exact: true }).selectOption("opportunity-plan-v1");
+    await page.getByRole("button", { name: "Télécharger PDF" }).click();
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByText("Télécharger le PDF actuel").click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/Plan_opportunites_FR\.pdf$/);
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    expect(Buffer.concat(chunks).subarray(0, 4).toString()).toBe("%PDF");
+  } finally {
+    await context.close();
+  }
+});

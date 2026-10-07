@@ -3,6 +3,7 @@ import {
   ADVISES_TEMPLATE_ID,
   COVER_LETTER_TEMPLATES,
   EUROPASS_TEMPLATE_ID,
+  OPPORTUNITY_PLAN_TEMPLATE_ID,
   getCvTemplatesForLanguage,
   isArabicCvTemplate,
   type CoverLetterTemplateId,
@@ -13,6 +14,7 @@ import { DOCUMENT_LANGUAGES, languageInfo, type DocumentLanguage } from "./docum
 import { DEFAULT_TEMPLATE_COLORS, type TemplateColorMap, type ThemeTemplateId } from "./pdf-theme";
 import type { TemplateDesignerSettings, TemplateDesignerSettingsMap } from "./template-designer";
 import { getTemplates, type DocumentKind } from "./document-catalog";
+import type { OpportunityPlan } from "./profile-opportunities";
 
 export {
   COMPLETE_PACK_DOCUMENT_COUNT,
@@ -30,6 +32,7 @@ export async function createDocumentPdfBlob(
   language: DocumentLanguage,
   accentColor?: string,
   designerSettings?: TemplateDesignerSettings,
+  opportunityPlan?: OpportunityPlan,
 ) {
   if (templateId === EUROPASS_TEMPLATE_ID) {
     throw new Error("Le modèle Europass produit un fichier XML et non un document PDF.");
@@ -39,6 +42,10 @@ export async function createDocumentPdfBlob(
     return createCoverLetterPdfBlob(cv, templateId as CoverLetterTemplateId, language, accentColor);
   }
   if (kind === "advises") {
+    if (templateId === OPPORTUNITY_PLAN_TEMPLATE_ID) {
+      const { createOpportunityPlanPdfBlob } = await import("./opportunity-plan-pdf");
+      return createOpportunityPlanPdfBlob(cv, opportunityPlan, language, accentColor);
+    }
     const { createAdvisesPdfBlob } = await import("./advises-pdf");
     return createAdvisesPdfBlob(cv, language, accentColor);
   }
@@ -71,13 +78,16 @@ function packEntries(language: DocumentLanguage) {
       filename: `${String(index + 1).padStart(2, "0")}_${safeFilename(template.name)}`,
       label: template.name,
     })),
-    {
+    ...[
+      { id: ADVISES_TEMPLATE_ID, name: "Plan de développement" },
+      { id: OPPORTUNITY_PLAN_TEMPLATE_ID, name: "Plan d’opportunités cliquable" },
+    ].map((template, index) => ({
       kind: "advises" as const,
-      templateId: ADVISES_TEMPLATE_ID as PdfTemplateId,
+      templateId: template.id as PdfTemplateId,
       folder: `${languageFolder}/Advises`,
-      filename: `01_${safeFilename("Template Advises")}`,
-      label: "Template Advises",
-    },
+      filename: `${String(index + 1).padStart(2, "0")}_${safeFilename(template.name)}`,
+      label: template.name,
+    })),
   ];
 }
 
@@ -88,6 +98,7 @@ export async function createCurrentTemplateMultilingualZip(
   onProgress?: (progress: CompletePackProgress) => void,
   accentColor?: string,
   designerSettings?: TemplateDesignerSettings,
+  opportunityPlan?: OpportunityPlan,
 ) {
   const { strToU8, zipSync } = await import("fflate");
   const files: Record<string, Uint8Array> = {};
@@ -104,6 +115,7 @@ export async function createCurrentTemplateMultilingualZip(
       language.id,
       accentColor,
       designerSettings,
+      opportunityPlan,
     );
     const folder = `${language.id.toUpperCase()}_${safeFilename(language.name)}`;
     const path = `${folder}/${safeFilename(getTemplates(kind, language.id).find((item) => item.id === templateId)?.name || "Document")}_${language.id.toUpperCase()}.pdf`;
@@ -122,6 +134,7 @@ export async function createCompletePackZip(
   onProgress?: (progress: CompletePackProgress) => void,
   templateColors: TemplateColorMap = DEFAULT_TEMPLATE_COLORS,
   designerSettings: TemplateDesignerSettingsMap = {},
+  opportunityPlan?: OpportunityPlan,
 ) {
   const { strToU8, zipSync } = await import("fflate");
   const entries = DOCUMENT_LANGUAGES.flatMap((language) =>
@@ -143,6 +156,7 @@ export async function createCompletePackZip(
       entry.language,
       templateColors[entry.templateId as ThemeTemplateId],
       designerSettings[entry.templateId],
+      opportunityPlan,
     );
     const path = `${entry.folder}/${entry.filename}_${entry.language.toUpperCase()}.pdf`;
     files[path] = new Uint8Array(await blob.arrayBuffer());
@@ -161,17 +175,22 @@ export function downloadPdfDocument(
   cv: CV,
   kind: DocumentKind,
   language: DocumentLanguage,
+  templateId?: PdfTemplateId,
 ) {
   const suffix =
     kind === "cover-letter"
       ? language === "fr"
         ? "Lettre_de_motivation"
         : "Cover_Letter"
-      : kind === "advises"
+      : kind === "advises" && templateId === OPPORTUNITY_PLAN_TEMPLATE_ID
         ? language === "fr"
-          ? "Plan_professionnel"
-          : "Professional_plan"
-        : "CV";
+          ? "Plan_opportunites"
+          : "Opportunity_plan"
+        : kind === "advises"
+          ? language === "fr"
+            ? "Plan_professionnel"
+            : "Professional_plan"
+          : "CV";
   const filename = `${safeFilename(cv.nom_complet || "document")}_${suffix}_${language.toUpperCase()}.pdf`;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

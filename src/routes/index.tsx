@@ -164,6 +164,7 @@ import { importClientOrderJson, type ClientOrderSummary } from "@/lib/client-ord
 import type { EuropassBatchImport } from "@/lib/europass-import";
 import { activatePwaUpdate, promptPwaInstall, usePwaStatus } from "@/lib/pwa-client";
 import { reportSyncFailure } from "@/lib/observability";
+import { emptyOpportunityPlan, type OpportunityPlan } from "@/lib/profile-opportunities";
 
 const AiSettingsDialog = lazy(async () => {
   const module = await import("@/components/ai-settings-dialog");
@@ -188,6 +189,10 @@ const ClientOrdersDialog = lazy(async () => {
 const CanadaOpportunitiesDialog = lazy(async () => {
   const module = await import("@/components/canada-opportunities-dialog");
   return { default: module.CanadaOpportunitiesDialog };
+});
+const ProfileOpportunitiesWorkspace = lazy(async () => {
+  const module = await import("@/components/profile-opportunities-workspace");
+  return { default: module.ProfileOpportunitiesWorkspace };
 });
 const CanadianNocField = lazy(async () => {
   const module = await import("@/components/canadian-noc-field");
@@ -259,6 +264,7 @@ type WorkspaceDraftPayload = {
   designerPresets: DesignerPreset[];
   activeDesignerPresetId: string | null;
   sectionAppearance: SectionAppearanceMap;
+  opportunityPlan?: OpportunityPlan;
 };
 
 const workspaceFingerprint = (payload: WorkspaceDraftPayload) =>
@@ -273,6 +279,7 @@ const workspaceFingerprint = (payload: WorkspaceDraftPayload) =>
     designerPresets: payload.designerPresets,
     activeDesignerPresetId: payload.activeDesignerPresetId,
     sectionAppearance: payload.sectionAppearance,
+    opportunityPlan: payload.opportunityPlan,
   });
 
 async function pdfWithDeadline<T>(operation: Promise<T>) {
@@ -603,6 +610,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   });
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
   const [canadaOpportunitiesOpen, setCanadaOpportunitiesOpen] = useState(false);
+  const [profileOpportunitiesOpen, setProfileOpportunitiesOpen] = useState(false);
+  const [opportunityPlan, setOpportunityPlan] = useState<OpportunityPlan | undefined>();
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [activeProfileWorkflowStatus, setActiveProfileWorkflowStatus] =
     useState<ClientWorkflowStatus>("draft");
@@ -674,6 +683,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       designerPresets,
       activeDesignerPresetId,
       sectionAppearance,
+      opportunityPlan,
     }),
     [
       activeDesignerPresetId,
@@ -684,6 +694,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       hiddenElements,
       language,
       sectionAppearance,
+      opportunityPlan,
       templateColors,
       templateDesignerSettings,
       templateId,
@@ -767,6 +778,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     language,
     accentColor,
     designerSettings,
+    opportunityPlan,
   });
   const setCv: Dispatch<SetStateAction<CV>> = (value) =>
     setCvByLanguage((current) => {
@@ -1050,6 +1062,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         setDesignerPresets(normalizeDesignerPresets(payload.designerPresets));
         setActiveDesignerPresetId(payload.activeDesignerPresetId || null);
         setSectionAppearance(normalizeSectionAppearance(payload.sectionAppearance));
+        setOpportunityPlan(
+          payload.opportunityPlan ? structuredClone(payload.opportunityPlan) : undefined,
+        );
         setActiveProfileId(
           payload.activeProfileId && /^ZGR-\d{8}-[A-Z0-9]{6,12}$/.test(payload.activeProfileId)
             ? payload.activeProfileId
@@ -1254,6 +1269,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             language,
             accentColor,
             designerSettings,
+            opportunityPlan,
           ),
         );
         if (cancelled) return;
@@ -1283,6 +1299,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     designerSettings,
     isEuropassTemplate,
     language,
+    opportunityPlan,
     outputCv,
     pdfPreview,
     pdfRetryNonce,
@@ -1488,6 +1505,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       updateProfilePhoto(undefined);
       setHiddenElements({});
       setActiveProfileId(null);
+      setOpportunityPlan(undefined);
       setActiveClientOrder(null);
       setEuropassImportReport(null);
       setEuropassImportReportExpanded(false);
@@ -1498,6 +1516,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     updateProfilePhoto(undefined);
     setHiddenElements({});
     setActiveProfileId(null);
+    setOpportunityPlan(undefined);
     setActiveClientOrder(null);
     setEuropassImportReport(null);
     setEuropassImportReportExpanded(false);
@@ -1530,6 +1549,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         updateProfilePhoto(importedCv.photo);
         setHiddenElements({});
         setActiveProfileId(null);
+        setOpportunityPlan(undefined);
         setActiveClientOrder(null);
         setImportMessage({
           ok: true,
@@ -1573,6 +1593,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setCvByLanguage(next);
       setHiddenElements({});
       setActiveProfileId(null);
+      setOpportunityPlan(undefined);
       setActiveClientOrder(null);
       const nextLanguage = importedSet?.defaultLanguage ?? importedLanguages[0];
       if (!importedLanguages.includes(language)) setLanguage(nextLanguage);
@@ -1623,6 +1644,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       updateProfilePhoto(importedPhoto);
       setHiddenElements({});
       setActiveProfileId(null);
+      setOpportunityPlan(undefined);
       setDocumentKind("cv");
       setTemplateId(EUROPASS_TEMPLATE_ID);
       const nextLanguage = result.languages.includes(language) ? language : result.languages[0];
@@ -1697,6 +1719,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         templateColors: structuredClone(templateColors),
         templateDesign: structuredClone(designerSettings),
         sectionAppearance: structuredClone(sectionAppearance),
+        opportunityPlan: opportunityPlan ? structuredClone(opportunityPlan) : undefined,
       };
       await saveClientProfile(profile);
       setBaselineFingerprint(draftFingerprint);
@@ -1773,6 +1796,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             template_colors: templateColors,
             template_design: designerSettings,
             section_appearance: sectionAppearance,
+            opportunity_plan: opportunityPlan,
             saved_at: now,
           },
         };
@@ -1826,6 +1850,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     if (profile.sectionAppearance) {
       setSectionAppearance(normalizeSectionAppearance(profile.sectionAppearance));
     }
+    setOpportunityPlan(
+      profile.opportunityPlan ? structuredClone(profile.opportunityPlan) : undefined,
+    );
     setActiveDesignerPresetId(null);
     resetBaselineRef.current = true;
     setActiveProfileId(profile.id);
@@ -1925,6 +1952,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         setSectionAppearance(normalizeSectionAppearance(zgr.section_appearance));
       }
       setActiveProfileId(null);
+      setOpportunityPlan(
+        zgr?.opportunity_plan && typeof zgr.opportunity_plan === "object"
+          ? (structuredClone(zgr.opportunity_plan) as OpportunityPlan)
+          : undefined,
+      );
       setActiveClientOrder(order);
       setImportMessage({
         ok: true,
@@ -1970,6 +2002,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       language,
       accentColor,
       designerSettings,
+      opportunityPlan,
     );
     const suffix =
       documentKind === "cover-letter"
@@ -2019,6 +2052,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             language,
             accentColor,
             designerSettings,
+            opportunityPlan,
           ),
         );
         const url = URL.createObjectURL(blob);
@@ -2026,7 +2060,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         pdfUrlRef.current = url;
         setPdfPreview({ blob, url, key: cvKey });
       }
-      downloadPdfDocument(blob, outputCv, documentKind, language);
+      downloadPdfDocument(blob, outputCv, documentKind, language, templateId);
     } catch (error) {
       console.error(error);
       setPdfError(error instanceof Error ? error.message : ui.previewError);
@@ -2064,8 +2098,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       profile.language,
       color,
       normalizeTemplateDesignerSettings(profile.templateDesign),
+      profile.opportunityPlan,
     );
-    downloadPdfDocument(blob, profileCv, profile.documentKind, profile.language);
+    downloadPdfDocument(blob, profileCv, profile.documentKind, profile.language, profileTemplateId);
   };
 
   const downloadCompletePack = async () => {
@@ -2082,6 +2117,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         },
         templateColors,
         templateDesignerSettings,
+        opportunityPlan,
       );
       downloadCompletePackArchive(blob, cv);
       setPackMessage({ ok: true, text: ui.packReady });
@@ -2111,6 +2147,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         ({ completed, total }) => setPackProgress({ completed, total }),
         accentColor,
         designerSettings,
+        opportunityPlan,
       );
       downloadCurrentMultilingualArchive(blob, cv);
       setPackMessage({
@@ -3270,6 +3307,38 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   />
                 </Suspense>
               </Field>
+              <div className="sm:col-span-2 rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 to-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-black text-slate-950">Opportunités adaptées à ce profil</p>
+                    <p className="text-sm text-slate-600">
+                      Emplois, programmes et volontariat classés selon le métier et le CNP, avec
+                      accès direct à la candidature.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (!opportunityPlan) setOpportunityPlan(emptyOpportunityPlan(cv));
+                      setProfileOpportunitiesOpen(true);
+                    }}
+                    disabled={!cv.titre_poste.trim()}
+                    className="bg-red-700 hover:bg-red-800"
+                  >
+                    <BriefcaseBusiness className="mr-2 h-4 w-4" /> Trouver les opportunités
+                  </Button>
+                </div>
+                {!cv.titre_poste.trim() ? (
+                  <p className="mt-2 text-xs font-semibold text-amber-800">
+                    Renseignez d’abord le poste recherché.
+                  </p>
+                ) : opportunityPlan?.selectedOpportunities.length ? (
+                  <p className="mt-2 text-xs font-bold text-emerald-700">
+                    {opportunityPlan.selectedOpportunities.length} opportunité(s) sélectionnée(s)
+                    pour le plan PDF.
+                  </p>
+                ) : null}
+              </div>
               <Field
                 label={form.phone}
                 {...visibilityProps("personal.telephone")}
@@ -4354,6 +4423,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             activeProfileId={activeProfileId}
             onOpenProfile={openClientProfile}
             onDownloadPdf={downloadClientProfilePdf}
+            onOpenOpportunities={(profile) => {
+              openClientProfile(profile);
+              setProfileOpportunitiesOpen(true);
+            }}
             onSyncStatusChange={setClientSyncStatus}
             onWorkflowCountsChange={setWorkflowCounts}
           />
@@ -4372,6 +4445,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             open={canadaOpportunitiesOpen}
             onOpenChange={setCanadaOpportunitiesOpen}
             isAdmin={user.role === "admin"}
+          />
+        ) : null}
+        {profileOpportunitiesOpen ? (
+          <ProfileOpportunitiesWorkspace
+            open={profileOpportunitiesOpen}
+            cv={cv}
+            plan={opportunityPlan}
+            onPlanChange={setOpportunityPlan}
+            onClose={() => setProfileOpportunitiesOpen(false)}
           />
         ) : null}
       </Suspense>

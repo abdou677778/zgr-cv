@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { VolunteerOpportunitiesDialog } from "@/components/volunteer-opportunities-dialog";
+import { RecruitmentDirectoriesPanel } from "@/components/recruitment-directories-panel";
 import {
   indeedCanadaSearchUrl,
   searchCanadaOpportunities,
@@ -74,7 +75,9 @@ type Provider =
   | "thamm_plus"
   | "algeria"
   | "italy"
-  | "volunteer";
+  | "volunteer"
+  | "canada_recruiters"
+  | "gulf_recruiters";
 
 type OpportunityCategory = "all" | "jobs" | "volunteering" | "events" | "programs";
 type OpportunitiesLanguage = "fr" | "ar";
@@ -84,7 +87,9 @@ const OPPORTUNITIES_LANGUAGE_STORAGE_KEY = "zgr-opportunities-language";
 const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
   all: [
     "jobbank",
+    "canada_recruiters",
     "europe_jobs",
+    "gulf_recruiters",
     "indeed",
     "aneti",
     "atct",
@@ -101,7 +106,9 @@ const PROVIDERS_BY_CATEGORY: Record<OpportunityCategory, Provider[]> = {
   ],
   jobs: [
     "jobbank",
+    "canada_recruiters",
     "europe_jobs",
+    "gulf_recruiters",
     "indeed",
     "ontario_public_jobs",
     "aneti",
@@ -130,6 +137,8 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   thamm_plus: "THAMM+ Tunisie–Italie",
   italy: "Opportunités Italie",
   volunteer: "Volontariat international",
+  canada_recruiters: "Recruteurs Canada",
+  gulf_recruiters: "Emploi pays du Golfe",
 };
 
 const PROVIDER_CONTEXT: Record<Provider, string> = {
@@ -148,6 +157,8 @@ const PROVIDER_CONTEXT: Record<Provider, string> = {
   thamm_plus: "Construction · Tunisiens qualifiés",
   italy: "Emploi et immigration · Italie",
   volunteer: "Corps européen de solidarité",
+  canada_recruiters: "Agences, offres et dépôts de CV",
+  gulf_recruiters: "Plateformes et formulaires candidats",
 };
 
 const PROVIDER_LABELS_AR: Record<Provider, string> = {
@@ -166,6 +177,8 @@ const PROVIDER_LABELS_AR: Record<Provider, string> = {
   thamm_plus: "THAMM+ تونس–إيطاليا",
   italy: "فرص العمل في إيطاليا",
   volunteer: "التطوع الدولي",
+  canada_recruiters: "جهات التوظيف في كندا",
+  gulf_recruiters: "وظائف دول الخليج",
 };
 
 const PROVIDER_CONTEXT_AR: Record<Provider, string> = {
@@ -184,6 +197,8 @@ const PROVIDER_CONTEXT_AR: Record<Provider, string> = {
   thamm_plus: "البناء · للكفاءات التونسية",
   italy: "العمل والهجرة · إيطاليا",
   volunteer: "فيلق التضامن الأوروبي",
+  canada_recruiters: "وكالات وعروض وإيداع السير الذاتية",
+  gulf_recruiters: "منصات واستمارات للمرشحين",
 };
 
 function providerLabel(provider: Provider, language: OpportunitiesLanguage) {
@@ -194,9 +209,10 @@ function providerContext(provider: Provider, language: OpportunitiesLanguage) {
   return language === "ar" ? PROVIDER_CONTEXT_AR[provider] : PROVIDER_CONTEXT[provider];
 }
 
-type ProviderTerritory = "canada" | "europe" | "tunisia" | "algeria" | "italy";
+type ProviderTerritory = "canada" | "europe" | "tunisia" | "algeria" | "italy" | "gulf";
 
 function territoryForProvider(provider: Provider): ProviderTerritory {
+  if (provider === "gulf_recruiters") return "gulf";
   if (provider === "europe_jobs" || provider === "volunteer") return "europe";
   if (provider === "aneti" || provider === "atct" || provider === "thamm_plus") return "tunisia";
   if (provider === "algeria") return "algeria";
@@ -220,6 +236,7 @@ function ProviderTerritoryMark({
           tunisia: "علم تونس",
           algeria: "علم الجزائر",
           italy: "علم إيطاليا",
+          gulf: "منطقة الخليج",
         }
       : {
           canada: "Drapeau du Canada",
@@ -227,6 +244,7 @@ function ProviderTerritoryMark({
           tunisia: "Drapeau de la Tunisie",
           algeria: "Drapeau de l’Algérie",
           italy: "Drapeau de l’Italie",
+          gulf: "Région du Golfe",
         };
 
   return (
@@ -280,11 +298,17 @@ function ProviderTerritoryMark({
               fill="#d21034"
             />
           </>
-        ) : (
+        ) : territory === "italy" ? (
           <>
             <rect width="14.67" height="30" fill="#009246" />
             <rect x="14.67" width="14.67" height="30" fill="#fff" />
             <rect x="29.34" width="14.66" height="30" fill="#ce2b37" />
+          </>
+        ) : (
+          <>
+            <rect width="44" height="30" fill="#087443" />
+            <path d="M8 21c7-8 15-9 28-12-7 6-15 10-28 12z" fill="#fff" opacity=".95" />
+            <circle cx="32" cy="8" r="2.3" fill="#f5d565" />
           </>
         )}
       </svg>
@@ -3247,6 +3271,10 @@ export function CanadaOpportunitiesDialog({
             interfaceLanguage={interfaceLanguage}
             onOpenChange={() => undefined}
           />
+        ) : provider === "canada_recruiters" ? (
+          <RecruitmentDirectoriesPanel kind="canada" language={interfaceLanguage} />
+        ) : provider === "gulf_recruiters" ? (
+          <RecruitmentDirectoriesPanel kind="gulf" language={interfaceLanguage} />
         ) : ar &&
           (provider === "europe_jobs" ||
             provider === "francophone_canada" ||

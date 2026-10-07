@@ -1097,6 +1097,39 @@ test("ouvre les opportunités Canada et distingue candidature externe et connexi
 
     await categorySelect.selectOption("all");
 
+    await chooseSource("Recruteurs Canada");
+    await expect(
+      dialog.getByRole("heading", {
+        name: "Annuaire candidat depuis l’Algérie ou la Tunisie",
+      }),
+    ).toBeVisible();
+    await expect(dialog.getByText("AR-2101518", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("AR-2000004", { exact: true })).toBeVisible();
+    await expect(
+      dialog.getByRole("link", { name: /Contrôler dans le registre CNESST/ }),
+    ).toHaveAttribute("href", /cnesst\.gouv\.qc\.ca/);
+    await expect(
+      dialog
+        .getByRole("article")
+        .filter({ hasText: "Immijob" })
+        .getByRole("link", { name: /Voir les offres et postuler/ }),
+    ).toHaveAttribute("href", "https://immijob.com/candidats-trouver-un-emploi-au-canada/");
+    await expect(dialog.getByText(/IMRECAN.*Agence Portfolio/)).toBeVisible();
+
+    await chooseSource("Emploi pays du Golfe");
+    await expect(
+      dialog.getByRole("heading", {
+        name: "Emplois du Golfe : vérifier avant d’envoyer le dossier",
+      }),
+    ).toBeVisible();
+    await expect(
+      dialog
+        .getByRole("article")
+        .filter({ hasText: "GulfTalent" })
+        .getByRole("link", { name: /Voir les offres et postuler/ }),
+    ).toHaveAttribute("href", "https://www.gulftalent.com/");
+    await expect(dialog.getByText(/Wazifu.*404/)).toBeVisible();
+
     await chooseSource("Indeed Canada");
     await expect(dialog.getByText("Recherche Indeed conforme et durable")).toBeVisible();
     await expect(dialog.getByRole("link", { name: /Ouvrir Indeed/ })).toHaveAttribute(

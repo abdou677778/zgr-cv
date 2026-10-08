@@ -8,8 +8,8 @@ type AiRequestOptions = {
   timeoutMs?: number;
 };
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-const DEFAULT_TOTAL_TIMEOUT_MS = 65_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+const DEFAULT_TOTAL_TIMEOUT_MS = 95_000;
 const CURRENT_GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"];
 
 export class AiHttpError extends Error {
@@ -68,7 +68,7 @@ async function requestJson(
 
   try {
     const response = url.startsWith("/")
-      ? await authenticatedFetch(url, { ...init, signal: controller.signal })
+      ? await authenticatedFetch(url, { ...init, signal: controller.signal }, timeoutMs + 1_000)
       : await fetch(url, { ...init, signal: controller.signal });
     const body = await responseJson(response);
     return { response, body };
@@ -202,8 +202,8 @@ export async function testAiConnection(
   const probeSystem = "Réponds uniquement avec un objet JSON valide.";
   const probePrompt = 'Réponds exactement avec {"status":"ok"}.';
   if (connection.provider === "gemini")
-    await generateGemini(probe, probeSystem, probePrompt, { timeoutMs: 20_000 });
-  else await generateOpenRouter(probe, probeSystem, probePrompt, { timeoutMs: 20_000 });
+    await generateGemini(probe, probeSystem, probePrompt, { timeoutMs: 60_000 });
+  else await generateOpenRouter(probe, probeSystem, probePrompt, { timeoutMs: 60_000 });
   const remote = connection.provider === "openrouter" ? await openRouterUsage(connection) : {};
   return {
     models: sortedModels,

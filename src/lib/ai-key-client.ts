@@ -1,5 +1,5 @@
 import { authenticatedFetch } from "@/lib/auth-client";
-import type { AiModelOption, AiProviderId } from "@/lib/ai-types";
+import type { AiModelOption, AiProviderId, AiProviderQuota } from "@/lib/ai-types";
 
 export type ManagedAiKey = {
   id: string;
@@ -35,6 +35,7 @@ export type AiKeyDiagnostic = {
   modelCount: number;
   latencyMs: number;
   tokens: number;
+  quota?: AiProviderQuota;
   message: string;
   advice: string;
 };
@@ -78,6 +79,7 @@ export async function saveAiKey(input: {
     models: AiModelOption[];
     generationVerified: boolean;
     tokens: number;
+    quota?: AiProviderQuota;
   }>("/api/admin/ai-keys", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

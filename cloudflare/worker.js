@@ -3074,6 +3074,133 @@ async function probeOpenAiCompatible(provider, key, model) {
   );
 }
 
+function finiteHeaderNumber(headers, name) {
+  const value = Number(headers?.get?.(name));
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function officialProviderQuota(provider, model = "") {
+  const observedAt = new Date().toISOString();
+  if (provider === "workers_ai")
+    return {
+      accuracy: "official",
+      source: "Cloudflare Workers AI",
+      sourceUrl: "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+      observedAt,
+      model,
+      label:
+        "Allocation officielle gratuite : 10 000 neurones par jour. Le solde exact est disponible dans le tableau Cloudflare.",
+      limitUnits: 10_000,
+      unit: "neurones/jour",
+      resetRequests: "00:00 UTC",
+    };
+  if (provider === "gemini")
+    return {
+      accuracy: "dashboard",
+      source: "Google AI Studio",
+      sourceUrl: "https://aistudio.google.com/usage",
+      observedAt,
+      model,
+      label:
+        "Google applique le quota par projet et par modèle. Le solde exact n’est pas exposé par la réponse de génération.",
+      resetRequests: "minuit, heure du Pacifique",
+    };
+  if (provider === "mistral")
+    return {
+      accuracy: "dashboard",
+      source: "Mistral Admin — Limits",
+      sourceUrl: "https://admin.mistral.ai/plateforme/limits",
+      observedAt,
+      model,
+      label:
+        "Le mode gratuit est limité par modèle et organisation. Les limites et la consommation exactes sont affichées dans Mistral Admin.",
+    };
+  if (provider === "openrouter")
+    return {
+      accuracy: "official",
+      source: "OpenRouter",
+      sourceUrl: "https://openrouter.ai/docs/faq#how-are-rate-limits-calculated",
+      observedAt,
+      model,
+      label:
+        "Le compte gratuit autorise 50 requêtes par jour. Le solde de crédits est lu directement depuis la clé lorsqu’il est disponible.",
+      limitRequests: 50,
+    };
+  return {
+    accuracy: "dashboard",
+    source: "Groq Console — Limits",
+    sourceUrl: "https://console.groq.com/settings/limits",
+    observedAt,
+    model,
+    label: "Le quota exact sera lu dans les en-têtes Groq après le prochain test.",
+  };
+}
+
+function groqQuotaFromHeaders(headers, model = "") {
+  const limitRequests = finiteHeaderNumber(headers, "x-ratelimit-limit-requests");
+  const remainingRequests = finiteHeaderNumber(headers, "x-ratelimit-remaining-requests");
+  const limitTokens = finiteHeaderNumber(headers, "x-ratelimit-limit-tokens");
+  const remainingTokens = finiteHeaderNumber(headers, "x-ratelimit-remaining-tokens");
+  if (
+    limitRequests === undefined &&
+    remainingRequests === undefined &&
+    limitTokens === undefined &&
+    remainingTokens === undefined
+  )
+    return officialProviderQuota("groq", model);
+  return {
+    accuracy: "exact",
+    source: "En-têtes officiels Groq",
+    sourceUrl: "https://console.groq.com/docs/rate-limits#rate-limit-headers",
+    observedAt: new Date().toISOString(),
+    model,
+    label: "Solde exact renvoyé par Groq pour ce modèle et ce projet.",
+    limitRequests,
+    remainingRequests,
+    resetRequests: headers.get("x-ratelimit-reset-requests") || undefined,
+    limitTokens,
+    remainingTokens,
+    resetTokens: headers.get("x-ratelimit-reset-tokens") || undefined,
+  };
+}
+
+async function openRouterKeyQuota(key, model = "") {
+  try {
+    const response = await fetchProvider(
+      "https://openrouter.ai/api/v1/key",
+      { headers: { Authorization: `Bearer ${key}` } },
+      10_000,
+    );
+    if (!response.ok) return officialProviderQuota("openrouter", model);
+    const data = (await response.json())?.data || {};
+    const limitCredits = Number(data.limit);
+    const remainingCredits = Number(data.limit_remaining);
+    const hasLimit = Number.isFinite(limitCredits) && limitCredits >= 0;
+    const hasRemaining = Number.isFinite(remainingCredits) && remainingCredits >= 0;
+    return {
+      ...officialProviderQuota("openrouter", model),
+      accuracy: hasLimit || hasRemaining ? "exact" : "official",
+      source: "OpenRouter /api/v1/key",
+      sourceUrl: "https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key",
+      label:
+        hasLimit || hasRemaining
+          ? "Solde exact de la clé OpenRouter. La limite gratuite de requêtes reste distincte."
+          : "Clé OpenRouter gratuite : 50 requêtes par jour; le solde de requêtes n’est pas exposé par cet endpoint.",
+      limitCredits: hasLimit ? limitCredits : undefined,
+      remainingCredits: hasRemaining ? remainingCredits : undefined,
+      currency: "USD",
+    };
+  } catch {
+    return officialProviderQuota("openrouter", model);
+  }
+}
+
+async function providerQuota(provider, response, key, model = "") {
+  if (provider === "groq") return groqQuotaFromHeaders(response?.headers, model);
+  if (provider === "openrouter") return openRouterKeyQuota(key, model);
+  return officialProviderQuota(provider, model);
+}
+
 async function probeProviderKey(provider, key, models, requestedModel = "", env = {}) {
   const firstModel = preferredProbeModel(provider, models, requestedModel);
   const currentModel = preferredProbeModel(provider, models);
@@ -3102,6 +3229,7 @@ async function probeProviderKey(provider, key, models, requestedModel = "", env 
         return {
           model,
           tokens: Number(body?.usage?.total_tokens || body?.usage?.totalTokens) || 0,
+          quota: officialProviderQuota("workers_ai", model),
         };
       } catch (error) {
         throw Object.assign(
@@ -3152,6 +3280,7 @@ async function probeProviderKey(provider, key, models, requestedModel = "", env 
       throw Object.assign(new Error(error.message), { status: error.status });
     }
     const body = await response.json();
+    const quota = await providerQuota(provider, response, key, model);
     const text =
       provider === "gemini"
         ? Array.isArray(body?.candidates?.[0]?.content?.parts)
@@ -3165,6 +3294,7 @@ async function probeProviderKey(provider, key, models, requestedModel = "", env 
     return {
       model,
       tokens: Number(body?.usageMetadata?.totalTokenCount || body?.usage?.total_tokens) || 0,
+      quota,
     };
   }
   throw Object.assign(new Error(lastModelError?.message || "Aucun modèle utilisable."), {
@@ -3288,6 +3418,7 @@ async function saveAiKey(request, env, actor, origin, ctx) {
       models,
       generationVerified: true,
       tokens: probe.tokens,
+      quota: probe.quota,
     },
     201,
     origin,
@@ -3444,6 +3575,7 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
           modelCount: models.length,
           latencyMs: Date.now() - startedAt,
           tokens: probe.tokens,
+          quota: probe.quota,
           message: "Liste des modèles et génération réelle réussies.",
           advice: "Clé prête pour les fonctions IA ZGR CV.",
         };
@@ -3583,6 +3715,7 @@ async function generateAi(request, env, origin) {
             tokens: Number(body?.usage?.total_tokens || body?.usage?.totalTokens) || 0,
             provider,
             model,
+            quota: officialProviderQuota("workers_ai", model),
           },
           200,
           origin,
@@ -3664,6 +3797,7 @@ async function generateAi(request, env, origin) {
       continue;
     }
     const body = await response.json();
+    const quota = await providerQuota(provider, response, key, model);
     if (provider === "gemini") {
       const parts = body?.candidates?.[0]?.content?.parts;
       const text = Array.isArray(parts) ? parts.map((part) => part?.text || "").join("") : "";
@@ -3672,7 +3806,13 @@ async function generateAi(request, env, origin) {
         continue;
       }
       return json(
-        { text, tokens: Number(body?.usageMetadata?.totalTokenCount) || 0, provider, model },
+        {
+          text,
+          tokens: Number(body?.usageMetadata?.totalTokenCount) || 0,
+          provider,
+          model,
+          quota,
+        },
         200,
         origin,
       );
@@ -3683,7 +3823,7 @@ async function generateAi(request, env, origin) {
       continue;
     }
     return json(
-      { text, tokens: Number(body?.usage?.total_tokens) || 0, provider, model },
+      { text, tokens: Number(body?.usage?.total_tokens) || 0, provider, model, quota },
       200,
       origin,
     );

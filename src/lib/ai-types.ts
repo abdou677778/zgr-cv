@@ -9,12 +9,34 @@ export type AiModelOption = {
   provider?: string;
 };
 
+export type AiProviderQuota = {
+  accuracy: "exact" | "official" | "dashboard";
+  source: string;
+  sourceUrl: string;
+  observedAt: string;
+  label: string;
+  model?: string;
+  limitRequests?: number;
+  remainingRequests?: number;
+  resetRequests?: string;
+  limitTokens?: number;
+  remainingTokens?: number;
+  resetTokens?: string;
+  limitCredits?: number;
+  remainingCredits?: number;
+  currency?: string;
+  limitUnits?: number;
+  remainingUnits?: number;
+  unit?: string;
+};
+
 export type AiUsage = {
   date: string;
   requests: number;
   tokens: number;
   remotePercent?: number;
   remoteLabel?: string;
+  providerQuota?: AiProviderQuota;
   lastStatus?: "ok" | "error" | "quota";
   lastError?: string;
 };

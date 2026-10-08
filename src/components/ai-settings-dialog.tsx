@@ -6,6 +6,8 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  ExternalLink,
+  Gauge,
   KeyRound,
   LoaderCircle,
   RefreshCw,
@@ -25,6 +27,7 @@ import {
   AI_PROVIDERS,
   newAiConnection,
   type AiConnection,
+  type AiProviderQuota,
   type AiProviderId,
   type AiSettings,
 } from "@/lib/ai-types";
@@ -60,6 +63,64 @@ function usagePercent(connection: AiConnection) {
   if (typeof connection.usage.remotePercent === "number") return connection.usage.remotePercent;
   if (connection.dailyRequestLimit <= 0) return 0;
   return Math.min(100, (connection.usage.requests / connection.dailyRequestLimit) * 100);
+}
+
+const QUOTA_GUIDANCE: Record<
+  AiProviderId,
+  Pick<AiProviderQuota, "accuracy" | "source" | "sourceUrl" | "label">
+> = {
+  groq: {
+    accuracy: "dashboard",
+    source: "Groq Console — Limits",
+    sourceUrl: "https://console.groq.com/settings/limits",
+    label: "Testez le modèle pour lire son solde exact dans les en-têtes officiels Groq.",
+  },
+  workers_ai: {
+    accuracy: "official",
+    source: "Cloudflare Workers AI",
+    sourceUrl: "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+    label: "Allocation gratuite officielle : 10 000 neurones/jour, remise à zéro à 00:00 UTC.",
+  },
+  gemini: {
+    accuracy: "dashboard",
+    source: "Google AI Studio",
+    sourceUrl: "https://aistudio.google.com/usage",
+    label:
+      "Le quota varie par projet et modèle. Google n’expose pas le solde exact dans la réponse de génération.",
+  },
+  mistral: {
+    accuracy: "dashboard",
+    source: "Mistral Admin — Limits",
+    sourceUrl: "https://admin.mistral.ai/plateforme/limits",
+    label:
+      "Les limites et la consommation exactes du mode gratuit sont visibles dans Mistral Admin.",
+  },
+  openrouter: {
+    accuracy: "official",
+    source: "OpenRouter",
+    sourceUrl: "https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key",
+    label: "Compte gratuit : 50 requêtes/jour. Le solde de crédits est lu depuis la clé au test.",
+  },
+};
+
+function quotaPercent(quota: AiProviderQuota) {
+  if (
+    typeof quota.limitRequests === "number" &&
+    quota.limitRequests > 0 &&
+    typeof quota.remainingRequests === "number"
+  )
+    return Math.max(0, Math.min(100, (quota.remainingRequests / quota.limitRequests) * 100));
+  if (
+    typeof quota.limitCredits === "number" &&
+    quota.limitCredits > 0 &&
+    typeof quota.remainingCredits === "number"
+  )
+    return Math.max(0, Math.min(100, (quota.remainingCredits / quota.limitCredits) * 100));
+  return null;
+}
+
+function formatQuotaNumber(value: number) {
+  return value.toLocaleString("fr-FR", { maximumFractionDigits: 3 });
 }
 
 function linkedSettings(value: AiSettings): AiSettings {
@@ -177,6 +238,7 @@ export function AiSettingsDialog({
           date: new Date().toISOString().slice(0, 10),
           requests: 0,
           tokens: result.tokens,
+          providerQuota: result.quota,
           lastStatus: "ok",
           lastError: "",
         },
@@ -273,7 +335,15 @@ export function AiSettingsDialog({
         const models = connection.models.some((model) => model.id === recommendedModel)
           ? connection.models
           : [...connection.models, { id: recommendedModel, name: recommendedModel, free: false }];
-        updateConnection(providerId, { model: recommendedModel, models, enabled: true });
+        const quota = report.results.find(
+          (result) => result.status === "healthy" && result.quota,
+        )?.quota;
+        updateConnection(providerId, {
+          model: recommendedModel,
+          models,
+          enabled: true,
+          usage: quota ? { ...connection.usage, providerQuota: quota } : connection.usage,
+        });
       }
       setMessage({
         ok: report.summary.actionRequired === 0 && report.summary.healthy > 0,
@@ -299,6 +369,10 @@ export function AiSettingsDialog({
       const result = report.results[0];
       if (!result) throw new Error("Le fournisseur n’a renvoyé aucun résultat pour cette clé.");
       const temporary = ["quota", "timeout", "temporary"].includes(result.category);
+      if (result.status === "healthy" && result.quota)
+        updateConnection(providerId, {
+          usage: { ...connection.usage, providerQuota: result.quota },
+        });
       setMessage({
         ok: result.status === "healthy",
         text:
@@ -478,6 +552,15 @@ export function AiSettingsDialog({
             const priority = connections.findIndex((item) => item.provider === providerId) + 1;
             const percent = usagePercent(connection);
             const diagnostic = diagnostics[providerId];
+            const quota: AiProviderQuota =
+              connection.usage.providerQuota?.model === connection.model
+                ? connection.usage.providerQuota
+                : {
+                    ...QUOTA_GUIDANCE[providerId],
+                    observedAt: "",
+                    model: connection.model,
+                  };
+            const remainingPercent = quotaPercent(quota);
             return (
               <section
                 key={providerId}
@@ -734,6 +817,75 @@ export function AiSettingsDialog({
                     <span>{percent.toFixed(0)} %</span>
                   </div>
                   <Progress value={percent} />
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+                      <Gauge className="h-4 w-4 text-violet-700" /> Quota du modèle sélectionné
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        quota.accuracy === "exact"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : quota.accuracy === "official"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-amber-100 text-amber-800"
+                      }`}
+                    >
+                      {quota.accuracy === "exact"
+                        ? "Solde exact"
+                        : quota.accuracy === "official"
+                          ? "Limite officielle"
+                          : "Tableau fournisseur"}
+                    </span>
+                  </div>
+
+                  {typeof quota.remainingRequests === "number" &&
+                    typeof quota.limitRequests === "number" && (
+                      <p className="text-sm font-semibold text-slate-950">
+                        {formatQuotaNumber(quota.remainingRequests)} /{" "}
+                        {formatQuotaNumber(quota.limitRequests)} requêtes restantes
+                        {quota.resetRequests ? ` · reset dans ${quota.resetRequests}` : ""}
+                      </p>
+                    )}
+                  {typeof quota.remainingTokens === "number" &&
+                    typeof quota.limitTokens === "number" && (
+                      <p className="text-xs text-slate-700">
+                        Fenêtre jetons : {formatQuotaNumber(quota.remainingTokens)} /{" "}
+                        {formatQuotaNumber(quota.limitTokens)} restants
+                        {quota.resetTokens ? ` · reset dans ${quota.resetTokens}` : ""}
+                      </p>
+                    )}
+                  {typeof quota.remainingCredits === "number" && (
+                    <p className="text-sm font-semibold text-slate-950">
+                      Solde clé : {formatQuotaNumber(quota.remainingCredits)} {quota.currency || ""}
+                      {typeof quota.limitCredits === "number"
+                        ? ` / ${formatQuotaNumber(quota.limitCredits)} ${quota.currency || ""}`
+                        : ""}
+                    </p>
+                  )}
+                  {typeof quota.limitUnits === "number" && (
+                    <p className="text-sm font-semibold text-slate-950">
+                      {formatQuotaNumber(quota.limitUnits)} {quota.unit || "unités"}
+                      {quota.resetRequests ? ` · reset ${quota.resetRequests}` : ""}
+                    </p>
+                  )}
+                  {remainingPercent !== null && <Progress value={remainingPercent} />}
+                  <p className="text-xs leading-relaxed text-slate-600">{quota.label}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                    <a
+                      href={quota.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline"
+                    >
+                      {quota.source} <ExternalLink className="h-3 w-3" />
+                    </a>
+                    {quota.observedAt && (
+                      <span>Vérifié le {new Date(quota.observedAt).toLocaleString("fr-FR")}</span>
+                    )}
+                  </div>
                 </div>
 
                 {connection.usage.lastStatus === "ok" && (

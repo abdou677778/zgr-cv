@@ -1,4 +1,11 @@
-import type { AiConnection, AiModelOption, AiRunResult, AiSettings, AiUsage } from "./ai-types";
+import type {
+  AiConnection,
+  AiModelOption,
+  AiProviderQuota,
+  AiRunResult,
+  AiSettings,
+  AiUsage,
+} from "./ai-types";
 import { authenticatedFetch } from "./auth-client";
 
 type JsonRecord = Record<string, unknown>;
@@ -111,6 +118,20 @@ function cleanJsonText(value: string) {
     .trim();
 }
 
+function providerQuotaFromBody(body: JsonRecord): AiProviderQuota | undefined {
+  if (!body.quota || typeof body.quota !== "object") return undefined;
+  const quota = body.quota as Partial<AiProviderQuota>;
+  if (
+    !["exact", "official", "dashboard"].includes(String(quota.accuracy)) ||
+    typeof quota.source !== "string" ||
+    typeof quota.sourceUrl !== "string" ||
+    typeof quota.observedAt !== "string" ||
+    typeof quota.label !== "string"
+  )
+    return undefined;
+  return quota as AiProviderQuota;
+}
+
 function parseJson<T>(value: string): T {
   try {
     return JSON.parse(cleanJsonText(value)) as T;
@@ -141,12 +162,6 @@ async function listProviderModels(connection: AiConnection): Promise<AiModelOpti
   });
 }
 
-async function openRouterUsage(
-  _connection: AiConnection,
-): Promise<Pick<AiUsage, "remotePercent" | "remoteLabel">> {
-  return { remoteLabel: "Clés OpenRouter protégées et gérées côté Cloudflare" };
-}
-
 export async function testAiConnection(
   connection: AiConnection,
 ): Promise<{ models: AiModelOption[]; model: string; usage: AiUsage }> {
@@ -172,12 +187,18 @@ export async function testAiConnection(
   const probe = { ...connection, model };
   const probeSystem = "Réponds uniquement avec un objet JSON valide.";
   const probePrompt = 'Réponds exactement avec {"status":"ok"}.';
-  await generateProvider(probe, probeSystem, probePrompt, { timeoutMs: 60_000 });
-  const remote = connection.provider === "openrouter" ? await openRouterUsage(connection) : {};
+  const generated = await generateProvider(probe, probeSystem, probePrompt, {
+    timeoutMs: 60_000,
+  });
   return {
     models: sortedModels,
     model,
-    usage: { ...normalizedUsage(connection.usage), ...remote, lastStatus: "ok", lastError: "" },
+    usage: {
+      ...normalizedUsage(connection.usage),
+      providerQuota: generated.quota,
+      lastStatus: "ok",
+      lastError: "",
+    },
   };
 }
 
@@ -206,7 +227,7 @@ async function generateGemini(
   ensureOk(response, body, "Échec Gemini");
   const text = typeof body.text === "string" ? body.text : "";
   if (!text) throw new Error("Gemini n’a renvoyé aucun contenu exploitable.");
-  return { text, tokens: Number(body.tokens) || 0 };
+  return { text, tokens: Number(body.tokens) || 0, quota: providerQuotaFromBody(body) };
 }
 
 async function generateOpenRouter(
@@ -241,7 +262,7 @@ async function generateOpenRouter(
   ensureOk(response, body, "Échec OpenRouter");
   const text = typeof body.text === "string" ? body.text : "";
   if (!text) throw new Error("OpenRouter n’a renvoyé aucun contenu exploitable.");
-  return { text, tokens: Number(body.tokens) || 0 };
+  return { text, tokens: Number(body.tokens) || 0, quota: providerQuotaFromBody(body) };
 }
 
 async function generateProvider(
@@ -271,7 +292,7 @@ async function generateProvider(
   ensureOk(response, body, `Échec ${connection.provider}`);
   const text = typeof body.text === "string" ? body.text : "";
   if (!text) throw new Error(`${connection.provider} n’a renvoyé aucun contenu exploitable.`);
-  return { text, tokens: Number(body.tokens) || 0 };
+  return { text, tokens: Number(body.tokens) || 0, quota: providerQuotaFromBody(body) };
 }
 
 function updateConnection(
@@ -326,6 +347,7 @@ export async function runAiJson<T>(
           ...normalizedUsage(connection.usage),
           requests: normalizedUsage(connection.usage).requests + 1,
           tokens: normalizedUsage(connection.usage).tokens + result.tokens,
+          providerQuota: result.quota ?? normalizedUsage(connection.usage).providerQuota,
           lastStatus: "ok",
           lastError: "",
         },

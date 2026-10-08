@@ -1147,6 +1147,57 @@ const geminiSuccess = () =>
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
 
+test("la génération Groq remonte le quota exact sans exposer la clé", async (t) => {
+  const groqKey = "gsk_quota-groq-test-12345678901234567890";
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '{"status":"ok"}' } }],
+          usage: { total_tokens: 11 },
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "x-ratelimit-limit-requests": "1000",
+            "x-ratelimit-remaining-requests": "987",
+            "x-ratelimit-reset-requests": "4h12m",
+            "x-ratelimit-limit-tokens": "8000",
+            "x-ratelimit-remaining-tokens": "7740",
+            "x-ratelimit-reset-tokens": "8.2s",
+          },
+        },
+      ),
+  );
+  const env = aiTestEnvironment([], { GROQ_API_KEYS: groqKey });
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const response = await call(
+    env,
+    "/api/ai/generate",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "groq",
+        model: "qwen/qwen3.8-27b",
+        system: "Réponds en JSON.",
+        prompt: "Test.",
+      }),
+    }),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.quota.accuracy, "exact");
+  assert.equal(body.quota.remainingRequests, 987);
+  assert.equal(body.quota.limitRequests, 1000);
+  assert.equal(body.quota.remainingTokens, 7740);
+  assert.equal(JSON.stringify(body).includes(groqKey), false);
+});
+
 test("l’auto-switch Gemini ignore une première clé refusée et utilise la suivante", async (t) => {
   const firstKey = "AIza-premiere-cle-invalide-test-123456";
   const secondKey = "AQ.deuxieme-cle-valide-test-123456789";

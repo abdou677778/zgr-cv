@@ -3405,9 +3405,22 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
   if (!provider) return json({ error: "Fournisseur IA invalide." }, 422, origin);
   const requestedModel =
     typeof payload?.model === "string" ? payload.model.trim().replace(/^models\//, "") : "";
-  const entries = await providerKeyEntries(provider, env);
+  const requestedKeyId =
+    typeof payload?.keyId === "string" ? payload.keyId.trim().slice(0, 120) : "";
+  const availableEntries = await providerKeyEntries(provider, env);
+  const entries = requestedKeyId
+    ? availableEntries.filter((entry) => entry.id === requestedKeyId)
+    : availableEntries;
   if (!entries.length)
-    return json({ error: `Aucune clé ${provider} configurée côté serveur.` }, 503, origin);
+    return json(
+      {
+        error: requestedKeyId
+          ? "Clé introuvable ou non disponible pour ce fournisseur."
+          : `Aucune clé ${provider} configurée côté serveur.`,
+      },
+      requestedKeyId ? 404 : 503,
+      origin,
+    );
 
   const results = await Promise.all(
     entries.map(async (entry) => {
@@ -3465,6 +3478,7 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
   ctx.waitUntil(
     writeAudit(env, request, "ai_keys_diagnosed", actor.username, "success", {
       provider,
+      singleKey: Boolean(requestedKeyId),
       tested: results.length,
       healthy,
     }),

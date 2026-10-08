@@ -91,13 +91,13 @@ export async function removeAiKey(id: string) {
   });
 }
 
-export async function diagnoseAiKeys(provider: AiProviderId, model?: string) {
+export async function diagnoseAiKeys(provider: AiProviderId, model?: string, keyId?: string) {
   const response = await authenticatedFetch(
     "/api/admin/ai-keys/diagnose",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, model }),
+      body: JSON.stringify({ provider, model, keyId }),
     },
     120_000,
   );

@@ -289,6 +289,35 @@ export function AiSettingsDialog({
     }
   };
 
+  const diagnoseSingleKey = async (providerId: AiProviderId, keyId: string) => {
+    const connection = providerConnection(draft, providerId) ?? newAiConnection(providerId);
+    setKeyBusy(`diagnose-key-${keyId}`);
+    setMessage(null);
+    try {
+      const report = await diagnoseAiKeys(providerId, connection.model, keyId);
+      setDiagnostics((current) => ({ ...current, [providerId]: report }));
+      const result = report.results[0];
+      if (!result) throw new Error("Le fournisseur n’a renvoyé aucun résultat pour cette clé.");
+      const temporary = ["quota", "timeout", "temporary"].includes(result.category);
+      setMessage({
+        ok: result.status === "healthy",
+        text:
+          result.status === "healthy"
+            ? `${result.label} fonctionne : génération réelle réussie avec ${result.model}.`
+            : temporary
+              ? `${result.label} est temporairement indisponible (${result.message}). Elle n’a pas été supprimée.`
+              : `${result.label} est invalide ou bloquée (${result.message}). Vous pouvez la supprimer.`,
+      });
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Diagnostic de la clé impossible.",
+      });
+    } finally {
+      setKeyBusy("");
+    }
+  };
+
   const connections = useMemo(
     () => [...draft.connections].sort((left, right) => left.priority - right.priority),
     [draft.connections],
@@ -500,31 +529,78 @@ export function AiSettingsDialog({
                         <span className="font-medium">{status.environmentCount} clé(s)</span>
                       </div>
                     )}
-                    {status?.managed.map((key, index) => (
-                      <div
-                        key={key.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2 text-xs"
-                      >
-                        <span className="min-w-0 truncate">
-                          <strong>#{index + 1}</strong> · {key.label} · ••••{key.last4}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0 text-red-600"
-                          aria-label={`Supprimer ${key.label}`}
-                          disabled={keyBusy === `delete-${key.id}`}
-                          onClick={() => void deleteServerKey(key.id)}
-                        >
-                          {keyBusy === `delete-${key.id}` ? (
-                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                      </div>
-                    ))}
+                    {status?.managed.map((key, index) =>
+                      (() => {
+                        const keyDiagnostic = diagnostic?.results.find(
+                          (result) => result.id === key.id,
+                        );
+                        const isTemporary =
+                          keyDiagnostic &&
+                          ["quota", "timeout", "temporary"].includes(keyDiagnostic.category);
+                        return (
+                          <div
+                            key={key.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-xs"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="block truncate">
+                                <strong>#{index + 1}</strong> · {key.label} · ••••{key.last4}
+                              </span>
+                              {keyDiagnostic && (
+                                <span
+                                  className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                    keyDiagnostic.status === "healthy"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : isTemporary
+                                        ? "bg-amber-100 text-amber-800"
+                                        : "bg-red-100 text-red-800"
+                                  }`}
+                                >
+                                  {keyDiagnostic.status === "healthy"
+                                    ? "Fonctionne"
+                                    : isTemporary
+                                      ? "Temporaire"
+                                      : "Invalide / bloquée"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-[11px]"
+                                aria-label={`Tester ${key.label}`}
+                                disabled={!!keyBusy}
+                                onClick={() => void diagnoseSingleKey(providerId, key.id)}
+                              >
+                                {keyBusy === `diagnose-key-${key.id}` ? (
+                                  <LoaderCircle className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Activity className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                Tester
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0 text-red-600"
+                                aria-label={`Supprimer ${key.label}`}
+                                disabled={!!keyBusy}
+                                onClick={() => void deleteServerKey(key.id)}
+                              >
+                                {keyBusy === `delete-${key.id}` ? (
+                                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })(),
+                    )}
                     {!totalKeys && (
                       <p className="text-xs text-amber-700">
                         {providerId === "workers_ai"

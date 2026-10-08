@@ -1279,6 +1279,21 @@ test("le diagnostic admin teste chaque clé sans exposer les secrets", async (t)
   assert.equal(body.results[1].status, "healthy");
   assert.equal(serialized.includes(blockedKey), false);
   assert.equal(serialized.includes(healthyKey), false);
+
+  const singleResponse = await call(
+    env,
+    "/api/admin/ai-keys/diagnose",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "gemini", keyId: "environment-2" }),
+    }),
+  );
+  const singleBody = await singleResponse.json();
+  assert.equal(singleResponse.status, 200);
+  assert.equal(singleBody.summary.total, 1);
+  assert.equal(singleBody.results[0].id, "environment-2");
+  assert.equal(singleBody.results[0].status, "healthy");
 });
 
 test("l’ajout d’une clé migre automatiquement un modèle Gemini devenu indisponible", async (t) => {

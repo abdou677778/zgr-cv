@@ -1126,7 +1126,7 @@ test("la conservation limite les sauvegardes quotidiennes et mensuelles", async 
   assert.equal(monthlyPeriods.size, 12);
 });
 
-function aiTestEnvironment(keys) {
+function aiTestEnvironment(keys, overrides = {}) {
   return {
     CLIENTS_BUCKET: new MemoryR2Bucket(),
     ADMIN_USERNAME: "admin",
@@ -1134,6 +1134,7 @@ function aiTestEnvironment(keys) {
     SESSION_SECRET: "secret-de-session-de-test-suffisamment-long-1234567890",
     ALLOWED_ORIGINS: "http://127.0.0.1:8080",
     GEMINI_API_KEYS: JSON.stringify(keys),
+    ...overrides,
   };
 }
 
@@ -1385,4 +1386,102 @@ test("le diagnostic distingue une forte demande temporaire d’un modèle invali
     actionRequired: 0,
     failed: 1,
   });
+});
+
+test("Mistral et Groq utilisent leurs endpoints officiels dans l’auto-switch", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url, init = {}) => {
+    calls.push({ url: String(url), authorization: new Headers(init.headers).get("Authorization") });
+    if (String(url).endsWith("/models"))
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: String(url).includes("mistral") ? "mistral-small-latest" : "qwen/qwen3.8-27b",
+              capabilities: { completion_chat: true },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: '{"status":"ok"}' } }],
+        usage: { total_tokens: 9 },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  });
+  const env = aiTestEnvironment([], {
+    MISTRAL_API_KEYS: JSON.stringify(["mstrl_test-key-12345678901234567890"]),
+    GROQ_API_KEYS: JSON.stringify(["gsk_test-key-123456789012345678901"]),
+  });
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+
+  for (const [provider, model] of [
+    ["mistral", "mistral-small-latest"],
+    ["groq", "qwen/qwen3.8-27b"],
+  ]) {
+    const modelsResponse = await call(
+      env,
+      `/api/ai/models?provider=${provider}`,
+      authorized(admin.token),
+    );
+    assert.equal(modelsResponse.status, 200);
+    const generation = await call(
+      env,
+      "/api/ai/generate",
+      authorized(admin.token, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, model, system: "JSON.", prompt: "Test." }),
+      }),
+    );
+    assert.equal(generation.status, 200);
+    assert.equal((await generation.json()).text, '{"status":"ok"}');
+  }
+
+  assert.ok(calls.some((entry) => entry.url === "https://api.mistral.ai/v1/models"));
+  assert.ok(calls.some((entry) => entry.url === "https://api.groq.com/openai/v1/models"));
+  assert.ok(calls.some((entry) => entry.url.includes("api.mistral.ai/v1/chat/completions")));
+  assert.ok(calls.some((entry) => entry.url.includes("api.groq.com/openai/v1/chat/completions")));
+});
+
+test("Workers AI fonctionne par liaison sans clé API", async () => {
+  const modelCalls = [];
+  const env = aiTestEnvironment([], {
+    AI: {
+      async run(model) {
+        modelCalls.push(model);
+        return { response: '{"status":"ok"}', usage: { total_tokens: 11 } };
+      },
+    },
+  });
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const modelsResponse = await call(
+    env,
+    "/api/ai/models?provider=workers_ai",
+    authorized(admin.token),
+  );
+  const models = await modelsResponse.json();
+  assert.equal(modelsResponse.status, 200);
+  assert.equal(models.models[0].id, "@cf/google/gemma-4-26b-a4b-it");
+
+  const generation = await call(
+    env,
+    "/api/ai/generate",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "workers_ai",
+        model: "@cf/google/gemma-4-26b-a4b-it",
+        system: "JSON.",
+        prompt: "Test.",
+      }),
+    }),
+  );
+  assert.equal(generation.status, 200);
+  assert.equal((await generation.json()).text, '{"status":"ok"}');
+  assert.deepEqual(modelCalls, ["@cf/google/gemma-4-26b-a4b-it"]);
 });

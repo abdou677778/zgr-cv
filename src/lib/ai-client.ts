@@ -119,40 +119,14 @@ function parseJson<T>(value: string): T {
   }
 }
 
-async function listGeminiModels(_connection: AiConnection): Promise<AiModelOption[]> {
+async function listProviderModels(connection: AiConnection): Promise<AiModelOption[]> {
   const { response, body } = await requestJson(
-    "/api/ai/models?provider=gemini",
+    `/api/ai/models?provider=${encodeURIComponent(connection.provider)}`,
     {},
-    "Liste des modèles Gemini",
+    `Liste des modèles ${connection.provider}`,
   );
-  ensureOk(response, body, "Connexion Gemini refusée");
+  ensureOk(response, body, `Connexion ${connection.provider} refusée`);
   const models = Array.isArray(body.models) ? body.models : [];
-  return models.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const model = item as JsonRecord;
-    if (typeof model.id !== "string") return [];
-    return [
-      {
-        id: model.id,
-        name: typeof model.name === "string" ? model.name : model.id,
-        free: model.free === true,
-      },
-    ];
-  });
-}
-
-async function listOpenRouterModels(_connection: AiConnection): Promise<AiModelOption[]> {
-  const { response, body } = await requestJson(
-    "/api/ai/models?provider=openrouter",
-    {},
-    "Liste des modèles OpenRouter",
-  );
-  ensureOk(response, body, "Connexion OpenRouter refusée");
-  const models = Array.isArray(body.models)
-    ? body.models
-    : Array.isArray(body.data)
-      ? body.data
-      : [];
   return models.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const model = item as JsonRecord;
@@ -176,10 +150,7 @@ async function openRouterUsage(
 export async function testAiConnection(
   connection: AiConnection,
 ): Promise<{ models: AiModelOption[]; model: string; usage: AiUsage }> {
-  const models =
-    connection.provider === "gemini"
-      ? await listGeminiModels(connection)
-      : await listOpenRouterModels(connection);
+  const models = await listProviderModels(connection);
   if (!models.length)
     throw new Error("Connexion valide, mais aucun modèle de génération de texte n’est disponible.");
   const sortedModels = models.sort(
@@ -201,9 +172,7 @@ export async function testAiConnection(
   const probe = { ...connection, model };
   const probeSystem = "Réponds uniquement avec un objet JSON valide.";
   const probePrompt = 'Réponds exactement avec {"status":"ok"}.';
-  if (connection.provider === "gemini")
-    await generateGemini(probe, probeSystem, probePrompt, { timeoutMs: 60_000 });
-  else await generateOpenRouter(probe, probeSystem, probePrompt, { timeoutMs: 60_000 });
+  await generateProvider(probe, probeSystem, probePrompt, { timeoutMs: 60_000 });
   const remote = connection.provider === "openrouter" ? await openRouterUsage(connection) : {};
   return {
     models: sortedModels,
@@ -275,6 +244,36 @@ async function generateOpenRouter(
   return { text, tokens: Number(body.tokens) || 0 };
 }
 
+async function generateProvider(
+  connection: AiConnection,
+  system: string,
+  prompt: string,
+  options: AiRequestOptions = {},
+) {
+  if (connection.provider === "gemini") return generateGemini(connection, system, prompt, options);
+  if (connection.provider === "openrouter")
+    return generateOpenRouter(connection, system, prompt, options);
+  const { response, body } = await requestJson(
+    "/api/ai/generate",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: connection.provider,
+        model: connection.model,
+        system,
+        prompt,
+      }),
+    },
+    `Génération ${connection.provider}`,
+    options,
+  );
+  ensureOk(response, body, `Échec ${connection.provider}`);
+  const text = typeof body.text === "string" ? body.text : "";
+  if (!text) throw new Error(`${connection.provider} n’a renvoyé aucun contenu exploitable.`);
+  return { text, tokens: Number(body.tokens) || 0 };
+}
+
 function updateConnection(
   settings: AiSettings,
   id: string,
@@ -317,16 +316,10 @@ export async function runAiJson<T>(
       continue;
     }
     try {
-      const result =
-        candidate.provider === "gemini"
-          ? await generateGemini(candidate, system, prompt, {
-              signal: options.signal,
-              timeoutMs: Math.min(DEFAULT_REQUEST_TIMEOUT_MS, remainingMs),
-            })
-          : await generateOpenRouter(candidate, system, prompt, {
-              signal: options.signal,
-              timeoutMs: Math.min(DEFAULT_REQUEST_TIMEOUT_MS, remainingMs),
-            });
+      const result = await generateProvider(candidate, system, prompt, {
+        signal: options.signal,
+        timeoutMs: Math.min(DEFAULT_REQUEST_TIMEOUT_MS, remainingMs),
+      });
       settings = updateConnection(settings, candidate.id, (connection) => ({
         ...connection,
         usage: {

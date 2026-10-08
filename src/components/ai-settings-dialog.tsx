@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { DialogFooter } from "@/components/ui/dialog";
 import {
+  AI_PROVIDERS,
   newAiConnection,
   type AiConnection,
   type AiProviderId,
@@ -37,10 +38,22 @@ import {
   type AiKeyStatus,
 } from "@/lib/ai-key-client";
 
-const PROVIDERS: AiProviderId[] = ["gemini", "openrouter"];
+const PROVIDERS: AiProviderId[] = [...AI_PROVIDERS];
+const KEYED_PROVIDERS: AiProviderId[] = ["gemini", "mistral", "groq", "openrouter"];
 const PROVIDER_LABEL: Record<AiProviderId, string> = {
   gemini: "Google Gemini",
+  mistral: "Mistral AI",
+  groq: "Groq AI",
+  workers_ai: "Cloudflare Workers AI",
   openrouter: "OpenRouter",
+};
+
+const KEY_PLACEHOLDER: Record<AiProviderId, string> = {
+  gemini: "AIza… ou AQ.…",
+  mistral: "mstrl_…",
+  groq: "gsk_…",
+  workers_ai: "Aucune clé nécessaire",
+  openrouter: "sk-or-v1-…",
 };
 
 function usagePercent(connection: AiConnection) {
@@ -50,17 +63,11 @@ function usagePercent(connection: AiConnection) {
 }
 
 function linkedSettings(value: AiSettings): AiSettings {
-  const seen = new Set<AiProviderId>();
-  const connections = [...value.connections]
-    .sort((left, right) => left.priority - right.priority)
-    .filter((connection) => {
-      if (seen.has(connection.provider)) return false;
-      seen.add(connection.provider);
-      return true;
-    });
-  for (const provider of PROVIDERS) {
-    if (!seen.has(provider)) connections.push(newAiConnection(provider));
-  }
+  const connections = PROVIDERS.map(
+    (provider) =>
+      value.connections.find((connection) => connection.provider === provider) ??
+      newAiConnection(provider),
+  );
   return {
     ...value,
     connections: connections.map((connection, index) => ({ ...connection, priority: index + 1 })),
@@ -122,8 +129,8 @@ export function AiSettingsDialog({
   }, [open, canManageKeys]);
 
   useEffect(() => {
-    const nextNumber = (keyStatus?.[provider].managed.length || 0) + 1;
-    setKeyLabel(`Clé ${provider === "gemini" ? "Gemini" : "OpenRouter"} ${nextNumber}`);
+    const nextNumber = (keyStatus?.[provider]?.managed.length || 0) + 1;
+    setKeyLabel(`Clé ${PROVIDER_LABEL[provider]} ${nextNumber}`);
   }, [provider, keyStatus]);
 
   const updateConnection = (providerId: AiProviderId, patch: Partial<AiConnection>) =>
@@ -350,8 +357,11 @@ export function AiSettingsDialog({
                   value={provider}
                   onChange={(event) => setProvider(event.target.value as AiProviderId)}
                 >
-                  <option value="gemini">Google Gemini</option>
-                  <option value="openrouter">OpenRouter</option>
+                  {KEYED_PROVIDERS.map((providerId) => (
+                    <option key={providerId} value={providerId}>
+                      {PROVIDER_LABEL[providerId]}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -369,7 +379,7 @@ export function AiSettingsDialog({
                     autoComplete="off"
                     className="pr-10"
                     value={keyValue}
-                    placeholder={provider === "gemini" ? "AIza… ou AQ.…" : "sk-or-v1-…"}
+                    placeholder={KEY_PLACEHOLDER[provider]}
                     onChange={(event) => setKeyValue(event.target.value.trim())}
                   />
                   <button
@@ -482,7 +492,11 @@ export function AiSettingsDialog({
                   <div className="space-y-2 rounded-xl bg-slate-50 p-3">
                     {!!status?.environmentCount && (
                       <div className="flex items-center justify-between text-xs">
-                        <span>Secrets Cloudflare protégés</span>
+                        <span>
+                          {providerId === "workers_ai"
+                            ? "Liaison Workers AI protégée"
+                            : "Secrets Cloudflare protégés"}
+                        </span>
                         <span className="font-medium">{status.environmentCount} clé(s)</span>
                       </div>
                     )}
@@ -513,7 +527,9 @@ export function AiSettingsDialog({
                     ))}
                     {!totalKeys && (
                       <p className="text-xs text-amber-700">
-                        Aucune clé configurée pour ce fournisseur.
+                        {providerId === "workers_ai"
+                          ? "La liaison Workers AI n’est pas disponible sur ce déploiement."
+                          : "Aucune clé configurée pour ce fournisseur."}
                       </p>
                     )}
                     {!!totalKeys && (

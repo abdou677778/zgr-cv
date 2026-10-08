@@ -34,6 +34,25 @@ const USERS_PREFIX = "system/users/";
 const SESSIONS_PREFIX = "system/sessions/";
 const AUDIT_PREFIX = "system/audit/";
 const AI_KEYS_OBJECT = "system/secrets/ai-keys.enc.json";
+const AI_PROVIDERS = ["gemini", "mistral", "groq", "workers_ai", "openrouter"];
+const KEYED_AI_PROVIDERS = ["gemini", "mistral", "groq", "openrouter"];
+const WORKERS_AI_MODELS = [
+  {
+    id: "@cf/google/gemma-4-26b-a4b-it",
+    name: "Gemma 4 26B A4B — recommandé CV et lettres",
+    free: true,
+  },
+  {
+    id: "@cf/zai-org/glm-4.7-flash",
+    name: "GLM 4.7 Flash — multilingue rapide",
+    free: true,
+  },
+  {
+    id: "@cf/qwen/qwen3-30b-a3b-fp8",
+    name: "Qwen 3 30B A3B — multilingue",
+    free: true,
+  },
+];
 const CLIENT_HISTORY_PREFIX = "history/clients/";
 const DAILY_BACKUP_PREFIX = "backups/daily/";
 const TELEMETRY_KINDS = new Set(["web_vital", "javascript_error", "api_failure", "sync_failure"]);
@@ -2861,7 +2880,7 @@ async function readManagedAiKeys(env) {
       (item) =>
         item &&
         typeof item.id === "string" &&
-        ["gemini", "openrouter"].includes(item.provider) &&
+        KEYED_AI_PROVIDERS.includes(item.provider) &&
         typeof item.key === "string",
     );
   } catch {
@@ -2894,6 +2913,18 @@ async function providerKeys(provider, env) {
 }
 
 async function providerKeyEntries(provider, env) {
+  if (provider === "workers_ai")
+    return typeof env.AI?.run === "function"
+      ? [
+          {
+            id: "workers-ai-binding",
+            key: "",
+            label: "Liaison Workers AI",
+            source: "binding",
+            priority: 1,
+          },
+        ]
+      : [];
   const managed = (await readManagedAiKeys(env))
     .filter((entry) => entry.provider === provider)
     .map((entry, index) => ({
@@ -2904,9 +2935,15 @@ async function providerKeyEntries(provider, env) {
       priority: index + 1,
     }));
   const known = new Set(managed.map((entry) => entry.key));
-  const environment = secretKeys(
-    provider === "gemini" ? env.GEMINI_API_KEYS : env.OPENROUTER_API_KEYS,
-  )
+  const environmentVariable =
+    provider === "gemini"
+      ? env.GEMINI_API_KEYS
+      : provider === "mistral"
+        ? env.MISTRAL_API_KEYS
+        : provider === "groq"
+          ? env.GROQ_API_KEYS
+          : env.OPENROUTER_API_KEYS;
+  const environment = secretKeys(environmentVariable)
     .filter((key) => !known.has(key))
     .map((key, index) => ({
       id: `environment-${index + 1}`,
@@ -2923,16 +2960,23 @@ async function providerKeyEntries(provider, env) {
   });
 }
 
-async function modelsForProviderKey(provider, key) {
-  const response =
+async function modelsForProviderKey(provider, key, env) {
+  if (provider === "workers_ai") {
+    if (typeof env.AI?.run !== "function")
+      throw Object.assign(new Error("Liaison Workers AI absente."), { status: 503 });
+    return WORKERS_AI_MODELS;
+  }
+  const url =
     provider === "gemini"
-      ? await fetchProvider(
-          "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
-          { headers: { "x-goog-api-key": key } },
-        )
-      : await fetchProvider("https://openrouter.ai/api/v1/models?output_modalities=text", {
-          headers: { Authorization: `Bearer ${key}` },
-        });
+      ? "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+      : provider === "mistral"
+        ? "https://api.mistral.ai/v1/models"
+        : provider === "groq"
+          ? "https://api.groq.com/openai/v1/models"
+          : "https://openrouter.ai/api/v1/models?output_modalities=text";
+  const response = await fetchProvider(url, {
+    headers: provider === "gemini" ? { "x-goog-api-key": key } : { Authorization: `Bearer ${key}` },
+  });
   if (!response.ok) {
     const error = await providerError(response, "Impossible de charger les modèles.");
     throw Object.assign(new Error(error.message), { status: error.status });
@@ -2953,9 +2997,15 @@ async function modelsForProviderKey(provider, key) {
   }
   return (Array.isArray(body.data) ? body.data : []).flatMap((model) => {
     if (!model || typeof model.id !== "string") return [];
+    if (provider === "mistral" && model.capabilities?.completion_chat === false) return [];
+    if (provider === "groq" && /(?:whisper|guard|orpheus|tts|speech)/i.test(model.id)) return [];
     const promptPrice = Number(model.pricing?.prompt);
     const completionPrice = Number(model.pricing?.completion);
-    const free = model.id.endsWith(":free") || (promptPrice === 0 && completionPrice === 0);
+    const free =
+      provider === "mistral" ||
+      provider === "groq" ||
+      model.id.endsWith(":free") ||
+      (promptPrice === 0 && completionPrice === 0);
     return [{ id: model.id, name: typeof model.name === "string" ? model.name : model.id, free }];
   });
 }
@@ -2972,12 +3022,22 @@ function preferredProbeModel(provider, models, requestedModel = "") {
           "gemini-2.5-flash-lite",
           "gemini-2.5-flash",
         ]
-      : [
-          "openrouter/free",
-          "google/gemini-2.5-flash-lite:free",
-          "openai/gpt-oss-20b:free",
-          "meta-llama/llama-3.3-70b-instruct:free",
-        ];
+      : provider === "mistral"
+        ? ["mistral-small-latest", "ministral-8b-latest", "mistral-medium-latest"]
+        : provider === "groq"
+          ? ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+          : provider === "workers_ai"
+            ? [
+                "@cf/google/gemma-4-26b-a4b-it",
+                "@cf/zai-org/glm-4.7-flash",
+                "@cf/qwen/qwen3-30b-a3b-fp8",
+              ]
+            : [
+                "openrouter/free",
+                "google/gemini-2.5-flash-lite:free",
+                "openai/gpt-oss-20b:free",
+                "meta-llama/llama-3.3-70b-instruct:free",
+              ];
   return (
     preferred.find((id) => models.some((model) => model.id === id)) ||
     models.find((model) => model.free)?.id ||
@@ -2986,7 +3046,35 @@ function preferredProbeModel(provider, models, requestedModel = "") {
   );
 }
 
-async function probeProviderKey(provider, key, models, requestedModel = "") {
+async function probeOpenAiCompatible(provider, key, model) {
+  return fetchProvider(
+    provider === "mistral"
+      ? "https://api.mistral.ai/v1/chat/completions"
+      : provider === "groq"
+        ? "https://api.groq.com/openai/v1/chat/completions"
+        : "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+        ...(provider === "openrouter" ? { "X-OpenRouter-Title": "ZGR CV AI Assistant" } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: "Réponds uniquement en JSON valide." },
+          { role: "user", content: 'Réponds exactement avec {"status":"ok"}.' },
+        ],
+        temperature: 0,
+        response_format: { type: "json_object" },
+      }),
+    },
+    20_000,
+  );
+}
+
+async function probeProviderKey(provider, key, models, requestedModel = "", env = {}) {
   const firstModel = preferredProbeModel(provider, models, requestedModel);
   const currentModel = preferredProbeModel(provider, models);
   const candidates = [...new Set([firstModel, currentModel].filter(Boolean))];
@@ -2995,7 +3083,34 @@ async function probeProviderKey(provider, key, models, requestedModel = "") {
   let lastModelError;
 
   for (const model of candidates) {
-    const response =
+    if (provider === "workers_ai") {
+      try {
+        const body = await env.AI.run(model, {
+          messages: [
+            { role: "system", content: "Réponds uniquement en JSON valide." },
+            { role: "user", content: 'Réponds exactement avec {"status":"ok"}.' },
+          ],
+          temperature: 0,
+          max_tokens: 64,
+        });
+        const text =
+          body?.response ?? body?.result?.response ?? body?.choices?.[0]?.message?.content;
+        if (typeof text !== "string" || !text.trim())
+          throw Object.assign(new Error("Workers AI n’a renvoyé aucun contenu exploitable."), {
+            status: 502,
+          });
+        return {
+          model,
+          tokens: Number(body?.usage?.total_tokens || body?.usage?.totalTokens) || 0,
+        };
+      } catch (error) {
+        throw Object.assign(
+          new Error(error instanceof Error ? error.message : "Échec du test Workers AI."),
+          { status: Number(error?.status) || 502 },
+        );
+      }
+    }
+    let response =
       provider === "gemini"
         ? await fetchProvider(
             `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -3015,31 +3130,19 @@ async function probeProviderKey(provider, key, models, requestedModel = "") {
             },
             20_000,
           )
-        : await fetchProvider(
-            "https://openrouter.ai/api/v1/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${key}`,
-                "X-OpenRouter-Title": "ZGR CV AI Assistant",
-              },
-              body: JSON.stringify({
-                model,
-                messages: [
-                  { role: "system", content: "Réponds uniquement en JSON valide." },
-                  { role: "user", content: 'Réponds exactement avec {"status":"ok"}.' },
-                ],
-                temperature: 0,
-                response_format: { type: "json_object" },
-              }),
-            },
-            20_000,
-          );
+        : await probeOpenAiCompatible(provider, key, model);
+    if (provider === "mistral" && response.status === 429) {
+      const retryAfter = Number(response.headers.get("retry-after"));
+      const retryDelay = Number.isFinite(retryAfter)
+        ? Math.min(5_000, Math.max(1_500, retryAfter * 1_000))
+        : 2_000;
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      response = await probeOpenAiCompatible(provider, key, model);
+    }
     if (!response.ok) {
       const error = await providerError(response, `Échec du test ${provider}.`);
       const modelFailure =
-        provider === "gemini" &&
+        ["gemini", "mistral", "groq"].includes(provider) &&
         [400, 404].includes(error.status) &&
         /model|no longer available|not found|unsupported/i.test(error.message);
       if (modelFailure && model !== candidates.at(-1)) {
@@ -3072,15 +3175,30 @@ async function probeProviderKey(provider, key, models, requestedModel = "") {
 function validProviderKey(provider, key) {
   if (typeof key !== "string" || key.length < 20 || key.length > 500) return false;
   if (provider === "gemini") return /^(?:AIza|AQ\.)[A-Za-z0-9_-]+$/.test(key);
+  if (provider === "mistral") return /^mstrl_[A-Za-z0-9_-]+$/.test(key);
+  if (provider === "groq") return /^gsk_[A-Za-z0-9_-]+$/.test(key);
   return /^sk-or-v1-[A-Za-z0-9_-]+$/.test(key);
 }
 
 async function aiKeyStatus(env, origin) {
   const managed = await readManagedAiKeys(env);
   const providers = {};
-  for (const provider of ["gemini", "openrouter"]) {
+  for (const provider of AI_PROVIDERS) {
+    if (provider === "workers_ai") {
+      providers[provider] = {
+        environmentCount: typeof env.AI?.run === "function" ? 1 : 0,
+        managed: [],
+      };
+      continue;
+    }
     const environment = secretKeys(
-      provider === "gemini" ? env.GEMINI_API_KEYS : env.OPENROUTER_API_KEYS,
+      provider === "gemini"
+        ? env.GEMINI_API_KEYS
+        : provider === "mistral"
+          ? env.MISTRAL_API_KEYS
+          : provider === "groq"
+            ? env.GROQ_API_KEYS
+            : env.OPENROUTER_API_KEYS,
     );
     const managedForProvider = managed.filter((entry) => entry.provider === provider);
     const managedValues = new Set(managedForProvider.map((entry) => entry.key));
@@ -3107,12 +3225,7 @@ async function saveAiKey(request, env, actor, origin, ctx) {
       return json({ error: "Clé API invalide." }, error.status, origin);
     throw error;
   }
-  const provider =
-    payload?.provider === "openrouter"
-      ? "openrouter"
-      : payload?.provider === "gemini"
-        ? "gemini"
-        : null;
+  const provider = KEYED_AI_PROVIDERS.includes(payload?.provider) ? payload.provider : null;
   const key = typeof payload?.key === "string" ? payload.key.trim() : "";
   const mode = payload?.mode === "replace" ? "replace" : "add";
   const label =
@@ -3126,7 +3239,7 @@ async function saveAiKey(request, env, actor, origin, ctx) {
   let models;
   let probe;
   try {
-    models = await modelsForProviderKey(provider, key);
+    models = await modelsForProviderKey(provider, key, env);
     if (!models.length)
       return json(
         { error: "Clé valide, mais aucun modèle de texte compatible n’a été trouvé." },
@@ -3138,6 +3251,7 @@ async function saveAiKey(request, env, actor, origin, ctx) {
       key,
       models,
       typeof payload?.model === "string" ? payload.model.trim() : "",
+      env,
     );
   } catch (error) {
     const status = Number(error?.status);
@@ -3215,15 +3329,28 @@ async function fetchProvider(url, init, timeoutMs = 30_000) {
 async function providerError(response, fallback) {
   const body = await response.json().catch(() => ({}));
   const nested = body?.error && typeof body.error === "object" ? body.error : {};
-  const message = typeof nested.message === "string" ? nested.message : fallback;
+  const detail = Array.isArray(body?.detail)
+    ? body.detail
+        .map((item) => (typeof item?.msg === "string" ? item.msg : ""))
+        .filter(Boolean)
+        .join(" · ")
+    : typeof body?.detail === "string"
+      ? body.detail
+      : "";
+  const message =
+    (typeof nested.message === "string" && nested.message) ||
+    (typeof body?.error === "string" && body.error) ||
+    (typeof body?.message === "string" && body.message) ||
+    detail ||
+    fallback;
   return { message: message.slice(0, 500), status: response.status };
 }
 
 function safeAiErrorMessage(error, key = "") {
   const raw = error instanceof Error ? error.message : "Erreur inconnue du fournisseur.";
-  return raw
-    .replaceAll(key, "[clé masquée]")
+  return (key ? raw.replaceAll(key, "[clé masquée]") : raw)
     .replace(/(?:AIza|AQ\.)[A-Za-z0-9_-]{16,}/g, "[clé masquée]")
+    .replace(/(?:mstrl_|gsk_|sk-or-v1-)[A-Za-z0-9_-]{16,}/g, "[clé masquée]")
     .slice(0, 500);
 }
 
@@ -3274,12 +3401,7 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
     if (error instanceof Response) return json({ error: "Diagnostic IA invalide." }, 400, origin);
     throw error;
   }
-  const provider =
-    payload?.provider === "openrouter"
-      ? "openrouter"
-      : payload?.provider === "gemini"
-        ? "gemini"
-        : null;
+  const provider = AI_PROVIDERS.includes(payload?.provider) ? payload.provider : null;
   if (!provider) return json({ error: "Fournisseur IA invalide." }, 422, origin);
   const requestedModel =
     typeof payload?.model === "string" ? payload.model.trim().replace(/^models\//, "") : "";
@@ -3291,16 +3413,16 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
     entries.map(async (entry) => {
       const startedAt = Date.now();
       try {
-        const models = await modelsForProviderKey(provider, entry.key);
+        const models = await modelsForProviderKey(provider, entry.key, env);
         if (!models.length)
           throw Object.assign(new Error("Aucun modèle de texte compatible n’est disponible."), {
             status: 422,
           });
-        const probe = await probeProviderKey(provider, entry.key, models);
+        const probe = await probeProviderKey(provider, entry.key, models, requestedModel, env);
         return {
           id: entry.id,
           label: entry.label,
-          last4: entry.key.slice(-4),
+          last4: provider === "workers_ai" ? "BIND" : entry.key.slice(-4),
           source: entry.source,
           priority: entry.priority,
           status: "healthy",
@@ -3319,7 +3441,7 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
         return {
           id: entry.id,
           label: entry.label,
-          last4: entry.key.slice(-4),
+          last4: provider === "workers_ai" ? "BIND" : entry.key.slice(-4),
           source: entry.source,
           priority: entry.priority,
           status: "failed",
@@ -3372,7 +3494,7 @@ async function listAiModels(provider, env, origin) {
   const failures = [];
   for (const key of keys) {
     try {
-      const models = await modelsForProviderKey(provider, key);
+      const models = await modelsForProviderKey(provider, key, env);
       if (models.length) return json({ models }, 200, origin);
       failures.push("aucun modèle compatible");
     } catch (error) {
@@ -3399,12 +3521,7 @@ async function generateAi(request, env, origin) {
       );
     throw error;
   }
-  const provider =
-    payload?.provider === "openrouter"
-      ? "openrouter"
-      : payload?.provider === "gemini"
-        ? "gemini"
-        : null;
+  const provider = AI_PROVIDERS.includes(payload?.provider) ? payload.provider : null;
   const model =
     typeof payload?.model === "string" ? payload.model.trim().replace(/^models\//, "") : "";
   const system = typeof payload?.system === "string" ? payload.system : "";
@@ -3427,6 +3544,43 @@ async function generateAi(request, env, origin) {
   const failures = [];
 
   for (const key of orderedKeys) {
+    if (provider === "workers_ai") {
+      try {
+        const body = await env.AI.run(model, {
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.2,
+          max_tokens: 8_192,
+        });
+        const text =
+          body?.response ?? body?.result?.response ?? body?.choices?.[0]?.message?.content;
+        if (typeof text !== "string" || !text.trim()) {
+          failures.push({
+            status: 502,
+            message: "Workers AI n’a renvoyé aucun contenu exploitable.",
+          });
+          continue;
+        }
+        return json(
+          {
+            text,
+            tokens: Number(body?.usage?.total_tokens || body?.usage?.totalTokens) || 0,
+            provider,
+            model,
+          },
+          200,
+          origin,
+        );
+      } catch (error) {
+        failures.push({
+          status: Number(error?.status) || (error?.name === "AbortError" ? 408 : 502),
+          message: safeAiErrorMessage(error),
+        });
+        continue;
+      }
+    }
     let response;
     try {
       response =
@@ -3443,34 +3597,43 @@ async function generateAi(request, env, origin) {
                 }),
               },
             )
-          : await fetchProvider("https://openrouter.ai/api/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${key}`,
-                "X-OpenRouter-Title": "ZGR CV AI Assistant",
+          : await fetchProvider(
+              provider === "mistral"
+                ? "https://api.mistral.ai/v1/chat/completions"
+                : provider === "groq"
+                  ? "https://api.groq.com/openai/v1/chat/completions"
+                  : "https://openrouter.ai/api/v1/chat/completions",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${key}`,
+                  ...(provider === "openrouter"
+                    ? { "X-OpenRouter-Title": "ZGR CV AI Assistant" }
+                    : {}),
+                },
+                body: JSON.stringify({
+                  model,
+                  messages: [
+                    { role: "system", content: system },
+                    { role: "user", content: prompt },
+                  ],
+                  temperature: 0.2,
+                  response_format: { type: "json_object" },
+                  ...(typeof payload.providerOrder === "string" && payload.providerOrder.trim()
+                    ? {
+                        provider: {
+                          order: payload.providerOrder
+                            .split(",")
+                            .map((item) => item.trim())
+                            .filter(Boolean),
+                          allow_fallbacks: payload.allowProviderFallbacks !== false,
+                        },
+                      }
+                    : {}),
+                }),
               },
-              body: JSON.stringify({
-                model,
-                messages: [
-                  { role: "system", content: system },
-                  { role: "user", content: prompt },
-                ],
-                temperature: 0.2,
-                response_format: { type: "json_object" },
-                ...(typeof payload.providerOrder === "string" && payload.providerOrder.trim()
-                  ? {
-                      provider: {
-                        order: payload.providerOrder
-                          .split(",")
-                          .map((item) => item.trim())
-                          .filter(Boolean),
-                        allow_fallbacks: payload.allowProviderFallbacks !== false,
-                      },
-                    }
-                  : {}),
-              }),
-            });
+            );
     } catch (error) {
       failures.push({
         status: error?.name === "AbortError" ? 408 : 502,
@@ -3502,7 +3665,7 @@ async function generateAi(request, env, origin) {
     }
     const text = body?.choices?.[0]?.message?.content;
     if (typeof text !== "string" || !text) {
-      failures.push({ status: 502, message: "OpenRouter n’a renvoyé aucun contenu exploitable." });
+      failures.push({ status: 502, message: `${provider} n’a renvoyé aucun contenu exploitable.` });
       continue;
     }
     return json(
@@ -4306,7 +4469,7 @@ async function route(request, env, ctx) {
     if (!permissions.aiUse)
       return json({ error: "Votre rôle ne permet pas d’utiliser les fonctions IA." }, 403, origin);
     const provider = url.searchParams.get("provider");
-    if (provider !== "gemini" && provider !== "openrouter")
+    if (!AI_PROVIDERS.includes(provider))
       return json({ error: "Fournisseur IA invalide." }, 400, origin);
     return listAiModels(provider, env, origin);
   }

@@ -18,7 +18,7 @@ export type AiKeyDiagnostic = {
   id: string;
   label: string;
   last4: string;
-  source: "managed" | "environment";
+  source: "managed" | "environment" | "binding";
   priority: number;
   status: "healthy" | "failed";
   category:

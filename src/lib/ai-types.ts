@@ -1,4 +1,6 @@
-export type AiProviderId = "gemini" | "openrouter";
+export const AI_PROVIDERS = ["groq", "workers_ai", "gemini", "mistral", "openrouter"] as const;
+
+export type AiProviderId = (typeof AI_PROVIDERS)[number];
 
 export type AiModelOption = {
   id: string;
@@ -49,14 +51,45 @@ export type AiRunResult<T> = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+const PROVIDER_DEFAULTS: Record<
+  AiProviderId,
+  { label: string; model: string; dailyRequestLimit: number }
+> = {
+  gemini: {
+    label: "Gemini — clé principale",
+    model: "gemini-3.8-flash",
+    dailyRequestLimit: 20,
+  },
+  mistral: {
+    label: "Mistral — clé principale",
+    model: "mistral-small-latest",
+    dailyRequestLimit: 50,
+  },
+  groq: {
+    label: "Groq — clé principale",
+    model: "qwen/qwen3.8-27b",
+    dailyRequestLimit: 100,
+  },
+  workers_ai: {
+    label: "Cloudflare Workers AI",
+    model: "@cf/google/gemma-4-26b-a4b-it",
+    dailyRequestLimit: 50,
+  },
+  openrouter: {
+    label: "OpenRouter — clé principale",
+    model: "openrouter/free",
+    dailyRequestLimit: 50,
+  },
+};
+
 export const newAiConnection = (provider: AiProviderId = "gemini"): AiConnection => ({
   id: crypto.randomUUID(),
-  label: provider === "gemini" ? "Gemini — clé principale" : "OpenRouter — clé principale",
+  label: PROVIDER_DEFAULTS[provider].label,
   provider,
-  model: provider === "gemini" ? "gemini-3.8-flash" : "openrouter/free",
+  model: PROVIDER_DEFAULTS[provider].model,
   enabled: true,
   priority: 1,
-  dailyRequestLimit: provider === "gemini" ? 20 : 50,
+  dailyRequestLimit: PROVIDER_DEFAULTS[provider].dailyRequestLimit,
   providerOrder: "",
   allowProviderFallbacks: true,
   models: [],
@@ -64,14 +97,15 @@ export const newAiConnection = (provider: AiProviderId = "gemini"): AiConnection
 });
 
 export const defaultAiSettings = (): AiSettings => {
-  const gemini = newAiConnection("gemini");
-  const openRouter = newAiConnection("openrouter");
-  openRouter.priority = 2;
+  const connections = AI_PROVIDERS.map((provider, index) => ({
+    ...newAiConnection(provider),
+    priority: index + 1,
+  }));
   return {
     version: 1,
     autoRotate: true,
     freeModelsOnly: true,
-    connections: [gemini, openRouter],
+    connections,
   };
 };
 
@@ -83,8 +117,9 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     ? source.connections.flatMap((item) => {
         if (!item || typeof item !== "object") return [];
         const connection = item as Partial<AiConnection>;
-        const provider: AiProviderId =
-          connection.provider === "openrouter" ? "openrouter" : "gemini";
+        const provider: AiProviderId = AI_PROVIDERS.includes(connection.provider as AiProviderId)
+          ? (connection.provider as AiProviderId)
+          : "gemini";
         const base = newAiConnection(provider);
         return [
           {

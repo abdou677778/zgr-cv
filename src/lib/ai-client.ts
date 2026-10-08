@@ -10,6 +10,7 @@ type AiRequestOptions = {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_TOTAL_TIMEOUT_MS = 65_000;
+const CURRENT_GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"];
 
 export class AiHttpError extends Error {
   constructor(
@@ -184,9 +185,19 @@ export async function testAiConnection(
   const sortedModels = models.sort(
     (left, right) => Number(right.free) - Number(left.free) || left.name.localeCompare(right.name),
   );
-  const model = sortedModels.some((item) => item.id === connection.model)
-    ? connection.model
-    : (sortedModels.find((item) => item.free)?.id ?? sortedModels[0].id);
+  const currentGeminiModel =
+    connection.provider === "gemini"
+      ? CURRENT_GEMINI_MODELS.find((id) => sortedModels.some((item) => item.id === id))
+      : undefined;
+  const selectedModelAvailable = sortedModels.some((item) => item.id === connection.model);
+  const model =
+    connection.provider === "gemini" &&
+    currentGeminiModel &&
+    (!selectedModelAvailable || connection.model.startsWith("gemini-2.5-"))
+      ? currentGeminiModel
+      : selectedModelAvailable
+        ? connection.model
+        : (sortedModels.find((item) => item.free)?.id ?? sortedModels[0].id);
   const probe = { ...connection, model };
   const probeSystem = "Réponds uniquement avec un objet JSON valide.";
   const probePrompt = 'Réponds exactement avec {"status":"ok"}.';

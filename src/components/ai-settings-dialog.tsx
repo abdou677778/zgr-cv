@@ -253,12 +253,27 @@ export function AiSettingsDialog({
     try {
       const report = await diagnoseAiKeys(providerId, connection.model);
       setDiagnostics((current) => ({ ...current, [providerId]: report }));
+      const modelFrequency = new Map<string, number>();
+      for (const result of report.results) {
+        if (result.status === "healthy" && result.model)
+          modelFrequency.set(result.model, (modelFrequency.get(result.model) || 0) + 1);
+      }
+      const recommendedModel = [...modelFrequency.entries()].sort(
+        (left, right) => right[1] - left[1],
+      )[0]?.[0];
+      const modelUpdated = Boolean(recommendedModel && recommendedModel !== connection.model);
+      if (recommendedModel) {
+        const models = connection.models.some((model) => model.id === recommendedModel)
+          ? connection.models
+          : [...connection.models, { id: recommendedModel, name: recommendedModel, free: false }];
+        updateConnection(providerId, { model: recommendedModel, models, enabled: true });
+      }
       setMessage({
         ok: report.summary.failed === 0,
         text:
           report.summary.failed === 0
-            ? `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy}/${report.summary.total} clés prêtes.`
-            : `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy} clé(s) prête(s), ${report.summary.failed} à corriger. Consultez le détail ci-dessous.`,
+            ? `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy}/${report.summary.total} clés prêtes.${modelUpdated ? ` Modèle corrigé : ${recommendedModel}.` : ""}`
+            : `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy} clé(s) prête(s), ${report.summary.failed} à corriger.${modelUpdated ? ` Modèle corrigé : ${recommendedModel}.` : ""} Consultez le détail ci-dessous.`,
       });
     } catch (error) {
       setMessage({

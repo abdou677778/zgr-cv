@@ -1273,3 +1273,58 @@ test("le diagnostic admin teste chaque clé sans exposer les secrets", async (t)
   assert.equal(serialized.includes(blockedKey), false);
   assert.equal(serialized.includes(healthyKey), false);
 });
+
+test("l’ajout d’une clé migre automatiquement un modèle Gemini devenu indisponible", async (t) => {
+  const key = "AQ.nouvelle-cle-auth-migration-1234567890";
+  const requestedModels = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).includes("/models?pageSize="))
+      return new Response(
+        JSON.stringify({
+          models: [
+            {
+              name: "models/gemini-2.5-flash",
+              displayName: "Gemini 2.5 Flash",
+              supportedGenerationMethods: ["generateContent"],
+            },
+            {
+              name: "models/gemini-3.8-flash",
+              displayName: "Gemini 3.8 Flash",
+              supportedGenerationMethods: ["generateContent"],
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    const model = decodeURIComponent(String(url).match(/models\/([^:]+):/)?.[1] || "");
+    requestedModels.push(model);
+    if (model === "gemini-2.5-flash")
+      return new Response(
+        JSON.stringify({ error: { message: "This model is no longer available to new users." } }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    return geminiSuccess();
+  });
+  const env = aiTestEnvironment([]);
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const response = await call(
+    env,
+    "/api/admin/ai-keys",
+    authorized(admin.token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "gemini",
+        key,
+        label: "Clé Auth",
+        mode: "add",
+        model: "gemini-2.5-flash",
+      }),
+    }),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 201);
+  assert.equal(body.model, "gemini-3.8-flash");
+  assert.deepEqual(requestedModels, ["gemini-2.5-flash", "gemini-3.8-flash"]);
+});

@@ -2987,65 +2987,86 @@ function preferredProbeModel(provider, models, requestedModel = "") {
 }
 
 async function probeProviderKey(provider, key, models, requestedModel = "") {
-  const model = preferredProbeModel(provider, models, requestedModel);
-  if (!model) throw Object.assign(new Error("Aucun modèle de texte disponible."), { status: 422 });
-  const response =
-    provider === "gemini"
-      ? await fetchProvider(
-          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: "Réponds uniquement en JSON valide." }] },
-              contents: [
-                { role: "user", parts: [{ text: 'Réponds exactement avec {"status":"ok"}.' }] },
-              ],
-              generationConfig: { temperature: 0, responseMimeType: "application/json" },
-            }),
-          },
-          20_000,
-        )
-      : await fetchProvider(
-          "https://openrouter.ai/api/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${key}`,
-              "X-OpenRouter-Title": "ZGR CV AI Assistant",
+  const firstModel = preferredProbeModel(provider, models, requestedModel);
+  const currentModel = preferredProbeModel(provider, models);
+  const candidates = [...new Set([firstModel, currentModel].filter(Boolean))];
+  if (!candidates.length)
+    throw Object.assign(new Error("Aucun modèle de texte disponible."), { status: 422 });
+  let lastModelError;
+
+  for (const model of candidates) {
+    const response =
+      provider === "gemini"
+        ? await fetchProvider(
+            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: "Réponds uniquement en JSON valide." }] },
+                contents: [
+                  {
+                    role: "user",
+                    parts: [{ text: 'Réponds exactement avec {"status":"ok"}.' }],
+                  },
+                ],
+                generationConfig: { temperature: 0, responseMimeType: "application/json" },
+              }),
             },
-            body: JSON.stringify({
-              model,
-              messages: [
-                { role: "system", content: "Réponds uniquement en JSON valide." },
-                { role: "user", content: 'Réponds exactement avec {"status":"ok"}.' },
-              ],
-              temperature: 0,
-              response_format: { type: "json_object" },
-            }),
-          },
-          20_000,
-        );
-  if (!response.ok) {
-    const error = await providerError(response, `Échec du test ${provider}.`);
-    throw Object.assign(new Error(error.message), { status: error.status });
+            20_000,
+          )
+        : await fetchProvider(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${key}`,
+                "X-OpenRouter-Title": "ZGR CV AI Assistant",
+              },
+              body: JSON.stringify({
+                model,
+                messages: [
+                  { role: "system", content: "Réponds uniquement en JSON valide." },
+                  { role: "user", content: 'Réponds exactement avec {"status":"ok"}.' },
+                ],
+                temperature: 0,
+                response_format: { type: "json_object" },
+              }),
+            },
+            20_000,
+          );
+    if (!response.ok) {
+      const error = await providerError(response, `Échec du test ${provider}.`);
+      const modelFailure =
+        provider === "gemini" &&
+        [400, 404].includes(error.status) &&
+        /model|no longer available|not found|unsupported/i.test(error.message);
+      if (modelFailure && model !== candidates.at(-1)) {
+        lastModelError = error;
+        continue;
+      }
+      throw Object.assign(new Error(error.message), { status: error.status });
+    }
+    const body = await response.json();
+    const text =
+      provider === "gemini"
+        ? Array.isArray(body?.candidates?.[0]?.content?.parts)
+          ? body.candidates[0].content.parts.map((part) => part?.text || "").join("")
+          : ""
+        : body?.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || !text.trim())
+      throw Object.assign(new Error("Le test n’a renvoyé aucun contenu exploitable."), {
+        status: 502,
+      });
+    return {
+      model,
+      tokens: Number(body?.usageMetadata?.totalTokenCount || body?.usage?.total_tokens) || 0,
+    };
   }
-  const body = await response.json();
-  const text =
-    provider === "gemini"
-      ? Array.isArray(body?.candidates?.[0]?.content?.parts)
-        ? body.candidates[0].content.parts.map((part) => part?.text || "").join("")
-        : ""
-      : body?.choices?.[0]?.message?.content;
-  if (typeof text !== "string" || !text.trim())
-    throw Object.assign(new Error("Le test n’a renvoyé aucun contenu exploitable."), {
-      status: 502,
-    });
-  return {
-    model,
-    tokens: Number(body?.usageMetadata?.totalTokenCount || body?.usage?.total_tokens) || 0,
-  };
+  throw Object.assign(new Error(lastModelError?.message || "Aucun modèle utilisable."), {
+    status: lastModelError?.status || 422,
+  });
 }
 
 function validProviderKey(provider, key) {
@@ -3275,7 +3296,7 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
         throw Object.assign(new Error("Aucun modèle de texte compatible n’est disponible."), {
           status: 422,
         });
-      const probe = await probeProviderKey(provider, entry.key, models, requestedModel);
+      const probe = await probeProviderKey(provider, entry.key, models);
       results.push({
         id: entry.id,
         label: entry.label,

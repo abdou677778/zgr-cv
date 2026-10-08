@@ -378,7 +378,11 @@ export async function verifyAdminSession(token = getAdminSession()) {
   }
 }
 
-export async function authenticatedFetch(path: string, init: RequestInit = {}) {
+export async function authenticatedFetch(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = API_REQUEST_TIMEOUT_MS,
+) {
   const token = getAdminSession();
   if (!token) throw new Error("Session utilisateur absente.");
   const headers = new Headers(init.headers);
@@ -394,7 +398,7 @@ export async function authenticatedFetch(path: string, init: RequestInit = {}) {
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     const abortFromCaller = () => controller.abort();
     init.signal?.addEventListener("abort", abortFromCaller, { once: true });
     try {

@@ -86,9 +86,18 @@ export async function removeAiKey(id: string) {
 }
 
 export async function diagnoseAiKeys(provider: AiProviderId, model?: string) {
-  return apiJson<AiKeyDiagnosticReport>("/api/admin/ai-keys/diagnose", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, model }),
-  });
+  const response = await authenticatedFetch(
+    "/api/admin/ai-keys/diagnose",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, model }),
+    },
+    120_000,
+  );
+  const body = (await response.json().catch(() => ({}))) as AiKeyDiagnosticReport & {
+    error?: string;
+  };
+  if (!response.ok) throw new Error(body.error || `Diagnostic refusé (${response.status}).`);
+  return body;
 }

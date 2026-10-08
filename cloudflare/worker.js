@@ -3287,53 +3287,54 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
   if (!entries.length)
     return json({ error: `Aucune clé ${provider} configurée côté serveur.` }, 503, origin);
 
-  const results = [];
-  for (const entry of entries) {
-    const startedAt = Date.now();
-    try {
-      const models = await modelsForProviderKey(provider, entry.key);
-      if (!models.length)
-        throw Object.assign(new Error("Aucun modèle de texte compatible n’est disponible."), {
-          status: 422,
-        });
-      const probe = await probeProviderKey(provider, entry.key, models);
-      results.push({
-        id: entry.id,
-        label: entry.label,
-        last4: entry.key.slice(-4),
-        source: entry.source,
-        priority: entry.priority,
-        status: "healthy",
-        category: "healthy",
-        model: probe.model,
-        modelCount: models.length,
-        latencyMs: Date.now() - startedAt,
-        tokens: probe.tokens,
-        message: "Liste des modèles et génération réelle réussies.",
-        advice: "Clé prête pour les fonctions IA ZGR CV.",
-      });
-    } catch (error) {
-      const status = Number(error?.status) || (error?.name === "AbortError" ? 408 : 502);
-      const message = safeAiErrorMessage(error, entry.key);
-      const category = aiFailureCategory(status, message);
-      results.push({
-        id: entry.id,
-        label: entry.label,
-        last4: entry.key.slice(-4),
-        source: entry.source,
-        priority: entry.priority,
-        status: "failed",
-        category,
-        httpStatus: status,
-        model: requestedModel || null,
-        modelCount: 0,
-        latencyMs: Date.now() - startedAt,
-        tokens: 0,
-        message,
-        advice: aiFailureAdvice(provider, category, entry.key),
-      });
-    }
-  }
+  const results = await Promise.all(
+    entries.map(async (entry) => {
+      const startedAt = Date.now();
+      try {
+        const models = await modelsForProviderKey(provider, entry.key);
+        if (!models.length)
+          throw Object.assign(new Error("Aucun modèle de texte compatible n’est disponible."), {
+            status: 422,
+          });
+        const probe = await probeProviderKey(provider, entry.key, models);
+        return {
+          id: entry.id,
+          label: entry.label,
+          last4: entry.key.slice(-4),
+          source: entry.source,
+          priority: entry.priority,
+          status: "healthy",
+          category: "healthy",
+          model: probe.model,
+          modelCount: models.length,
+          latencyMs: Date.now() - startedAt,
+          tokens: probe.tokens,
+          message: "Liste des modèles et génération réelle réussies.",
+          advice: "Clé prête pour les fonctions IA ZGR CV.",
+        };
+      } catch (error) {
+        const status = Number(error?.status) || (error?.name === "AbortError" ? 408 : 502);
+        const message = safeAiErrorMessage(error, entry.key);
+        const category = aiFailureCategory(status, message);
+        return {
+          id: entry.id,
+          label: entry.label,
+          last4: entry.key.slice(-4),
+          source: entry.source,
+          priority: entry.priority,
+          status: "failed",
+          category,
+          httpStatus: status,
+          model: requestedModel || null,
+          modelCount: 0,
+          latencyMs: Date.now() - startedAt,
+          tokens: 0,
+          message,
+          advice: aiFailureAdvice(provider, category, entry.key),
+        };
+      }
+    }),
+  );
   const healthy = results.filter((result) => result.status === "healthy").length;
   ctx.waitUntil(
     writeAudit(env, request, "ai_keys_diagnosed", actor.username, "success", {

@@ -1198,6 +1198,47 @@ test("la génération Groq remonte le quota exact sans exposer la clé", async (
   assert.equal(JSON.stringify(body).includes(groqKey), false);
 });
 
+test("OpenRouter ne transforme pas un plafond monétaire absent en faux solde zéro", async (t) => {
+  const openRouterKey = "sk-or-v1-test-quota-null-12345678901234567890";
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/api/v1/key"))
+      return new Response(
+        JSON.stringify({ data: { is_free_tier: true, limit: null, limit_remaining: null } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: '{"status":"ok"}' } }],
+        usage: { total_tokens: 9 },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  });
+  const env = aiTestEnvironment([], { OPENROUTER_API_KEYS: openRouterKey });
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const response = await call(
+    env,
+    "/api/ai/generate",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "openrouter",
+        model: "openrouter/free",
+        system: "Réponds en JSON.",
+        prompt: "Test.",
+      }),
+    }),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.quota.accuracy, "official");
+  assert.equal(body.quota.limitRequests, 50);
+  assert.equal("limitCredits" in body.quota, false);
+  assert.equal("remainingCredits" in body.quota, false);
+});
+
 test("l’auto-switch Gemini ignore une première clé refusée et utilise la suivante", async (t) => {
   const firstKey = "AIza-premiere-cle-invalide-test-123456";
   const secondKey = "AQ.deuxieme-cle-valide-test-123456789";

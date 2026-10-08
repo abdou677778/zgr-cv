@@ -3173,8 +3173,13 @@ async function openRouterKeyQuota(key, model = "") {
     );
     if (!response.ok) return officialProviderQuota("openrouter", model);
     const data = (await response.json())?.data || {};
-    const limitCredits = Number(data.limit);
-    const remainingCredits = Number(data.limit_remaining);
+    const hasLimitValue = data.limit !== null && data.limit !== undefined && data.limit !== "";
+    const hasRemainingValue =
+      data.limit_remaining !== null &&
+      data.limit_remaining !== undefined &&
+      data.limit_remaining !== "";
+    const limitCredits = hasLimitValue ? Number(data.limit) : Number.NaN;
+    const remainingCredits = hasRemainingValue ? Number(data.limit_remaining) : Number.NaN;
     const hasLimit = Number.isFinite(limitCredits) && limitCredits >= 0;
     const hasRemaining = Number.isFinite(remainingCredits) && remainingCredits >= 0;
     return {

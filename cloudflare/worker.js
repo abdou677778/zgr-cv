@@ -3609,7 +3609,7 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
   );
   const healthy = results.filter((result) => result.status === "healthy").length;
   const temporary = results.filter((result) =>
-    ["temporary", "timeout"].includes(result.category),
+    ["quota", "temporary", "timeout"].includes(result.category),
   ).length;
   const actionRequired = results.length - healthy - temporary;
   ctx.waitUntil(

@@ -269,11 +269,8 @@ export function AiSettingsDialog({
         updateConnection(providerId, { model: recommendedModel, models, enabled: true });
       }
       setMessage({
-        ok: report.summary.failed === 0,
-        text:
-          report.summary.failed === 0
-            ? `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy}/${report.summary.total} clés prêtes.${modelUpdated ? ` Modèle corrigé : ${recommendedModel}.` : ""}`
-            : `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy} clé(s) prête(s), ${report.summary.failed} à corriger.${modelUpdated ? ` Modèle corrigé : ${recommendedModel}.` : ""} Consultez le détail ci-dessous.`,
+        ok: report.summary.actionRequired === 0 && report.summary.healthy > 0,
+        text: `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy} clé(s) prête(s), ${report.summary.temporary} indisponible(s) temporairement, ${report.summary.actionRequired} à corriger.${modelUpdated ? ` Modèle corrigé : ${recommendedModel}.` : ""} Consultez le détail ci-dessous.`,
       });
     } catch (error) {
       setMessage({
@@ -544,7 +541,9 @@ export function AiSettingsDialog({
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <strong>Résultat du diagnostic réel</strong>
                       <span className="text-muted-foreground">
-                        {diagnostic.summary.healthy}/{diagnostic.summary.total} prête(s)
+                        {diagnostic.summary.healthy}/{diagnostic.summary.total} prête(s) ·{" "}
+                        {diagnostic.summary.temporary} temporaire(s) ·{" "}
+                        {diagnostic.summary.actionRequired} à corriger
                       </span>
                     </div>
                     {diagnostic.results.map((result) => (

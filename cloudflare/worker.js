@@ -3240,11 +3240,11 @@ function aiFailureCategory(status, message) {
     normalized.includes("blocked")
   )
     return "authentication";
-  if (status === 404 || normalized.includes("model") || normalized.includes("not found"))
-    return "model";
   if (status === 400 && (normalized.includes("billing") || normalized.includes("precondition")))
     return "configuration";
   if (status >= 500) return "temporary";
+  if (status === 404 || normalized.includes("model") || normalized.includes("not found"))
+    return "model";
   return "request";
 }
 
@@ -3336,6 +3336,10 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
     }),
   );
   const healthy = results.filter((result) => result.status === "healthy").length;
+  const temporary = results.filter((result) =>
+    ["temporary", "timeout"].includes(result.category),
+  ).length;
+  const actionRequired = results.length - healthy - temporary;
   ctx.waitUntil(
     writeAudit(env, request, "ai_keys_diagnosed", actor.username, "success", {
       provider,
@@ -3347,7 +3351,13 @@ async function diagnoseAiKeys(request, env, actor, origin, ctx) {
     {
       provider,
       testedAt: new Date().toISOString(),
-      summary: { total: results.length, healthy, failed: results.length - healthy },
+      summary: {
+        total: results.length,
+        healthy,
+        temporary,
+        actionRequired,
+        failed: results.length - healthy,
+      },
       results,
     },
     200,

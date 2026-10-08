@@ -42,7 +42,13 @@ export type AiKeyDiagnostic = {
 export type AiKeyDiagnosticReport = {
   provider: AiProviderId;
   testedAt: string;
-  summary: { total: number; healthy: number; failed: number };
+  summary: {
+    total: number;
+    healthy: number;
+    temporary: number;
+    actionRequired: number;
+    failed: number;
+  };
   results: AiKeyDiagnostic[];
 };
 

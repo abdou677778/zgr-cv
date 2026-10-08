@@ -1266,7 +1266,13 @@ test("le diagnostic admin teste chaque clé sans exposer les secrets", async (t)
   const serialized = JSON.stringify(body);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(body.summary, { total: 2, healthy: 1, failed: 1 });
+  assert.deepEqual(body.summary, {
+    total: 2,
+    healthy: 1,
+    temporary: 0,
+    actionRequired: 1,
+    failed: 1,
+  });
   assert.equal(body.results[0].category, "authentication");
   assert.match(body.results[0].advice, /clé Standard/);
   assert.equal(body.results[1].status, "healthy");
@@ -1327,4 +1333,56 @@ test("l’ajout d’une clé migre automatiquement un modèle Gemini devenu indi
   assert.equal(response.status, 201);
   assert.equal(body.model, "gemini-3.8-flash");
   assert.deepEqual(requestedModels, ["gemini-2.5-flash", "gemini-3.8-flash"]);
+});
+
+test("le diagnostic distingue une forte demande temporaire d’un modèle invalide", async (t) => {
+  const busyKey = "AQ.cle-temporairement-saturee-1234567890";
+  const healthyKey = "AQ.cle-disponible-immediatement-123456789";
+  t.mock.method(globalThis, "fetch", async (url, init = {}) => {
+    const key = new Headers(init.headers).get("x-goog-api-key");
+    if (String(url).includes("/models?pageSize="))
+      return new Response(
+        JSON.stringify({
+          models: [
+            {
+              name: "models/gemini-3.8-flash",
+              displayName: "Gemini 3.8 Flash",
+              supportedGenerationMethods: ["generateContent"],
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    if (key === busyKey)
+      return new Response(
+        JSON.stringify({
+          error: { message: "This model is currently experiencing high demand." },
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      );
+    return geminiSuccess();
+  });
+  const env = aiTestEnvironment([busyKey, healthyKey]);
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const response = await call(
+    env,
+    "/api/admin/ai-keys/diagnose",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "gemini" }),
+    }),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.results[0].category, "temporary");
+  assert.match(body.results[0].advice, /temporaire/);
+  assert.deepEqual(body.summary, {
+    total: 2,
+    healthy: 1,
+    temporary: 1,
+    actionRequired: 0,
+    failed: 1,
+  });
 });

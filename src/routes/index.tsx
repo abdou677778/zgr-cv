@@ -50,6 +50,8 @@ import {
   TriangleAlert,
   RefreshCw,
   X,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { analyzeEuropassCoverage } from "@/lib/europass-coverage";
 import { EUROPASS_TEMPLATE_ID } from "@/lib/document-templates";
@@ -322,6 +324,73 @@ const EUROPASS_EDITOR_LANGUAGE: Record<DocumentLanguage, string> = {
   ar: "en",
 };
 
+const COLOR_MODE_STORAGE_KEY = "zgr-cv-color-mode";
+type ColorMode = "light" | "dark";
+
+function LanguageMenu({
+  language,
+  onLanguageChange,
+}: {
+  language: DocumentLanguage;
+  onLanguageChange: (language: DocumentLanguage) => void;
+}) {
+  const selectedLanguage = DOCUMENT_LANGUAGES.find((item) => item.id === language);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="zgr-control h-10 gap-2 rounded-xl border-primary/15 px-3"
+          aria-label={`Langue du document : ${selectedLanguage?.name}`}
+        >
+          <span
+            className={`flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br ${LANGUAGE_VISUALS[language].color} text-[10px] font-extrabold text-white shadow-sm`}
+          >
+            {selectedLanguage?.shortName}
+          </span>
+          <Languages className="h-4 w-4 text-primary" />
+          <span className="hidden text-left sm:block">
+            <span className="block text-[10px] font-medium uppercase leading-none text-muted-foreground">
+              Langue
+            </span>
+            <span className="mt-1 block text-xs font-bold leading-none">
+              {selectedLanguage?.name}
+            </span>
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64 rounded-xl p-2 shadow-xl">
+        <DropdownMenuLabel className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
+          <Languages className="h-4 w-4 text-primary" /> Langue du document et du formulaire
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {DOCUMENT_LANGUAGES.map((item) => (
+          <DropdownMenuItem
+            key={item.id}
+            onSelect={() => onLanguageChange(item.id)}
+            className={`my-1 gap-3 rounded-lg px-2.5 py-2.5 ${language === item.id ? "bg-primary/10 text-primary" : ""}`}
+          >
+            <span
+              className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${LANGUAGE_VISUALS[item.id].color} text-[10px] font-extrabold text-white shadow-sm`}
+            >
+              {item.shortName}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="font-semibold">{item.name}</span>
+              <span className="text-[11px] text-muted-foreground">
+                Code document : {item.shortName}
+              </span>
+            </span>
+            {language === item.id && <Check className="h-4 w-4 text-primary" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function europassEditorUrl(language: DocumentLanguage) {
   return `https://europa.eu/europass/eportfolio/screen/cv-editor?lang=${EUROPASS_EDITOR_LANGUAGE[language]}`;
 }
@@ -546,6 +615,10 @@ function Index() {
 function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const pwa = usePwaStatus();
   const [language, setLanguage] = useState<DocumentLanguage>("fr");
+  const [colorMode, setColorMode] = useState<ColorMode>(() => {
+    if (typeof window === "undefined") return "light";
+    return window.localStorage.getItem(COLOR_MODE_STORAGE_KEY) === "dark" ? "dark" : "light";
+  });
   const [cvByLanguage, setCvByLanguage] = useState<Record<DocumentLanguage, CV>>({
     ...sampleCVByLanguage,
   });
@@ -642,6 +715,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const canWriteClients = user.permissions.clientsWrite;
   const profileEditingLocked =
     Boolean(activeProfileId) && activeProfileWorkflowStatus === "approved";
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", colorMode === "dark");
+    document.documentElement.style.colorScheme = colorMode;
+    window.localStorage.setItem(COLOR_MODE_STORAGE_KEY, colorMode);
+  }, [colorMode]);
 
   const refreshWorkflowCounts = useCallback(async () => {
     if (!user.permissions.clientsApprove) return;
@@ -2511,22 +2590,42 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   return (
     <div lang="fr" dir="ltr" className="zgr-app-shell min-h-screen">
       <header className="zgr-app-header sticky top-0 z-20 border-b">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
-          <div className="flex shrink-0 items-center gap-3">
-            <div className="zgr-brand-mark flex h-11 w-11 items-center justify-center rounded-2xl text-white">
-              <FileText className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="zgr-brand-title text-xl font-extrabold tracking-tight">ZGR CV</h1>
-                <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700">
-                  Studio
-                </span>
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3">
+          <div className="flex w-full items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="zgr-brand-mark flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white">
+                <FileText className="h-5 w-5" />
               </div>
-              <p className="max-w-md text-xs text-muted-foreground">{ui.subtitle}</p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="zgr-brand-title text-xl font-extrabold tracking-tight">ZGR CV</h1>
+                  <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-200">
+                    Studio
+                  </span>
+                </div>
+                <p className="hidden max-w-2xl truncate text-xs text-muted-foreground sm:block">
+                  {ui.subtitle}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="zgr-control h-10 w-10 rounded-xl"
+                aria-label={
+                  colorMode === "dark" ? "Activer le mode clair" : "Activer le mode sombre"
+                }
+                title={colorMode === "dark" ? "Mode clair" : "Mode sombre"}
+                onClick={() => setColorMode((current) => (current === "dark" ? "light" : "dark"))}
+              >
+                {colorMode === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              <LanguageMenu language={language} onLanguageChange={setLanguage} />
             </div>
           </div>
-          <div className="flex w-full flex-wrap items-center justify-start gap-2 2xl:w-auto 2xl:justify-end">
+          <div className="flex w-full flex-wrap items-center gap-2">
             <input
               ref={jsonInputRef}
               type="file"
@@ -2542,255 +2641,162 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               className="hidden"
               onChange={importEuropass}
             />
-            <div className="zgr-control flex items-center gap-2 rounded-xl border px-3 py-1.5">
-              <Label htmlFor="document-kind" className="text-xs font-medium text-muted-foreground">
-                {ui.document}
-              </Label>
-              <select
-                id="document-kind"
-                aria-label={ui.document}
-                value={documentKind}
-                onChange={(event) => changeDocumentKind(event.target.value as DocumentKind)}
-                className="h-7 min-w-40 cursor-pointer bg-transparent text-sm font-semibold outline-none"
-              >
-                {getDocumentKinds("fr").map((kind) => (
-                  <option key={kind.id} value={kind.id}>
-                    {kind.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="zgr-control flex items-center gap-2 rounded-xl border px-3 py-1.5">
-              <Label htmlFor="pdf-template" className="text-xs font-medium text-muted-foreground">
-                {ui.template}
-              </Label>
-              <select
-                id="pdf-template"
-                aria-label={ui.template}
-                value={selectedTemplateOptionId}
-                onChange={(event) => selectTemplateOption(event.target.value)}
-                className="h-7 min-w-40 cursor-pointer bg-transparent text-sm font-semibold outline-none"
-              >
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {!isEuropassTemplate && (
-              <div
-                className="zgr-control flex items-center gap-1.5 rounded-xl border px-2 py-1.5"
-                aria-label={ui.palette}
-                role="group"
-              >
-                <Palette className="mx-0.5 h-4 w-4 text-muted-foreground" />
-                {paletteColors.map((color, index) => {
-                  const selected = accentColor.toLowerCase() === color.toLowerCase();
-                  const original = color.toLowerCase() === TEMPLATE_DEFAULT_COLORS[themeTemplateId];
-                  return (
-                    <button
-                      key={color}
-                      type="button"
-                      className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                        selected ? "scale-110 border-white ring-2 ring-zinc-400" : "border-white/90"
-                      }`}
-                      style={{ backgroundColor: color }}
-                      aria-label={`${ui.palette} — ${original ? ui.originalColor : color}`}
-                      aria-pressed={selected}
-                      title={original ? ui.originalColor : color}
-                      onClick={() =>
-                        setTemplateColors((current) => ({
-                          ...current,
-                          [themeTemplateId]: color,
-                        }))
-                      }
-                    >
-                      {index === 0 && <span className="sr-only">{ui.originalColor}</span>}
-                    </button>
-                  );
-                })}
-                <label
-                  className="relative ml-0.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-dashed border-zinc-400 bg-white"
-                  title={ui.customColor}
+            <div className="zgr-toolbar-group flex flex-wrap items-center gap-2">
+              <div className="zgr-control flex items-center gap-2 rounded-xl border px-3 py-1.5">
+                <Label
+                  htmlFor="document-kind"
+                  className="text-xs font-medium text-muted-foreground"
                 >
-                  <span
-                    className="h-4 w-4 rounded-full"
-                    style={{
-                      background: `conic-gradient(from 90deg, #ef4444, #f97316, #059669, #0891b2, #8b5cf6, #ef4444)`,
-                    }}
-                  />
-                  <input
-                    type="color"
-                    value={accentColor}
-                    aria-label={ui.customColor}
-                    className="absolute inset-0 cursor-pointer opacity-0"
-                    onChange={(event) =>
-                      setTemplateColors((current) => ({
-                        ...current,
-                        [themeTemplateId]: event.target.value.toLowerCase(),
-                      }))
-                    }
-                  />
-                </label>
+                  {ui.document}
+                </Label>
+                <select
+                  id="document-kind"
+                  aria-label={ui.document}
+                  value={documentKind}
+                  onChange={(event) => changeDocumentKind(event.target.value as DocumentKind)}
+                  className="h-7 min-w-40 cursor-pointer bg-transparent text-sm font-semibold outline-none"
+                >
+                  {getDocumentKinds("fr").map((kind) => (
+                    <option key={kind.id} value={kind.id}>
+                      {kind.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
+              <div className="zgr-control flex items-center gap-2 rounded-xl border px-3 py-1.5">
+                <Label htmlFor="pdf-template" className="text-xs font-medium text-muted-foreground">
+                  {ui.template}
+                </Label>
+                <select
+                  id="pdf-template"
+                  aria-label={ui.template}
+                  value={selectedTemplateOptionId}
+                  onChange={(event) => selectTemplateOption(event.target.value)}
+                  className="h-7 min-w-40 cursor-pointer bg-transparent text-sm font-semibold outline-none"
+                >
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
-                  type="button"
                   variant="outline"
-                  className="zgr-control h-10 gap-2 rounded-xl border-primary/15 px-3"
-                  aria-label={`${ui.language} : ${DOCUMENT_LANGUAGES.find((item) => item.id === language)?.name}`}
+                  size="sm"
+                  className="zgr-control gap-2 border-blue-200 text-blue-800 dark:border-blue-900 dark:text-blue-200"
                 >
-                  <span
-                    className={`flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br ${LANGUAGE_VISUALS[language].color} text-[10px] font-extrabold text-white shadow-sm`}
-                  >
-                    {DOCUMENT_LANGUAGES.find((item) => item.id === language)?.shortName}
-                  </span>
-                  <Languages className="h-4 w-4 text-primary" />
-                  <span className="hidden text-left sm:block">
-                    <span className="block text-[10px] font-medium uppercase leading-none text-muted-foreground">
-                      Langue
-                    </span>
-                    <span className="mt-1 block text-xs font-bold leading-none">
-                      {DOCUMENT_LANGUAGES.find((item) => item.id === language)?.name}
-                    </span>
-                  </span>
-                  <span className="font-bold sm:hidden">
-                    {DOCUMENT_LANGUAGES.find((item) => item.id === language)?.shortName}
-                  </span>
+                  {europassImporting ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  {europassImporting ? "Analyse Europass…" : "Importer"}
                   <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 rounded-xl p-2 shadow-xl">
-                <DropdownMenuLabel className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
-                  <Languages className="h-4 w-4 text-primary" /> Langue du document et du formulaire
+              <DropdownMenuContent align="start" className="w-72 rounded-xl p-2 shadow-xl">
+                <DropdownMenuLabel className="px-2 py-2 text-xs text-muted-foreground">
+                  Choisir la source à importer
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {DOCUMENT_LANGUAGES.map((item) => (
-                  <DropdownMenuItem
-                    key={item.id}
-                    onSelect={() => setLanguage(item.id)}
-                    className={`my-1 gap-3 rounded-lg px-2.5 py-2.5 ${language === item.id ? "bg-primary/10 text-primary" : ""}`}
-                  >
-                    <span
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${LANGUAGE_VISUALS[item.id].color} text-[10px] font-extrabold text-white shadow-sm`}
-                    >
-                      {item.shortName}
+                <DropdownMenuItem
+                  disabled={europassImporting}
+                  onSelect={() => europassInputRef.current?.click()}
+                  className="items-start gap-3 rounded-lg px-3 py-3"
+                >
+                  <FileCode className="mt-0.5 h-4 w-4 text-blue-600" />
+                  <span className="flex flex-col">
+                    <span className="font-semibold">CV Europass</span>
+                    <span className="text-xs text-muted-foreground">
+                      PDF ou XML officiel · jusqu’à 4 langues
                     </span>
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="font-semibold">{item.name}</span>
-                      <span className="text-[11px] text-muted-foreground">
-                        Code document : {item.shortName}
-                      </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => jsonInputRef.current?.click()}
+                  className="items-start gap-3 rounded-lg px-3 py-3"
+                >
+                  <FileText className="mt-0.5 h-4 w-4 text-sky-600" />
+                  <span className="flex flex-col">
+                    <span className="font-semibold">Fichier JSON</span>
+                    <span className="text-xs text-muted-foreground">
+                      Profil ZGR CV ou données structurées
                     </span>
-                    {language === item.id && <Check className="h-4 w-4 text-primary" />}
-                  </DropdownMenuItem>
-                ))}
+                  </span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-blue-200 bg-blue-50/80 text-blue-800 hover:bg-blue-100"
-              disabled={europassImporting}
-              onClick={() => europassInputRef.current?.click()}
-              title="Importer jusqu’à 4 CV Europass officiels PDF/XML, par exemple un document FR et un document EN"
-            >
-              {europassImporting ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FileCode className="mr-2 h-4 w-4" />
-              )}
-              {europassImporting ? "Analyse Europass…" : "Importer CV Europass"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-sky-200 bg-sky-50/80 text-sky-800 hover:bg-sky-100"
-              onClick={() => jsonInputRef.current?.click()}
-            >
-              <Upload className="mr-2 h-4 w-4" /> {ui.importJson}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-emerald-200 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100"
-              disabled={profileSaving || !canWriteClients || profileEditingLocked}
-              onClick={() => void saveCurrentClient()}
-              title={
-                !canWriteClients
-                  ? "Mode lecture seule : sauvegarde cloud interdite"
-                  : profileEditingLocked
-                    ? "CV validé : rouvrez-le en brouillon depuis la base pour le modifier"
-                    : activeProfileId
-                      ? `Mettre à jour ${activeProfileId}`
-                      : "Créer un profil client"
-              }
-            >
-              {profileSaving ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-2 h-4 w-4" />
-              )}
-              {activeProfileId ? "Sauvegarder" : "Sauvegarder client"}
-            </Button>
-            <span
-              role="status"
-              title={
-                pendingCloudCount
-                  ? `${pendingCloudCount} sauvegarde(s) locale(s) seront envoyées automatiquement au retour du cloud.`
-                  : draftState === "error"
-                    ? "Le brouillon automatique n’a pas pu être enregistré."
-                    : lastDraftSavedAt
-                      ? `Brouillon local enregistré à ${new Date(lastDraftSavedAt).toLocaleTimeString("fr-DZ")}.`
-                      : "Initialisation du brouillon automatique."
-              }
-              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold ${
-                draftState === "error"
-                  ? "border-red-200 bg-red-50 text-red-700"
-                  : pendingCloudCount || !online || hasUnsavedChanges
-                    ? "border-amber-200 bg-amber-50 text-amber-800"
-                    : draftState === "saving"
-                      ? "border-sky-200 bg-sky-50 text-sky-700"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
-              }`}
-            >
-              {draftState === "error" ? (
-                <TriangleAlert className="h-3.5 w-3.5" />
-              ) : pendingCloudCount || !online ? (
-                <CloudOff className="h-3.5 w-3.5" />
-              ) : draftState === "saving" ? (
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <CircleCheck className="h-3.5 w-3.5" />
-              )}
-              {draftState === "error"
-                ? "Erreur brouillon"
-                : pendingCloudCount
-                  ? `${pendingCloudCount} cloud en attente`
-                  : !online
-                    ? "Hors ligne"
-                    : draftState === "saving"
-                      ? "Sauvegarde auto"
-                      : hasUnsavedChanges
-                        ? "Modifications en attente"
-                        : "Travail enregistré"}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-indigo-200 bg-indigo-50/80 text-indigo-800 hover:bg-indigo-100"
-              onClick={() => setClientDatabaseOpen(true)}
-            >
-              <Database className="mr-2 h-4 w-4" /> Base de données
-              {user.permissions.clientsApprove && workflowCounts.review > 0 && (
-                <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
-                  {workflowCounts.review > 99 ? "99+" : workflowCounts.review}
-                </span>
-              )}
-            </Button>
+            <div className="zgr-workspace-status flex items-center gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/65 p-1 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                disabled={profileSaving || !canWriteClients || profileEditingLocked}
+                onClick={() => void saveCurrentClient()}
+                title={
+                  !canWriteClients
+                    ? "Mode lecture seule : sauvegarde cloud interdite"
+                    : profileEditingLocked
+                      ? "CV validé : rouvrez-le en brouillon depuis la base pour le modifier"
+                      : activeProfileId
+                        ? `Mettre à jour ${activeProfileId}`
+                        : "Créer un profil client"
+                }
+              >
+                {profileSaving ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                {activeProfileId ? "Sauvegarder" : "Sauvegarder client"}
+              </Button>
+              <span
+                role="status"
+                title={
+                  pendingCloudCount
+                    ? `${pendingCloudCount} sauvegarde(s) locale(s) seront envoyées automatiquement au retour du cloud.`
+                    : draftState === "error"
+                      ? "Le brouillon automatique n’a pas pu être enregistré."
+                      : lastDraftSavedAt
+                        ? `Brouillon local enregistré à ${new Date(lastDraftSavedAt).toLocaleTimeString("fr-DZ")}.`
+                        : "Initialisation du brouillon automatique."
+                }
+                className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold ${
+                  draftState === "error"
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : pendingCloudCount || !online || hasUnsavedChanges
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : draftState === "saving"
+                        ? "border-sky-200 bg-sky-50 text-sky-700"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                {draftState === "error" ? (
+                  <TriangleAlert className="h-3.5 w-3.5" />
+                ) : pendingCloudCount || !online ? (
+                  <CloudOff className="h-3.5 w-3.5" />
+                ) : draftState === "saving" ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CircleCheck className="h-3.5 w-3.5" />
+                )}
+                {draftState === "error"
+                  ? "Erreur brouillon"
+                  : pendingCloudCount
+                    ? `${pendingCloudCount} cloud en attente`
+                    : !online
+                      ? "Hors ligne"
+                      : draftState === "saving"
+                        ? "Sauvegarde auto"
+                        : hasUnsavedChanges
+                          ? "Modifications en attente"
+                          : "Travail enregistré"}
+              </span>
+            </div>
             {pwa.installAvailable && !pwa.installed && (
               <Button
                 variant="outline"
@@ -2833,62 +2839,110 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                       : "Local"}
               </span>
             )}
-            {user.role === "admin" && (
+            <div className="zgr-toolbar-group flex flex-wrap items-center gap-2">
+              {user.role === "admin" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-cyan-200 bg-cyan-50/80 text-cyan-900 hover:bg-cyan-100"
+                  onClick={() => setClientOrdersOpen(true)}
+                >
+                  <ClipboardList className="mr-2 h-4 w-4" /> Commandes
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
-                className="border-cyan-200 bg-cyan-50/80 text-cyan-900 hover:bg-cyan-100"
-                onClick={() => setClientOrdersOpen(true)}
+                className="border-red-200 bg-red-50/80 text-red-900 hover:bg-red-100"
+                onClick={() => setCanadaOpportunitiesOpen(true)}
               >
-                <ClipboardList className="mr-2 h-4 w-4" /> Commandes
+                <BriefcaseBusiness className="mr-2 h-4 w-4" /> Opportunités
               </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-red-200 bg-red-50/80 text-red-900 hover:bg-red-100"
-              onClick={() => setCanadaOpportunitiesOpen(true)}
-            >
-              <BriefcaseBusiness className="mr-2 h-4 w-4" /> Opportunités
-            </Button>
-            {user.permissions.aiUse && (
-              <>
+              {user.permissions.aiUse && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-violet-200 bg-violet-50/80 text-violet-800 hover:bg-violet-100"
+                    onClick={() => setAiAssistantOpen(true)}
+                  >
+                    <Bot className="mr-2 h-4 w-4 text-violet-600" /> Assistant IA
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-amber-200 bg-amber-50/80 text-amber-900 hover:bg-amber-100"
+                    onClick={() => setPromptMasterOpen(true)}
+                  >
+                    <BookOpenText className="mr-2 h-4 w-4 text-amber-600" /> Prompte
+                  </Button>
+                </>
+              )}
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-violet-200 bg-violet-50/80 text-violet-800 hover:bg-violet-100"
-                  onClick={() => setAiAssistantOpen(true)}
+                  className="zgr-control gap-2"
+                  aria-label="Ouvrir les paramètres"
                 >
-                  <Bot className="mr-2 h-4 w-4 text-violet-600" /> Assistant IA
+                  <Settings className="h-4 w-4" /> Paramètres
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-amber-200 bg-amber-50/80 text-amber-900 hover:bg-amber-100"
-                  onClick={() => setPromptMasterOpen(true)}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72 rounded-xl p-2 shadow-xl">
+                <DropdownMenuLabel className="px-2 py-2 text-xs text-muted-foreground">
+                  Administration et configuration
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => setClientDatabaseOpen(true)}
+                  className="items-start gap-3 rounded-lg px-3 py-3"
                 >
-                  <BookOpenText className="mr-2 h-4 w-4 text-amber-600" /> Prompte
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Paramètres IA"
-                  title="Paramètres IA"
-                  onClick={() => setAiSettingsOpen(true)}
+                  <Database className="mt-0.5 h-4 w-4 text-indigo-600" />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="flex items-center gap-2 font-semibold">
+                      Base de données
+                      {user.permissions.clientsApprove && workflowCounts.review > 0 && (
+                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                          {workflowCounts.review > 99 ? "99+" : workflowCounts.review}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Clients et dossiers enregistrés
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setAccountSettingsOpen(true)}
+                  className="items-start gap-3 rounded-lg px-3 py-3"
                 >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-sky-200 bg-sky-50/80 text-sky-900 hover:bg-sky-100"
-              onClick={() => setAccountSettingsOpen(true)}
-              title="Paramètres du compte"
-            >
-              <UserCog className="mr-2 h-4 w-4" /> {user.displayName}
-            </Button>
+                  <UserCog className="mt-0.5 h-4 w-4 text-sky-600" />
+                  <span className="flex flex-col">
+                    <span className="font-semibold">Administrateur</span>
+                    <span className="text-xs text-muted-foreground">
+                      Compte, équipe et permissions
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                {user.permissions.aiUse && (
+                  <DropdownMenuItem
+                    onSelect={() => setAiSettingsOpen(true)}
+                    className="items-start gap-3 rounded-lg px-3 py-3"
+                  >
+                    <Sparkles className="mt-0.5 h-4 w-4 text-violet-600" />
+                    <span className="flex flex-col">
+                      <span className="font-semibold">Paramètres IA et API</span>
+                      <span className="text-xs text-muted-foreground">
+                        Clés, modèles et auto-switch
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="ghost" size="sm" onClick={loadSample}>
               {ui.example}
             </Button>
@@ -4221,6 +4275,79 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               previewFocusMode ? "lg:mx-auto lg:w-full lg:max-w-6xl" : ""
             }`}
           >
+            {!isEuropassTemplate && (
+              <div className="zgr-preview-palette mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Palette className="h-4 w-4" />
+                  </span>
+                  <span>
+                    <span className="block text-xs font-bold">Couleur du modèle</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Mise à jour immédiate de l’aperçu
+                    </span>
+                  </span>
+                </div>
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label={ui.palette}
+                >
+                  {paletteColors.map((color, index) => {
+                    const selected = accentColor.toLowerCase() === color.toLowerCase();
+                    const original =
+                      color.toLowerCase() === TEMPLATE_DEFAULT_COLORS[themeTemplateId];
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                          selected
+                            ? "scale-110 border-white ring-2 ring-zinc-500 dark:border-slate-900"
+                            : "border-white/90 dark:border-slate-800"
+                        }`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`${ui.palette} — ${original ? ui.originalColor : color}`}
+                        aria-pressed={selected}
+                        title={original ? ui.originalColor : color}
+                        onClick={() =>
+                          setTemplateColors((current) => ({
+                            ...current,
+                            [themeTemplateId]: color,
+                          }))
+                        }
+                      >
+                        {index === 0 && <span className="sr-only">{ui.originalColor}</span>}
+                      </button>
+                    );
+                  })}
+                  <label
+                    className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-dashed border-zinc-400 bg-white dark:bg-slate-900"
+                    title={ui.customColor}
+                  >
+                    <span
+                      className="h-5 w-5 rounded-full"
+                      style={{
+                        background:
+                          "conic-gradient(from 90deg, #ef4444, #f97316, #059669, #0891b2, #8b5cf6, #ef4444)",
+                      }}
+                    />
+                    <input
+                      type="color"
+                      value={accentColor}
+                      aria-label={ui.customColor}
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                      onChange={(event) =>
+                        setTemplateColors((current) => ({
+                          ...current,
+                          [themeTemplateId]: event.target.value.toLowerCase(),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
             <div className="relative min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-md shadow-slate-900/10">
               {isEuropassTemplate ? (
                 <EuropassPreview

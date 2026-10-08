@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
   Eye,
@@ -26,7 +28,14 @@ import {
   type AiSettings,
 } from "@/lib/ai-types";
 import { testAiConnection } from "@/lib/ai-client";
-import { getAiKeyStatus, removeAiKey, saveAiKey, type AiKeyStatus } from "@/lib/ai-key-client";
+import {
+  diagnoseAiKeys,
+  getAiKeyStatus,
+  removeAiKey,
+  saveAiKey,
+  type AiKeyDiagnosticReport,
+  type AiKeyStatus,
+} from "@/lib/ai-key-client";
 
 const PROVIDERS: AiProviderId[] = ["gemini", "openrouter"];
 const PROVIDER_LABEL: Record<AiProviderId, string> = {
@@ -84,11 +93,15 @@ export function AiSettingsDialog({
   const [showKey, setShowKey] = useState(false);
   const [keyBusy, setKeyBusy] = useState("");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [diagnostics, setDiagnostics] = useState<
+    Partial<Record<AiProviderId, AiKeyDiagnosticReport>>
+  >({});
 
   useEffect(() => {
     if (open) {
       setDraft(linkedSettings(structuredClone(value)));
       setMessage(null);
+      setDiagnostics({});
     }
   }, [open, value]);
 
@@ -230,6 +243,30 @@ export function AiSettingsDialog({
       });
     } finally {
       setTesting(null);
+    }
+  };
+
+  const diagnoseProviderKeys = async (providerId: AiProviderId) => {
+    const connection = providerConnection(draft, providerId) ?? newAiConnection(providerId);
+    setKeyBusy(`diagnose-${providerId}`);
+    setMessage(null);
+    try {
+      const report = await diagnoseAiKeys(providerId, connection.model);
+      setDiagnostics((current) => ({ ...current, [providerId]: report }));
+      setMessage({
+        ok: report.summary.failed === 0,
+        text:
+          report.summary.failed === 0
+            ? `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy}/${report.summary.total} clés prêtes.`
+            : `${PROVIDER_LABEL[providerId]} : ${report.summary.healthy} clé(s) prête(s), ${report.summary.failed} à corriger. Consultez le détail ci-dessous.`,
+      });
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Diagnostic des clés impossible.",
+      });
+    } finally {
+      setKeyBusy("");
     }
   };
 
@@ -375,7 +412,9 @@ export function AiSettingsDialog({
             />
             <span>
               <strong className="block">Modèles gratuits uniquement</strong>
-              <span className="text-xs text-muted-foreground">Filtre appliqué après le test</span>
+              <span className="text-xs text-muted-foreground">
+                Préférence appliquée après le test
+              </span>
             </span>
           </label>
         </div>
@@ -387,6 +426,7 @@ export function AiSettingsDialog({
             const totalKeys = (status?.environmentCount || 0) + (status?.managed.length || 0);
             const priority = connections.findIndex((item) => item.provider === providerId) + 1;
             const percent = usagePercent(connection);
+            const diagnostic = diagnostics[providerId];
             return (
               <section
                 key={providerId}
@@ -462,6 +502,74 @@ export function AiSettingsDialog({
                     {!totalKeys && (
                       <p className="text-xs text-amber-700">
                         Aucune clé configurée pour ce fournisseur.
+                      </p>
+                    )}
+                    {!!totalKeys && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        disabled={!!keyBusy}
+                        onClick={() => void diagnoseProviderKeys(providerId)}
+                      >
+                        {keyBusy === `diagnose-${providerId}` ? (
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Activity className="mr-2 h-4 w-4" />
+                        )}
+                        Diagnostiquer chaque clé
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {diagnostic && (
+                  <div className="space-y-2 rounded-xl border bg-white p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <strong>Résultat du diagnostic réel</strong>
+                      <span className="text-muted-foreground">
+                        {diagnostic.summary.healthy}/{diagnostic.summary.total} prête(s)
+                      </span>
+                    </div>
+                    {diagnostic.results.map((result) => (
+                      <div
+                        key={result.id}
+                        className={`rounded-lg border p-3 text-xs ${
+                          result.status === "healthy"
+                            ? "border-emerald-200 bg-emerald-50"
+                            : "border-red-200 bg-red-50"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {result.status === "healthy" ? (
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+                          ) : (
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap justify-between gap-2 font-medium">
+                              <span>
+                                #{result.priority} · {result.label} · ••••{result.last4}
+                              </span>
+                              <span>{result.latencyMs.toLocaleString("fr-FR")} ms</span>
+                            </div>
+                            <p className="mt-1 break-words">{result.message}</p>
+                            <p className="mt-1 font-medium">{result.advice}</p>
+                            {result.status === "healthy" && result.model && (
+                              <p className="mt-1 text-emerald-800">
+                                {result.model} · {result.modelCount} modèle(s) disponible(s)
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {providerId === "gemini" && (
+                      <p className="text-xs text-slate-600">
+                        Important : Google applique les quotas par projet, pas par clé. Depuis
+                        septembre 2026, une ancienne clé Standard doit être remplacée par une clé
+                        Auth créée dans Google AI Studio.
                       </p>
                     )}
                   </div>

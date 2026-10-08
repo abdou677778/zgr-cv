@@ -2890,13 +2890,37 @@ async function writeManagedAiKeys(env, entries) {
 }
 
 async function providerKeys(provider, env) {
-  const environmentKeys = secretKeys(
-    provider === "gemini" ? env.GEMINI_API_KEYS : env.OPENROUTER_API_KEYS,
-  );
-  const managedKeys = (await readManagedAiKeys(env))
+  return (await providerKeyEntries(provider, env)).map((entry) => entry.key);
+}
+
+async function providerKeyEntries(provider, env) {
+  const managed = (await readManagedAiKeys(env))
     .filter((entry) => entry.provider === provider)
-    .map((entry) => entry.key);
-  return [...new Set([...managedKeys, ...environmentKeys])];
+    .map((entry, index) => ({
+      id: entry.id,
+      key: entry.key,
+      label: entry.label || `Clé interface ${index + 1}`,
+      source: "managed",
+      priority: index + 1,
+    }));
+  const known = new Set(managed.map((entry) => entry.key));
+  const environment = secretKeys(
+    provider === "gemini" ? env.GEMINI_API_KEYS : env.OPENROUTER_API_KEYS,
+  )
+    .filter((key) => !known.has(key))
+    .map((key, index) => ({
+      id: `environment-${index + 1}`,
+      key,
+      label: `Secret Cloudflare ${index + 1}`,
+      source: "environment",
+      priority: managed.length + index + 1,
+    }));
+  const seen = new Set();
+  return [...managed, ...environment].filter((entry) => {
+    if (seen.has(entry.key)) return false;
+    seen.add(entry.key);
+    return true;
+  });
 }
 
 async function modelsForProviderKey(provider, key) {
@@ -2941,7 +2965,13 @@ function preferredProbeModel(provider, models, requestedModel = "") {
   if (requested && models.some((model) => model.id === requested)) return requested;
   const preferred =
     provider === "gemini"
-      ? ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+      ? [
+          "gemini-3.8-flash",
+          "gemini-3.5-flash-lite",
+          "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
+          "gemini-2.5-flash",
+        ]
       : [
           "openrouter/free",
           "google/gemini-2.5-flash-lite:free",
@@ -3168,6 +3198,141 @@ async function providerError(response, fallback) {
   return { message: message.slice(0, 500), status: response.status };
 }
 
+function safeAiErrorMessage(error, key = "") {
+  const raw = error instanceof Error ? error.message : "Erreur inconnue du fournisseur.";
+  return raw
+    .replaceAll(key, "[clé masquée]")
+    .replace(/(?:AIza|AQ\.)[A-Za-z0-9_-]{16,}/g, "[clé masquée]")
+    .slice(0, 500);
+}
+
+function aiFailureCategory(status, message) {
+  const normalized = String(message || "").toLowerCase();
+  if (status === 429 || status === 402 || normalized.includes("resource_exhausted")) return "quota";
+  if (status === 408 || normalized.includes("timeout") || normalized.includes("aborted"))
+    return "timeout";
+  if (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes("api key") ||
+    normalized.includes("leaked") ||
+    normalized.includes("blocked")
+  )
+    return "authentication";
+  if (status === 404 || normalized.includes("model") || normalized.includes("not found"))
+    return "model";
+  if (status === 400 && (normalized.includes("billing") || normalized.includes("precondition")))
+    return "configuration";
+  if (status >= 500) return "temporary";
+  return "request";
+}
+
+function aiFailureAdvice(provider, category, key) {
+  if (category === "quota")
+    return "Quota du projet atteint. Plusieurs clés du même projet partagent le même quota.";
+  if (category === "timeout" || category === "temporary")
+    return "Erreur temporaire du fournisseur : réessayez dans quelques minutes.";
+  if (category === "model")
+    return "Le modèle choisi n’est pas disponible pour cette clé. Rechargez les modèles.";
+  if (category === "configuration")
+    return "Vérifiez le projet, la facturation et l’activation de Gemini API dans Google AI Studio.";
+  if (category === "authentication" && provider === "gemini")
+    return key.startsWith("AIza")
+      ? "Cette ancienne clé Standard peut être bloquée. Créez une nouvelle clé Auth dans Google AI Studio."
+      : "Vérifiez dans Google AI Studio que la clé Auth est active, non bloquée et autorisée pour Gemini API.";
+  if (category === "authentication")
+    return "Vérifiez que la clé est active et autorisée chez le fournisseur.";
+  return "Vérifiez la clé, le modèle et la configuration du projet fournisseur.";
+}
+
+async function diagnoseAiKeys(request, env, actor, origin, ctx) {
+  let payload;
+  try {
+    payload = (await readJson(request, 4_096)).value;
+  } catch (error) {
+    if (error instanceof Response) return json({ error: "Diagnostic IA invalide." }, 400, origin);
+    throw error;
+  }
+  const provider =
+    payload?.provider === "openrouter"
+      ? "openrouter"
+      : payload?.provider === "gemini"
+        ? "gemini"
+        : null;
+  if (!provider) return json({ error: "Fournisseur IA invalide." }, 422, origin);
+  const requestedModel =
+    typeof payload?.model === "string" ? payload.model.trim().replace(/^models\//, "") : "";
+  const entries = await providerKeyEntries(provider, env);
+  if (!entries.length)
+    return json({ error: `Aucune clé ${provider} configurée côté serveur.` }, 503, origin);
+
+  const results = [];
+  for (const entry of entries) {
+    const startedAt = Date.now();
+    try {
+      const models = await modelsForProviderKey(provider, entry.key);
+      if (!models.length)
+        throw Object.assign(new Error("Aucun modèle de texte compatible n’est disponible."), {
+          status: 422,
+        });
+      const probe = await probeProviderKey(provider, entry.key, models, requestedModel);
+      results.push({
+        id: entry.id,
+        label: entry.label,
+        last4: entry.key.slice(-4),
+        source: entry.source,
+        priority: entry.priority,
+        status: "healthy",
+        category: "healthy",
+        model: probe.model,
+        modelCount: models.length,
+        latencyMs: Date.now() - startedAt,
+        tokens: probe.tokens,
+        message: "Liste des modèles et génération réelle réussies.",
+        advice: "Clé prête pour les fonctions IA ZGR CV.",
+      });
+    } catch (error) {
+      const status = Number(error?.status) || (error?.name === "AbortError" ? 408 : 502);
+      const message = safeAiErrorMessage(error, entry.key);
+      const category = aiFailureCategory(status, message);
+      results.push({
+        id: entry.id,
+        label: entry.label,
+        last4: entry.key.slice(-4),
+        source: entry.source,
+        priority: entry.priority,
+        status: "failed",
+        category,
+        httpStatus: status,
+        model: requestedModel || null,
+        modelCount: 0,
+        latencyMs: Date.now() - startedAt,
+        tokens: 0,
+        message,
+        advice: aiFailureAdvice(provider, category, entry.key),
+      });
+    }
+  }
+  const healthy = results.filter((result) => result.status === "healthy").length;
+  ctx.waitUntil(
+    writeAudit(env, request, "ai_keys_diagnosed", actor.username, "success", {
+      provider,
+      tested: results.length,
+      healthy,
+    }),
+  );
+  return json(
+    {
+      provider,
+      testedAt: new Date().toISOString(),
+      summary: { total: results.length, healthy, failed: results.length - healthy },
+      results,
+    },
+    200,
+    origin,
+  );
+}
+
 async function listAiModels(provider, env, origin) {
   const keys = await providerKeys(provider, env);
   if (!keys.length)
@@ -3230,61 +3395,73 @@ async function generateAi(request, env, origin) {
   const failures = [];
 
   for (const key of orderedKeys) {
-    const response =
-      provider === "gemini"
-        ? await fetchProvider(
-            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-            {
+    let response;
+    try {
+      response =
+        provider === "gemini"
+          ? await fetchProvider(
+              `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+                body: JSON.stringify({
+                  systemInstruction: { parts: [{ text: system }] },
+                  contents: [{ role: "user", parts: [{ text: prompt }] }],
+                  generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+                }),
+              },
+            )
+          : await fetchProvider("https://openrouter.ai/api/v1/chat/completions", {
               method: "POST",
-              headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${key}`,
+                "X-OpenRouter-Title": "ZGR CV AI Assistant",
+              },
               body: JSON.stringify({
-                systemInstruction: { parts: [{ text: system }] },
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+                model,
+                messages: [
+                  { role: "system", content: system },
+                  { role: "user", content: prompt },
+                ],
+                temperature: 0.2,
+                response_format: { type: "json_object" },
+                ...(typeof payload.providerOrder === "string" && payload.providerOrder.trim()
+                  ? {
+                      provider: {
+                        order: payload.providerOrder
+                          .split(",")
+                          .map((item) => item.trim())
+                          .filter(Boolean),
+                        allow_fallbacks: payload.allowProviderFallbacks !== false,
+                      },
+                    }
+                  : {}),
               }),
-            },
-          )
-        : await fetchProvider("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${key}`,
-              "X-OpenRouter-Title": "ZGR CV AI Assistant",
-            },
-            body: JSON.stringify({
-              model,
-              messages: [
-                { role: "system", content: system },
-                { role: "user", content: prompt },
-              ],
-              temperature: 0.2,
-              response_format: { type: "json_object" },
-              ...(typeof payload.providerOrder === "string" && payload.providerOrder.trim()
-                ? {
-                    provider: {
-                      order: payload.providerOrder
-                        .split(",")
-                        .map((item) => item.trim())
-                        .filter(Boolean),
-                      allow_fallbacks: payload.allowProviderFallbacks !== false,
-                    },
-                  }
-                : {}),
-            }),
-          });
+            });
+    } catch (error) {
+      failures.push({
+        status: error?.name === "AbortError" ? 408 : 502,
+        message: safeAiErrorMessage(error, key),
+      });
+      continue;
+    }
 
     if (!response.ok) {
       const error = await providerError(response, `Échec ${provider}.`);
-      failures.push(error.message);
-      if ([402, 408, 429].includes(response.status) || response.status >= 500) continue;
-      return json({ error: error.message }, response.status, origin);
+      failures.push({ status: error.status, message: safeAiErrorMessage(error, key) });
+      // Une erreur client ne doit pas être rejouée sur la même clé, mais une autre clé
+      // peut être valide, appartenir à un autre projet ou autoriser le modèle demandé.
+      continue;
     }
     const body = await response.json();
     if (provider === "gemini") {
       const parts = body?.candidates?.[0]?.content?.parts;
       const text = Array.isArray(parts) ? parts.map((part) => part?.text || "").join("") : "";
-      if (!text)
-        return json({ error: "Gemini n’a renvoyé aucun contenu exploitable." }, 502, origin);
+      if (!text) {
+        failures.push({ status: 502, message: "Gemini n’a renvoyé aucun contenu exploitable." });
+        continue;
+      }
       return json(
         { text, tokens: Number(body?.usageMetadata?.totalTokenCount) || 0, provider, model },
         200,
@@ -3292,17 +3469,27 @@ async function generateAi(request, env, origin) {
       );
     }
     const text = body?.choices?.[0]?.message?.content;
-    if (typeof text !== "string" || !text)
-      return json({ error: "OpenRouter n’a renvoyé aucun contenu exploitable." }, 502, origin);
+    if (typeof text !== "string" || !text) {
+      failures.push({ status: 502, message: "OpenRouter n’a renvoyé aucun contenu exploitable." });
+      continue;
+    }
     return json(
       { text, tokens: Number(body?.usage?.total_tokens) || 0, provider, model },
       200,
       origin,
     );
   }
+  const onlyQuota =
+    failures.length > 0 && failures.every((failure) => [402, 429].includes(failure.status));
   return json(
-    { error: `Toutes les clés ${provider} ont échoué. ${failures.join(" · ").slice(0, 700)}` },
-    503,
+    {
+      error: `Toutes les clés ${provider} ont échoué. ${failures
+        .map((failure) => failure.message)
+        .join(" · ")
+        .slice(0, 700)}`,
+      attemptedKeyCount: orderedKeys.length,
+    },
+    onlyQuota ? 429 : 503,
     origin,
   );
 }
@@ -4075,6 +4262,8 @@ async function route(request, env, ctx) {
       return aiKeyStatus(env, origin);
     if (url.pathname === "/api/admin/ai-keys" && request.method === "PUT")
       return saveAiKey(request, env, actor, origin, ctx);
+    if (url.pathname === "/api/admin/ai-keys/diagnose" && request.method === "POST")
+      return diagnoseAiKeys(request, env, actor, origin, ctx);
     const keyId = aiKeyId(url.pathname);
     if (keyId && request.method === "DELETE")
       return deleteAiKey(request, env, actor, keyId, origin, ctx);

@@ -1125,3 +1125,151 @@ test("la conservation limite les sauvegardes quotidiennes et mensuelles", async 
   assert.equal(dailyPeriods.size, 30);
   assert.equal(monthlyPeriods.size, 12);
 });
+
+function aiTestEnvironment(keys) {
+  return {
+    CLIENTS_BUCKET: new MemoryR2Bucket(),
+    ADMIN_USERNAME: "admin",
+    ADMIN_PASSWORD: "mot-de-passe-admin-test",
+    SESSION_SECRET: "secret-de-session-de-test-suffisamment-long-1234567890",
+    ALLOWED_ORIGINS: "http://127.0.0.1:8080",
+    GEMINI_API_KEYS: JSON.stringify(keys),
+  };
+}
+
+const geminiSuccess = () =>
+  new Response(
+    JSON.stringify({
+      candidates: [{ content: { parts: [{ text: '{"status":"ok"}' }] } }],
+      usageMetadata: { totalTokenCount: 7 },
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+
+test("l’auto-switch Gemini ignore une première clé refusée et utilise la suivante", async (t) => {
+  const firstKey = "AIza-premiere-cle-invalide-test-123456";
+  const secondKey = "AQ.deuxieme-cle-valide-test-123456789";
+  const attempts = [];
+  t.mock.method(globalThis, "fetch", async (_url, init = {}) => {
+    const key = new Headers(init.headers).get("x-goog-api-key");
+    attempts.push(key);
+    if (key === firstKey)
+      return new Response(JSON.stringify({ error: { message: "API key rejected" } }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    return geminiSuccess();
+  });
+  const env = aiTestEnvironment([firstKey, secondKey]);
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+
+  const response = await call(
+    env,
+    "/api/ai/generate",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "gemini",
+        model: "gemini-test",
+        system: "Réponds en JSON.",
+        prompt: "Test.",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(attempts, [firstKey, secondKey]);
+  assert.equal((await response.json()).text, '{"status":"ok"}');
+});
+
+test("l’auto-switch Gemini couvre quota, réseau et réponse vide", async (t) => {
+  const keys = [
+    "AIza-quota-test-12345678901234567890",
+    "AIza-reseau-test-1234567890123456789",
+    "AIza-vide-test-123456789012345678901",
+    "AQ.cle-finale-test-1234567890123456789",
+  ];
+  let attempt = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    attempt += 1;
+    if (attempt === 1)
+      return new Response(JSON.stringify({ error: { message: "RESOURCE_EXHAUSTED" } }), {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      });
+    if (attempt === 2) throw new TypeError("network unavailable");
+    if (attempt === 3)
+      return new Response(JSON.stringify({ candidates: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    return geminiSuccess();
+  });
+  const env = aiTestEnvironment(keys);
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const response = await call(
+    env,
+    "/api/ai/generate",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "gemini",
+        model: "gemini-test",
+        system: "Réponds en JSON.",
+        prompt: "Test.",
+      }),
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(attempt, 4);
+});
+
+test("le diagnostic admin teste chaque clé sans exposer les secrets", async (t) => {
+  const blockedKey = "AIza-ancienne-cle-standard-bloquee-12345";
+  const healthyKey = "AQ.nouvelle-cle-auth-valide-123456789012";
+  t.mock.method(globalThis, "fetch", async (url, init = {}) => {
+    const key = new Headers(init.headers).get("x-goog-api-key");
+    if (key === blockedKey)
+      return new Response(
+        JSON.stringify({ error: { message: "Your API key was reported as leaked." } }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    if (String(url).includes("/models?pageSize="))
+      return new Response(
+        JSON.stringify({
+          models: [
+            {
+              name: "models/gemini-3.8-flash",
+              displayName: "Gemini 3.8 Flash",
+              supportedGenerationMethods: ["generateContent"],
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    return geminiSuccess();
+  });
+  const env = aiTestEnvironment([blockedKey, healthyKey]);
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const response = await call(
+    env,
+    "/api/admin/ai-keys/diagnose",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "gemini" }),
+    }),
+  );
+  const body = await response.json();
+  const serialized = JSON.stringify(body);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.summary, { total: 2, healthy: 1, failed: 1 });
+  assert.equal(body.results[0].category, "authentication");
+  assert.match(body.results[0].advice, /clé Standard/);
+  assert.equal(body.results[1].status, "healthy");
+  assert.equal(serialized.includes(blockedKey), false);
+  assert.equal(serialized.includes(healthyKey), false);
+});

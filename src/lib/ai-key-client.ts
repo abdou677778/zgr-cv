@@ -14,6 +14,38 @@ export type AiKeyStatus = Record<
   { environmentCount: number; managed: ManagedAiKey[] }
 >;
 
+export type AiKeyDiagnostic = {
+  id: string;
+  label: string;
+  last4: string;
+  source: "managed" | "environment";
+  priority: number;
+  status: "healthy" | "failed";
+  category:
+    | "healthy"
+    | "quota"
+    | "timeout"
+    | "authentication"
+    | "model"
+    | "configuration"
+    | "temporary"
+    | "request";
+  httpStatus?: number;
+  model: string | null;
+  modelCount: number;
+  latencyMs: number;
+  tokens: number;
+  message: string;
+  advice: string;
+};
+
+export type AiKeyDiagnosticReport = {
+  provider: AiProviderId;
+  testedAt: string;
+  summary: { total: number; healthy: number; failed: number };
+  results: AiKeyDiagnostic[];
+};
+
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authenticatedFetch(path, init);
   const body = (await response.json().catch(() => ({}))) as T & { error?: string };
@@ -50,5 +82,13 @@ export async function saveAiKey(input: {
 export async function removeAiKey(id: string) {
   return apiJson<{ ok: boolean }>(`/api/admin/ai-keys/${encodeURIComponent(id)}`, {
     method: "DELETE",
+  });
+}
+
+export async function diagnoseAiKeys(provider: AiProviderId, model?: string) {
+  return apiJson<AiKeyDiagnosticReport>("/api/admin/ai-keys/diagnose", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, model }),
   });
 }

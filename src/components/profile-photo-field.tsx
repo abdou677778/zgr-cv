@@ -176,7 +176,7 @@ export function ProfilePhotoField({
   const generateProfessionalPhoto = async () => {
     if (!photo?.dataUrl) return;
     setBusy(true);
-    setMessage("Détourage du sujet et application du fond #E7E7E7…");
+    setMessage("Chargement du moteur IA local, détourage et application du fond #E7E7E7…");
     try {
       let sourceId = sourceAssetId;
       if (!sourceId) {
@@ -219,7 +219,7 @@ export function ProfilePhotoField({
       setGallery((current) => [generatedAsset, ...current]);
       onChange(generated);
       setMessage(
-        `Photo CV créée avec ${PROFILE_PHOTO_AI_MODEL} · visage inchangé · fond exact ${PROFILE_PHOTO_BACKGROUND}.`,
+        `Photo CV créée localement avec ${PROFILE_PHOTO_AI_MODEL} · aucun envoi externe · fond exact ${PROFILE_PHOTO_BACKGROUND}.`,
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Création de la photo CV impossible.");
@@ -273,8 +273,8 @@ export function ProfilePhotoField({
               {photo ? "Photo du profil prête" : "Ajouter une photo professionnelle"}
             </p>
             <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-              L’original est conservé. L’IA détoure uniquement la personne et applique le fond CV
-              exact #E7E7E7, sans modifier le visage.
+              L’original est conservé. L’IA locale détoure la personne sur cet appareil et applique
+              le fond exact #E7E7E7, sans clé API, quota ni envoi externe.
             </p>
           </div>
           {photo && (
@@ -320,7 +320,7 @@ export function ProfilePhotoField({
                 ) : (
                   <Sparkles className="mr-2 h-4 w-4" />
                 )}
-                Photo CV IA
+                Photo CV IA locale
               </Button>
             )}
             <Button
@@ -402,7 +402,7 @@ export function ProfilePhotoField({
                       {asset.label}
                     </span>
                     <span className="mt-0.5 block text-[10px] text-slate-500">
-                      {asset.kind === "professional" ? "Version IA" : "Original"} ·{" "}
+                      {asset.kind === "professional" ? "Version IA locale" : "Original"} ·{" "}
                       {new Date(asset.createdAt).toLocaleDateString("fr-DZ")}
                     </span>
                   </span>

@@ -1656,38 +1656,3 @@ test("la galerie photo conserve les originaux et les versions CV par profil", as
   assert.equal(download.headers.get("Content-Type"), "image/jpeg");
   assert.deepEqual(new Uint8Array(await download.arrayBuffer()), jpeg);
 });
-
-test("la photo CV utilise BRIA RMBG 2.0 et retourne un PNG privé", async (t) => {
-  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
-  t.mock.method(globalThis, "fetch", async (url) => {
-    assert.equal(String(url), "https://images.example.test/cutout.png");
-    return new Response(png, { status: 200, headers: { "Content-Type": "image/png" } });
-  });
-  const modelCalls = [];
-  const env = aiTestEnvironment([], {
-    AI: {
-      async run(model, input) {
-        modelCalls.push({ model, input });
-        return { image: "https://images.example.test/cutout.png" };
-      },
-    },
-  });
-  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
-  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
-  const response = await call(
-    env,
-    "/api/ai/profile-photo/background",
-    authorized(admin.token, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image: `data:image/jpeg;base64,${Buffer.from(jpeg).toString("base64")}`,
-      }),
-    }),
-  );
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("Content-Type"), "image/png");
-  assert.equal(response.headers.get("Cache-Control"), "private, no-store");
-  assert.equal(modelCalls[0].model, "bria/remove-background");
-  assert.equal(modelCalls[0].input.preserve_alpha, true);
-});

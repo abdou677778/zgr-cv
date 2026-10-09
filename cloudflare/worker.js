@@ -19,8 +19,6 @@ const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
 const MAX_ACCOUNT_BYTES = 16_384;
 const MAX_AI_BYTES = 120_000;
-const MAX_PROFILE_PHOTO_AI_BYTES = 2_000_000;
-const MAX_PROFILE_PHOTO_AI_INPUT_BYTES = 1_500_000;
 const MAX_TELEMETRY_BYTES = 16_384;
 const MAX_PHOTO_BYTES = 150 * 1024;
 const MAX_PROFILE_PHOTO_SOURCE_BYTES = 12 * 1024 * 1024;
@@ -1529,78 +1527,6 @@ async function deleteProfilePhotoLibraryAsset(env, target, origin) {
     return json({ error: "Photo introuvable dans la galerie." }, 404, origin);
   await env.CLIENTS_BUCKET.delete(key);
   return json({ ok: true, id: target.assetId }, 200, origin);
-}
-
-async function professionalizeProfilePhoto(request, env, origin) {
-  if (typeof env.AI?.run !== "function")
-    return json({ error: "Liaison Cloudflare AI absente." }, 503, origin);
-  let payload;
-  try {
-    payload = (await readJson(request, MAX_PROFILE_PHOTO_AI_BYTES)).value;
-  } catch (error) {
-    if (error instanceof Response)
-      return json(
-        {
-          error:
-            error.status === 413 ? "La photo dépasse la taille autorisée." : "Requête invalide.",
-        },
-        error.status,
-        origin,
-      );
-    throw error;
-  }
-  const image = typeof payload?.image === "string" ? payload.image : "";
-  if (!/^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(image))
-    return json({ error: "La photo JPEG/PNG est absente ou invalide." }, 422, origin);
-  const encoded = image.slice(image.indexOf(",") + 1);
-  if (encoded.length > Math.ceil(MAX_PROFILE_PHOTO_AI_INPUT_BYTES / 3) * 4 + 4)
-    return json({ error: "La photo transmise à l’IA est trop volumineuse." }, 413, origin);
-  let inputBytes;
-  try {
-    inputBytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
-  } catch {
-    return json({ error: "La photo encodée est invalide." }, 422, origin);
-  }
-  const inputIsValid = image.startsWith("data:image/jpeg")
-    ? isJpeg(inputBytes.buffer)
-    : isPng(inputBytes.buffer);
-  if (!inputIsValid)
-    return json({ error: "Le contenu de la photo ne correspond pas à son format." }, 422, origin);
-  let result;
-  try {
-    result = await env.AI.run("bria/remove-background", {
-      image,
-      preserve_alpha: true,
-      visual_input_content_moderation: true,
-      visual_output_content_moderation: true,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Service de détourage indisponible.";
-    return json({ error: `Détourage IA impossible : ${message}` }, 502, origin);
-  }
-  const imageUrl = result?.image || result?.result?.image;
-  if (typeof imageUrl !== "string" || !/^https:\/\//i.test(imageUrl))
-    return json({ error: "Le modèle n’a pas retourné de photo exploitable." }, 502, origin);
-  const generated = await fetch(imageUrl, { redirect: "error" });
-  if (!generated.ok)
-    return json({ error: "La photo détourée n’a pas pu être récupérée." }, 502, origin);
-  const contentType = (generated.headers.get("Content-Type") || "").split(";", 1)[0];
-  if (contentType !== "image/png")
-    return json({ error: "Le modèle a retourné un format inattendu." }, 502, origin);
-  const bytes = await generated.arrayBuffer();
-  if (!isPng(bytes) || bytes.byteLength > MAX_PROFILE_PHOTO_SOURCE_BYTES)
-    return json({ error: "La photo détourée est invalide ou trop volumineuse." }, 502, origin);
-  return new Response(bytes, {
-    status: 200,
-    headers: {
-      "Content-Type": "image/png",
-      "Content-Length": String(bytes.byteLength),
-      "Cache-Control": "private, no-store",
-      "X-ZGR-Photo-Model": "BRIA RMBG 2.0",
-      "X-Content-Type-Options": "nosniff",
-      ...corsHeaders(origin),
-    },
-  });
 }
 
 async function readR2ProfileIndex(env) {
@@ -4887,12 +4813,6 @@ async function route(request, env, ctx) {
       return json({ error: "Votre rôle ne permet pas d’utiliser les fonctions IA." }, 403, origin);
     return generateAi(request, env, origin);
   }
-  if (url.pathname === "/api/ai/profile-photo/background" && request.method === "POST") {
-    if (!permissions.aiUse)
-      return json({ error: "Votre rôle ne permet pas d’utiliser les fonctions IA." }, 403, origin);
-    return professionalizeProfilePhoto(request, env, origin);
-  }
-
   if (url.pathname === "/api/telemetry" && request.method === "POST")
     return recordOperationalEvents(request, env, actor, origin, ctx);
 

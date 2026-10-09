@@ -3,7 +3,7 @@ import type { ProfilePhoto } from "./cv-types";
 export const PROFILE_PHOTO_MAX_BYTES = 150 * 1024;
 export const PROFILE_PHOTO_MAX_SOURCE_BYTES = 12 * 1024 * 1024;
 export const PROFILE_PHOTO_BACKGROUND = "#E7E7E7";
-export const PROFILE_PHOTO_AI_MODEL = "BRIA RMBG 2.0";
+export const PROFILE_PHOTO_AI_MODEL = "Google MediaPipe Selfie Segmenter · local";
 const PROFILE_PHOTO_MIN_EDGE = 160;
 const PROFILE_PHOTO_INITIAL_MAX_EDGE = 1200;
 const PROFILE_PHOTO_MIN_OUTPUT_EDGE = 280;

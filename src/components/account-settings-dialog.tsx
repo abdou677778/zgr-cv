@@ -48,7 +48,7 @@ import {
   type ManagedUser,
   type OperationalMonitoring,
 } from "@/lib/account-client";
-import type { AccountRole, SessionUser } from "@/lib/auth-client";
+import type { AccountRole, SessionUser, TeamRole } from "@/lib/auth-client";
 
 const roleLabels: Record<AccountRole, string> = {
   admin: "Administrateur",
@@ -159,6 +159,7 @@ export function AccountSettingsDialog({
     password: "",
     role: "editor" as AccountRole,
     workflowManager: false,
+    teamRoles: ["writer"] as TeamRole[],
   });
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const [ownPassword, setOwnPassword] = useState({ current: "", next: "", confirm: "" });
@@ -294,6 +295,7 @@ export function AccountSettingsDialog({
         password: "",
         role: "editor",
         workflowManager: false,
+        teamRoles: ["writer"],
       });
       setMessage({ ok: true, text: "Le nouveau profil peut maintenant se connecter." });
       await loadAdminData();
@@ -316,6 +318,7 @@ export function AccountSettingsDialog({
         active: profile.active,
         role: profile.role,
         workflowManager: profile.workflowManager,
+        teamRoles: profile.teamRoles,
       });
       setUsers((current) =>
         current.map((item) => (item.username === profile.username ? updated : item)),
@@ -1187,6 +1190,35 @@ export function AccountSettingsDialog({
                     </span>
                   </span>
                 </label>
+                <fieldset className="rounded-md border border-cyan-200 bg-white px-3 py-2 xl:col-span-2">
+                  <legend className="px-1 text-xs font-semibold text-cyan-900">
+                    Rôles dans les commandes
+                  </legend>
+                  <div className="flex flex-wrap gap-5 text-sm">
+                    {(
+                      [
+                        ["order_admin", "Admin clients"],
+                        ["writer", "Rédacteur"],
+                      ] as const
+                    ).map(([teamRole, label]) => (
+                      <label key={teamRole} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={newUser.teamRoles.includes(teamRole)}
+                          onChange={(event) =>
+                            setNewUser({
+                              ...newUser,
+                              teamRoles: event.target.checked
+                                ? [...new Set([...newUser.teamRoles, teamRole])]
+                                : newUser.teamRoles.filter((item) => item !== teamRole),
+                            })
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <Button className="md:col-span-2 md:w-fit" disabled={busy === "create"}>
                   {busy === "create" ? (
                     <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
@@ -1218,11 +1250,21 @@ export function AccountSettingsDialog({
                   <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Chargement…
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="overflow-hidden rounded-xl border bg-white">
+                  <div className="hidden grid-cols-[minmax(170px,1fr)_minmax(180px,1.1fr)_170px_105px_82px] items-center gap-3 border-b bg-slate-100 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-600 lg:grid">
+                    <span>Utilisateur</span>
+                    <span>Nom affiché</span>
+                    <span>Accès technique</span>
+                    <span>Actif</span>
+                    <span>Actions</span>
+                  </div>
                   {users.map((profile) => {
                     const isProtected = profile.isPrimary || profile.username === user.username;
                     return (
-                      <div key={profile.username} className="space-y-3 rounded-xl border p-4">
+                      <div
+                        key={profile.username}
+                        className="space-y-3 border-b p-4 last:border-b-0"
+                      >
                         <div className="grid gap-3 lg:grid-cols-[1fr_1.1fr_190px_auto_auto] lg:items-end">
                           <div>
                             <p className="text-xs text-muted-foreground">Identifiant</p>
@@ -1338,6 +1380,47 @@ export function AccountSettingsDialog({
                               </Button>
                             )}
                           </div>
+                        </div>
+                        <div className="grid overflow-hidden rounded-lg border border-cyan-200 bg-white text-sm sm:grid-cols-[minmax(180px,1fr)_150px_150px]">
+                          <div className="bg-cyan-50 px-3 py-2 font-semibold text-cyan-950">
+                            Rôles commandes
+                            <span className="block text-[11px] font-normal text-cyan-800">
+                              Admin clients = communication et prise de commande
+                            </span>
+                          </div>
+                          {(
+                            [
+                              ["order_admin", "Admin clients"],
+                              ["writer", "Rédacteur"],
+                            ] as const
+                          ).map(([teamRole, label]) => (
+                            <label
+                              key={teamRole}
+                              className="flex items-center justify-center gap-2 border-t px-3 py-2 sm:border-l sm:border-t-0"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={(profile.teamRoles || []).includes(teamRole)}
+                                onChange={(event) =>
+                                  setUsers((current) =>
+                                    current.map((item) =>
+                                      item.username === profile.username
+                                        ? {
+                                            ...item,
+                                            teamRoles: event.target.checked
+                                              ? [...new Set([...(item.teamRoles || []), teamRole])]
+                                              : (item.teamRoles || []).filter(
+                                                  (value) => value !== teamRole,
+                                                ),
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                              />
+                              {label}
+                            </label>
+                          ))}
                         </div>
                         <label className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm">
                           <input

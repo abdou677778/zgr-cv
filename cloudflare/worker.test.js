@@ -364,6 +364,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
 
   const editor = await login(env, "editeur", "mot-de-passe-editeur");
   assert.equal(editor.user.permissions.clientsApprove, false);
+  assert.deepEqual(editor.user.teamRoles, ["writer"]);
   const sharedListResponse = await call(env, "/api/clients", authorized(editor.token));
   assert.equal(sharedListResponse.status, 200);
   const sharedList = await sharedListResponse.json();
@@ -407,6 +408,7 @@ test("les clients R2 sont partagés, attribués et protégés contre les écrase
   assert.equal(viewerAccountResponse.status, 201);
   const viewer = await login(env, "lecteur", "mot-de-passe-lecteur");
   assert.equal(viewer.user.role, "viewer");
+  assert.deepEqual(viewer.user.teamRoles, []);
   assert.equal(viewer.user.permissions.clientsWrite, false);
   assert.equal(
     (await call(env, `/api/clients/${profile.id}`, authorized(viewer.token))).status,

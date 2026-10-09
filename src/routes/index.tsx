@@ -2899,7 +2899,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               </span>
             )}
             <div className="zgr-toolbar-group flex flex-wrap items-center gap-2">
-              {user.role === "admin" && (
+              {(user.role === "admin" ||
+                (user.teamRoles || []).some(
+                  (role) => role === "order_admin" || role === "writer",
+                )) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -4627,12 +4630,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             }}
             onSyncStatusChange={setClientSyncStatus}
             onWorkflowCountsChange={setWorkflowCounts}
+            onOpenOrderArchives={() => {
+              setClientDatabaseOpen(false);
+              setClientOrdersOpen(true);
+            }}
           />
         ) : null}
         {clientOrdersOpen ? (
           <ClientOrdersDialog
             open={clientOrdersOpen}
             onOpenChange={setClientOrdersOpen}
+            user={user}
             onOpenJson={openClientOrderJson}
             activeOrderId={activeClientOrder?.id}
             onCreateCurrentDeliverable={createCurrentOrderDeliverable}

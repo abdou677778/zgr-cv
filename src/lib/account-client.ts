@@ -1,4 +1,9 @@
-import { authenticatedFetch, type AccountRole, type SessionUser } from "@/lib/auth-client";
+import {
+  authenticatedFetch,
+  type AccountRole,
+  type SessionUser,
+  type TeamRole,
+} from "@/lib/auth-client";
 
 export type ManagedUser = SessionUser & { sessionVersion: number; isPrimary?: boolean };
 
@@ -144,6 +149,7 @@ export async function createManagedUser(input: {
   password: string;
   role: AccountRole;
   workflowManager: boolean;
+  teamRoles: TeamRole[];
 }) {
   return (await apiJson<{ user: ManagedUser }>("/api/admin/users", jsonRequest("POST", input)))
     .user;
@@ -156,6 +162,7 @@ export async function updateManagedUser(
     active: boolean;
     role: AccountRole;
     workflowManager: boolean;
+    teamRoles: TeamRole[];
   },
 ) {
   return (

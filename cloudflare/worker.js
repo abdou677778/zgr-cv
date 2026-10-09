@@ -72,6 +72,7 @@ const TELEMETRY_NAMES = new Set([
 ]);
 const TELEMETRY_RATINGS = new Set(["good", "needs-improvement", "poor", "error"]);
 const ACCOUNT_ROLES = new Set(["admin", "editor", "viewer"]);
+const TEAM_ROLES = new Set(["order_admin", "writer"]);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -156,6 +157,35 @@ function normalizeAccountRole(value) {
   return value === "user" ? "editor" : "viewer";
 }
 
+function normalizeTeamRoles(value, accountRole = "viewer") {
+  const explicitlyConfigured = Array.isArray(value) || typeof value === "string";
+  const values = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  const normalized = [
+    ...new Set(values.map((item) => String(item).trim()).filter((item) => TEAM_ROLES.has(item))),
+  ];
+  if (explicitlyConfigured) return normalized;
+  // Migration sûre des comptes existants : l'administrateur principal conserve
+  // les deux fonctions et les anciens éditeurs deviennent rédacteurs.
+  const role = normalizeAccountRole(accountRole);
+  if (role === "admin") return ["order_admin", "writer"];
+  if (role === "editor") return ["writer"];
+  return [];
+}
+
+function canAccessOrders(user) {
+  const teamRoles = normalizeTeamRoles(user?.teamRoles, user?.role);
+  return (
+    normalizeAccountRole(user?.role) === "admin" || teamRoles.some((role) => TEAM_ROLES.has(role))
+  );
+}
+
+function canAdministerOrders(user) {
+  return (
+    normalizeAccountRole(user?.role) === "admin" ||
+    normalizeTeamRoles(user?.teamRoles, user?.role).includes("order_admin")
+  );
+}
+
 function normalizeClientWorkflowStatus(value) {
   return value === "review" || value === "approved" ? value : "draft";
 }
@@ -238,11 +268,13 @@ async function readR2Json(env, key) {
 function publicUser(user) {
   const role = normalizeAccountRole(user.role);
   const workflowManager = role === "admin" || (role === "editor" && user.workflowManager === true);
+  const teamRoles = normalizeTeamRoles(user.teamRoles, role);
   return {
     username: user.username,
     displayName: user.displayName,
     role,
     workflowManager,
+    teamRoles,
     permissions: rolePermissions(role, workflowManager),
     active: user.active !== false,
     createdAt: user.createdAt || null,
@@ -264,6 +296,7 @@ async function saveUser(env, user) {
         displayName: String(user.displayName || user.username).slice(0, 120),
         role: normalizeAccountRole(user.role),
         workflowManager: user.workflowManager === true ? "true" : "false",
+        teamRoles: normalizeTeamRoles(user.teamRoles, user.role).join(","),
         active: user.active === false ? "false" : "true",
         createdAt: String(user.createdAt || "").slice(0, 40),
         updatedAt: String(user.updatedAt || "").slice(0, 40),
@@ -289,6 +322,7 @@ function bootstrapAdmin(env) {
     displayName: "Administrateur",
     role: "admin",
     workflowManager: true,
+    teamRoles: ["order_admin", "writer"],
     active: true,
     password: null,
     sessionVersion: 1,
@@ -952,6 +986,7 @@ async function listUsers(env, origin) {
         username: metadata.username || "",
         displayName: metadata.displayName || metadata.username || "Profil",
         role,
+        teamRoles: normalizeTeamRoles(metadata.teamRoles, role),
         workflowManager:
           role === "admin" || (role === "editor" && metadata.workflowManager === "true"),
         permissions: rolePermissions(role, metadata.workflowManager === "true"),
@@ -974,6 +1009,26 @@ async function listUsers(env, origin) {
     return left.username.localeCompare(right.username);
   });
   return json({ users }, 200, origin);
+}
+
+async function listTeamUsers(env, origin) {
+  const response = await listUsers(env, origin);
+  const payload = await response.json();
+  return json(
+    {
+      users: (payload.users || [])
+        .filter(
+          (user) => user.active !== false && Array.isArray(user.teamRoles) && user.teamRoles.length,
+        )
+        .map((user) => ({
+          username: user.username,
+          displayName: user.displayName,
+          teamRoles: user.teamRoles,
+        })),
+    },
+    200,
+    origin,
+  );
 }
 
 async function listWorkflowValidators(env, origin, actor) {
@@ -1029,6 +1084,7 @@ async function createUser(request, env, actor, origin, ctx) {
   const role = ACCOUNT_ROLES.has(payload?.role) ? payload.role : "editor";
   const workflowManager =
     role === "admin" || (role === "editor" && payload?.workflowManager === true);
+  const teamRoles = normalizeTeamRoles(payload?.teamRoles, role);
   if (!USERNAME_PATTERN.test(username))
     return json(
       {
@@ -1055,6 +1111,7 @@ async function createUser(request, env, actor, origin, ctx) {
     displayName,
     role,
     workflowManager,
+    teamRoles,
     active: true,
     password: await hashPassword(password),
     sessionVersion: 1,
@@ -1069,6 +1126,7 @@ async function createUser(request, env, actor, origin, ctx) {
       target: username,
       role,
       workflowManager,
+      teamRoles,
     }),
   );
   return json({ ok: true, user: { ...publicUser(user), isPrimary: false } }, 201, origin);
@@ -1115,24 +1173,31 @@ async function updateUser(request, env, actor, username, origin, ctx) {
     role === "admin" ||
     (role === "editor" &&
       (protectedAccount ? user.workflowManager === true : payload?.workflowManager === true));
+  const teamRoles = normalizeTeamRoles(
+    Array.isArray(payload?.teamRoles) ? payload.teamRoles : user.teamRoles,
+    role,
+  );
   if (!displayName) return json({ error: "Le nom affiché est obligatoire." }, 422, origin);
   const changedActivity = user.active !== active;
   const changedRole = user.role !== role;
   const changedWorkflowManager = (user.workflowManager === true) !== workflowManager;
+  const changedTeamRoles =
+    JSON.stringify(normalizeTeamRoles(user.teamRoles, user.role)) !== JSON.stringify(teamRoles);
   const updated = {
     ...user,
     displayName,
     role,
     workflowManager,
+    teamRoles,
     active,
     updatedAt: new Date().toISOString(),
     sessionVersion:
       (Number(user.sessionVersion) || 1) +
-      (changedActivity || changedRole || changedWorkflowManager ? 1 : 0),
+      (changedActivity || changedRole || changedWorkflowManager || changedTeamRoles ? 1 : 0),
   };
   await Promise.all([
     saveUser(env, updated),
-    changedActivity || changedRole || changedWorkflowManager
+    changedActivity || changedRole || changedWorkflowManager || changedTeamRoles
       ? deleteUserSessions(env, username)
       : Promise.resolve(),
   ]);
@@ -1142,6 +1207,7 @@ async function updateUser(request, env, actor, username, origin, ctx) {
       active,
       role,
       workflowManager,
+      teamRoles,
     }),
   );
   return json(
@@ -4024,7 +4090,7 @@ function clientOrderPortalPath(pathname) {
   return `/api/admin/orders/${pathname.slice(root.length + 1)}`;
 }
 
-async function proxyClientOrders(request, env, origin, pathname) {
+async function proxyClientOrders(request, env, origin, pathname, actor) {
   const configuration = portalConfiguration(env);
   if (!configuration)
     return json(
@@ -4039,6 +4105,12 @@ async function proxyClientOrders(request, env, origin, pathname) {
   target.search = incomingUrl.search;
   const headers = new Headers();
   headers.set("X-Admin-Token", configuration.token);
+  headers.set("X-ZGR-Actor", String(actor?.username || "").slice(0, 64));
+  headers.set(
+    "X-ZGR-Actor-Name",
+    String(actor?.displayName || actor?.username || "").slice(0, 120),
+  );
+  headers.set("X-ZGR-Team-Roles", normalizeTeamRoles(actor?.teamRoles, actor?.role).join(","));
   const contentType = request.headers.get("Content-Type");
   if (contentType) headers.set("Content-Type", contentType);
   const outbound = new Request(target, {
@@ -4739,6 +4811,24 @@ async function route(request, env, ctx) {
   if (url.pathname === "/api/account/password" && request.method === "PUT")
     return changeOwnPassword(request, env, actor, origin, ctx);
 
+  if (url.pathname === "/api/team/users" && request.method === "GET") {
+    if (!canAccessOrders(actor))
+      return json({ error: "Accès à l'équipe commandes requis." }, 403, origin);
+    return listTeamUsers(env, origin);
+  }
+
+  if (clientOrderPortalPath(url.pathname)) {
+    if (!canAccessOrders(actor))
+      return json({ error: "Rôle Admin clients ou Rédacteur requis." }, 403, origin);
+    const orderAdminOnly =
+      request.method === "DELETE" ||
+      /\/invitations(?:\/|$)/.test(url.pathname) ||
+      /\/archive-import$/.test(url.pathname);
+    if (orderAdminOnly && !canAdministerOrders(actor))
+      return json({ error: "Rôle Admin clients requis pour cette action." }, 403, origin);
+    return proxyClientOrders(request, env, origin, url.pathname, actor);
+  }
+
   if (url.pathname.startsWith("/api/admin/")) {
     if (actor.role !== "admin")
       return json({ error: "Droits administrateur requis." }, 403, origin);
@@ -4764,8 +4854,6 @@ async function route(request, env, ctx) {
         return restoreClientBackup(request, env, restoreTarget, actor, origin, ctx);
       return json({ error: "Méthode non autorisée." }, 405, origin);
     }
-    if (clientOrderPortalPath(url.pathname))
-      return proxyClientOrders(request, env, origin, url.pathname);
     if (url.pathname === "/api/admin/users" && request.method === "GET")
       return listUsers(env, origin);
     if (url.pathname === "/api/admin/users" && request.method === "POST")

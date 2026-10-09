@@ -1,5 +1,5 @@
-import { recordEvent, runtimeEnv } from '@/db/runtime';
-import { safeFileName } from '@/lib/order-model';
+import { recordEvent, runtimeEnv } from "@/db/runtime";
+import { safeFileName } from "@/lib/order-model";
 import {
   getDeliverables,
   getJsonVersions,
@@ -7,11 +7,11 @@ import {
   getOrderFiles,
   type StoredDeliverable,
   type StoredOrder,
-} from '@/lib/order-repository';
+} from "@/lib/order-repository";
 
-const DRIVE_API = 'https://www.googleapis.com/drive/v3';
-const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
-const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
+const DRIVE_API = "https://www.googleapis.com/drive/v3";
+const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
+const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 
 type DriveEntry = { id: string; name: string; mimeType?: string };
 type DriveDirectoryCache = Map<string, Map<string, DriveEntry>>;
@@ -29,24 +29,21 @@ export function driveConfigured() {
 }
 
 async function accessToken() {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000)
-    return tokenCache.token;
+  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
   const env = runtimeEnv();
-  if (!driveConfigured())
-    throw new Error('La connexion Google Drive n’est pas configurée.');
+  if (!driveConfigured()) throw new Error("La connexion Google Drive n’est pas configurée.");
   const body = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID!,
     client_secret: env.GOOGLE_CLIENT_SECRET!,
     refresh_token: env.GOOGLE_REFRESH_TOKEN!,
-    grant_type: 'refresh_token',
+    grant_type: "refresh_token",
   });
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!response.ok)
-    throw new Error(`Connexion Google refusée (${response.status}).`);
+  if (!response.ok) throw new Error(`Connexion Google refusée (${response.status}).`);
   const payload = (await response.json()) as {
     access_token: string;
     expires_in?: number;
@@ -60,16 +57,13 @@ async function accessToken() {
 
 async function driveFetch(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  headers.set('Authorization', `Bearer ${await accessToken()}`);
-  const response = await fetch(
-    path.startsWith('http') ? path : `${DRIVE_API}${path}`,
-    {
-      ...init,
-      headers,
-    },
-  );
+  headers.set("Authorization", `Bearer ${await accessToken()}`);
+  const response = await fetch(path.startsWith("http") ? path : `${DRIVE_API}${path}`, {
+    ...init,
+    headers,
+  });
   if (!response.ok) {
-    const detail = await response.text().catch(() => '');
+    const detail = await response.text().catch(() => "");
     throw new Error(`Google Drive ${response.status}: ${detail.slice(0, 280)}`);
   }
   return response;
@@ -79,8 +73,8 @@ export async function trashDriveFolder(folderId: string) {
   if (!driveConfigured()) return { configured: false as const };
   if (!folderId) return { configured: true as const, trashed: false as const };
   await driveFetch(`/files/${encodeURIComponent(folderId)}?supportsAllDrives=true`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    method: "PATCH",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify({ trashed: true }),
   });
   return { configured: true as const, trashed: true as const };
@@ -88,87 +82,84 @@ export async function trashDriveFolder(folderId: string) {
 
 /** Read-only verification of one known order folder; never broadens sharing. */
 export async function inspectDriveFolder(folderId: string) {
-  if (!driveConfigured()) return { verified: false as const, reason: 'not_configured' };
+  if (!driveConfigured()) return { verified: false as const, reason: "not_configured" };
   try {
-    const folder = await driveFetch(`/files/${encodeURIComponent(folderId)}?fields=id,name,mimeType,trashed&supportsAllDrives=true`);
-    const metadata = await folder.json() as { name: string; mimeType: string; trashed?: boolean };
+    const folder = await driveFetch(
+      `/files/${encodeURIComponent(folderId)}?fields=id,name,mimeType,trashed&supportsAllDrives=true`,
+    );
+    const metadata = (await folder.json()) as { name: string; mimeType: string; trashed?: boolean };
     if (metadata.trashed || metadata.mimeType !== FOLDER_MIME_TYPE) {
-      return { verified: false as const, reason: 'folder_unavailable' };
+      return { verified: false as const, reason: "folder_unavailable" };
     }
     const files: { id: string; name: string; mimeType: string; size?: string }[] = [];
     let pageToken: string | undefined;
     do {
       const params = new URLSearchParams({
         q: `'${driveQueryValue(folderId)}' in parents and trashed = false`,
-        fields: 'nextPageToken,files(id,name,mimeType,size)', pageSize: '1000',
+        fields: "nextPageToken,files(id,name,mimeType,size)",
+        pageSize: "1000",
         ...(pageToken ? { pageToken } : {}),
       });
       const response = await driveFetch(`/files?${params}`);
-      const page = await response.json() as { files?: typeof files; nextPageToken?: string };
+      const page = (await response.json()) as { files?: typeof files; nextPageToken?: string };
       files.push(...(page.files ?? []));
       pageToken = page.nextPageToken;
     } while (pageToken);
     const permissionResponse = await driveFetch(
       `/files/${encodeURIComponent(folderId)}/permissions?fields=permissions(id,type,role,allowFileDiscovery)&supportsAllDrives=true`,
     );
-    const permissionPayload = await permissionResponse.json() as {
+    const permissionPayload = (await permissionResponse.json()) as {
       permissions?: { id: string; type: string; role: string; allowFileDiscovery?: boolean }[];
     };
     const publicPermission = (permissionPayload.permissions ?? []).find(
-      (permission) => permission.type === 'anyone' && permission.role === 'reader',
+      (permission) => permission.type === "anyone" && permission.role === "reader",
     );
     return {
       verified: true as const,
       name: metadata.name,
       files,
       linkSharing: publicPermission
-        ? { enabled: true as const, allowFileDiscovery: Boolean(publicPermission.allowFileDiscovery) }
+        ? {
+            enabled: true as const,
+            allowFileDiscovery: Boolean(publicPermission.allowFileDiscovery),
+          }
         : { enabled: false as const },
       checkedAt: new Date().toISOString(),
     };
   } catch {
-    return { verified: false as const, reason: 'drive_read_failed' };
+    return { verified: false as const, reason: "drive_read_failed" };
   }
 }
 
 function driveQueryValue(value: string) {
-  return value.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+  return value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 }
 
-async function directoryEntries(
-  cache: DriveDirectoryCache,
-  parentId: string,
-) {
+async function directoryEntries(cache: DriveDirectoryCache, parentId: string) {
   const cached = cache.get(parentId);
   if (cached) return cached;
   const search = new URLSearchParams({
     q: `'${driveQueryValue(parentId)}' in parents and trashed = false`,
-    fields: 'files(id,name,mimeType)',
-    pageSize: '1000',
-    spaces: 'drive',
+    fields: "files(id,name,mimeType)",
+    pageSize: "1000",
+    spaces: "drive",
   });
   const response = await driveFetch(`/files?${search.toString()}`);
   const payload = (await response.json()) as {
     files?: DriveEntry[];
   };
-  const entries = new Map(
-    (payload.files ?? []).map((entry) => [entry.name, entry] as const),
-  );
+  const entries = new Map((payload.files ?? []).map((entry) => [entry.name, entry] as const));
   cache.set(parentId, entries);
   return entries;
 }
 
-async function ensureFolder(
-  cache: DriveDirectoryCache,
-  parentId: string,
-  name: string,
-) {
+async function ensureFolder(cache: DriveDirectoryCache, parentId: string, name: string) {
   const entries = await directoryEntries(cache, parentId);
   const existing = entries.get(name);
   if (existing?.mimeType === FOLDER_MIME_TYPE) return existing.id;
-  const response = await driveFetch('/files?fields=id,name,mimeType', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+  const response = await driveFetch("/files?fields=id,name,mimeType", {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify({
       name,
       mimeType: FOLDER_MIME_TYPE,
@@ -185,13 +176,8 @@ function bodyStream(body: BodyInit) {
   return new Response(body).body!;
 }
 
-function multipartUploadBody(
-  metadata: object,
-  contentType: string,
-  size: number,
-  body: BodyInit,
-) {
-  const boundary = `zgr_${crypto.randomUUID().replaceAll('-', '')}`;
+function multipartUploadBody(metadata: object, contentType: string, size: number, body: BodyInit) {
+  const boundary = `zgr_${crypto.randomUUID().replaceAll("-", "")}`;
   const encoder = new TextEncoder();
   const prefix = encoder.encode(
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${contentType}\r\n\r\n`,
@@ -251,10 +237,10 @@ async function uploadToFolder(input: {
     input.body,
   );
   const response = await driveFetch(uploadPath, {
-    method: existing ? 'PATCH' : 'POST',
+    method: existing ? "PATCH" : "POST",
     headers: {
-      'Content-Type': `multipart/related; boundary=${multipart.boundary}`,
-      'Content-Length': String(multipart.contentLength),
+      "Content-Type": `multipart/related; boundary=${multipart.boundary}`,
+      "Content-Length": String(multipart.contentLength),
     },
     body: multipart.stream,
   });
@@ -284,6 +270,31 @@ async function uploadText(
   });
 }
 
+async function copyFirstOrderBonus(cache: DriveDirectoryCache, deliveryFolderId: string) {
+  const rootId = runtimeEnv().GOOGLE_DRIVE_ROOT_FOLDER_ID!;
+  const rootEntries = await directoryEntries(cache, rootId);
+  const sourceFolder = rootEntries.get("Bonus 01 - Cadeaux nouveaux clients");
+  if (!sourceFolder || sourceFolder.mimeType !== FOLDER_MIME_TYPE) return 0;
+  const sourceEntries = await directoryEntries(cache, sourceFolder.id);
+  const files = [...sourceEntries.values()].filter((entry) => entry.mimeType !== FOLDER_MIME_TYPE);
+  if (!files.length) return 0;
+  const bonusFolder = await ensureFolder(cache, deliveryFolderId, "BONUS_CLIENT");
+  const existing = await directoryEntries(cache, bonusFolder);
+  for (const file of files) {
+    if (existing.has(file.name)) continue;
+    await driveFetch(
+      `/files/${encodeURIComponent(file.id)}/copy?fields=id,name,mimeType&supportsAllDrives=true`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ name: file.name, parents: [bonusFolder] }),
+      },
+    );
+    existing.set(file.name, file);
+  }
+  return files.length;
+}
+
 function clientFolderName(order: StoredOrder) {
   const date = order.createdAt.slice(0, 10);
   const client = safeFileName(order.clientName).toUpperCase();
@@ -293,7 +304,7 @@ function clientFolderName(order: StoredOrder) {
 export async function syncOrderToDrive(orderId: string) {
   if (!driveConfigured()) return { configured: false as const };
   const order = await getOrder(orderId);
-  if (!order) throw new Error('Commande introuvable.');
+  if (!order) throw new Error("Commande introuvable.");
   const env = runtimeEnv();
   const rootId = env.GOOGLE_DRIVE_ROOT_FOLDER_ID!;
   const startedAt = new Date().toISOString();
@@ -304,7 +315,7 @@ export async function syncOrderToDrive(orderId: string) {
     .bind(startedAt, orderId)
     .run();
   if (!Number(lock.meta.changes))
-    throw new Error('Une synchronisation Google Drive est déjà en cours.');
+    throw new Error("Une synchronisation Google Drive est déjà en cours.");
   try {
     const cache: DriveDirectoryCache = new Map();
     const files = await getOrderFiles(orderId);
@@ -312,41 +323,21 @@ export async function syncOrderToDrive(orderId: string) {
     const deliverables = await getDeliverables(orderId);
     const date = new Date(order.createdAt);
     const year = String(date.getUTCFullYear());
-    const month = `${String(date.getUTCMonth() + 1).padStart(2, '0')}_${date
-      .toLocaleString('fr-FR', { month: 'long', timeZone: 'UTC' })
+    const month = `${String(date.getUTCMonth() + 1).padStart(2, "0")}_${date
+      .toLocaleString("fr-FR", { month: "long", timeZone: "UTC" })
       .toUpperCase()}`;
     const yearFolder = await ensureFolder(cache, rootId, year);
     const monthFolder = await ensureFolder(cache, yearFolder, month);
-    const clientFolder = await ensureFolder(
-      cache,
-      monthFolder,
-      clientFolderName(order),
-    );
-    const commandFolder = await ensureFolder(
-      cache,
-      clientFolder,
-      '00_COMMANDE',
-    );
-    const sourceFolder = await ensureFolder(
-      cache,
-      clientFolder,
-      '01_DOCUMENTS_SOURCES',
-    );
-    const aiFolder = await ensureFolder(
-      cache,
-      clientFolder,
-      '02_TRAITEMENT_IA',
-    );
-    const jsonFolder = await ensureFolder(cache, aiFolder, 'JSON_ZGR');
-    await ensureFolder(cache, aiFolder, 'PACKS_IA');
-    await ensureFolder(cache, aiFolder, 'RAPPORTS_VALIDATION');
-    await ensureFolder(cache, clientFolder, '03_PRODUCTION');
-    const deliverablesFolder = await ensureFolder(
-      cache,
-      clientFolder,
-      '04_LIVRABLES',
-    );
-    await ensureFolder(cache, clientFolder, '05_ARCHIVES');
+    const clientFolder = await ensureFolder(cache, monthFolder, clientFolderName(order));
+    const commandFolder = await ensureFolder(cache, clientFolder, "00_COMMANDE");
+    const sourceFolder = await ensureFolder(cache, clientFolder, "01_DOCUMENTS_SOURCES");
+    const aiFolder = await ensureFolder(cache, clientFolder, "02_TRAITEMENT_IA");
+    const jsonFolder = await ensureFolder(cache, aiFolder, "JSON_ZGR");
+    await ensureFolder(cache, aiFolder, "PACKS_IA");
+    await ensureFolder(cache, aiFolder, "RAPPORTS_VALIDATION");
+    await ensureFolder(cache, clientFolder, "03_PRODUCTION");
+    const deliverablesFolder = await ensureFolder(cache, clientFolder, "04_LIVRABLES");
+    await ensureFolder(cache, clientFolder, "05_ARCHIVES");
     const serviceFolders = new Map<string, string>();
     for (const service of order.services)
       serviceFolders.set(service, await ensureFolder(cache, deliverablesFolder, service));
@@ -354,11 +345,7 @@ export async function syncOrderToDrive(orderId: string) {
     const sourceCategoryFolders: Record<string, string> = {};
     const usedCategories = new Set(files.map((file) => file.category));
     for (const category of usedCategories) {
-      sourceCategoryFolders[category] = await ensureFolder(
-        cache,
-        sourceFolder,
-        category,
-      );
+      sourceCategoryFolders[category] = await ensureFolder(cache, sourceFolder, category);
     }
 
     const manifest = {
@@ -370,29 +357,29 @@ export async function syncOrderToDrive(orderId: string) {
       `COMMANDE : ${order.id}`,
       `CLIENT : ${order.clientName}`,
       `EMAIL : ${order.email}`,
-      `TÉLÉPHONE : ${order.phone || 'Non renseigné'}`,
-      `FACEBOOK : ${order.facebookUrl || 'Non renseigné'}`,
+      `TÉLÉPHONE : ${order.phone || "Non renseigné"}`,
+      `FACEBOOK : ${order.facebookUrl || "Non renseigné"}`,
       `LANGUE : ${order.language}`,
-      `SERVICES : ${order.services.join(', ')}`,
-      '',
-      'REMARQUES DU CLIENT',
-      order.notes || 'Aucune remarque.',
-    ].join('\n');
+      `SERVICES : ${order.services.join(", ")}`,
+      "",
+      "REMARQUES DU CLIENT",
+      order.notes || "Aucune remarque.",
+    ].join("\n");
     await uploadText(
       cache,
       commandFolder,
-      'commande.json',
+      "commande.json",
       JSON.stringify(manifest, null, 2),
-      'application/json; charset=utf-8',
+      "application/json; charset=utf-8",
       `${orderId}/commande.json`,
       true,
     );
     await uploadText(
       cache,
       commandFolder,
-      'brief-client.txt',
+      "brief-client.txt",
       brief,
-      'text/plain; charset=utf-8',
+      "text/plain; charset=utf-8",
       `${orderId}/brief-client.txt`,
       true,
     );
@@ -404,7 +391,7 @@ export async function syncOrderToDrive(orderId: string) {
         cache,
         parentId: sourceCategoryFolders[file.category] ?? sourceFolder,
         name: file.originalName,
-        contentType: file.mimeType || 'application/octet-stream',
+        contentType: file.mimeType || "application/octet-stream",
         size: object.size,
         body: object.body,
         sourceKey: file.storageKey,
@@ -417,8 +404,8 @@ export async function syncOrderToDrive(orderId: string) {
       await uploadToFolder({
         cache,
         parentId: jsonFolder,
-        name: `CV_GLOBAL_7_LANGUES__v${String(version.versionNumber).padStart(3, '0')}.json`,
-        contentType: 'application/json; charset=utf-8',
+        name: `CV_GLOBAL_7_LANGUES__v${String(version.versionNumber).padStart(3, "0")}.json`,
+        contentType: "application/json; charset=utf-8",
         size: object.size,
         body: object.body,
         sourceKey: version.storageKey,
@@ -440,16 +427,14 @@ export async function syncOrderToDrive(orderId: string) {
       const nameKey = `${deliverable.service}\u0000${baseName}`;
       const occurrence = usedDeliverableNames.get(nameKey) ?? 0;
       usedDeliverableNames.set(nameKey, occurrence + 1);
-      const name = occurrence
-        ? baseName.replace(/(\.[^.]+)?$/, `__${occurrence + 1}$1`)
-        : baseName;
+      const name = occurrence ? baseName.replace(/(\.[^.]+)?$/, `__${occurrence + 1}$1`) : baseName;
       const object = await env.FILES.get(deliverable.storageKey);
       if (!object) throw new Error(`Livrable R2 introuvable : ${deliverable.originalName}`);
       await uploadToFolder({
         cache,
         parentId: serviceFolder,
         name,
-        contentType: deliverable.mimeType || 'application/octet-stream',
+        contentType: deliverable.mimeType || "application/octet-stream",
         size: object.size,
         body: object.body,
         sourceKey: deliverable.storageKey,
@@ -463,7 +448,7 @@ export async function syncOrderToDrive(orderId: string) {
     )
       .bind(clientFolder, now, orderId)
       .run();
-    await recordEvent(orderId, 'DRIVE_SYNCED', {
+    await recordEvent(orderId, "DRIVE_SYNCED", {
       driveFolderId: clientFolder,
       fileCount: files.length,
       jsonVersionCount: versions.length,
@@ -471,13 +456,11 @@ export async function syncOrderToDrive(orderId: string) {
     });
     return { configured: true as const, driveFolderId: clientFolder };
   } catch (error) {
-    await env.DB.prepare(
-      "UPDATE orders SET drive_status = 'ERROR' WHERE id = ?",
-    )
+    await env.DB.prepare("UPDATE orders SET drive_status = 'ERROR' WHERE id = ?")
       .bind(orderId)
       .run();
-    await recordEvent(orderId, 'DRIVE_SYNC_FAILED', {
-      message: error instanceof Error ? error.message : 'Erreur Google Drive',
+    await recordEvent(orderId, "DRIVE_SYNC_FAILED", {
+      message: error instanceof Error ? error.message : "Erreur Google Drive",
     });
     throw error;
   }
@@ -488,28 +471,22 @@ export async function publishDeliveryToDrive(input: {
   versionNumber: number;
   deliverables: StoredDeliverable[];
 }) {
-  if (!driveConfigured())
-    throw new Error('La connexion Google Drive n’est pas configurée.');
-  if (!input.deliverables.length)
-    throw new Error('Sélectionnez au moins un livrable.');
+  if (!driveConfigured()) throw new Error("La connexion Google Drive n’est pas configurée.");
+  if (!input.deliverables.length) throw new Error("Sélectionnez au moins un livrable.");
 
   let order = await getOrder(input.orderId);
-  if (!order) throw new Error('Commande introuvable.');
+  if (!order) throw new Error("Commande introuvable.");
   if (!order.driveFolderId) {
     const synced = await syncOrderToDrive(input.orderId);
-    if (!synced.configured) throw new Error('Google Drive est indisponible.');
+    if (!synced.configured) throw new Error("Google Drive est indisponible.");
     order = await getOrder(input.orderId);
   }
   if (!order?.driveFolderId)
-    throw new Error('Le dossier Drive interne de la commande est introuvable.');
+    throw new Error("Le dossier Drive interne de la commande est introuvable.");
 
   const cache: DriveDirectoryCache = new Map();
-  const deliverablesRoot = await ensureFolder(
-    cache,
-    order.driveFolderId,
-    '04_LIVRABLES',
-  );
-  const label = `LIVRAISON_CLIENT__v${String(input.versionNumber).padStart(3, '0')}__${new Date()
+  const deliverablesRoot = await ensureFolder(cache, order.driveFolderId, "04_LIVRABLES");
+  const label = `LIVRAISON_CLIENT__v${String(input.versionNumber).padStart(3, "0")}__${new Date()
     .toISOString()
     .slice(0, 10)}`;
   const deliveryFolderId = await ensureFolder(cache, deliverablesRoot, label);
@@ -517,19 +494,16 @@ export async function publishDeliveryToDrive(input: {
 
   for (const deliverable of input.deliverables) {
     const object = await runtimeEnv().FILES.get(deliverable.storageKey);
-    if (!object)
-      throw new Error(`Livrable R2 introuvable : ${deliverable.originalName}`);
+    if (!object) throw new Error(`Livrable R2 introuvable : ${deliverable.originalName}`);
     const baseName = safeFileName(deliverable.originalName);
     const occurrence = usedNames.get(baseName) ?? 0;
     usedNames.set(baseName, occurrence + 1);
-    const name = occurrence
-      ? baseName.replace(/(\.[^.]+)?$/, `_${occurrence + 1}$1`)
-      : baseName;
+    const name = occurrence ? baseName.replace(/(\.[^.]+)?$/, `_${occurrence + 1}$1`) : baseName;
     await uploadToFolder({
       cache,
       parentId: deliveryFolderId,
       name,
-      contentType: deliverable.mimeType || 'application/octet-stream',
+      contentType: deliverable.mimeType || "application/octet-stream",
       size: object.size,
       body: object.body,
       sourceKey: deliverable.storageKey,
@@ -537,12 +511,18 @@ export async function publishDeliveryToDrive(input: {
     });
   }
 
+  // Le cadeau gratuit est joint une seule fois, à la première livraison.
+  // Le dossier Bonus 02 reste strictement privé et n'est jamais copié.
+  if (input.versionNumber === 1) {
+    await copyFirstOrderBonus(cache, deliveryFolderId);
+  }
+
   await driveFetch(`/files/${deliveryFolderId}/permissions?supportsAllDrives=true`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify({
-      type: 'anyone',
-      role: 'reader',
+      type: "anyone",
+      role: "reader",
       allowFileDiscovery: false,
     }),
   });

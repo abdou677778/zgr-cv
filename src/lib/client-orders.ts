@@ -1,4 +1,10 @@
-import { authenticatedFetch } from "@/lib/auth-client";
+import { authenticatedFetch, type TeamRole } from "@/lib/auth-client";
+
+export interface OrderTeamMember {
+  username: string;
+  displayName: string;
+  teamRoles: TeamRole[];
+}
 
 export type ClientOrderStatus =
   | "DRAFT"
@@ -25,6 +31,8 @@ export interface ClientOrderSummary {
   currentJsonVersion?: number;
   driveFolderId?: string;
   driveStatus: "PENDING" | "SYNCING" | "SYNCED" | "ERROR";
+  adminUsername: string;
+  writerUsername: string;
   fileCount: number;
   totalBytes: number;
   jsonVersionCount: number;
@@ -120,6 +128,22 @@ export async function listClientOrders() {
   return responseJson<{ orders: ClientOrderSummary[] }>(response).then((body) => body.orders);
 }
 
+export async function listOrderTeamMembers() {
+  const response = await authenticatedFetch("/api/team/users");
+  return responseJson<{ users: OrderTeamMember[] }>(response).then((body) => body.users);
+}
+
+export async function importArchivedClientOrders(file: File, year: number) {
+  const data = new FormData();
+  data.append("file", file);
+  data.append("year", String(year));
+  const response = await authenticatedFetch("/api/admin/client-orders/archive-import", {
+    method: "POST",
+    body: data,
+  });
+  return responseJson<{ imported: number; skipped: number; ids: string[] }>(response);
+}
+
 export async function createClientInvitation(validDays = 5) {
   const response = await authenticatedFetch("/api/admin/client-orders/invitations", {
     method: "POST",
@@ -183,7 +207,16 @@ export async function updateClientOrderFacebook(orderId: string, facebookUrl: st
 export type ClientOrderUpdate = Partial<
   Pick<
     ClientOrderSummary,
-    "clientName" | "email" | "phone" | "facebookUrl" | "language" | "notes" | "services"
+    | "clientName"
+    | "email"
+    | "phone"
+    | "facebookUrl"
+    | "language"
+    | "notes"
+    | "services"
+    | "adminUsername"
+    | "writerUsername"
+    | "status"
   >
 >;
 

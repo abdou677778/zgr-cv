@@ -120,6 +120,7 @@ function apiNetworkError(failure: unknown) {
 }
 
 export type AccountRole = "admin" | "editor" | "viewer";
+export type TeamRole = "order_admin" | "writer";
 
 export type AccountPermissions = {
   clientsRead: boolean;
@@ -137,6 +138,7 @@ export type SessionUser = {
   displayName: string;
   role: AccountRole;
   workflowManager: boolean;
+  teamRoles: TeamRole[];
   permissions: AccountPermissions;
   active: boolean;
   createdAt: string | null;
@@ -217,6 +219,15 @@ function normalizeSessionUser(value: unknown): SessionUser | null {
     ...user,
     role,
     workflowManager: permissions.clientsApprove,
+    teamRoles: Array.isArray(user.teamRoles)
+      ? user.teamRoles.filter(
+          (item): item is TeamRole => item === "order_admin" || item === "writer",
+        )
+      : role === "admin"
+        ? ["order_admin", "writer"]
+        : role === "editor"
+          ? ["writer"]
+          : [],
     permissions,
   } as SessionUser;
 }

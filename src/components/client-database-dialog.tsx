@@ -292,6 +292,7 @@ export function ClientDatabaseDialog({
   onOpenOpportunities,
   onSyncStatusChange,
   onWorkflowCountsChange,
+  onOpenOrderArchives,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -302,6 +303,7 @@ export function ClientDatabaseDialog({
   onOpenOpportunities: (profile: ClientProfile) => void;
   onSyncStatusChange?: (status: ClientSyncStatus) => void;
   onWorkflowCountsChange?: (counts: ClientWorkflowCounts) => void;
+  onOpenOrderArchives?: () => void;
 }) {
   const [profiles, setProfiles] = useState<ClientProfileSummary[]>([]);
   const [search, setSearch] = useState("");
@@ -942,6 +944,13 @@ export function ClientDatabaseDialog({
       description="Recherche et pagination rapides avec Cloudflare D1. Les CV et photos restent stockés dans R2 et sont téléchargés uniquement lorsque vous ouvrez une fiche."
       icon={<Database className="h-5 w-5" />}
       iconClassName="bg-blue-100 text-blue-700"
+      actions={
+        onOpenOrderArchives ? (
+          <Button type="button" size="sm" variant="outline" onClick={onOpenOrderArchives}>
+            <ArchiveRestore className="mr-2 h-4 w-4" /> Archives des commandes
+          </Button>
+        ) : undefined
+      }
       bodyClassName="mx-auto w-full max-w-[1600px] gap-4 overflow-y-auto p-5 sm:p-8"
     >
       <div className="contents">

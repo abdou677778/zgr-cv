@@ -40,7 +40,9 @@ import {
   downloadClientOrderPack,
   getClientOrder,
   importClientOrderJson,
+  importArchivedClientOrders,
   listClientOrders,
+  listOrderTeamMembers,
   publishClientOrderDelivery,
   readClientOrderJson,
   syncClientOrderDrive,
@@ -51,7 +53,9 @@ import {
   type ClientOrderFile,
   type ClientOrderJsonVersion,
   type ClientOrderSummary,
+  type OrderTeamMember,
 } from "@/lib/client-orders";
+import type { SessionUser } from "@/lib/auth-client";
 
 const SERVICE_LABELS: Record<string, string> = {
   CV_EUROPASS: "Europass",
@@ -130,6 +134,7 @@ export function ClientOrdersDialog({
   onOpenJson,
   activeOrderId,
   onCreateCurrentDeliverable,
+  user,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -138,14 +143,18 @@ export function ClientOrdersDialog({
   onCreateCurrentDeliverable?: (
     order: ClientOrderSummary,
   ) => Promise<{ file: File; service: string }>;
+  user: SessionUser;
 }) {
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const deliverableInputRef = useRef<HTMLInputElement>(null);
   const sourceInputRef = useRef<HTMLInputElement>(null);
+  const archiveInputRef = useRef<HTMLInputElement>(null);
   const [orders, setOrders] = useState<ClientOrderSummary[]>([]);
   const [detail, setDetail] = useState<ClientOrderDetail | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [archiveYear, setArchiveYear] = useState(new Date().getFullYear());
+  const [teamMembers, setTeamMembers] = useState<OrderTeamMember[]>([]);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
@@ -162,6 +171,7 @@ export function ClientOrdersDialog({
     notes: "",
     services: [] as string[],
   });
+  const canAdminOrders = user.role === "admin" || (user.teamRoles || []).includes("order_admin");
 
   const createInvitation = async () => {
     setBusy("invite");
@@ -186,8 +196,9 @@ export function ClientOrdersDialog({
     setBusy("refresh");
     setMessage("");
     try {
-      const next = await listClientOrders();
+      const [next, members] = await Promise.all([listClientOrders(), listOrderTeamMembers()]);
       setOrders(next);
+      setTeamMembers(members);
       if (selectedId && next.some((order) => order.id === selectedId)) {
         setDetail(await getClientOrder(selectedId));
       } else if (next[0]) {
@@ -247,11 +258,16 @@ export function ClientOrdersDialog({
   const grouped = useMemo(() => {
     const result = new Map<string, ClientOrderSummary[]>();
     for (const order of filtered) {
-      const label = dayLabel(order.createdAt);
+      const label =
+        status === "ARCHIVED"
+          ? `Archives ${new Date(order.createdAt).getFullYear()}`
+          : dayLabel(order.createdAt);
       result.set(label, [...(result.get(label) ?? []), order]);
     }
-    return [...result.entries()];
-  }, [filtered]);
+    return [...result.entries()].sort((left, right) =>
+      status === "ARCHIVED" ? right[0].localeCompare(left[0]) : 0,
+    );
+  }, [filtered, status]);
 
   const openOrder = async (orderId: string) => {
     setBusy(`open:${orderId}`);
@@ -382,6 +398,60 @@ export function ClientOrdersDialog({
       setMessage("Informations de la commande mises à jour.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Modification impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const assignTeamMember = async (field: "adminUsername" | "writerUsername", username: string) => {
+    if (!detail) return;
+    setBusy(`assign-${field}`);
+    setMessage("");
+    try {
+      await updateClientOrder(detail.order.id, { [field]: username });
+      await refresh();
+      setMessage("Affectation de la commande mise à jour.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Affectation impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const toggleArchive = async () => {
+    if (!detail) return;
+    const archived = detail.order.status === "ARCHIVED";
+    setBusy("order-archive");
+    setMessage("");
+    try {
+      await updateClientOrder(detail.order.id, { status: archived ? "DELIVERED" : "ARCHIVED" });
+      await refresh();
+      setMessage(
+        archived
+          ? "Commande restaurée dans les livraisons."
+          : "Commande classée dans les archives annuelles.",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Archivage impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const importArchiveFile = async (file: File) => {
+    setBusy("archive-import");
+    setMessage("");
+    try {
+      const result = await importArchivedClientOrders(file, archiveYear);
+      setStatus("ARCHIVED");
+      await loadOrders();
+      setMessage(
+        `${result.imported} ancienne${result.imported > 1 ? "s" : ""} commande${
+          result.imported > 1 ? "s" : ""
+        } importée${result.imported > 1 ? "s" : ""} dans les archives ${archiveYear}.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Import des archives impossible.");
     } finally {
       setBusy("");
     }
@@ -559,20 +629,22 @@ export function ClientOrdersDialog({
       icon={<PackageOpen className="h-5 w-5" />}
       iconClassName="bg-cyan-100 text-cyan-800"
       actions={
-        <Button
-          type="button"
-          size="sm"
-          className="bg-cyan-700 hover:bg-cyan-800"
-          onClick={() => void createInvitation()}
-          disabled={Boolean(busy)}
-        >
-          {busy === "invite" ? (
-            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Link2 className="mr-2 h-4 w-4" />
-          )}
-          Nouveau lien client
-        </Button>
+        canAdminOrders ? (
+          <Button
+            type="button"
+            size="sm"
+            className="bg-cyan-700 hover:bg-cyan-800"
+            onClick={() => void createInvitation()}
+            disabled={Boolean(busy)}
+          >
+            {busy === "invite" ? (
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Link2 className="mr-2 h-4 w-4" />
+            )}
+            Nouveau lien client
+          </Button>
+        ) : undefined
       }
       bodyClassName="mx-auto w-full max-w-[1800px] gap-4 overflow-y-auto p-5 sm:p-8"
     >
@@ -611,6 +683,17 @@ export function ClientOrdersDialog({
             if (files.length) void addSourceFiles(files);
           }}
         />
+        <input
+          ref={archiveInputRef}
+          type="file"
+          accept=".json,.csv,application/json,text/csv"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void importArchiveFile(file);
+          }}
+        />
 
         <div className="grid min-h-[620px] gap-4 lg:grid-cols-[23rem_minmax(0,1fr)]">
           <aside className="space-y-3 rounded-xl border bg-slate-50/80 p-3">
@@ -646,6 +729,42 @@ export function ClientOrdersDialog({
                 </option>
               ))}
             </select>
+
+            {canAdminOrders && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2.5">
+                <p className="text-xs font-bold text-amber-950">Anciennes bases par année</p>
+                <div className="mt-2 flex gap-2">
+                  <Input
+                    type="number"
+                    min={2000}
+                    max={new Date().getFullYear()}
+                    value={archiveYear}
+                    onChange={(event) => setArchiveYear(Number(event.target.value))}
+                    className="h-8 w-24 bg-white text-xs"
+                    aria-label="Année des archives"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 flex-1 bg-white text-xs"
+                    disabled={Boolean(busy)}
+                    onClick={() => archiveInputRef.current?.click()}
+                  >
+                    {busy === "archive-import" ? (
+                      <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Importer JSON / CSV
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-[10px] leading-relaxed text-amber-800">
+                  Les commandes importées sont classées automatiquement dans « Archivée », année la
+                  plus récente en premier.
+                </p>
+              </div>
+            )}
 
             <div className="max-h-[525px] space-y-4 overflow-y-auto pr-1">
               {grouped.length === 0 ? (
@@ -704,6 +823,10 @@ export function ClientOrdersDialog({
                               </span>
                             )}
                           </div>
+                          <p className="mt-2 truncate text-[10px] text-slate-500">
+                            Admin clients : {order.adminUsername || "Non affecté"} · Rédacteur :{" "}
+                            {order.writerUsername || "Non affecté"}
+                          </p>
                         </button>
                       ))}
                     </div>
@@ -741,6 +864,36 @@ export function ClientOrdersDialog({
                         {detail.order.phone ? ` · ${detail.order.phone}` : ""} · Reçue{" "}
                         {new Date(detail.order.createdAt).toLocaleString("fr-DZ")}
                       </p>
+                      <div className="mt-3 grid max-w-2xl gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+                        {(
+                          [
+                            ["adminUsername", "Admin clients", "order_admin"],
+                            ["writerUsername", "Rédacteur", "writer"],
+                          ] as const
+                        ).map(([field, label, role]) => (
+                          <label
+                            key={field}
+                            className="space-y-1 text-[11px] font-bold text-slate-700"
+                          >
+                            {label}
+                            <select
+                              value={detail.order[field] || ""}
+                              disabled={!canAdminOrders || Boolean(busy)}
+                              onChange={(event) => void assignTeamMember(field, event.target.value)}
+                              className="h-9 w-full rounded-md border bg-white px-2 text-xs font-normal disabled:bg-slate-100"
+                            >
+                              <option value="">Non affecté</option>
+                              {teamMembers
+                                .filter((member) => member.teamRoles.includes(role))
+                                .map((member) => (
+                                  <option key={member.username} value={member.username}>
+                                    {member.displayName} · {member.username}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                        ))}
+                      </div>
                       <div className="mt-3 flex max-w-2xl flex-wrap items-center gap-2">
                         <div className="relative min-w-[16rem] flex-1">
                           <Facebook className="absolute left-3 top-2.5 h-4 w-4 text-blue-700" />
@@ -798,20 +951,37 @@ export function ClientOrdersDialog({
                         <Pencil className="mr-2 h-4 w-4" />
                         {editingOrder ? "Fermer l’édition" : "Modifier"}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-                        onClick={() => void removeOrder()}
-                        disabled={Boolean(busy)}
-                      >
-                        {busy === "order-delete" ? (
-                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="mr-2 h-4 w-4" />
-                        )}
-                        Supprimer
-                      </Button>
+                      {canAdminOrders && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleArchive()}
+                            disabled={Boolean(busy)}
+                          >
+                            {busy === "order-archive" ? (
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Archive className="mr-2 h-4 w-4" />
+                            )}
+                            {detail.order.status === "ARCHIVED" ? "Restaurer" : "Archiver"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                            onClick={() => void removeOrder()}
+                            disabled={Boolean(busy)}
+                          >
+                            {busy === "order-delete" ? (
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="mr-2 h-4 w-4" />
+                            )}
+                            Supprimer
+                          </Button>
+                        </>
+                      )}
                       <Button
                         size="sm"
                         onClick={() => void downloadPack()}

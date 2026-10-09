@@ -1,5 +1,5 @@
 PROMPT MAÎTRE — EXTRACTION DE DOSSIER, RÉDACTION CV/LETTRE ET JSON ZGR EN 7 LANGUES
-Version 1.1 — compatible ZGR CV et export Europass Candidate XML moderne
+Version 1.2 — compatible ZGR CV, section Logiciels et export Europass Candidate XML moderne
 
 MODE D’EMPLOI POUR L’UTILISATEUR
 1. Copie l’intégralité de ce prompt dans ChatGPT, Gemini ou un autre assistant capable de lire des pièces jointes.
@@ -63,6 +63,7 @@ Règles communes :
 - aucune phrase copiée de l’offre si elle n’est pas soutenue par l’expérience du candidat ;
 - 3 à 5 puces pertinentes par expérience récente lorsque les preuves le permettent ;
 - compétences dédupliquées, spécifiques et soutenues par les sources ;
+- logiciels strictement attestés par les sources, dédupliqués et structurés avec un id stable, un libellé et une icône parmi word, excel, powerpoint ou generic ;
 - objectif professionnel bref, ciblé et cohérent avec les faits ;
 - lettre de motivation différente d’un résumé du CV, personnalisée seulement avec les éléments réellement fournis.
 
@@ -94,7 +95,14 @@ Europass :
 CNP/NOC Canada :
 - si la navigation Web est disponible et qu’un poste canadien est clairement ciblé, vérifie le code dans la source officielle de la Classification nationale des professions en comparant principalement les fonctions réelles, pas seulement le titre ;
 - n’inscris aucun code si la correspondance n’est pas suffisamment étayée ;
-- comme le schéma ne possède pas de champ CNP dédié, un code officiellement vérifié peut être mentionné une seule fois dans candidature et expliqué brièvement dans plan_developpement ; sinon, n’ajoute rien.
+- renseigne uniquement le champ structuré cnp avec le code à cinq chiffres, l’intitulé officiel, la catégorie FEER, la version CNP 2021 v1.0 et l’URL officielle ; ne répète jamais le code dans candidature ;
+- pour un document canadien, utilise dans titre_poste l’intitulé professionnel localisé correspondant au profil (genre grammatical uniquement s’il est explicitement connu). Le moteur ZGR ajoutera automatiquement « - CODE » en majuscules dans les modèles canadiens seulement ;
+- pour un document non canadien ou Europass, conserve titre_poste sans suffixe CNP.
+
+Statut de mobilité :
+- statut_relocation est obligatoire, professionnel, localisé et limité à 33 caractères maximum ;
+- le JSON conserve la formulation générique localisée (par exemple « Open to relocate »). Les modèles canadiens la remplacent automatiquement par la formulation Canada localisée (par exemple « Open to relocate to Canada ») ;
+- n’ajoute aucun détail de permis de travail ou de statut d’immigration dans ce champ.
 
 Lettre de motivation :
 - objet spécifique au poste si le poste est connu, sinon objet professionnel générique et honnête ;
@@ -162,6 +170,13 @@ SCHÉMA DOCUMENT — À DUPLIQUER EXACTEMENT POUR CHACUNE DES SEPT LANGUES
 {
   "nom_complet": "",
   "titre_poste": "",
+  "cnp": {
+    "code": "",
+    "title": "",
+    "teer": "",
+    "version": "CNP 2021 v1.0",
+    "sourceUrl": ""
+  },
   "telephone": "",
   "email": "",
   "adresse": "",
@@ -175,6 +190,13 @@ SCHÉMA DOCUMENT — À DUPLIQUER EXACTEMENT POUR CHACUNE DES SEPT LANGUES
   "candidature": "",
   "objectif": "",
   "competences": [],
+  "logiciels": [
+    {
+      "id": "software-01",
+      "label": "",
+      "icon": "generic"
+    }
+  ],
   "langues": {
     "fr": "",
     "en": "",
@@ -330,6 +352,8 @@ RÈGLES DE STRUCTURE ET DE VALEURS
 20. europass.experience_details contient au maximum une entrée par expérience réelle. Le code secteur NACE et le service restent vides s’ils ne sont pas explicitement connus.
 21. europass.education_details utilise le même id que l’éducation ou la formation correspondante. Le niveau EQF/CEC et les codes de domaine restent vides sans preuve officielle ; le titre du diplôme ne suffit pas à les déduire.
 22. Les champs Europass textuels localisables, comme country_label et label, sont traduits dans la langue du document. Les codes, URL, id et faits restent identiques dans les sept langues.
+23. statut_relocation contient une formulation professionnelle localisée de 33 caractères maximum. Utilise les formulations génériques recommandées : FR « Mobile géographiquement », EN « Open to relocate », ES « Disponible para reubicarse », DE « Umzugsbereit », IT « Disponibile al trasferimento », ZH « 接受工作调动 », AR « مستعد للانتقال ».
+24. cnp contient des chaînes vides si aucun code n’est suffisamment vérifié. Si un code est renseigné, code comporte exactement cinq chiffres et title, teer, version et sourceUrl proviennent de la source officielle CNP. Le code et les faits CNP restent identiques dans les sept documents.
 
 6 — PLAN DE DÉVELOPPEMENT ET INFORMATIONS À CLARIFIER
 
@@ -338,7 +362,7 @@ plan_developpement sert uniquement à consigner :
 - des lacunes pertinentes par rapport à l’offre, sans prétendre que le candidat possède la compétence ;
 - les ambiguïtés documentaires importantes sous la forme localisée « À clarifier : … » ;
 - les recommandations de visibilité des données personnelles selon le marché cible ;
-- un code CNP/NOC uniquement s’il a été vérifié officiellement.
+- une recommandation CNP/NOC uniquement si elle complète un code déjà vérifié dans le champ cnp.
 
 N’y mets pas de diagnostic médical, jugement de personnalité, prédiction, emploi fictif, prix de formation non vérifié, délai garanti ou conseil d’immigration présenté comme une décision officielle.
 
@@ -350,6 +374,8 @@ Avant d’émettre la réponse, vérifie silencieusement chaque point :
 - les contradictions sont résolues selon la hiérarchie de preuves ou signalées ;
 - les expériences, formations et études sont triées du plus récent au plus ancien ;
 - toutes les réalisations quantifiées sont prouvées ;
+- statut_relocation est renseigné dans les sept langues et ne dépasse jamais 33 caractères ;
+- tout code cnp est officiellement vérifié et cohérent avec les fonctions réelles ;
 - les mots-clés de l’offre sont utilisés uniquement s’ils sont justifiés ;
 - les sept langues sont complètes et naturelles ;
 - l’allemand, l’italien, le chinois et l’arabe ne contiennent pas de résidus anglais injustifiés ;

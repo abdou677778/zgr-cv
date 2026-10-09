@@ -15,6 +15,7 @@ import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { normalizeProfilePhoto } from "./profile-photo";
 import { normalizeCompanyLogo } from "./company-logo";
+import { normalizeRelocationStatus } from "./relocation-status";
 
 export type JsonImportLanguage = "auto" | "fr" | "en";
 
@@ -202,13 +203,25 @@ export function importCvJsonSet(value: unknown): CvJsonSetImportResult | null {
       if (!Object.keys(candidate).length) continue;
       const wrappedDocument = record(candidate.document);
       const payload = Object.keys(wrappedDocument).length ? wrappedDocument : candidate;
-      documents[language.id] = importCvJson(payload, "auto").cv;
+      const cv = importCvJson({ ...payload, language: language.id }, "auto").cv;
+      documents[language.id] = {
+        ...cv,
+        statut_relocation: normalizeRelocationStatus(cv.statut_relocation, language.id, {
+          fillEmpty: true,
+        }),
+      };
     }
   } else {
     const wrappedDocument = record(root.document);
     const language = documentLanguage(root.language);
     if (Object.keys(wrappedDocument).length && language) {
-      documents[language] = importCvJson(wrappedDocument, "auto").cv;
+      const cv = importCvJson(wrappedDocument, "auto").cv;
+      documents[language] = {
+        ...cv,
+        statut_relocation: normalizeRelocationStatus(cv.statut_relocation, language, {
+          fillEmpty: true,
+        }),
+      };
     }
   }
 
@@ -470,6 +483,13 @@ export function importCvJson(
   } else {
     throw new Error("Structure JSON non reconnue. Aucun contenu CV compatible n’a été trouvé.");
   }
+
+  const relocationLanguage =
+    documentLanguage(root.language) ?? (preferredLanguage === "auto" ? "fr" : preferredLanguage);
+  cv = {
+    ...cv,
+    statut_relocation: normalizeRelocationStatus(cv.statut_relocation, relocationLanguage),
+  };
 
   const summary = summaryForCv(cv);
 

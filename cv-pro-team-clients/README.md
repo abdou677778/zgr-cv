@@ -83,6 +83,13 @@ qu’un fichier est absent, partiellement paginé, trop volumineux, illisible ou
 dans un format non extractible. Convertir les images HEIC/HEIF en JPEG/PNG avant
 la génération IA afin qu’elles puissent être analysées visuellement.
 
+Pour modifier un JSON existant, le client appelle d’abord `get_json_version`
+sans numéro afin de charger la version active, puis transmet
+`baseVersionForNextSave` dans `base_version`. Une base obsolète est refusée avec
+un conflit `409`. Un contenu strictement identique conserve la version active et
+ne crée pas de doublon ; les versions antérieures restent un historique en
+lecture seule.
+
 `get_order` retourne aussi un menu numéroté de huit workflows adaptés au projet :
 génération et modification JSON, contrôle des sources, photo de profil,
 adaptation à une offre, contrôle des livrables Drive et email final.

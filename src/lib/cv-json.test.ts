@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { importCvJson } from "./cv-json";
+import { importCvJson, importCvJsonSet } from "./cv-json";
 
 test("keeps legacy JSON compatible when the software section is absent", () => {
   const result = importCvJson({ nom_complet: "Legacy Profile", experiences: [] }, "auto");
@@ -52,4 +52,18 @@ test("normalizes and preserves the official Canadian NOC equivalence", () => {
     version: "CNP 2021 v1.0",
     sourceUrl: "https://www.statcan.gc.ca/fr/sujets/norme/cnp/2021/indexV1",
   });
+});
+
+test("fills missing multilingual relocation statuses and replaces overlong legacy wording", () => {
+  const result = importCvJsonSet({
+    default_language: "fr",
+    documents: {
+      fr: { nom_complet: "Profil FR", statut_relocation: "" },
+      en: { nom_complet: "Profile EN", statut_relocation: "x".repeat(80) },
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(result.documents.fr?.statut_relocation, "Mobile géographiquement");
+  assert.equal(result.documents.en?.statut_relocation, "Open to relocate");
 });

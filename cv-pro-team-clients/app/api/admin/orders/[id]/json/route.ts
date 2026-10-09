@@ -1,8 +1,5 @@
 import { requireAdmin } from '@/lib/admin-auth';
-import {
-  JsonVersionError,
-  saveJsonVersion,
-} from '@/lib/json-version-service';
+import { JsonVersionError, saveJsonVersion } from '@/lib/json-version-service';
 import { jsonResponse } from '@/lib/order-model';
 
 interface RouteContext {
@@ -17,9 +14,20 @@ export async function POST(request: Request, context: RouteContext) {
   const formData = await request.formData();
   const candidate = formData.get('file');
   const promptVersionValue = formData.get('promptVersion');
+  const baseVersionValue = formData.get('baseVersion');
   const promptVersion = (
     typeof promptVersionValue === 'string' ? promptVersionValue : '1.1'
   ).slice(0, 30);
+  const baseVersion = Number(baseVersionValue);
+  if (!Number.isInteger(baseVersion) || baseVersion < 0) {
+    return jsonResponse(
+      {
+        error:
+          'Rechargez la commande avant l’import : version de base absente ou invalide.',
+      },
+      409,
+    );
+  }
   if (!(candidate instanceof File)) {
     return jsonResponse({ error: 'Sélectionnez un fichier JSON.' }, 400);
   }
@@ -44,8 +52,9 @@ export async function POST(request: Request, context: RouteContext) {
       originalName: candidate.name,
       promptVersion,
       source: 'admin',
+      expectedBaseVersion: baseVersion,
     });
-    return jsonResponse(result, 201);
+    return jsonResponse(result, result.unchanged ? 200 : 201);
   } catch (error) {
     if (error instanceof JsonVersionError) {
       return jsonResponse(

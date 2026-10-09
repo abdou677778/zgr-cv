@@ -62,8 +62,8 @@ par email pendant la revue.
 ### 5. Enregistrement après confirmation
 
 - **Prompt** : « J’ai vérifié ce JSON. Enregistre-le comme nouvelle version pour `[ID_DEMO]`. »
-- **Comportement attendu** : appeler `save_json_version` avec un JSON valide après confirmation explicite.
-- **Résultat attendu** : `saved: true`, numéro de version, empreinte et état de synchronisation Drive.
+- **Comportement attendu** : appeler `get_json_version` sans numéro, modifier le JSON actif complet, puis appeler `save_json_version` avec ce JSON valide et `base_version` égal à `baseVersionForNextSave`, après confirmation explicite.
+- **Résultat attendu** : `saved: true`, numéro de version, empreinte et état de synchronisation Drive. Un contenu identique retourne `unchanged: true` sans créer de version supplémentaire.
 
 ## Tests négatifs
 

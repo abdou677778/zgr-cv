@@ -167,6 +167,8 @@ import type { EuropassBatchImport } from "@/lib/europass-import";
 import { activatePwaUpdate, promptPwaInstall, usePwaStatus } from "@/lib/pwa-client";
 import { reportSyncFailure } from "@/lib/observability";
 import { emptyOpportunityPlan, type OpportunityPlan } from "@/lib/profile-opportunities";
+import { RELOCATION_STATUS_MAX_CHARS } from "@/lib/relocation-status";
+import { NOC_AI_SYSTEM, nocAiPrompt } from "@/lib/ai-prompts";
 
 const AiSettingsDialog = lazy(async () => {
   const module = await import("@/components/ai-settings-dialog");
@@ -1432,6 +1434,56 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const aiFieldProps = (label: string, value: string, onApply: (next: string) => void) => ({
     onAi: () => openAiField(label, value, onApply),
   });
+  const openNocAiField = async () => {
+    if (!cv.titre_poste.trim()) {
+      setImportMessage({ ok: false, text: "Renseignez d’abord le poste recherché." });
+      return;
+    }
+    const { NOC_ENTRIES, NOC_VERSION } = await import("@/data/noc-2021-fr");
+    setAiFieldRequest({
+      label: "Équivalence professionnelle CNP Canada",
+      value: cv.titre_poste,
+      system: NOC_AI_SYSTEM,
+      initialInstruction:
+        "Comparer les fonctions du profil et sélectionner le groupe de base CNP officiel le plus précis.",
+      presets: [
+        "Comparer les fonctions réelles au titre CNP",
+        "Privilégier les responsabilités plutôt que le titre",
+        "Ne rien proposer si les preuves sont insuffisantes",
+      ],
+      buildPrompt: (source, instruction) =>
+        nocAiPrompt(language, source, instruction, cv, NOC_ENTRIES),
+      onApply: (proposal) => {
+        const code = proposal.match(/\b\d{5}\b/)?.[0] ?? "";
+        const entry = NOC_ENTRIES.find((item) => item.code === code);
+        if (!entry)
+          throw new Error(
+            "L’IA n’a pas fourni un code CNP officiel vérifiable. Précisez les fonctions du poste puis réessayez.",
+          );
+        const localizedTitle = proposal
+          .replace(/^\s*\d{5}\s*[|:—–-]?\s*/, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 120);
+        if (!localizedTitle)
+          throw new Error(
+            "L’IA n’a pas fourni d’intitulé canadien localisé. Précisez le poste puis réessayez.",
+          );
+        set("cnp", {
+          code: entry.code,
+          title: entry.title,
+          teer: `FEER ${entry.code[1]}`,
+          version: NOC_VERSION,
+          sourceUrl: `https://noc.esdc.gc.ca/Structure/NOCProfile?GocTemplateCulture=fr-CA&code=${entry.code}&version=2021.0`,
+        });
+        set("titre_poste", localizedTitle);
+        setImportMessage({
+          ok: true,
+          text: `Équivalence CNP vérifiée : ${localizedTitle} · ${entry.code}.`,
+        });
+      },
+    });
+  };
   const isVisible = (path: string) => cvElementIsVisible(hiddenElements, path);
   const toggleVisibility = (path: string) =>
     setHiddenElements((current) => {
@@ -1884,10 +1936,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           `${activeClientOrder.id}_CV_GLOBAL_7_LANGUES.json`,
           { type: "application/json" },
         );
-        const imported = await importClientOrderJson(activeClientOrder.id, orderJson);
+        const imported = await importClientOrderJson(
+          activeClientOrder.id,
+          orderJson,
+          activeClientOrder.currentJsonVersion ?? 0,
+        );
+        setActiveClientOrder((current) =>
+          current ? { ...current, currentJsonVersion: imported.versionNumber } : current,
+        );
         orderVersion = ` · commande ${activeClientOrder.id} JSON v${String(
           imported.versionNumber,
-        ).padStart(3, "0")}`;
+        ).padStart(3, "0")}${imported.unchanged ? " (inchangé, aucun doublon)" : ""}`;
       }
       setImportMessage({
         ok: !cloudError,
@@ -3353,7 +3412,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   onChange={(e) => set("titre_poste", e.target.value.slice(0, 120))}
                 />
               </Field>
-              <Field label="Équivalence professionnelle — CNP Canada">
+              <Field
+                label="Équivalence professionnelle — CNP Canada"
+                onAi={() => void openNocAiField()}
+              >
                 <Suspense
                   fallback={
                     <div className="h-10 animate-pulse rounded-lg border border-slate-200 bg-slate-50" />
@@ -3440,13 +3502,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 label={form.relocation}
                 {...visibilityProps("personal.statut_relocation")}
                 {...aiFieldProps(form.relocation, cv.statut_relocation, (value) =>
-                  set("statut_relocation", value.slice(0, 120)),
+                  set(
+                    "statut_relocation",
+                    Array.from(value).slice(0, RELOCATION_STATUS_MAX_CHARS).join(""),
+                  ),
                 )}
               >
                 <Input
                   value={cv.statut_relocation}
                   placeholder={form.relocation}
-                  onChange={(e) => set("statut_relocation", e.target.value.slice(0, 120))}
+                  maxLength={RELOCATION_STATUS_MAX_CHARS}
+                  onChange={(e) => set("statut_relocation", e.target.value)}
                 />
               </Field>
               <Field

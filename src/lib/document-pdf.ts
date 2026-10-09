@@ -15,6 +15,7 @@ import { DEFAULT_TEMPLATE_COLORS, type TemplateColorMap, type ThemeTemplateId } 
 import type { TemplateDesignerSettings, TemplateDesignerSettingsMap } from "./template-designer";
 import { getTemplates, type DocumentKind } from "./document-catalog";
 import type { OpportunityPlan } from "./profile-opportunities";
+import { prepareCvForDocument } from "./canadian-document";
 
 export {
   COMPLETE_PACK_DOCUMENT_COUNT,
@@ -37,20 +38,32 @@ export async function createDocumentPdfBlob(
   if (templateId === EUROPASS_TEMPLATE_ID) {
     throw new Error("Le modèle Europass produit un fichier XML et non un document PDF.");
   }
+  const documentCv = prepareCvForDocument(cv, kind, templateId, language);
   if (kind === "cover-letter") {
     const { createCoverLetterPdfBlob } = await import("./letter-pdf");
-    return createCoverLetterPdfBlob(cv, templateId as CoverLetterTemplateId, language, accentColor);
+    return createCoverLetterPdfBlob(
+      documentCv,
+      templateId as CoverLetterTemplateId,
+      language,
+      accentColor,
+    );
   }
   if (kind === "advises") {
     if (templateId === OPPORTUNITY_PLAN_TEMPLATE_ID) {
       const { createOpportunityPlanPdfBlob } = await import("./opportunity-plan-pdf");
-      return createOpportunityPlanPdfBlob(cv, opportunityPlan, language, accentColor);
+      return createOpportunityPlanPdfBlob(documentCv, opportunityPlan, language, accentColor);
     }
     const { createAdvisesPdfBlob } = await import("./advises-pdf");
-    return createAdvisesPdfBlob(cv, language, accentColor);
+    return createAdvisesPdfBlob(documentCv, language, accentColor);
   }
   const { createCvPdfBlob } = await import("./cv-pdf");
-  return createCvPdfBlob(cv, templateId as CvTemplateId, language, accentColor, designerSettings);
+  return createCvPdfBlob(
+    documentCv,
+    templateId as CvTemplateId,
+    language,
+    accentColor,
+    designerSettings,
+  );
 }
 
 export interface CompletePackProgress {

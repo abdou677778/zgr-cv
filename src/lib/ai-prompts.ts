@@ -3,7 +3,29 @@ import { languageInfo, type DocumentLanguage } from "./document-language";
 
 export type FieldAiResponse = { value: string };
 
+export type NocPromptEntry = { code: string; title: string };
+
 export const FIELD_AI_SYSTEM = `Tu es un rédacteur senior de CV et lettres de motivation. Tu dois améliorer uniquement le champ demandé, dans la langue demandée, sans inventer aucun fait, chiffre, employeur, compétence, diplôme ou résultat. Préserve les noms propres, dates et technologies. Réponds exclusivement en JSON strict sous la forme {"value":"..."}. Aucun Markdown.`;
+
+export const NOC_AI_SYSTEM = `Tu es un classificateur professionnel CNP Canada. Tu dois choisir exactement un code à cinq chiffres dans la liste officielle fournie, principalement d'après les fonctions réellement exercées. Après le code, propose un intitulé professionnel canadien naturel, localisé dans la langue demandée et au singulier. Respecte le genre grammatical uniquement s'il est explicitement établi par le titre source ; ne l'infère jamais depuis le nom. N'invente jamais de code et ne réponds pas si les preuves sont insuffisantes. Réponds exclusivement en JSON strict sous la forme {"value":"73300 | Conducteur de camion de transport"} ou {"value":""}. Aucun Markdown.`;
+
+export function nocAiPrompt(
+  language: DocumentLanguage,
+  jobTitle: string,
+  instruction: string,
+  cv: CV,
+  entries: readonly NocPromptEntry[],
+) {
+  const evidence = {
+    titre_poste: jobTitle,
+    experiences: cv.experiences.map(({ titre, descriptions }) => ({
+      titre,
+      descriptions: descriptions.filter(Boolean),
+    })),
+    competences: cv.competences.filter(Boolean),
+  };
+  return `Langue du profil : ${languageInfo(language).name}.\nInstruction : ${instruction}.\nPreuves professionnelles : ${JSON.stringify(evidence)}\nCodes CNP 2021 v1.0 autorisés : ${JSON.stringify(entries)}\nChoisis uniquement le code dont les fonctions correspondent aux preuves. Transforme ensuite l'intitulé officiel en titre professionnel localisé, naturel et singulier. Exemple français masculin : « Chauffeur poids lourd » correspondant aux fonctions du groupe 73300 devient « Conducteur de camion de transport ». Retourne {"value":"CODE | TITRE LOCALISÉ"}; si la correspondance n'est pas suffisamment fiable, retourne {"value":""}.`;
+}
 
 export function fieldAiPrompt(
   language: DocumentLanguage,

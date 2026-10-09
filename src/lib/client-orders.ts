@@ -211,16 +211,18 @@ export async function deleteClientOrder(orderId: string) {
   }>(response);
 }
 
-export async function importClientOrderJson(orderId: string, file: File) {
+export async function importClientOrderJson(orderId: string, file: File, baseVersion: number) {
   const data = new FormData();
   data.append("file", file);
   data.append("promptVersion", "1.1");
+  data.append("baseVersion", String(baseVersion));
   const response = await authenticatedFetch(
     `/api/admin/client-orders/${encodeURIComponent(orderId)}/json`,
     { method: "POST", body: data },
   );
   return responseJson<{
     versionNumber: number;
+    unchanged?: boolean;
     validation: ClientOrderJsonVersion["validation"];
     driveStatus: string;
   }>(response);

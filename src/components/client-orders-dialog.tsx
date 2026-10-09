@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Archive,
   CalendarDays,
   CircleCheck,
   Cloud,
@@ -419,11 +420,17 @@ export function ClientOrdersDialog({
     setBusy("json-import");
     setMessage("");
     try {
-      const result = await importClientOrderJson(detail.order.id, file);
+      const result = await importClientOrderJson(
+        detail.order.id,
+        file,
+        detail.order.currentJsonVersion ?? 0,
+      );
       setMessage(
-        `JSON v${String(result.versionNumber).padStart(3, "0")} importé et validé · ${
-          result.validation.presentLanguages?.join(", ").toUpperCase() || "langues reconnues"
-        }.`,
+        result.unchanged
+          ? `Aucun changement : JSON actif v${String(result.versionNumber).padStart(3, "0")} conservé sans doublon.`
+          : `JSON actif v${String(result.versionNumber).padStart(3, "0")} importé et validé · ${
+              result.validation.presentLanguages?.join(", ").toUpperCase() || "langues reconnues"
+            }.`,
       );
       await refresh();
     } catch (error) {
@@ -1102,48 +1109,59 @@ export function ClientOrdersDialog({
                           Téléchargez le Pack IA, traitez le dossier puis importez le JSON produit.
                         </div>
                       ) : (
-                        detail.jsonVersions.map((version) => (
-                          <div key={version.id} className="rounded-lg border p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <p className="text-sm font-bold">
-                                  Version {String(version.versionNumber).padStart(3, "0")}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  Prompt {version.promptVersion} ·{" "}
-                                  {new Date(version.createdAt).toLocaleString("fr-DZ")}
-                                </p>
-                              </div>
-                              <CircleCheck className="h-5 w-5 text-emerald-600" />
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => void openJson(version)}
-                                disabled={Boolean(busy)}
-                              >
-                                {busy === `json-open:${version.versionNumber}` ? (
-                                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        detail.jsonVersions.map((version) => {
+                          const active = version.versionNumber === detail.order.currentJsonVersion;
+                          return (
+                            <div
+                              key={version.id}
+                              className={`rounded-lg border p-3 ${active ? "border-emerald-300 bg-emerald-50/60" : "bg-slate-50/70 opacity-75"}`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-bold">
+                                    {active ? "Version active" : "Historique"} · v
+                                    {String(version.versionNumber).padStart(3, "0")}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Prompt {version.promptVersion} ·{" "}
+                                    {new Date(version.createdAt).toLocaleString("fr-DZ")}
+                                  </p>
+                                </div>
+                                {active ? (
+                                  <CircleCheck className="h-5 w-5 text-emerald-600" />
                                 ) : (
-                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  <Archive className="h-5 w-5 text-slate-400" />
                                 )}
-                                Ouvrir dans ZGR
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  void downloadClientOrderJson(
-                                    detail.order.id,
-                                    version.versionNumber,
-                                  )
-                                }
-                              >
-                                <Download className="mr-2 h-4 w-4" /> JSON
-                              </Button>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => void openJson(version)}
+                                  disabled={Boolean(busy)}
+                                >
+                                  {busy === `json-open:${version.versionNumber}` ? (
+                                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                  )}
+                                  {active ? "Ouvrir dans ZGR" : "Consulter l’historique"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    void downloadClientOrderJson(
+                                      detail.order.id,
+                                      version.versionNumber,
+                                    )
+                                  }
+                                >
+                                  <Download className="mr-2 h-4 w-4" /> JSON
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </section>

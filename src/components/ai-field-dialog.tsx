@@ -20,6 +20,10 @@ export type AiFieldRequest = {
   label: string;
   value: string;
   onApply: (value: string) => void;
+  system?: string;
+  buildPrompt?: (source: string, instruction: string) => string;
+  initialInstruction?: string;
+  presets?: string[];
 };
 
 const PRESETS = [
@@ -57,7 +61,7 @@ export function AiFieldDialog({
 
   useEffect(() => {
     controllerRef.current?.abort();
-    setInstruction(PRESETS[0]);
+    setInstruction(request?.initialInstruction ?? PRESETS[0]);
     setProposal("");
     setSource(request?.value ?? "");
     setError("");
@@ -90,8 +94,9 @@ export function AiFieldDialog({
     try {
       const result = await runAiJson<FieldAiResponse>(
         settings,
-        FIELD_AI_SYSTEM,
-        fieldAiPrompt(language, request.label, source, instruction, cv),
+        request.system ?? FIELD_AI_SYSTEM,
+        request.buildPrompt?.(source, instruction) ??
+          fieldAiPrompt(language, request.label, source, instruction, cv),
         { signal: controller.signal },
       );
       if (typeof result.data.value !== "string") throw new Error("Réponse IA incompatible.");
@@ -134,7 +139,7 @@ export function AiFieldDialog({
           <div>
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">Instruction</p>
             <div className="mb-2 flex flex-wrap gap-1.5">
-              {PRESETS.map((preset) => (
+              {(request?.presets ?? PRESETS).map((preset) => (
                 <button
                   type="button"
                   key={preset}
@@ -202,8 +207,12 @@ export function AiFieldDialog({
             type="button"
             disabled={loading || !proposal.trim()}
             onClick={() => {
-              request?.onApply(proposal.trim());
-              closeDialog();
+              try {
+                request?.onApply(proposal.trim());
+                closeDialog();
+              } catch (reason) {
+                setError(reason instanceof Error ? reason.message : "Proposition IA invalide.");
+              }
             }}
           >
             Appliquer

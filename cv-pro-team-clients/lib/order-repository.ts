@@ -1,5 +1,5 @@
-import { ensureSchema, runtimeEnv } from "@/db/runtime";
-import { sha256Hex } from "@/lib/order-model";
+import { ensureSchema, runtimeEnv } from '@/db/runtime';
+import { sha256Hex } from '@/lib/order-model';
 
 export interface StoredOrder {
   id: string;
@@ -19,6 +19,9 @@ export interface StoredOrder {
   driveStatus: string;
   adminUsername: string;
   writerUsername: string;
+  archivedAt?: string;
+  archivedFromStatus?: string;
+  archiveSourceKey?: string;
 }
 
 export interface StoredOrderFile {
@@ -70,8 +73,8 @@ export interface StoredDelivery {
 type D1Row = Record<string, unknown>;
 const STALE_DRIVE_SYNC_MS = 20 * 60 * 1000;
 
-function textValue(value: unknown, fallback = "") {
-  return typeof value === "string" ? value : fallback;
+function textValue(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
 }
 
 function mapOrder(row: D1Row): StoredOrder {
@@ -81,21 +84,25 @@ function mapOrder(row: D1Row): StoredOrder {
     email: String(row.email),
     phone: textValue(row.phone),
     facebookUrl: textValue(row.facebook_url),
-    language: textValue(row.language, "fr"),
+    language: textValue(row.language, 'fr'),
     notes: textValue(row.notes),
-    services: JSON.parse(textValue(row.services_json, "[]")),
+    services: JSON.parse(textValue(row.services_json, '[]')),
     status: String(row.status),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
     completedAt: textValue(row.completed_at) || undefined,
     currentJsonVersion:
-      row.current_json_version === null || row.current_json_version === undefined
+      row.current_json_version === null ||
+      row.current_json_version === undefined
         ? undefined
         : Number(row.current_json_version),
     driveFolderId: textValue(row.drive_folder_id) || undefined,
-    driveStatus: textValue(row.drive_status, "PENDING"),
+    driveStatus: textValue(row.drive_status, 'PENDING'),
     adminUsername: textValue(row.admin_username),
     writerUsername: textValue(row.writer_username),
+    archivedAt: textValue(row.archived_at) || undefined,
+    archivedFromStatus: textValue(row.archived_from_status) || undefined,
+    archiveSourceKey: textValue(row.archive_source_key) || undefined,
   };
 }
 
@@ -122,7 +129,7 @@ function mapJsonVersion(row: D1Row): StoredJsonVersion {
     originalName: String(row.original_name),
     sha256: String(row.sha256),
     promptVersion: String(row.prompt_version),
-    validation: JSON.parse(textValue(row.validation_json, "{}")),
+    validation: JSON.parse(textValue(row.validation_json, '{}')),
     createdAt: String(row.created_at),
   };
 }
@@ -131,7 +138,7 @@ function mapDeliverable(row: D1Row): StoredDeliverable {
   return {
     id: String(row.id),
     orderId: String(row.order_id),
-    service: textValue(row.service, "AUTRE"),
+    service: textValue(row.service, 'AUTRE'),
     originalName: String(row.original_name),
     storageKey: String(row.storage_key),
     mimeType: String(row.mime_type),
@@ -148,7 +155,7 @@ function mapDelivery(row: D1Row): StoredDelivery {
     versionNumber: Number(row.version_number),
     driveFolderId: String(row.drive_folder_id),
     shareUrl: String(row.share_url),
-    fileIds: JSON.parse(textValue(row.file_ids_json, "[]")),
+    fileIds: JSON.parse(textValue(row.file_ids_json, '[]')),
     createdAt: String(row.created_at),
   };
 }
@@ -171,14 +178,19 @@ async function repairStaleDriveSyncs() {
 export async function getOrder(id: string) {
   await ensureSchema();
   await repairStaleDriveSyncs();
-  const row = await runtimeEnv().DB.prepare("SELECT * FROM orders WHERE id = ?").bind(id).first();
+  const row = await runtimeEnv()
+    .DB.prepare('SELECT * FROM orders WHERE id = ?')
+    .bind(id)
+    .first();
   return row ? mapOrder(row as D1Row) : null;
 }
 
 export async function getOrderFiles(orderId: string) {
   await ensureSchema();
   const result = await runtimeEnv()
-    .DB.prepare("SELECT * FROM order_files WHERE order_id = ? ORDER BY created_at ASC")
+    .DB.prepare(
+      'SELECT * FROM order_files WHERE order_id = ? ORDER BY created_at ASC',
+    )
     .bind(orderId)
     .all();
   return (result.results as D1Row[]).map(mapFile);
@@ -187,7 +199,9 @@ export async function getOrderFiles(orderId: string) {
 export async function getJsonVersions(orderId: string) {
   await ensureSchema();
   const result = await runtimeEnv()
-    .DB.prepare("SELECT * FROM json_versions WHERE order_id = ? ORDER BY version_number DESC")
+    .DB.prepare(
+      'SELECT * FROM json_versions WHERE order_id = ? ORDER BY version_number DESC',
+    )
     .bind(orderId)
     .all();
   return (result.results as D1Row[]).map(mapJsonVersion);
@@ -197,14 +211,14 @@ export async function getOrderEvents(orderId: string) {
   await ensureSchema();
   const result = await runtimeEnv()
     .DB.prepare(
-      "SELECT id, type, details_json, created_at FROM order_events WHERE order_id = ? ORDER BY created_at DESC",
+      'SELECT id, type, details_json, created_at FROM order_events WHERE order_id = ? ORDER BY created_at DESC',
     )
     .bind(orderId)
     .all();
   return (result.results as D1Row[]).map((row) => ({
     id: Number(row.id),
     type: String(row.type),
-    details: JSON.parse(textValue(row.details_json, "{}")),
+    details: JSON.parse(textValue(row.details_json, '{}')),
     createdAt: String(row.created_at),
   }));
 }
@@ -212,7 +226,9 @@ export async function getOrderEvents(orderId: string) {
 export async function getDeliverables(orderId: string) {
   await ensureSchema();
   const result = await runtimeEnv()
-    .DB.prepare("SELECT * FROM deliverables WHERE order_id = ? ORDER BY created_at DESC")
+    .DB.prepare(
+      'SELECT * FROM deliverables WHERE order_id = ? ORDER BY created_at DESC',
+    )
     .bind(orderId)
     .all();
   return (result.results as D1Row[]).map(mapDeliverable);
@@ -221,7 +237,9 @@ export async function getDeliverables(orderId: string) {
 export async function getDeliveries(orderId: string) {
   await ensureSchema();
   const result = await runtimeEnv()
-    .DB.prepare("SELECT * FROM deliveries WHERE order_id = ? ORDER BY version_number DESC")
+    .DB.prepare(
+      'SELECT * FROM deliveries WHERE order_id = ? ORDER BY version_number DESC',
+    )
     .bind(orderId)
     .all();
   return (result.results as D1Row[]).map(mapDelivery);
@@ -232,7 +250,10 @@ export async function getDeliveries(orderId: string) {
  * Both the short-lived upload token and the original invitation link are
  * accepted, but neither can outlive the invitation's five-day window.
  */
-export async function validateOrderAccess(orderId: string, token: string | null) {
+export async function validateOrderAccess(
+  orderId: string,
+  token: string | null,
+) {
   if (!token) return false;
   await ensureSchema();
   const tokenHash = await sha256Hex(token);
@@ -251,7 +272,9 @@ export async function validateOrderAccess(orderId: string, token: string | null)
       invitation_token_hash: string;
     }>();
   return Boolean(
-    row && (row.upload_token_hash === tokenHash || row.invitation_token_hash === tokenHash),
+    row &&
+    (row.upload_token_hash === tokenHash ||
+      row.invitation_token_hash === tokenHash),
   );
 }
 

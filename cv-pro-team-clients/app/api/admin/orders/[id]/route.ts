@@ -1,9 +1,9 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-import { requireAdmin } from "@/lib/admin-auth";
-import { recordEvent, runtimeEnv } from "@/db/runtime";
-import { trashDriveFolder } from "@/lib/google-drive";
-import { jsonResponse, orderDetailsSchema } from "@/lib/order-model";
+import { requireAdmin } from '@/lib/admin-auth';
+import { recordEvent, runtimeEnv } from '@/db/runtime';
+import { trashDriveFolder } from '@/lib/google-drive';
+import { jsonResponse, orderDetailsSchema } from '@/lib/order-model';
 import {
   getJsonVersions,
   getDeliverables,
@@ -11,7 +11,7 @@ import {
   getOrder,
   getOrderEvents,
   getOrderFiles,
-} from "@/lib/order-repository";
+} from '@/lib/order-repository';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -23,45 +23,52 @@ export async function GET(request: Request, context: RouteContext) {
 
   const { id } = await context.params;
   const order = await getOrder(id);
-  if (!order) return jsonResponse({ error: "Commande introuvable." }, 404);
-  const [files, jsonVersions, deliverables, deliveries, events] = await Promise.all([
-    getOrderFiles(id),
-    getJsonVersions(id),
-    getDeliverables(id),
-    getDeliveries(id),
-    getOrderEvents(id),
-  ]);
+  if (!order) return jsonResponse({ error: 'Commande introuvable.' }, 404);
+  const [files, jsonVersions, deliverables, deliveries, events] =
+    await Promise.all([
+      getOrderFiles(id),
+      getJsonVersions(id),
+      getDeliverables(id),
+      getDeliveries(id),
+      getOrderEvents(id),
+    ]);
 
   return jsonResponse({
     order,
     files: files.map(({ storageKey: _storageKey, ...file }) => file),
-    jsonVersions: jsonVersions.map(({ storageKey: _storageKey, ...version }) => version),
-    deliverables: deliverables.map(({ storageKey: _storageKey, ...deliverable }) => deliverable),
+    jsonVersions: jsonVersions.map(
+      ({ storageKey: _storageKey, ...version }) => version,
+    ),
+    deliverables: deliverables.map(
+      ({ storageKey: _storageKey, ...deliverable }) => deliverable,
+    ),
     deliveries,
     events,
   });
 }
 
 function normalizedFacebookUrl(value: unknown) {
-  if (typeof value !== "string") return null;
+  if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  if (!trimmed) return "";
-  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (!trimmed) return '';
+  const candidate = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
   try {
     const url = new URL(candidate);
     const host = url.hostname.toLowerCase();
     if (
-      url.protocol !== "https:" ||
+      url.protocol !== 'https:' ||
       !(
-        host === "facebook.com" ||
-        host.endsWith(".facebook.com") ||
-        host === "fb.com" ||
-        host.endsWith(".fb.com")
+        host === 'facebook.com' ||
+        host.endsWith('.facebook.com') ||
+        host === 'fb.com' ||
+        host.endsWith('.fb.com')
       )
     ) {
       return null;
     }
-    url.hash = "";
+    url.hash = '';
     return url.toString();
   } catch {
     return null;
@@ -74,13 +81,16 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { id } = await context.params;
   const order = await getOrder(id);
-  if (!order) return jsonResponse({ error: "Commande introuvable." }, 404);
+  if (!order) return jsonResponse({ error: 'Commande introuvable.' }, 404);
 
   let payload: unknown;
   try {
     payload = await request.json();
   } catch {
-    return jsonResponse({ error: "Les informations envoyées sont invalides." }, 400);
+    return jsonResponse(
+      { error: 'Les informations envoyées sont invalides.' },
+      400,
+    );
   }
   const parsed = orderDetailsSchema
     .partial()
@@ -90,42 +100,56 @@ export async function PATCH(request: Request, context: RouteContext) {
       writerUsername: z.string().trim().max(64).optional(),
       status: z
         .enum([
-          "DRAFT",
-          "RECEIVED",
-          "JSON_IMPORTED",
-          "IN_PRODUCTION",
-          "TO_VALIDATE",
-          "DELIVERED",
-          "ARCHIVED",
+          'DRAFT',
+          'RECEIVED',
+          'JSON_IMPORTED',
+          'IN_PRODUCTION',
+          'TO_VALIDATE',
+          'DELIVERED',
+          'ARCHIVED',
         ])
         .optional(),
     })
     .safeParse(payload);
   if (!parsed.success || Object.keys(parsed.data).length === 0) {
-    return jsonResponse({ error: "Aucune modification valide reçue." }, 422);
+    return jsonResponse({ error: 'Aucune modification valide reçue.' }, 422);
   }
   const teamRoles = new Set(
-    (request.headers.get("X-ZGR-Team-Roles") || "")
-      .split(",")
+    (request.headers.get('X-ZGR-Team-Roles') || '')
+      .split(',')
       .map((role) => role.trim())
       .filter(Boolean),
   );
   const changesAssignmentOrArchive =
     parsed.data.adminUsername !== undefined ||
     parsed.data.writerUsername !== undefined ||
-    parsed.data.status === "ARCHIVED" ||
-    (order.status === "ARCHIVED" && parsed.data.status !== undefined);
-  if (changesAssignmentOrArchive && !teamRoles.has("order_admin")) {
-    return jsonResponse({ error: "Rôle Admin clients requis pour cette modification." }, 403);
+    parsed.data.status === 'ARCHIVED' ||
+    (order.status === 'ARCHIVED' && parsed.data.status !== undefined);
+  if (changesAssignmentOrArchive && !teamRoles.has('order_admin')) {
+    return jsonResponse(
+      { error: 'Rôle Admin clients requis pour cette modification.' },
+      403,
+    );
   }
   const facebookUrl =
     parsed.data.facebookUrl === undefined
       ? order.facebookUrl
       : normalizedFacebookUrl(parsed.data.facebookUrl);
   if (facebookUrl === null) {
-    return jsonResponse({ error: "Saisissez un lien Facebook valide et sécurisé (https)." }, 422);
+    return jsonResponse(
+      { error: 'Saisissez un lien Facebook valide et sécurisé (https).' },
+      422,
+    );
   }
 
+  const now = new Date().toISOString();
+  const enteringArchive =
+    order.status !== 'ARCHIVED' && parsed.data.status === 'ARCHIVED';
+  const leavingArchive =
+    order.status === 'ARCHIVED' &&
+    parsed.data.status !== undefined &&
+    parsed.data.status !== 'ARCHIVED';
+  const restoredStatus = order.archivedFromStatus || 'DELIVERED';
   const updated = {
     clientName: parsed.data.clientName ?? order.clientName,
     email: parsed.data.email ?? order.email,
@@ -136,15 +160,27 @@ export async function PATCH(request: Request, context: RouteContext) {
     facebookUrl,
     adminUsername: parsed.data.adminUsername ?? order.adminUsername,
     writerUsername: parsed.data.writerUsername ?? order.writerUsername,
-    status: parsed.data.status ?? order.status,
+    status: leavingArchive
+      ? restoredStatus
+      : (parsed.data.status ?? order.status),
+    archivedAt: enteringArchive
+      ? now
+      : leavingArchive
+        ? ''
+        : (order.archivedAt ?? ''),
+    archivedFromStatus: enteringArchive
+      ? order.status
+      : leavingArchive
+        ? ''
+        : (order.archivedFromStatus ?? ''),
   };
-  const now = new Date().toISOString();
   await runtimeEnv()
     .DB.prepare(
       `UPDATE orders
        SET client_name = ?, email = ?, phone = ?, language = ?, notes = ?,
            services_json = ?, facebook_url = ?, admin_username = ?, writer_username = ?,
-           status = ?, drive_status = 'PENDING', updated_at = ?
+           status = ?, archived_at = NULLIF(?, ''), archived_from_status = ?,
+           drive_status = 'PENDING', updated_at = ?
        WHERE id = ?`,
     )
     .bind(
@@ -158,12 +194,16 @@ export async function PATCH(request: Request, context: RouteContext) {
       updated.adminUsername,
       updated.writerUsername,
       updated.status,
+      updated.archivedAt,
+      updated.archivedFromStatus,
       now,
       id,
     )
     .run();
-  await recordEvent(id, "CLIENT_DETAILS_UPDATED", {
+  await recordEvent(id, 'CLIENT_DETAILS_UPDATED', {
     fields: Object.keys(parsed.data),
+    ...(enteringArchive ? { archivedFromStatus: order.status } : {}),
+    ...(leavingArchive ? { restoredStatus } : {}),
   });
 
   return jsonResponse({ order: await getOrder(id), updatedAt: now });
@@ -192,7 +232,7 @@ export async function DELETE(request: Request, context: RouteContext) {
 
   const { id } = await context.params;
   const order = await getOrder(id);
-  if (!order) return jsonResponse({ error: "Commande introuvable." }, 404);
+  if (!order) return jsonResponse({ error: 'Commande introuvable.' }, 404);
 
   // Trash the external folder first. If Google refuses, the database and R2
   // remain intact and the administrator can retry safely.
@@ -204,7 +244,7 @@ export async function DELETE(request: Request, context: RouteContext) {
         {
           error:
             `Suppression annulée : le dossier Google Drive n’a pas pu être placé dans la corbeille. ${
-              error instanceof Error ? error.message : ""
+              error instanceof Error ? error.message : ''
             }`.trim(),
         },
         502,
@@ -213,8 +253,10 @@ export async function DELETE(request: Request, context: RouteContext) {
   }
 
   await runtimeEnv().DB.batch([
-    runtimeEnv().DB.prepare("DELETE FROM invitations WHERE order_id = ?").bind(id),
-    runtimeEnv().DB.prepare("DELETE FROM orders WHERE id = ?").bind(id),
+    runtimeEnv()
+      .DB.prepare('DELETE FROM invitations WHERE order_id = ?')
+      .bind(id),
+    runtimeEnv().DB.prepare('DELETE FROM orders WHERE id = ?').bind(id),
   ]);
   let deletedObjects = 0;
   let storageCleanupPending = false;

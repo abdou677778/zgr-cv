@@ -473,7 +473,7 @@ export function AccountSettingsDialog({
       }
       icon={<ShieldCheck className="h-5 w-5" />}
       iconClassName="bg-indigo-100 text-indigo-700"
-      bodyClassName="mx-auto w-full max-w-6xl gap-4 overflow-y-auto p-5 sm:p-8"
+      bodyClassName="w-full max-w-none gap-4 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6 xl:px-7"
     >
       <div className="contents">
         {message && (
@@ -1245,244 +1245,259 @@ export function AccountSettingsDialog({
                 pouvez afficher temporairement une valeur pendant sa saisie ou définir un nouveau
                 mot de passe. Toute réinitialisation ferme immédiatement les sessions du profil.
               </div>
+              <div className="grid gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-950 lg:grid-cols-3">
+                <p>
+                  <strong>Niveau d’accès</strong> : droits techniques dans l’application.
+                </p>
+                <p>
+                  <strong>Admin clients</strong> : communication, prise de commande et archivage.
+                </p>
+                <p>
+                  <strong>Rédacteur</strong> : préparation et production des documents clients.
+                </p>
+              </div>
               {loading ? (
                 <div className="flex items-center py-8 text-sm text-muted-foreground">
                   <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Chargement…
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-xl border bg-white">
-                  <div className="hidden grid-cols-[minmax(170px,1fr)_minmax(180px,1.1fr)_170px_105px_82px] items-center gap-3 border-b bg-slate-100 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-600 lg:grid">
-                    <span>Utilisateur</span>
-                    <span>Nom affiché</span>
-                    <span>Accès technique</span>
-                    <span>Actif</span>
-                    <span>Actions</span>
-                  </div>
-                  {users.map((profile) => {
-                    const isProtected = profile.isPrimary || profile.username === user.username;
-                    return (
-                      <div
-                        key={profile.username}
-                        className="space-y-3 border-b p-4 last:border-b-0"
-                      >
-                        <div className="grid gap-3 lg:grid-cols-[1fr_1.1fr_190px_auto_auto] lg:items-end">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Identifiant</p>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-semibold">{profile.username}</p>
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${roleBadgeClasses[profile.role]}`}
-                              >
-                                {roleLabels[profile.role]}
-                              </span>
-                              {profile.isPrimary && (
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                                  Principal
-                                </span>
-                              )}
-                              {profile.permissions.clientsApprove && !profile.isPrimary && (
-                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                                  Validation
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-1 text-[11px] text-muted-foreground">
-                              Dernière connexion : {formatDate(profile.lastLoginAt)} ·{" "}
-                              {profile.loginCount} connexions
-                            </p>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs">Nom affiché</Label>
-                            <Input
-                              value={profile.displayName}
-                              onChange={(event) =>
-                                setUsers((current) =>
-                                  current.map((item) =>
-                                    item.username === profile.username
-                                      ? { ...item, displayName: event.target.value }
-                                      : item,
-                                  ),
-                                )
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs">Niveau d’accès</Label>
-                            <select
-                              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60"
-                              value={profile.role}
-                              disabled={isProtected}
-                              onChange={(event) => {
-                                const role = event.target.value as AccountRole;
-                                setUsers((current) =>
-                                  current.map((item) =>
-                                    item.username === profile.username
-                                      ? {
-                                          ...item,
-                                          role,
-                                          workflowManager:
-                                            role === "admin" ||
-                                            (role === "editor" && item.workflowManager),
-                                        }
-                                      : item,
-                                  ),
-                                );
-                              }}
-                            >
-                              <option value="editor">Éditeur</option>
-                              <option value="viewer">Lecture seule</option>
-                              <option value="admin">Administrateur</option>
-                            </select>
-                          </div>
-                          <label className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={profile.active}
-                              disabled={isProtected}
-                              onChange={(event) =>
-                                setUsers((current) =>
-                                  current.map((item) =>
-                                    item.username === profile.username
-                                      ? { ...item, active: event.target.checked }
-                                      : item,
-                                  ),
-                                )
-                              }
-                            />{" "}
-                            Actif
-                          </label>
-                          <div className="flex gap-1">
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              title="Sauvegarder le profil"
-                              disabled={busy === `save-${profile.username}`}
-                              onClick={() => void saveProfile(profile)}
-                            >
-                              {busy === `save-${profile.username}` ? (
-                                <LoaderCircle className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Save className="h-4 w-4" />
-                              )}
-                            </Button>
-                            {!isProtected && (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="text-red-600"
-                                title="Supprimer le profil"
-                                disabled={busy === `delete-${profile.username}`}
-                                onClick={() => void removeProfile(profile.username)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="grid overflow-hidden rounded-lg border border-cyan-200 bg-white text-sm sm:grid-cols-[minmax(180px,1fr)_150px_150px]">
-                          <div className="bg-cyan-50 px-3 py-2 font-semibold text-cyan-950">
-                            Rôles commandes
-                            <span className="block text-[11px] font-normal text-cyan-800">
-                              Admin clients = communication et prise de commande
-                            </span>
-                          </div>
-                          {(
-                            [
-                              ["order_admin", "Admin clients"],
-                              ["writer", "Rédacteur"],
-                            ] as const
-                          ).map(([teamRole, label]) => (
-                            <label
-                              key={teamRole}
-                              className="flex items-center justify-center gap-2 border-t px-3 py-2 sm:border-l sm:border-t-0"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={(profile.teamRoles || []).includes(teamRole)}
+                <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white shadow-sm">
+                  <table className="w-full min-w-[1500px] border-collapse text-left text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                      <tr>
+                        <th className="w-[250px] border-b border-r px-3 py-3">Utilisateur</th>
+                        <th className="w-[220px] border-b border-r px-3 py-3">Nom affiché</th>
+                        <th className="w-[190px] border-b border-r px-3 py-3">Niveau d’accès</th>
+                        <th className="w-[120px] border-b border-r px-3 py-3 text-center">
+                          Admin clients
+                        </th>
+                        <th className="w-[105px] border-b border-r px-3 py-3 text-center">
+                          Rédacteur
+                        </th>
+                        <th className="w-[120px] border-b border-r px-3 py-3 text-center">
+                          Actif/inactif
+                        </th>
+                        <th className="w-[170px] border-b border-r px-3 py-3 text-center">
+                          Responsable de validation
+                        </th>
+                        <th className="min-w-[300px] border-b px-3 py-3">Nouveau mot de passe</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((profile, index) => {
+                        const isProtected = profile.isPrimary || profile.username === user.username;
+                        const updateProfile = (changes: Partial<typeof profile>) =>
+                          setUsers((current) =>
+                            current.map((item) =>
+                              item.username === profile.username ? { ...item, ...changes } : item,
+                            ),
+                          );
+                        const updateTeamRole = (
+                          teamRole: "order_admin" | "writer",
+                          checked: boolean,
+                        ) =>
+                          updateProfile({
+                            teamRoles: checked
+                              ? [...new Set([...(profile.teamRoles || []), teamRole])]
+                              : (profile.teamRoles || []).filter((value) => value !== teamRole),
+                          });
+                        return (
+                          <tr
+                            key={profile.username}
+                            className={index % 2 ? "bg-slate-50/70" : "bg-white"}
+                          >
+                            <td className="border-b border-r px-3 py-3 align-top">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate font-bold text-slate-950">
+                                    {profile.username}
+                                  </p>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${roleBadgeClasses[profile.role]}`}
+                                    >
+                                      {roleLabels[profile.role]}
+                                    </span>
+                                    {profile.isPrimary && (
+                                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold text-amber-800">
+                                        Principal
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 gap-1">
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    className="h-8 w-8"
+                                    title="Sauvegarder cette ligne"
+                                    aria-label={`Sauvegarder ${profile.username}`}
+                                    disabled={busy === `save-${profile.username}`}
+                                    onClick={() => void saveProfile(profile)}
+                                  >
+                                    {busy === `save-${profile.username}` ? (
+                                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Save className="h-3.5 w-3.5" />
+                                    )}
+                                  </Button>
+                                  {!isProtected && (
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                      title="Supprimer ce profil"
+                                      aria-label={`Supprimer ${profile.username}`}
+                                      disabled={busy === `delete-${profile.username}`}
+                                      onClick={() => void removeProfile(profile.username)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                                Dernière connexion : {formatDate(profile.lastLoginAt)}
+                                <br />
+                                {profile.loginCount} connexion
+                                {profile.loginCount === 1 ? "" : "s"}
+                              </p>
+                            </td>
+                            <td className="border-b border-r px-3 py-3 align-top">
+                              <Input
+                                className="h-9 bg-white"
+                                aria-label={`Nom affiché de ${profile.username}`}
+                                value={profile.displayName}
                                 onChange={(event) =>
-                                  setUsers((current) =>
-                                    current.map((item) =>
-                                      item.username === profile.username
-                                        ? {
-                                            ...item,
-                                            teamRoles: event.target.checked
-                                              ? [...new Set([...(item.teamRoles || []), teamRole])]
-                                              : (item.teamRoles || []).filter(
-                                                  (value) => value !== teamRole,
-                                                ),
-                                          }
-                                        : item,
-                                    ),
-                                  )
+                                  updateProfile({ displayName: event.target.value })
                                 }
                               />
-                              {label}
-                            </label>
-                          ))}
-                        </div>
-                        <label className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm">
-                          <input
-                            className="mt-0.5"
-                            type="checkbox"
-                            checked={profile.role === "admin" || profile.workflowManager}
-                            disabled={isProtected || profile.role !== "editor"}
-                            onChange={(event) =>
-                              setUsers((current) =>
-                                current.map((item) =>
-                                  item.username === profile.username
-                                    ? { ...item, workflowManager: event.target.checked }
-                                    : item,
-                                ),
-                              )
-                            }
-                          />
-                          <span>
-                            <strong>Responsable de validation</strong>
-                            <span className="block text-xs leading-relaxed text-muted-foreground">
-                              Peut valider et verrouiller un CV, puis le déverrouiller ou le
-                              renvoyer en brouillon avec un commentaire. Ce droit ne donne pas accès
-                              à la gestion des utilisateurs.
-                            </span>
-                          </span>
-                        </label>
-                        <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-end">
-                          <div className="min-w-0 flex-1 space-y-1.5">
-                            <Label className="text-xs">
-                              Nouveau mot de passe
-                              {profile.username === user.username ? " — votre compte" : ""}
-                            </Label>
-                            <PasswordInput
-                              minLength={10}
-                              autoComplete="new-password"
-                              value={resetPasswords[profile.username] || ""}
-                              onChange={(event) =>
-                                setResetPasswords((current) => ({
-                                  ...current,
-                                  [profile.username]: event.target.value,
-                                }))
-                              }
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={
-                              (resetPasswords[profile.username] || "").length < 10 ||
-                              busy === `password-${profile.username}`
-                            }
-                            onClick={() => void resetPassword(profile.username)}
-                          >
-                            {busy === `password-${profile.username}` && (
-                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                            )}
-                            Réinitialiser
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                            </td>
+                            <td className="border-b border-r px-3 py-3 align-top">
+                              <select
+                                className="h-9 w-full rounded-md border border-input bg-white px-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                aria-label={`Niveau d’accès de ${profile.username}`}
+                                value={profile.role}
+                                disabled={isProtected}
+                                onChange={(event) => {
+                                  const role = event.target.value as AccountRole;
+                                  updateProfile({
+                                    role,
+                                    workflowManager:
+                                      role === "admin" ||
+                                      (role === "editor" && profile.workflowManager),
+                                  });
+                                }}
+                              >
+                                <option value="editor">Éditeur</option>
+                                <option value="viewer">Lecture seule</option>
+                                <option value="admin">Administrateur</option>
+                              </select>
+                            </td>
+                            <td className="border-b border-r px-3 py-3 text-center align-top">
+                              <input
+                                type="checkbox"
+                                className="mt-2 h-4 w-4 accent-cyan-700"
+                                aria-label={`Admin clients pour ${profile.username}`}
+                                checked={(profile.teamRoles || []).includes("order_admin")}
+                                onChange={(event) =>
+                                  updateTeamRole("order_admin", event.target.checked)
+                                }
+                              />
+                            </td>
+                            <td className="border-b border-r px-3 py-3 text-center align-top">
+                              <input
+                                type="checkbox"
+                                className="mt-2 h-4 w-4 accent-cyan-700"
+                                aria-label={`Rédacteur pour ${profile.username}`}
+                                checked={(profile.teamRoles || []).includes("writer")}
+                                onChange={(event) => updateTeamRole("writer", event.target.checked)}
+                              />
+                            </td>
+                            <td className="border-b border-r px-3 py-3 text-center align-top">
+                              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border bg-white px-2.5 py-1.5 text-xs font-semibold">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 accent-emerald-600"
+                                  checked={profile.active}
+                                  disabled={isProtected}
+                                  onChange={(event) =>
+                                    updateProfile({ active: event.target.checked })
+                                  }
+                                />
+                                <span
+                                  className={profile.active ? "text-emerald-700" : "text-red-700"}
+                                >
+                                  {profile.active ? "Actif" : "Inactif"}
+                                </span>
+                              </label>
+                            </td>
+                            <td className="border-b border-r px-3 py-3 text-center align-top">
+                              <label
+                                className="inline-flex items-center gap-2 text-xs"
+                                title="Peut valider, verrouiller et renvoyer un CV en brouillon"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 accent-emerald-600"
+                                  checked={profile.role === "admin" || profile.workflowManager}
+                                  disabled={isProtected || profile.role !== "editor"}
+                                  onChange={(event) =>
+                                    updateProfile({ workflowManager: event.target.checked })
+                                  }
+                                />
+                                <span>
+                                  {profile.role === "admin"
+                                    ? "Inclus"
+                                    : profile.workflowManager
+                                      ? "Oui"
+                                      : "Non"}
+                                </span>
+                              </label>
+                            </td>
+                            <td className="border-b px-3 py-3 align-top">
+                              <div className="flex items-center gap-2">
+                                <PasswordInput
+                                  className="h-9 min-w-[170px] bg-white"
+                                  minLength={10}
+                                  autoComplete="new-password"
+                                  aria-label={`Nouveau mot de passe de ${profile.username}`}
+                                  value={resetPasswords[profile.username] || ""}
+                                  onChange={(event) =>
+                                    setResetPasswords((current) => ({
+                                      ...current,
+                                      [profile.username]: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-9 shrink-0"
+                                  disabled={
+                                    (resetPasswords[profile.username] || "").length < 10 ||
+                                    busy === `password-${profile.username}`
+                                  }
+                                  onClick={() => void resetPassword(profile.username)}
+                                >
+                                  {busy === `password-${profile.username}` && (
+                                    <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                  )}
+                                  Réinitialiser
+                                </Button>
+                              </div>
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                10 caractères minimum · ferme toutes les sessions
+                              </p>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </section>

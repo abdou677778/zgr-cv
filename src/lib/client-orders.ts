@@ -33,6 +33,9 @@ export interface ClientOrderSummary {
   driveStatus: "PENDING" | "SYNCING" | "SYNCED" | "ERROR";
   adminUsername: string;
   writerUsername: string;
+  archivedAt?: string;
+  archivedFromStatus?: ClientOrderStatus;
+  archiveSourceKey?: string;
   fileCount: number;
   totalBytes: number;
   jsonVersionCount: number;
@@ -141,7 +144,15 @@ export async function importArchivedClientOrders(file: File, year: number) {
     method: "POST",
     body: data,
   });
-  return responseJson<{ imported: number; skipped: number; ids: string[] }>(response);
+  return responseJson<{
+    imported: number;
+    duplicates: number;
+    skipped: number;
+    ids: string[];
+    issues: Array<{ row: number; reason: string }>;
+    issueCount: number;
+    year: number;
+  }>(response);
 }
 
 export async function createClientInvitation(validDays = 5) {

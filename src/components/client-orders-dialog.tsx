@@ -424,11 +424,15 @@ export function ClientOrdersDialog({
     setBusy("order-archive");
     setMessage("");
     try {
-      await updateClientOrder(detail.order.id, { status: archived ? "DELIVERED" : "ARCHIVED" });
+      await updateClientOrder(detail.order.id, {
+        status: archived ? detail.order.archivedFromStatus || "DELIVERED" : "ARCHIVED",
+      });
       await refresh();
       setMessage(
         archived
-          ? "Commande restaurée dans les livraisons."
+          ? `Commande restaurée dans son statut précédent : ${
+              STATUS_LABELS[detail.order.archivedFromStatus || "DELIVERED"]
+            }.`
           : "Commande classée dans les archives annuelles.",
       );
     } catch (error) {
@@ -439,16 +443,31 @@ export function ClientOrdersDialog({
   };
 
   const importArchiveFile = async (file: File) => {
+    if (
+      !window.confirm(
+        `Importer « ${file.name} » dans les archives ${archiveYear} ?\n\nLes doublons seront ignorés et les lignes d’une autre année seront refusées.`,
+      )
+    ) {
+      return;
+    }
     setBusy("archive-import");
     setMessage("");
     try {
       const result = await importArchivedClientOrders(file, archiveYear);
       setStatus("ARCHIVED");
       await loadOrders();
+      const issuePreview = result.issues
+        .slice(0, 3)
+        .map((issue) => `ligne ${issue.row} : ${issue.reason}`)
+        .join(" · ");
       setMessage(
-        `${result.imported} ancienne${result.imported > 1 ? "s" : ""} commande${
-          result.imported > 1 ? "s" : ""
-        } importée${result.imported > 1 ? "s" : ""} dans les archives ${archiveYear}.`,
+        `${result.imported} commande${result.imported === 1 ? "" : "s"} importée${
+          result.imported === 1 ? "" : "s"
+        } dans ${archiveYear} · ${result.duplicates} doublon${
+          result.duplicates === 1 ? "" : "s"
+        } ignoré${result.duplicates === 1 ? "" : "s"} · ${result.skipped} ligne${
+          result.skipped === 1 ? "" : "s"
+        } refusée${result.skipped === 1 ? "" : "s"}.${issuePreview ? ` ${issuePreview}` : ""}`,
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Import des archives impossible.");
@@ -760,8 +779,8 @@ export function ClientOrdersDialog({
                   </Button>
                 </div>
                 <p className="mt-1.5 text-[10px] leading-relaxed text-amber-800">
-                  Les commandes importées sont classées automatiquement dans « Archivée », année la
-                  plus récente en premier.
+                  Contrôle anti-doublon actif. Une ligne dont la date ne correspond pas à l’année
+                  sélectionnée est refusée et signalée sans bloquer les autres.
                 </p>
               </div>
             )}

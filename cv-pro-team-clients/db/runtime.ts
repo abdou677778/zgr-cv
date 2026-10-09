@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { env } from 'cloudflare:workers';
 
 const statements = [
   `CREATE TABLE IF NOT EXISTS orders (
@@ -19,7 +19,10 @@ const statements = [
     drive_folder_id TEXT,
     drive_status TEXT NOT NULL DEFAULT 'PENDING',
     admin_username TEXT NOT NULL DEFAULT '',
-    writer_username TEXT NOT NULL DEFAULT ''
+    writer_username TEXT NOT NULL DEFAULT '',
+    archived_at TEXT,
+    archived_from_status TEXT NOT NULL DEFAULT '',
+    archive_source_key TEXT NOT NULL DEFAULT ''
   )`,
   `CREATE TABLE IF NOT EXISTS order_files (
     id TEXT PRIMARY KEY NOT NULL,
@@ -78,21 +81,21 @@ const statements = [
     file_ids_json TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`,
-  "CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)",
-  "CREATE INDEX IF NOT EXISTS idx_orders_status_created_at ON orders(status, created_at)",
-  "CREATE INDEX IF NOT EXISTS idx_orders_email_created_at ON orders(email, created_at)",
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_order_files_storage_key ON order_files(storage_key)",
-  "CREATE INDEX IF NOT EXISTS idx_order_files_order_id ON order_files(order_id)",
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_json_versions_order_version ON json_versions(order_id, version_number)",
-  "CREATE INDEX IF NOT EXISTS idx_json_versions_order_id ON json_versions(order_id)",
-  "CREATE INDEX IF NOT EXISTS idx_order_events_order_created ON order_events(order_id, created_at)",
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_invitations_token_hash ON invitations(token_hash)",
-  "CREATE INDEX IF NOT EXISTS idx_invitations_expires_at ON invitations(expires_at)",
-  "CREATE INDEX IF NOT EXISTS idx_invitations_order_id ON invitations(order_id)",
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_deliverables_storage_key ON deliverables(storage_key)",
-  "CREATE INDEX IF NOT EXISTS idx_deliverables_order_created ON deliverables(order_id, created_at)",
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_order_version ON deliveries(order_id, version_number)",
-  "CREATE INDEX IF NOT EXISTS idx_deliveries_order_created ON deliveries(order_id, created_at)",
+  'CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_orders_status_created_at ON orders(status, created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_orders_email_created_at ON orders(email, created_at)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_order_files_storage_key ON order_files(storage_key)',
+  'CREATE INDEX IF NOT EXISTS idx_order_files_order_id ON order_files(order_id)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_json_versions_order_version ON json_versions(order_id, version_number)',
+  'CREATE INDEX IF NOT EXISTS idx_json_versions_order_id ON json_versions(order_id)',
+  'CREATE INDEX IF NOT EXISTS idx_order_events_order_created ON order_events(order_id, created_at)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_invitations_token_hash ON invitations(token_hash)',
+  'CREATE INDEX IF NOT EXISTS idx_invitations_expires_at ON invitations(expires_at)',
+  'CREATE INDEX IF NOT EXISTS idx_invitations_order_id ON invitations(order_id)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_deliverables_storage_key ON deliverables(storage_key)',
+  'CREATE INDEX IF NOT EXISTS idx_deliverables_order_created ON deliverables(order_id, created_at)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_order_version ON deliveries(order_id, version_number)',
+  'CREATE INDEX IF NOT EXISTS idx_deliveries_order_created ON deliveries(order_id, created_at)',
 ];
 
 let schemaPromise: Promise<void> | undefined;
@@ -116,30 +119,54 @@ export function runtimeEnv() {
 
 export function ensureSchema() {
   const currentEnv = runtimeEnv();
-  if (!currentEnv.DB) throw new Error("La base D1 DB est indisponible.");
+  if (!currentEnv.DB) throw new Error('La base D1 DB est indisponible.');
   schemaPromise ??= currentEnv.DB.batch(
     statements.map((statement) => currentEnv.DB.prepare(statement)),
   ).then(async () => {
-    const result = await currentEnv.DB.prepare("PRAGMA table_info(orders)").all();
+    const result = await currentEnv.DB.prepare(
+      'PRAGMA table_info(orders)',
+    ).all();
     const columns = new Set(
       (result.results as Array<{ name?: string }>).map((column) => column.name),
     );
     const migrations: D1PreparedStatement[] = [];
-    if (!columns.has("admin_username")) {
+    if (!columns.has('admin_username')) {
       migrations.push(
         currentEnv.DB.prepare(
           "ALTER TABLE orders ADD COLUMN admin_username TEXT NOT NULL DEFAULT ''",
         ),
       );
     }
-    if (!columns.has("writer_username")) {
+    if (!columns.has('writer_username')) {
       migrations.push(
         currentEnv.DB.prepare(
           "ALTER TABLE orders ADD COLUMN writer_username TEXT NOT NULL DEFAULT ''",
         ),
       );
     }
+    if (!columns.has('archived_at')) {
+      migrations.push(
+        currentEnv.DB.prepare('ALTER TABLE orders ADD COLUMN archived_at TEXT'),
+      );
+    }
+    if (!columns.has('archived_from_status')) {
+      migrations.push(
+        currentEnv.DB.prepare(
+          "ALTER TABLE orders ADD COLUMN archived_from_status TEXT NOT NULL DEFAULT ''",
+        ),
+      );
+    }
+    if (!columns.has('archive_source_key')) {
+      migrations.push(
+        currentEnv.DB.prepare(
+          "ALTER TABLE orders ADD COLUMN archive_source_key TEXT NOT NULL DEFAULT ''",
+        ),
+      );
+    }
     if (migrations.length) await currentEnv.DB.batch(migrations);
+    await currentEnv.DB.prepare(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_archive_source_key ON orders(archive_source_key) WHERE archive_source_key <> ''",
+    ).run();
   });
   return schemaPromise;
 }
@@ -153,7 +180,7 @@ export async function recordEvent(
   const now = new Date().toISOString();
   await runtimeEnv()
     .DB.prepare(
-      "INSERT INTO order_events (order_id, type, details_json, created_at) VALUES (?, ?, ?, ?)",
+      'INSERT INTO order_events (order_id, type, details_json, created_at) VALUES (?, ?, ?, ?)',
     )
     .bind(orderId, type, JSON.stringify(details), now)
     .run();

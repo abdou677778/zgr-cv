@@ -185,73 +185,112 @@ function opportunityCard(item: OpportunityMatch, language: DocumentLanguage): Co
       body: [
         [
           {
-            stack: [
+            columns: [
+              { svg: flagSvg(item.countryCode), width: 40 },
               {
-                columns: [
-                  { svg: flagSvg(item.countryCode), width: 38 },
+                stack: [
                   {
-                    stack: [
-                      {
-                        text: item.countryName || "International",
-                        bold: true,
-                        color: "#475569",
-                        fontSize: 9,
-                      },
-                      { text: item.source, color: "#64748b", fontSize: 8 },
-                    ],
+                    text: item.countryName || "International",
+                    bold: true,
+                    color: "#0f172a",
+                    fontSize: 9.5,
                   },
                   {
-                    text: `${item.score}%`,
-                    alignment: "right",
-                    bold: true,
-                    color: item.status === "strong" ? "#047857" : "#92400e",
-                    width: 42,
+                    text: item.source,
+                    color: "#64748b",
+                    fontSize: 8,
+                    margin: [0, 1, 0, 0],
                   },
                 ],
               },
+            ],
+            columnGap: 10,
+            fillColor: "#f8fafc",
+            margin: [11, 7, 11, 7],
+          },
+        ],
+        [
+          {
+            stack: [
               {
                 text: item.title,
                 bold: true,
-                fontSize: 14,
+                fontSize: 13.5,
                 color: "#0f172a",
-                margin: [0, 7, 0, 2],
+                margin: [0, 0, 0, 3],
               },
               {
                 text: [item.employer, item.location].filter(Boolean).join(" · "),
                 bold: true,
-                color: "#7f1d1d",
-                margin: [0, 0, 0, 6],
+                color: "#475569",
+                fontSize: 9,
+                margin: [0, 0, 0, 7],
               },
               {
-                text: `${copy.deadline} : ${humanDate(item.deadlineAt, language)}`,
-                bold: true,
-                color: "#b91c1c",
-                fillColor: "#fee2e2",
-                margin: [7, 5, 7, 5],
+                table: {
+                  widths: ["*"],
+                  body: [
+                    [
+                      {
+                        text: `${copy.deadline} : ${humanDate(item.deadlineAt, language)}`,
+                        bold: true,
+                        color: "#b91c1c",
+                        fillColor: "#fee2e2",
+                        margin: [7, 4, 7, 4],
+                      },
+                    ],
+                  ],
+                },
+                layout: "noBorders",
+                margin: [0, 0, 0, 3],
               },
               ...(item.conditions.length
                 ? [
-                    { text: `${copy.conditions} :`, bold: true, margin: [0, 7, 0, 2] },
-                    { ul: item.conditions.slice(0, 4), margin: [12, 0, 0, 4] },
+                    {
+                      text: `${copy.conditions} :`,
+                      bold: true,
+                      color: "#334155",
+                      margin: [0, 7, 0, 3],
+                    },
+                    {
+                      ul: item.conditions.slice(0, 4),
+                      markerColor: "#b91c1c",
+                      margin: [12, 0, 0, 5],
+                    },
                   ]
                 : []),
               ...(item.application.loginRequired
-                ? [{ text: copy.login, italics: true, color: "#92400e", margin: [0, 4, 0, 0] }]
+                ? [
+                    {
+                      text: copy.login,
+                      italics: true,
+                      color: "#92400e",
+                      margin: [0, 4, 0, 0],
+                    },
+                  ]
                 : []),
-              ...(links.length ? [{ columns: links, columnGap: 14, margin: [0, 7, 0, 0] }] : []),
+              ...(links.length
+                ? [
+                    {
+                      columns: links,
+                      columnGap: 20,
+                      margin: [0, 9, 0, 0],
+                    },
+                  ]
+                : []),
             ],
-            margin: [10, 9, 10, 9],
+            margin: [12, 10, 12, 11],
           },
         ],
       ],
     },
     layout: {
-      hLineColor: () => "#cbd5e1",
-      vLineColor: () => "#cbd5e1",
-      hLineWidth: () => 0.8,
-      vLineWidth: () => 0.8,
+      hLineColor: (index: number) => (index === 1 ? "#e2e8f0" : "#cbd5e1"),
+      vLineColor: (index: number) => (index === 0 ? "#b91c1c" : "#cbd5e1"),
+      hLineWidth: (index: number) => (index === 1 ? 0.5 : 0.8),
+      vLineWidth: (index: number) => (index === 0 ? 2.6 : 0.8),
     },
-    margin: [0, 0, 0, 10],
+    margin: [0, 0, 0, 12],
   } as Content;
 }
 
@@ -316,11 +355,33 @@ export function buildOpportunityPlanDefinition(
   for (const [key, countryItems] of grouped) {
     const [code, name] = key.split("|");
     content.push({
-      columns: [
-        { svg: flagSvg(code), width: 40 },
-        { text: name, bold: true, fontSize: 16, color: "#0f172a", margin: [0, 2, 0, 0] },
-      ],
-      margin: [0, 8, 0, 8],
+      table: {
+        widths: [42, "*"],
+        body: [
+          [
+            {
+              svg: flagSvg(code),
+              fillColor: "#fee2e2",
+              margin: [7, 6, 0, 6],
+            },
+            {
+              text: name,
+              bold: true,
+              fontSize: 15,
+              color: "#0f172a",
+              fillColor: "#fee2e2",
+              margin: [9, 8, 8, 6],
+            },
+          ],
+        ],
+      },
+      layout: {
+        hLineColor: () => "#b91c1c",
+        vLineColor: (index: number) => (index === 0 ? "#b91c1c" : "#fee2e2"),
+        hLineWidth: () => 0.7,
+        vLineWidth: (index: number) => (index === 0 ? 2.6 : 0),
+      },
+      margin: [0, 10, 0, 8],
     });
     content.push(...countryItems.map((item) => opportunityCard(item, language)));
   }

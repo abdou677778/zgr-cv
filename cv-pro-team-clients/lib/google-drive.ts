@@ -295,6 +295,57 @@ async function copyFirstOrderBonus(cache: DriveDirectoryCache, deliveryFolderId:
   return files.length;
 }
 
+async function ensurePrivateLinkSharing(folderId: string) {
+  const response = await driveFetch(
+    `/files/${encodeURIComponent(folderId)}/permissions?fields=permissions(id,type,role)&supportsAllDrives=true`,
+  );
+  const payload = (await response.json()) as {
+    permissions?: { type: string; role: string }[];
+  };
+  if (
+    (payload.permissions ?? []).some(
+      (permission) => permission.type === "anyone" && permission.role === "reader",
+    )
+  ) {
+    return;
+  }
+  await driveFetch(`/files/${folderId}/permissions?supportsAllDrives=true`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ type: "anyone", role: "reader", allowFileDiscovery: false }),
+  });
+}
+
+export async function publishWelcomeGiftToDrive(orderId: string) {
+  if (!driveConfigured()) return { configured: false as const, fileCount: 0 };
+  let order = await getOrder(orderId);
+  if (!order) throw new Error("Commande introuvable.");
+  if (!order.driveFolderId) {
+    const synced = await syncOrderToDrive(orderId);
+    if (!synced.configured) return { configured: false as const, fileCount: 0 };
+    order = await getOrder(orderId);
+  }
+  if (!order?.driveFolderId) throw new Error("Dossier Drive client introuvable.");
+
+  const cache: DriveDirectoryCache = new Map();
+  const fileCount = await copyFirstOrderBonus(cache, order.driveFolderId);
+  if (!fileCount) return { configured: true as const, fileCount: 0 };
+  const orderEntries = await directoryEntries(cache, order.driveFolderId);
+  const bonusFolder = orderEntries.get("BONUS_CLIENT");
+  if (!bonusFolder) return { configured: true as const, fileCount: 0 };
+
+  await ensurePrivateLinkSharing(bonusFolder.id);
+  await recordEvent(orderId, "WELCOME_GIFT_PUBLISHED", {
+    driveFolderId: bonusFolder.id,
+    fileCount,
+  });
+  return {
+    configured: true as const,
+    fileCount,
+    shareUrl: `https://drive.google.com/drive/folders/${bonusFolder.id}?usp=sharing`,
+  };
+}
+
 function clientFolderName(order: StoredOrder) {
   const date = order.createdAt.slice(0, 10);
   const client = safeFileName(order.clientName).toUpperCase();
@@ -511,21 +562,7 @@ export async function publishDeliveryToDrive(input: {
     });
   }
 
-  // Le cadeau gratuit est joint une seule fois, à la première livraison.
-  // Le dossier Bonus 02 reste strictement privé et n'est jamais copié.
-  if (input.versionNumber === 1) {
-    await copyFirstOrderBonus(cache, deliveryFolderId);
-  }
-
-  await driveFetch(`/files/${deliveryFolderId}/permissions?supportsAllDrives=true`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({
-      type: "anyone",
-      role: "reader",
-      allowFileDiscovery: false,
-    }),
-  });
+  await ensurePrivateLinkSharing(deliveryFolderId);
 
   return {
     driveFolderId: deliveryFolderId,

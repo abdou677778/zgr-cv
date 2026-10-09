@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
   ArrowLeft,
@@ -11,25 +11,15 @@ import {
   LockKeyhole,
   Trash2,
   UploadCloud,
-} from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import {
-  Progress,
-  ProgressLabel,
-  ProgressValue,
-} from '@/components/ui/progress';
-import { Textarea } from '@/components/ui/textarea';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import {
   fileCategoryIds,
   fileCategoryLabels,
@@ -37,7 +27,7 @@ import {
   serviceIds,
   serviceLabels,
   type ServiceId,
-} from '@/lib/order-constants';
+} from "@/lib/order-constants";
 
 interface PendingFile {
   id: string;
@@ -63,20 +53,20 @@ interface ExistingOrder {
   clientName: string;
   email: string;
   phone: string;
-  language: 'fr' | 'en' | 'ar';
+  language: "fr" | "en" | "ar";
   notes: string;
   services: ServiceId[];
   status: string;
 }
 
 interface InvitationSessionResponse {
-  state: 'NEW' | 'EXISTING';
+  state: "NEW" | "EXISTING";
   expiresAt: string;
   order?: ExistingOrder;
   files?: ExistingFile[];
 }
 
-const acceptedExtensions = '.pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.heif';
+const acceptedExtensions = ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.heif";
 
 function formatBytes(value: number) {
   if (value < 1024) return `${value} o`;
@@ -91,25 +81,18 @@ async function apiError(response: Response) {
   return payload?.error || `Erreur ${response.status}`;
 }
 
-function uploadFile(
-  session: OrderSession,
-  item: PendingFile,
-  onProgress: (ratio: number) => void,
-) {
+function uploadFile(session: OrderSession, item: PendingFile, onProgress: (ratio: number) => void) {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/orders/${encodeURIComponent(session.id)}/files`);
-    xhr.setRequestHeader('x-upload-token', session.uploadToken);
-    xhr.setRequestHeader('x-file-name', encodeURIComponent(item.file.name));
-    xhr.setRequestHeader('x-file-category', item.category);
-    xhr.setRequestHeader(
-      'Content-Type',
-      item.file.type || 'application/octet-stream',
-    );
-    xhr.upload.addEventListener('progress', (event) => {
+    xhr.open("POST", `/api/orders/${encodeURIComponent(session.id)}/files`);
+    xhr.setRequestHeader("x-upload-token", session.uploadToken);
+    xhr.setRequestHeader("x-file-name", encodeURIComponent(item.file.name));
+    xhr.setRequestHeader("x-file-category", item.category);
+    xhr.setRequestHeader("Content-Type", item.file.type || "application/octet-stream");
+    xhr.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);
     });
-    xhr.addEventListener('load', () => {
+    xhr.addEventListener("load", () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress(1);
         resolve();
@@ -122,25 +105,21 @@ function uploadFile(
         reject(new Error(`Erreur ${xhr.status} pendant l’envoi.`));
       }
     });
-    xhr.addEventListener('error', () =>
-      reject(new Error('Connexion interrompue pendant l’envoi.')),
+    xhr.addEventListener("error", () =>
+      reject(new Error("Connexion interrompue pendant l’envoi.")),
     );
     xhr.send(item.file);
   });
 }
 
-export function ClientIntakeForm({
-  invitationToken,
-}: {
-  invitationToken: string;
-}) {
+export function ClientIntakeForm({ invitationToken }: { invitationToken: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [clientName, setClientName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [language, setLanguage] = useState<'fr' | 'en' | 'ar'>('fr');
-  const [notes, setNotes] = useState('');
+  const [clientName, setClientName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [language, setLanguage] = useState<"fr" | "en" | "ar">("fr");
+  const [notes, setNotes] = useState("");
   const [services, setServices] = useState<ServiceId[]>([]);
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [existingFiles, setExistingFiles] = useState<ExistingFile[]>([]);
@@ -148,12 +127,13 @@ export function ClientIntakeForm({
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
   const [session, setSession] = useState<OrderSession | null>(null);
-  const [completedOrderId, setCompletedOrderId] = useState('');
+  const [completedOrderId, setCompletedOrderId] = useState("");
+  const [bonusShareUrl, setBonusShareUrl] = useState("");
   const [restoring, setRestoring] = useState(Boolean(invitationToken));
   const [accessDenied, setAccessDenied] = useState(false);
-  const [expiresAt, setExpiresAt] = useState('');
+  const [expiresAt, setExpiresAt] = useState("");
 
   const totalBytes = useMemo(
     () =>
@@ -167,16 +147,16 @@ export function ClientIntakeForm({
     let cancelled = false;
     void (async () => {
       try {
-        const response = await fetch('/api/orders/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/orders/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ invitationToken }),
         });
         if (!response.ok) throw new Error(await apiError(response));
         const payload = (await response.json()) as InvitationSessionResponse;
         if (cancelled) return;
         setExpiresAt(payload.expiresAt);
-        if (payload.state === 'EXISTING' && payload.order) {
+        if (payload.state === "EXISTING" && payload.order) {
           const order = payload.order;
           setClientName(order.clientName);
           setEmail(order.email);
@@ -191,9 +171,7 @@ export function ClientIntakeForm({
       } catch (error) {
         if (cancelled) return;
         setAccessDenied(true);
-        setMessage(
-          error instanceof Error ? error.message : 'Ce lien client est indisponible.',
-        );
+        setMessage(error instanceof Error ? error.message : "Ce lien client est indisponible.");
       } finally {
         if (!cancelled) setRestoring(false);
       }
@@ -210,15 +188,11 @@ export function ClientIntakeForm({
           <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-amber-100 text-amber-800">
             <LockKeyhole className="size-8" />
           </div>
-          <Badge className="mb-4 bg-amber-100 text-amber-900">
-            Invitation nécessaire
-          </Badge>
-          <h2 className="text-2xl font-black text-primary">
-            Ce portail est réservé aux clients.
-          </h2>
+          <Badge className="mb-4 bg-amber-100 text-amber-900">Invitation nécessaire</Badge>
+          <h2 className="text-2xl font-black text-primary">Ce portail est réservé aux clients.</h2>
           <p className="mx-auto mt-3 max-w-xl leading-7 text-muted-foreground">
-            Ouvrez le lien personnel transmis par CV PRO TEAM. Chaque invitation
-            protège un seul dossier pendant 5 jours.
+            Ouvrez le lien personnel transmis par CV PRO TEAM. Chaque invitation protège un seul
+            dossier pendant 5 jours.
           </p>
         </CardContent>
       </Card>
@@ -267,51 +241,41 @@ export function ClientIntakeForm({
     const nextFiles = [...incoming];
     setFiles((current) => {
       const signatures = new Set(
-        current.map(
-          (item) =>
-            `${item.file.name}:${item.file.size}:${item.file.lastModified}`,
-        ),
+        current.map((item) => `${item.file.name}:${item.file.size}:${item.file.lastModified}`),
       );
       const accepted = nextFiles
-        .filter(
-          (file) =>
-            !signatures.has(`${file.name}:${file.size}:${file.lastModified}`),
-        )
+        .filter((file) => !signatures.has(`${file.name}:${file.size}:${file.lastModified}`))
         .slice(0, Math.max(0, 50 - existingFiles.length - current.length))
         .map((file) => ({
           id: crypto.randomUUID(),
           file,
-          category: 'AUTRES' as FileCategoryId,
+          category: "AUTRES" as FileCategoryId,
           uploaded: false,
         }));
       return [...current, ...accepted];
     });
-    setMessage('');
+    setMessage("");
   };
 
   const moveToFiles = () => {
-    if (clientName.trim().length < 2)
-      return setMessage('Renseignez votre nom et prénom.');
-    if (!/^\S+@\S+\.\S+$/.test(email.trim()))
-      return setMessage('Renseignez un email valide.');
-    if (!services.length)
-      return setMessage('Sélectionnez au moins un service.');
-    setMessage('');
+    if (clientName.trim().length < 2) return setMessage("Renseignez votre nom et prénom.");
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setMessage("Renseignez un email valide.");
+    if (!services.length) return setMessage("Sélectionnez au moins un service.");
+    setMessage("");
     setStep(2);
   };
 
   const submit = async () => {
-    if (!files.length && !existingFiles.length)
-      return setMessage('Ajoutez au moins un document.');
-    if (!consent) return setMessage('Confirmez votre accord avant l’envoi.');
+    if (!files.length && !existingFiles.length) return setMessage("Ajoutez au moins un document.");
+    if (!consent) return setMessage("Confirmez votre accord avant l’envoi.");
     setSubmitting(true);
-    setMessage('');
+    setMessage("");
     try {
       let activeSession = session;
       if (!activeSession) {
-        const response = await fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             invitationToken,
             clientName,
@@ -326,24 +290,21 @@ export function ClientIntakeForm({
         activeSession = (await response.json()) as OrderSession;
         setSession(activeSession);
       } else {
-        const response = await fetch(
-          `/api/orders/${encodeURIComponent(activeSession.id)}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-upload-token': activeSession.uploadToken,
-            },
-            body: JSON.stringify({
-              clientName,
-              email,
-              phone,
-              language,
-              notes,
-              services,
-            }),
+        const response = await fetch(`/api/orders/${encodeURIComponent(activeSession.id)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "x-upload-token": activeSession.uploadToken,
           },
-        );
+          body: JSON.stringify({
+            clientName,
+            email,
+            phone,
+            language,
+            notes,
+            services,
+          }),
+        });
         if (!response.ok) throw new Error(await apiError(response));
       }
 
@@ -351,32 +312,30 @@ export function ClientIntakeForm({
       for (let index = 0; index < pending.length; index += 1) {
         const item = pending[index];
         await uploadFile(activeSession, item, (ratio) => {
-          setProgress(
-            pending.length ? ((index + ratio) / pending.length) * 100 : 100,
-          );
+          setProgress(pending.length ? ((index + ratio) / pending.length) * 100 : 100);
         });
         setFiles((current) =>
           current.map((candidate) =>
-            candidate.id === item.id
-              ? { ...candidate, uploaded: true }
-              : candidate,
+            candidate.id === item.id ? { ...candidate, uploaded: true } : candidate,
           ),
         );
       }
 
-      const response = await fetch(
-        `/api/orders/${encodeURIComponent(activeSession.id)}/complete`,
-        {
-          method: 'POST',
-          headers: { 'x-upload-token': activeSession.uploadToken },
-        },
-      );
+      const response = await fetch(`/api/orders/${encodeURIComponent(activeSession.id)}/complete`, {
+        method: "POST",
+        headers: { "x-upload-token": activeSession.uploadToken },
+      });
       if (!response.ok) throw new Error(await apiError(response));
+      const completion = (await response.json()) as {
+        bonusShareUrl?: string;
+        bonusFileCount?: number;
+      };
       setProgress(100);
       setCompletedOrderId(activeSession.id);
-      const restored = await fetch('/api/orders/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      setBonusShareUrl(completion.bonusShareUrl || "");
+      const restored = await fetch("/api/orders/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ invitationToken }),
       });
       if (restored.ok) {
@@ -386,7 +345,7 @@ export function ClientIntakeForm({
       }
       setStep(3);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Envoi impossible.');
+      setMessage(error instanceof Error ? error.message : "Envoi impossible.");
     } finally {
       setSubmitting(false);
     }
@@ -395,21 +354,19 @@ export function ClientIntakeForm({
   const deleteExistingFile = async (file: ExistingFile) => {
     if (!session || submitting) return;
     setSubmitting(true);
-    setMessage('');
+    setMessage("");
     try {
       const response = await fetch(
         `/api/orders/${encodeURIComponent(session.id)}/files/${encodeURIComponent(file.id)}`,
         {
-          method: 'DELETE',
-          headers: { 'x-upload-token': session.uploadToken },
+          method: "DELETE",
+          headers: { "x-upload-token": session.uploadToken },
         },
       );
       if (!response.ok) throw new Error(await apiError(response));
-      setExistingFiles((current) =>
-        current.filter((candidate) => candidate.id !== file.id),
-      );
+      setExistingFiles((current) => current.filter((candidate) => candidate.id !== file.id));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Suppression impossible.');
+      setMessage(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
       setSubmitting(false);
     }
@@ -422,15 +379,12 @@ export function ClientIntakeForm({
           <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-emerald-100 text-emerald-700">
             <CheckCircle2 className="size-9" />
           </div>
-          <Badge className="mb-4 bg-emerald-100 text-emerald-800">
-            Dossier reçu
-          </Badge>
+          <Badge className="mb-4 bg-emerald-100 text-emerald-800">Dossier reçu</Badge>
           <h2 className="text-2xl font-black text-primary sm:text-3xl">
             Merci, votre commande est enregistrée.
           </h2>
           <p className="mx-auto mt-3 max-w-xl leading-7 text-muted-foreground">
-            Vos documents et vos consignes sont maintenant regroupés sous la
-            référence suivante.
+            Vos documents et vos consignes sont maintenant regroupés sous la référence suivante.
           </p>
           <div className="mx-auto mt-7 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-primary/15 bg-muted px-4 py-4">
             <code className="overflow-hidden text-ellipsis text-sm font-black text-primary sm:text-base">
@@ -445,12 +399,25 @@ export function ClientIntakeForm({
               <Copy />
             </Button>
           </div>
+          {bonusShareUrl && (
+            <div className="mx-auto mt-5 max-w-md rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-left">
+              <p className="font-black text-amber-950">Votre cadeau de bienvenue est prêt</p>
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                Ce dossier gratuit est réservé à votre première confirmation. Les livres payants ne
+                sont jamais inclus automatiquement.
+              </p>
+              <Button
+                type="button"
+                className="mt-3 w-full"
+                onClick={() => window.open(bonusShareUrl, "_blank", "noopener,noreferrer")}
+              >
+                Ouvrir mon cadeau
+              </Button>
+            </div>
+          )}
           <p className="mt-5 text-sm text-muted-foreground">
-            Ce même lien reste utilisable pour consulter et modifier votre dossier
-            jusqu’au{' '}
-            {expiresAt
-              ? new Date(expiresAt).toLocaleString('fr-DZ')
-              : 'terme des 5 jours'}.
+            Ce même lien reste utilisable pour consulter et modifier votre dossier jusqu’au{" "}
+            {expiresAt ? new Date(expiresAt).toLocaleString("fr-DZ") : "terme des 5 jours"}.
           </p>
           <Button
             type="button"
@@ -458,7 +425,7 @@ export function ClientIntakeForm({
             className="mt-6"
             onClick={() => {
               setConsent(false);
-              setMessage('');
+              setMessage("");
               setStep(1);
             }}
           >
@@ -471,11 +438,8 @@ export function ClientIntakeForm({
 
   return (
     <>
-      <div
-        className="mb-5 grid grid-cols-3 gap-2"
-        aria-label="Progression du dépôt"
-      >
-        {['Vos besoins', 'Vos fichiers', 'Confirmation'].map((label, index) => {
+      <div className="mb-5 grid grid-cols-3 gap-2" aria-label="Progression du dépôt">
+        {["Vos besoins", "Vos fichiers", "Confirmation"].map((label, index) => {
           const number = index + 1;
           const active = number === step;
           const completed = number < step;
@@ -484,12 +448,12 @@ export function ClientIntakeForm({
               key={label}
               className={`rounded-2xl border px-2 py-3 text-center text-[11px] font-bold sm:px-3 sm:text-sm ${
                 active || completed
-                  ? 'border-accent bg-accent/10 text-primary'
-                  : 'border-border bg-card text-muted-foreground'
+                  ? "border-accent bg-accent/10 text-primary"
+                  : "border-border bg-card text-muted-foreground"
               }`}
             >
               <span className="mr-1 inline-grid size-5 place-items-center rounded-full bg-white/80 text-[11px] shadow-sm sm:mr-1.5">
-                {completed ? '✓' : number}
+                {completed ? "✓" : number}
               </span>
               {label}
             </div>
@@ -500,12 +464,12 @@ export function ClientIntakeForm({
       <Card className="border-0 shadow-[0_22px_70px_-48px_rgba(13,38,63,.55)] ring-primary/10">
         <CardHeader className="border-b border-border px-5 pb-5 sm:px-7">
           <CardTitle className="text-xl font-black text-primary">
-            {step === 1 ? 'Préparer votre dossier' : 'Ajouter vos documents'}
+            {step === 1 ? "Préparer votre dossier" : "Ajouter vos documents"}
           </CardTitle>
           <CardDescription>
             {step === 1
-              ? 'Les informations resteront associées à votre numéro de commande.'
-              : 'Classez les fichiers avant de confirmer l’envoi.'}
+              ? "Les informations resteront associées à votre numéro de commande."
+              : "Classez les fichiers avant de confirmer l’envoi."}
           </CardDescription>
         </CardHeader>
 
@@ -513,10 +477,7 @@ export function ClientIntakeForm({
           {step === 1 ? (
             <>
               <section className="grid gap-4 sm:grid-cols-2">
-                <label
-                  htmlFor="client-name"
-                  className="space-y-2 text-sm font-bold text-primary"
-                >
+                <label htmlFor="client-name" className="space-y-2 text-sm font-bold text-primary">
                   Nom et prénom *
                   <Input
                     id="client-name"
@@ -526,10 +487,7 @@ export function ClientIntakeForm({
                     placeholder="Ex. Amine Bensalem"
                   />
                 </label>
-                <label
-                  htmlFor="client-email"
-                  className="space-y-2 text-sm font-bold text-primary"
-                >
+                <label htmlFor="client-email" className="space-y-2 text-sm font-bold text-primary">
                   Email *
                   <Input
                     id="client-email"
@@ -540,10 +498,7 @@ export function ClientIntakeForm({
                     placeholder="nom@exemple.com"
                   />
                 </label>
-                <label
-                  htmlFor="client-phone"
-                  className="space-y-2 text-sm font-bold text-primary"
-                >
+                <label htmlFor="client-phone" className="space-y-2 text-sm font-bold text-primary">
                   Téléphone / WhatsApp
                   <Input
                     id="client-phone"
@@ -562,9 +517,7 @@ export function ClientIntakeForm({
                     id="client-language"
                     className="h-11 w-full rounded-lg border border-input bg-white px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/30"
                     value={language}
-                    onChange={(event) =>
-                      setLanguage(event.target.value as 'fr' | 'en' | 'ar')
-                    }
+                    onChange={(event) => setLanguage(event.target.value as "fr" | "en" | "ar")}
                   >
                     <option value="fr">Français</option>
                     <option value="en">English</option>
@@ -576,16 +529,14 @@ export function ClientIntakeForm({
               <section>
                 <div className="mb-3 flex items-end justify-between gap-3">
                   <div>
-                    <h2 className="font-black text-primary">
-                      Documents souhaités *
-                    </h2>
+                    <h2 className="font-black text-primary">Documents souhaités *</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Vous pouvez sélectionner plusieurs services.
                     </p>
                   </div>
                   <span className="text-xs font-semibold text-muted-foreground">
                     {services.length} sélectionné
-                    {services.length > 1 ? 's' : ''}
+                    {services.length > 1 ? "s" : ""}
                   </span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -596,8 +547,8 @@ export function ClientIntakeForm({
                         key={service}
                         className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-sm font-bold transition ${
                           checked
-                            ? 'border-accent bg-accent/10 text-primary'
-                            : 'border-border bg-white text-primary hover:border-accent'
+                            ? "border-accent bg-accent/10 text-primary"
+                            : "border-border bg-white text-primary hover:border-accent"
                         }`}
                       >
                         <input
@@ -637,14 +588,12 @@ export function ClientIntakeForm({
                 accept={acceptedExtensions}
                 onChange={(event) => {
                   if (event.target.files) addFiles(event.target.files);
-                  event.target.value = '';
+                  event.target.value = "";
                 }}
               />
               <section
                 className={`rounded-2xl border-2 border-dashed px-5 py-8 text-center transition sm:py-10 ${
-                  dragging
-                    ? 'border-accent bg-accent/10'
-                    : 'border-accent/45 bg-accent/5'
+                  dragging ? "border-accent bg-accent/10" : "border-accent/45 bg-accent/5"
                 }`}
                 onDragEnter={(event) => {
                   event.preventDefault();
@@ -661,12 +610,9 @@ export function ClientIntakeForm({
                 <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-white text-accent shadow-sm">
                   <UploadCloud className="size-7" />
                 </div>
-                <h2 className="font-black text-primary">
-                  Déposez vos documents ici
-                </h2>
+                <h2 className="font-black text-primary">Déposez vos documents ici</h2>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                  Ancien CV, diplômes, certificats, photos et documents PDF ou
-                  Word.
+                  Ancien CV, diplômes, certificats, photos et documents PDF ou Word.
                 </p>
                 <Button
                   type="button"
@@ -686,7 +632,7 @@ export function ClientIntakeForm({
                   <div className="flex items-center justify-between">
                     <h2 className="font-black text-primary">
                       {files.length + existingFiles.length} fichier
-                      {files.length + existingFiles.length > 1 ? 's' : ''}
+                      {files.length + existingFiles.length > 1 ? "s" : ""}
                     </h2>
                     <span className="text-xs font-semibold text-muted-foreground">
                       {formatBytes(totalBytes)}
@@ -740,7 +686,7 @@ export function ClientIntakeForm({
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {formatBytes(item.file.size)}
-                            {item.uploaded ? ' · envoyé' : ''}
+                            {item.uploaded ? " · envoyé" : ""}
                           </p>
                         </div>
                       </div>
@@ -754,8 +700,7 @@ export function ClientIntakeForm({
                               candidate.id === item.id
                                 ? {
                                     ...candidate,
-                                    category: event.target
-                                      .value as FileCategoryId,
+                                    category: event.target.value as FileCategoryId,
                                   }
                                 : candidate,
                             ),
@@ -776,9 +721,7 @@ export function ClientIntakeForm({
                         aria-label={`Retirer ${item.file.name}`}
                         onClick={() =>
                           setFiles((current) =>
-                            current.filter(
-                              (candidate) => candidate.id !== item.id,
-                            ),
+                            current.filter((candidate) => candidate.id !== item.id),
                           )
                         }
                       >
@@ -796,17 +739,15 @@ export function ClientIntakeForm({
                   checked={consent}
                   onChange={(event) => setConsent(event.target.checked)}
                 />
-                J’autorise CV PRO TEAM à traiter ces documents uniquement pour
-                préparer les services sélectionnés.
+                J’autorise CV PRO TEAM à traiter ces documents uniquement pour préparer les services
+                sélectionnés.
               </label>
 
               {submitting && (
                 <Progress value={progress}>
                   <ProgressLabel>Envoi sécurisé en cours</ProgressLabel>
                   <ProgressValue>
-                    {(_formattedValue, value) =>
-                      `${Math.round(value ?? progress)} %`
-                    }
+                    {(_formattedValue, value) => `${Math.round(value ?? progress)} %`}
                   </ProgressValue>
                 </Progress>
               )}
@@ -831,8 +772,8 @@ export function ClientIntakeForm({
               )}
               <p>
                 {step === 1
-                  ? 'Vous pourrez vérifier chaque document avant l’envoi.'
-                  : 'Aucun autre client ne peut consulter votre dossier.'}
+                  ? "Vous pourrez vérifier chaque document avant l’envoi."
+                  : "Aucun autre client ne peut consulter votre dossier."}
               </p>
             </div>
             <div className="flex gap-2">
@@ -844,7 +785,7 @@ export function ClientIntakeForm({
                   disabled={submitting}
                   onClick={() => {
                     setStep(1);
-                    setMessage('');
+                    setMessage("");
                   }}
                 >
                   <ArrowLeft /> Retour

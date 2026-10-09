@@ -1,11 +1,7 @@
-import { recordEvent, runtimeEnv } from '@/db/runtime';
-import { driveConfigured, syncOrderToDrive } from '@/lib/google-drive';
-import { jsonResponse } from '@/lib/order-model';
-import {
-  getOrder,
-  getOrderFiles,
-  validateOrderAccess,
-} from '@/lib/order-repository';
+import { recordEvent, runtimeEnv } from "@/db/runtime";
+import { driveConfigured, publishWelcomeGiftToDrive, syncOrderToDrive } from "@/lib/google-drive";
+import { jsonResponse } from "@/lib/order-model";
+import { getOrder, getOrderFiles, validateOrderAccess } from "@/lib/order-repository";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -13,46 +9,43 @@ interface RouteContext {
 
 export async function POST(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  if (!(await validateOrderAccess(id, request.headers.get('x-upload-token')))) {
-    return jsonResponse({ error: 'Lien de dossier invalide ou expiré.' }, 401);
+  if (!(await validateOrderAccess(id, request.headers.get("x-upload-token")))) {
+    return jsonResponse({ error: "Lien de dossier invalide ou expiré." }, 401);
   }
 
   const order = await getOrder(id);
-  if (!order) return jsonResponse({ error: 'Commande introuvable.' }, 404);
+  if (!order) return jsonResponse({ error: "Commande introuvable." }, 404);
   const files = await getOrderFiles(id);
   if (files.length === 0) {
-    return jsonResponse(
-      { error: 'Ajoutez au moins un document avant l’envoi.' },
-      422,
-    );
+    return jsonResponse({ error: "Ajoutez au moins un document avant l’envoi." }, 422);
   }
 
   const completedAt = new Date().toISOString();
   const manifest = {
     schemaVersion: 1,
-    order: { ...order, status: 'RECEIVED', completedAt },
+    order: { ...order, status: "RECEIVED", completedAt },
     files: files.map(({ storageKey: _storageKey, ...file }) => file),
   };
   const brief = [
     `COMMANDE : ${order.id}`,
     `CLIENT : ${order.clientName}`,
     `EMAIL : ${order.email}`,
-    `TÉLÉPHONE : ${order.phone || 'Non renseigné'}`,
+    `TÉLÉPHONE : ${order.phone || "Non renseigné"}`,
     `LANGUE : ${order.language}`,
-    `SERVICES : ${order.services.join(', ')}`,
-    '',
-    'REMARQUES DU CLIENT',
-    order.notes || 'Aucune remarque.',
-  ].join('\n');
+    `SERVICES : ${order.services.join(", ")}`,
+    "",
+    "REMARQUES DU CLIENT",
+    order.notes || "Aucune remarque.",
+  ].join("\n");
 
   await Promise.all([
     runtimeEnv().FILES.put(
       `orders/${id}/00_COMMANDE/commande.json`,
       JSON.stringify(manifest, null, 2),
-      { httpMetadata: { contentType: 'application/json; charset=utf-8' } },
+      { httpMetadata: { contentType: "application/json; charset=utf-8" } },
     ),
     runtimeEnv().FILES.put(`orders/${id}/00_COMMANDE/brief-client.txt`, brief, {
-      httpMetadata: { contentType: 'text/plain; charset=utf-8' },
+      httpMetadata: { contentType: "text/plain; charset=utf-8" },
     }),
   ]);
 
@@ -64,19 +57,31 @@ export async function POST(request: Request, context: RouteContext) {
     .run();
   await recordEvent(
     id,
-    order.status === 'DRAFT' ? 'ORDER_COMPLETED' : 'ORDER_RECONFIRMED_BY_CLIENT',
+    order.status === "DRAFT" ? "ORDER_COMPLETED" : "ORDER_RECONFIRMED_BY_CLIENT",
     { fileCount: files.length, previousStatus: order.status },
   );
 
-  let driveStatus = 'PENDING';
+  let driveStatus = "PENDING";
+  let bonusShareUrl: string | undefined;
+  let bonusFileCount = 0;
   if (driveConfigured()) {
     try {
       await syncOrderToDrive(id);
-      driveStatus = 'SYNCED';
+      driveStatus = "SYNCED";
+      const bonus = await publishWelcomeGiftToDrive(id);
+      bonusShareUrl = bonus.shareUrl;
+      bonusFileCount = bonus.fileCount;
     } catch {
-      driveStatus = 'ERROR';
+      driveStatus = "ERROR";
     }
   }
 
-  return jsonResponse({ id, status: 'RECEIVED', completedAt, driveStatus });
+  return jsonResponse({
+    id,
+    status: "RECEIVED",
+    completedAt,
+    driveStatus,
+    bonusShareUrl,
+    bonusFileCount,
+  });
 }

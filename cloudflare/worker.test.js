@@ -1592,3 +1592,102 @@ test("Workers AI fonctionne par liaison sans clé API", async () => {
   assert.equal((await generation.json()).text, '{"status":"ok"}');
   assert.deepEqual(modelCalls, ["@cf/google/gemma-4-26b-a4b-it"]);
 });
+
+test("la galerie photo conserve les originaux et les versions CV par profil", async () => {
+  const env = aiTestEnvironment([]);
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const id = "ZGR-20261009-PHOTO1";
+  const profile = {
+    version: 1,
+    id,
+    revision: 0,
+    name: "Profil Photo",
+    email: "photo@example.com",
+    phone: "+213555000000",
+    createdAt: "2026-10-09T08:00:00.000Z",
+    updatedAt: "2026-10-09T08:00:00.000Z",
+    language: "fr",
+    cvByLanguage: { fr: { nom_complet: "Profil Photo" } },
+    hiddenElements: {},
+    documentKind: "cv",
+    templateId: "canadian-v1",
+    templateColors: {},
+  };
+  assert.equal(
+    (
+      await call(
+        env,
+        `/api/clients/${id}`,
+        authorized(admin.token, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(profile),
+        }),
+      )
+    ).status,
+    200,
+  );
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  const assetId = "original-20261009";
+  const upload = await call(
+    env,
+    `/api/clients/${id}/photos/${assetId}`,
+    authorized(admin.token, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "image/jpeg",
+        "X-Photo-Kind": "original",
+        "X-Photo-Label": "Original appareil photo",
+        "X-Photo-Width": "1200",
+        "X-Photo-Height": "1600",
+      },
+      body: jpeg,
+    }),
+  );
+  assert.equal(upload.status, 200);
+  const list = await call(env, `/api/clients/${id}/photos`, authorized(admin.token));
+  assert.equal(list.status, 200);
+  const listed = await list.json();
+  assert.equal(listed.items.length, 1);
+  assert.equal(listed.items[0].kind, "original");
+  assert.equal(listed.items[0].label, "Original appareil photo");
+  const download = await call(env, `/api/clients/${id}/photos/${assetId}`, authorized(admin.token));
+  assert.equal(download.status, 200);
+  assert.equal(download.headers.get("Content-Type"), "image/jpeg");
+  assert.deepEqual(new Uint8Array(await download.arrayBuffer()), jpeg);
+});
+
+test("la photo CV utilise BRIA RMBG 2.0 et retourne un PNG privé", async (t) => {
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+  t.mock.method(globalThis, "fetch", async (url) => {
+    assert.equal(String(url), "https://images.example.test/cutout.png");
+    return new Response(png, { status: 200, headers: { "Content-Type": "image/png" } });
+  });
+  const modelCalls = [];
+  const env = aiTestEnvironment([], {
+    AI: {
+      async run(model, input) {
+        modelCalls.push({ model, input });
+        return { image: "https://images.example.test/cutout.png" };
+      },
+    },
+  });
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  const response = await call(
+    env,
+    "/api/ai/profile-photo/background",
+    authorized(admin.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: `data:image/jpeg;base64,${Buffer.from(jpeg).toString("base64")}`,
+      }),
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "image/png");
+  assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+  assert.equal(modelCalls[0].model, "bria/remove-background");
+  assert.equal(modelCalls[0].input.preserve_alpha, true);
+});

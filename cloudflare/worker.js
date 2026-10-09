@@ -19,8 +19,12 @@ const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
 const MAX_ACCOUNT_BYTES = 16_384;
 const MAX_AI_BYTES = 120_000;
+const MAX_PROFILE_PHOTO_AI_BYTES = 2_000_000;
+const MAX_PROFILE_PHOTO_AI_INPUT_BYTES = 1_500_000;
 const MAX_TELEMETRY_BYTES = 16_384;
 const MAX_PHOTO_BYTES = 150 * 1024;
+const MAX_PROFILE_PHOTO_SOURCE_BYTES = 12 * 1024 * 1024;
+const MAX_PROFILE_PHOTO_LIBRARY_ITEMS = 24;
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const TRASH_RETENTION_DAYS = 30;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -88,7 +92,8 @@ function corsHeaders(origin) {
   if (!origin) return {};
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Profile-Revision",
+    "Access-Control-Allow-Headers":
+      "Authorization, Content-Type, X-Profile-Revision, X-Photo-Kind, X-Photo-Label, X-Photo-Width, X-Photo-Height, X-Photo-Background, X-Photo-Model, X-Photo-Source-Id",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
@@ -1266,6 +1271,16 @@ function profilePhotoId(pathname) {
   return ID_PATTERN.test(id) ? id : null;
 }
 
+function profilePhotoLibraryRoute(pathname) {
+  const match = pathname.match(
+    /^\/api\/clients\/([^/]+)\/photos(?:\/([a-z0-9][a-z0-9_-]{7,79}))?$/i,
+  );
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]).toUpperCase();
+  if (!ID_PATTERN.test(id)) return null;
+  return { id, assetId: match[2] || null };
+}
+
 function profileVersionsId(pathname) {
   const match = pathname.match(/^\/api\/clients\/([^/]+)\/versions$/);
   if (!match) return null;
@@ -1308,10 +1323,13 @@ function profileWorkflowAssignmentId(pathname) {
 }
 
 const profilePhotoKey = (id) => `clients/${id}/photo.webp`;
+const profilePhotoLibraryPrefix = (id) => `clients/${id}/photos/`;
+const profilePhotoLibraryKey = (id, assetId) => `${profilePhotoLibraryPrefix(id)}${assetId}`;
 const profileDeletedKey = (id) => `clients/${id}.deleted.json`;
 const trashProfilePrefix = (id) => `trash/clients/${id}/`;
 const trashProfileKey = (id) => `${trashProfilePrefix(id)}profile.json`;
 const trashPhotoKey = (id) => `${trashProfilePrefix(id)}photo.webp`;
+const trashPhotoLibraryPrefix = (id) => `${trashProfilePrefix(id)}photos/`;
 const trashManifestKey = (id) => `${trashProfilePrefix(id)}manifest.json`;
 const profileVersionKey = (id, revision) =>
   `${CLIENT_HISTORY_PREFIX}${id}/${String(revision).padStart(8, "0")}.json`;
@@ -1325,6 +1343,33 @@ function isWebp(buffer) {
     String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
     String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
   );
+}
+
+function isJpeg(buffer) {
+  if (buffer.byteLength < 3) return false;
+  const bytes = new Uint8Array(buffer, 0, 3);
+  return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
+function isPng(buffer) {
+  if (buffer.byteLength < 8) return false;
+  const bytes = new Uint8Array(buffer, 0, 8);
+  return [137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value);
+}
+
+function validProfilePhotoSource(buffer, contentType) {
+  if (contentType === "image/webp") return isWebp(buffer);
+  if (contentType === "image/jpeg") return isJpeg(buffer);
+  if (contentType === "image/png") return isPng(buffer);
+  return false;
+}
+
+function cleanPhotoMetadata(value, fallback, max = 160) {
+  const normalized = String(value || "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (normalized || fallback).slice(0, max);
 }
 
 async function getProfilePhoto(env, id, origin) {
@@ -1374,6 +1419,188 @@ async function putProfilePhoto(request, env, id, origin) {
     customMetadata: { id, updatedAt, size: String(buffer.byteLength) },
   });
   return json({ ok: true, id, key, size: buffer.byteLength, updatedAt }, 200, origin);
+}
+
+async function listProfilePhotoLibrary(env, id, origin) {
+  const profile = await readR2Json(env, `clients/${id}.json`);
+  if (!profile) return json({ error: "Profil introuvable." }, 404, origin);
+  const page = await env.CLIENTS_BUCKET.list({
+    prefix: profilePhotoLibraryPrefix(id),
+    include: ["customMetadata", "httpMetadata"],
+    limit: MAX_PROFILE_PHOTO_LIBRARY_ITEMS + 1,
+  });
+  const items = page.objects
+    .slice(0, MAX_PROFILE_PHOTO_LIBRARY_ITEMS)
+    .map((object) => {
+      const metadata = object.customMetadata || {};
+      return {
+        id: object.key.slice(profilePhotoLibraryPrefix(id).length),
+        kind: metadata.kind === "professional" ? "professional" : "original",
+        label: metadata.label || (metadata.kind === "professional" ? "Photo CV" : "Original"),
+        name: metadata.name || "photo",
+        contentType: metadata.contentType || "image/webp",
+        width: Number(metadata.width) || 1,
+        height: Number(metadata.height) || 1,
+        sizeBytes: object.size,
+        createdAt: metadata.createdAt || object.uploaded.toISOString(),
+        backgroundColor: metadata.backgroundColor || undefined,
+        model: metadata.model || undefined,
+        sourceId: metadata.sourceId || undefined,
+      };
+    })
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  return json({ items, limit: MAX_PROFILE_PHOTO_LIBRARY_ITEMS }, 200, origin);
+}
+
+async function getProfilePhotoLibraryAsset(env, target, origin) {
+  if (!(await env.CLIENTS_BUCKET.get(`clients/${target.id}.json`)))
+    return json({ error: "Profil introuvable." }, 404, origin);
+  const object = await env.CLIENTS_BUCKET.get(profilePhotoLibraryKey(target.id, target.assetId));
+  if (!object) return json({ error: "Photo introuvable dans la galerie." }, 404, origin);
+  const contentType = object.customMetadata?.contentType || "image/webp";
+  return new Response(object.body, {
+    headers: {
+      "Content-Type": contentType,
+      "Content-Length": String(object.size),
+      "Cache-Control": "private, no-store",
+      ETag: object.httpEtag,
+      "X-Content-Type-Options": "nosniff",
+      ...corsHeaders(origin),
+    },
+  });
+}
+
+async function putProfilePhotoLibraryAsset(request, env, target, origin) {
+  const profile = await readR2Json(env, `clients/${target.id}.json`);
+  if (!profile) return json({ error: "Enregistrez d’abord le profil client." }, 404, origin);
+  const contentType = (request.headers.get("Content-Type") || "").split(";", 1)[0].trim();
+  if (!["image/jpeg", "image/png", "image/webp"].includes(contentType))
+    return json({ error: "Formats acceptés : JPG, PNG ou WebP." }, 415, origin);
+  const declaredSize = Number(request.headers.get("Content-Length") || 0);
+  if (declaredSize > MAX_PROFILE_PHOTO_SOURCE_BYTES)
+    return json({ error: "La photo source dépasse 12 Mo." }, 413, origin);
+  const existing = await env.CLIENTS_BUCKET.get(profilePhotoLibraryKey(target.id, target.assetId));
+  if (!existing) {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix: profilePhotoLibraryPrefix(target.id),
+      limit: MAX_PROFILE_PHOTO_LIBRARY_ITEMS,
+    });
+    if (page.objects.length >= MAX_PROFILE_PHOTO_LIBRARY_ITEMS)
+      return json(
+        { error: `La galerie est limitée à ${MAX_PROFILE_PHOTO_LIBRARY_ITEMS} photos.` },
+        409,
+        origin,
+      );
+  }
+  const buffer = await request.arrayBuffer();
+  if (buffer.byteLength > MAX_PROFILE_PHOTO_SOURCE_BYTES)
+    return json({ error: "La photo source dépasse 12 Mo." }, 413, origin);
+  if (!validProfilePhotoSource(buffer, contentType))
+    return json({ error: "Le fichier image est invalide." }, 422, origin);
+  const kind = request.headers.get("X-Photo-Kind") === "professional" ? "professional" : "original";
+  const createdAt = new Date().toISOString();
+  const key = profilePhotoLibraryKey(target.id, target.assetId);
+  await env.CLIENTS_BUCKET.put(key, buffer, {
+    httpMetadata: { contentType },
+    customMetadata: {
+      id: target.id,
+      assetId: target.assetId,
+      kind,
+      label: cleanPhotoMetadata(
+        request.headers.get("X-Photo-Label"),
+        kind === "professional" ? "Photo CV · fond #E7E7E7" : "Original importé",
+      ),
+      name: cleanPhotoMetadata(request.headers.get("X-Photo-Label"), "photo", 120),
+      contentType,
+      width: String(Math.max(1, Number(request.headers.get("X-Photo-Width")) || 1)),
+      height: String(Math.max(1, Number(request.headers.get("X-Photo-Height")) || 1)),
+      createdAt,
+      backgroundColor: cleanPhotoMetadata(request.headers.get("X-Photo-Background"), "", 16),
+      model: cleanPhotoMetadata(request.headers.get("X-Photo-Model"), "", 80),
+      sourceId: cleanPhotoMetadata(request.headers.get("X-Photo-Source-Id"), "", 80),
+    },
+  });
+  return json({ ok: true, id: target.assetId, key, createdAt }, 200, origin);
+}
+
+async function deleteProfilePhotoLibraryAsset(env, target, origin) {
+  const key = profilePhotoLibraryKey(target.id, target.assetId);
+  if (!(await env.CLIENTS_BUCKET.get(key)))
+    return json({ error: "Photo introuvable dans la galerie." }, 404, origin);
+  await env.CLIENTS_BUCKET.delete(key);
+  return json({ ok: true, id: target.assetId }, 200, origin);
+}
+
+async function professionalizeProfilePhoto(request, env, origin) {
+  if (typeof env.AI?.run !== "function")
+    return json({ error: "Liaison Cloudflare AI absente." }, 503, origin);
+  let payload;
+  try {
+    payload = (await readJson(request, MAX_PROFILE_PHOTO_AI_BYTES)).value;
+  } catch (error) {
+    if (error instanceof Response)
+      return json(
+        {
+          error:
+            error.status === 413 ? "La photo dépasse la taille autorisée." : "Requête invalide.",
+        },
+        error.status,
+        origin,
+      );
+    throw error;
+  }
+  const image = typeof payload?.image === "string" ? payload.image : "";
+  if (!/^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(image))
+    return json({ error: "La photo JPEG/PNG est absente ou invalide." }, 422, origin);
+  const encoded = image.slice(image.indexOf(",") + 1);
+  if (encoded.length > Math.ceil(MAX_PROFILE_PHOTO_AI_INPUT_BYTES / 3) * 4 + 4)
+    return json({ error: "La photo transmise à l’IA est trop volumineuse." }, 413, origin);
+  let inputBytes;
+  try {
+    inputBytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+  } catch {
+    return json({ error: "La photo encodée est invalide." }, 422, origin);
+  }
+  const inputIsValid = image.startsWith("data:image/jpeg")
+    ? isJpeg(inputBytes.buffer)
+    : isPng(inputBytes.buffer);
+  if (!inputIsValid)
+    return json({ error: "Le contenu de la photo ne correspond pas à son format." }, 422, origin);
+  let result;
+  try {
+    result = await env.AI.run("bria/remove-background", {
+      image,
+      preserve_alpha: true,
+      visual_input_content_moderation: true,
+      visual_output_content_moderation: true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Service de détourage indisponible.";
+    return json({ error: `Détourage IA impossible : ${message}` }, 502, origin);
+  }
+  const imageUrl = result?.image || result?.result?.image;
+  if (typeof imageUrl !== "string" || !/^https:\/\//i.test(imageUrl))
+    return json({ error: "Le modèle n’a pas retourné de photo exploitable." }, 502, origin);
+  const generated = await fetch(imageUrl, { redirect: "error" });
+  if (!generated.ok)
+    return json({ error: "La photo détourée n’a pas pu être récupérée." }, 502, origin);
+  const contentType = (generated.headers.get("Content-Type") || "").split(";", 1)[0];
+  if (contentType !== "image/png")
+    return json({ error: "Le modèle a retourné un format inattendu." }, 502, origin);
+  const bytes = await generated.arrayBuffer();
+  if (!isPng(bytes) || bytes.byteLength > MAX_PROFILE_PHOTO_SOURCE_BYTES)
+    return json({ error: "La photo détourée est invalide ou trop volumineuse." }, 502, origin);
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      "Content-Type": "image/png",
+      "Content-Length": String(bytes.byteLength),
+      "Cache-Control": "private, no-store",
+      "X-ZGR-Photo-Model": "BRIA RMBG 2.0",
+      "X-Content-Type-Options": "nosniff",
+      ...corsHeaders(origin),
+    },
+  });
 }
 
 async function readR2ProfileIndex(env) {
@@ -2151,8 +2378,13 @@ async function archiveClientInTrash(env, profile, actor, deletedAt) {
       }),
     );
   }
+  const archivedPhotoLibraryItems = await copyR2Prefix(
+    env,
+    profilePhotoLibraryPrefix(id),
+    trashPhotoLibraryPrefix(id),
+  );
   await Promise.all(writes);
-  return manifest;
+  return { ...manifest, photoLibraryItems: archivedPhotoLibraryItems };
 }
 
 async function readTrashManifests(env) {
@@ -2196,6 +2428,7 @@ async function listTrash(env, origin) {
 
 async function purgeTrashData(env, id) {
   const keys = [trashManifestKey(id), trashProfileKey(id), trashPhotoKey(id)];
+  keys.push(...(await listR2ObjectKeys(env, trashPhotoLibraryPrefix(id))));
   let cursor;
   do {
     const page = await env.CLIENTS_BUCKET.list({
@@ -2243,6 +2476,7 @@ async function restoreTrashProfile(request, env, id, actor, origin, ctx) {
       customMetadata: { id, updatedAt: now, size: String(photoBytes.byteLength) },
     });
   }
+  await copyR2Prefix(env, trashPhotoLibraryPrefix(id), profilePhotoLibraryPrefix(id));
   const stored = await env.CLIENTS_BUCKET.put(`clients/${id}.json`, raw, {
     onlyIf: { etagDoesNotMatch: "*" },
     httpMetadata: { contentType: "application/json; charset=utf-8" },
@@ -2257,6 +2491,7 @@ async function restoreTrashProfile(request, env, id, actor, origin, ctx) {
       trashPhotoKey(id),
       profileDeletedKey(id),
     ]),
+    deleteR2ObjectKeys(env, await listR2ObjectKeys(env, trashPhotoLibraryPrefix(id))),
   ]);
   await maintainClientProfileIndex(env, () => upsertClientProfileIndex(env, restored, stored.size));
   ctx.waitUntil(
@@ -4352,6 +4587,7 @@ async function createDailyBackup(env, scheduledTime = Date.now()) {
   const index = await readR2ProfileIndex(env);
   let profiles = 0;
   let photos = 0;
+  let photoLibraryItems = 0;
   let deletions = 0;
   for (const profile of index.profiles) {
     if (
@@ -4369,6 +4605,11 @@ async function createDailyBackup(env, scheduledTime = Date.now()) {
     ) {
       photos += 1;
     }
+    photoLibraryItems += await copyR2Prefix(
+      env,
+      profilePhotoLibraryPrefix(profile.id),
+      `${root}/r2/clients/${profile.id}/photos/`,
+    );
   }
   for (const deleted of index.deletedProfiles) {
     if (
@@ -4417,7 +4658,16 @@ async function createDailyBackup(env, scheduledTime = Date.now()) {
     }
   }
 
-  const manifest = { version: 1, day, createdAt, profiles, photos, deletions, d1 };
+  const manifest = {
+    version: 1,
+    day,
+    createdAt,
+    profiles,
+    photos,
+    photoLibraryItems,
+    deletions,
+    d1,
+  };
   await env.CLIENTS_BUCKET.put(manifestKey, JSON.stringify(manifest), {
     onlyIf: { etagDoesNotMatch: "*" },
     httpMetadata: { contentType: "application/json; charset=utf-8" },
@@ -4637,6 +4887,11 @@ async function route(request, env, ctx) {
       return json({ error: "Votre rôle ne permet pas d’utiliser les fonctions IA." }, 403, origin);
     return generateAi(request, env, origin);
   }
+  if (url.pathname === "/api/ai/profile-photo/background" && request.method === "POST") {
+    if (!permissions.aiUse)
+      return json({ error: "Votre rôle ne permet pas d’utiliser les fonctions IA." }, 403, origin);
+    return professionalizeProfilePhoto(request, env, origin);
+  }
 
   if (url.pathname === "/api/telemetry" && request.method === "POST")
     return recordOperationalEvents(request, env, actor, origin, ctx);
@@ -4678,6 +4933,24 @@ async function route(request, env, ctx) {
   const versionsId = profileVersionsId(url.pathname);
   if (versionsId) {
     if (request.method === "GET") return listProfileVersions(env, versionsId, origin);
+    return json({ error: "Méthode non autorisée." }, 405, origin);
+  }
+  const photoLibraryTarget = profilePhotoLibraryRoute(url.pathname);
+  if (photoLibraryTarget) {
+    if (!photoLibraryTarget.assetId && request.method === "GET")
+      return listProfilePhotoLibrary(env, photoLibraryTarget.id, origin);
+    if (!photoLibraryTarget.assetId) return json({ error: "Méthode non autorisée." }, 405, origin);
+    if (request.method === "GET")
+      return getProfilePhotoLibraryAsset(env, photoLibraryTarget, origin);
+    if (!permissions.clientsWrite)
+      return json({ error: "Votre rôle est limité à la lecture." }, 403, origin);
+    const current = await readR2Json(env, `clients/${photoLibraryTarget.id}.json`);
+    if (current && normalizeClientWorkflowStatus(current.workflowStatus) === "approved")
+      return profileLocked(origin, current);
+    if (request.method === "PUT")
+      return putProfilePhotoLibraryAsset(request, env, photoLibraryTarget, origin);
+    if (request.method === "DELETE")
+      return deleteProfilePhotoLibraryAsset(env, photoLibraryTarget, origin);
     return json({ error: "Méthode non autorisée." }, 405, origin);
   }
   const photoId = profilePhotoId(url.pathname);
@@ -4725,9 +4998,11 @@ async function route(request, env, ctx) {
     const current = await ensureCurrentProfileSnapshot(env, id);
     if (!current) return json({ error: "Profil introuvable." }, 404, origin);
     const trash = await archiveClientInTrash(env, current, actor, deletedAt);
+    const photoLibraryKeys = await listR2ObjectKeys(env, profilePhotoLibraryPrefix(id));
     await Promise.all([
       env.CLIENTS_BUCKET.delete(`clients/${id}.json`),
       env.CLIENTS_BUCKET.delete(profilePhotoKey(id)),
+      deleteR2ObjectKeys(env, photoLibraryKeys),
       env.CLIENTS_BUCKET.put(
         profileDeletedKey(id),
         JSON.stringify({

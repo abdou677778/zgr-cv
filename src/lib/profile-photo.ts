@@ -2,6 +2,8 @@ import type { ProfilePhoto } from "./cv-types";
 
 export const PROFILE_PHOTO_MAX_BYTES = 150 * 1024;
 export const PROFILE_PHOTO_MAX_SOURCE_BYTES = 12 * 1024 * 1024;
+export const PROFILE_PHOTO_BACKGROUND = "#E7E7E7";
+export const PROFILE_PHOTO_AI_MODEL = "BRIA RMBG 2.0";
 const PROFILE_PHOTO_MIN_EDGE = 160;
 const PROFILE_PHOTO_INITIAL_MAX_EDGE = 1200;
 const PROFILE_PHOTO_MIN_OUTPUT_EDGE = 280;
@@ -123,6 +125,41 @@ export async function processProfilePhoto(file: File): Promise<ProfilePhoto> {
       maxEdge = Math.floor(maxEdge * 0.82);
     }
     throw new Error("La photo ne peut pas être réduite sous 150 Ko avec une qualité suffisante.");
+  } finally {
+    closeBitmap(image);
+  }
+}
+
+/**
+ * Composites a transparent cutout on the exact CV background. The server-side
+ * model is intentionally kept outside this pure image module so JSON/PDF tests stay portable.
+ */
+export async function composeProfessionalProfilePhoto(cutout: Blob): Promise<ProfilePhoto> {
+  if (cutout.type !== "image/png" || cutout.size > PROFILE_PHOTO_MAX_SOURCE_BYTES) {
+    throw new Error("Le modèle IA a retourné une image invalide.");
+  }
+  const image = await loadBitmap(cutout);
+  try {
+    const dimensions = imageDimensions(image);
+    const canvas = document.createElement("canvas");
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("Canvas 2D indisponible pour finaliser la photo.");
+    context.fillStyle = PROFILE_PHOTO_BACKGROUND;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const flattened = await canvasAsBlob(canvas, "image/png", 1);
+    const processed = await processProfilePhoto(
+      new File([flattened], "photo-cv-fond-e7e7e7.png", { type: "image/png" }),
+    );
+    return {
+      ...processed,
+      name: "photo-cv-professionnelle.webp",
+      updatedAt: new Date().toISOString(),
+    };
   } finally {
     closeBitmap(image);
   }

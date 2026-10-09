@@ -3319,7 +3319,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <Field label="Photo du profil" {...visibilityProps("personal.photo")}>
-                  <ProfilePhotoField photo={cv.photo} onChange={updateProfilePhoto} />
+                  <ProfilePhotoField
+                    photo={cv.photo}
+                    onChange={updateProfilePhoto}
+                    profileId={activeProfileId}
+                    canUseAi={user.permissions.aiUse}
+                  />
                 </Field>
               </div>
               <Field

@@ -526,6 +526,31 @@ function prepareDriveRootRepair(manifest, driveRootId, preparedAt = new Date().t
   return reset;
 }
 
+async function fetchTextWithHardTimeout(url, init, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutError = new Error(`Délai réseau dépassé après ${Math.round(timeoutMs / 1000)} s.`);
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(url, { ...init, signal: controller.signal });
+        const bodyText = await response.text();
+        return { response, bodyText };
+      })(),
+      timeoutPromise,
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+    controller.abort();
+  }
+}
+
 async function atomicWriteJson(path, value) {
   const target = resolve(path);
   const temporary = `${target}.tmp`;
@@ -573,12 +598,13 @@ async function apiRequest(baseUrl, path, token, actor, init = {}, attempts = 4) 
     headers.set("x-admin-token", token);
     headers.set("X-ZGR-Actor", actor);
     let response;
+    let bodyText;
     try {
-      response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
-        ...init,
-        headers,
-        signal: init.signal ?? AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
-      });
+      ({ response, bodyText } = await fetchTextWithHardTimeout(
+        `${baseUrl.replace(/\/$/, "")}${path}`,
+        { ...init, headers },
+        API_REQUEST_TIMEOUT_MS,
+      ));
     } catch (error) {
       if (attempt < attempts) {
         await new Promise((resolvePromise) =>
@@ -589,7 +615,6 @@ async function apiRequest(baseUrl, path, token, actor, init = {}, attempts = 4) 
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(`API indisponible après ${attempts} tentatives : ${reason}`);
     }
-    const bodyText = await response.text();
     let body;
     try {
       body = bodyText ? JSON.parse(bodyText) : {};
@@ -677,8 +702,9 @@ async function uploadFile(client, file, context, temporaryDirectory) {
     let uploaded = false;
     for (let attempt = 1; attempt <= 5 && !uploaded; attempt += 1) {
       let response;
+      let responseText;
       try {
-        response = await fetch(
+        ({ response, bodyText: responseText } = await fetchTextWithHardTimeout(
           `${context.portalUrl.replace(/\/$/, "")}/api/admin/orders/${encodeURIComponent(client.orderId)}/archive-file`,
           {
             method: "POST",
@@ -695,9 +721,9 @@ async function uploadFile(client, file, context, temporaryDirectory) {
             },
             body: createReadStream(localPath),
             duplex: "half",
-            signal: AbortSignal.timeout(FILE_UPLOAD_TIMEOUT_MS),
           },
-        );
+          FILE_UPLOAD_TIMEOUT_MS,
+        ));
       } catch (error) {
         if (attempt < 5) {
           await new Promise((resolvePromise) => setTimeout(resolvePromise, attempt * 3_000));
@@ -706,7 +732,6 @@ async function uploadFile(client, file, context, temporaryDirectory) {
         const reason = error instanceof Error ? error.message : String(error);
         throw new Error(`Téléversement interrompu après 5 tentatives : ${reason}`);
       }
-      const responseText = await response.text();
       if (response.ok) {
         uploaded = true;
         break;
@@ -1044,6 +1069,7 @@ export {
   approveDatesByConfidence,
   buildManifest,
   clientPathParts,
+  fetchTextWithHardTimeout,
   prepareDriveRootRepair,
   sourceEligibility,
   validateClient,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import test from "node:test";
 
 import {
@@ -6,10 +7,25 @@ import {
   approveDatesByConfidence,
   buildManifest,
   clientPathParts,
+  fetchTextWithHardTimeout,
   prepareDriveRootRepair,
   sourceEligibility,
   validateClient,
 } from "./migrate-onedrive-archives.mjs";
+
+test("le timeout dur interrompt une réponse HTTP qui ne se termine jamais", async (context) => {
+  const server = createServer(() => {});
+  await new Promise((resolvePromise) => server.listen(0, "127.0.0.1", resolvePromise));
+  context.after(() => server.close());
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const startedAt = Date.now();
+  await assert.rejects(
+    fetchTextWithHardTimeout(`http://127.0.0.1:${address.port}`, {}, 75),
+    /Délai réseau dépassé|aborted/i,
+  );
+  assert.ok(Date.now() - startedAt < 1_000);
+});
 
 function inventoryFile(path, size = 128, modified = "2023-08-27T10:30:00.000Z") {
   return {

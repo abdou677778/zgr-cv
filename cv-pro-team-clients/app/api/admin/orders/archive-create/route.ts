@@ -22,6 +22,11 @@ const archiveOrderSchema = z.object({
   notes: z.string().trim().max(6000).default(''),
   services: z.array(z.enum(serviceIds)).min(1).max(serviceIds.length),
   archiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  migrationKey: z
+    .string()
+    .trim()
+    .regex(/^onedrive:[a-f0-9]{64}$/)
+    .optional(),
 });
 
 function secureFacebookUrl(value: string) {
@@ -89,14 +94,30 @@ export async function POST(request: Request) {
   }
 
   await ensureSchema();
+  const sourceKey = parsed.data.migrationKey
+    ? `archive:${parsed.data.migrationKey}`
+    : '';
+  if (sourceKey) {
+    const existing = await runtimeEnv()
+      .DB.prepare('SELECT id FROM orders WHERE archive_source_key = ? LIMIT 1')
+      .bind(sourceKey)
+      .first<{ id: string }>();
+    if (existing?.id) {
+      return jsonResponse(
+        { order: await getOrder(existing.id), created: false },
+        200,
+      );
+    }
+  }
+
   const id = createOrderId(archiveDate);
   const createdAt = archiveDate.toISOString();
   const now = new Date().toISOString();
   const actor = (request.headers.get('X-ZGR-Actor') || '').trim().slice(0, 64);
-  const sourceKey = `archive:manual:${id}`;
-  await runtimeEnv()
+  const storedSourceKey = sourceKey || `archive:manual:${id}`;
+  const inserted = await runtimeEnv()
     .DB.prepare(
-      `INSERT INTO orders (
+      `INSERT OR IGNORE INTO orders (
         id, upload_token_hash, client_name, email, phone, facebook_url, language,
         notes, services_json, status, created_at, updated_at, completed_at,
         drive_status, admin_username, writer_username, archived_at,
@@ -118,14 +139,27 @@ export async function POST(request: Request) {
       createdAt,
       actor,
       now,
-      sourceKey,
+      storedSourceKey,
     )
     .run();
+  if (!Number(inserted.meta.changes) && sourceKey) {
+    const existing = await runtimeEnv()
+      .DB.prepare('SELECT id FROM orders WHERE archive_source_key = ? LIMIT 1')
+      .bind(sourceKey)
+      .first<{ id: string }>();
+    if (existing?.id) {
+      return jsonResponse(
+        { order: await getOrder(existing.id), created: false },
+        200,
+      );
+    }
+  }
   await recordEvent(id, 'ORDER_ARCHIVE_CREATED', {
     archiveDate: parsed.data.archiveDate,
-    source: 'manual',
+    source: parsed.data.migrationKey ? 'onedrive-migration' : 'manual',
+    migrationKey: parsed.data.migrationKey ?? null,
     createdBy: actor,
   });
 
-  return jsonResponse({ order: await getOrder(id) }, 201);
+  return jsonResponse({ order: await getOrder(id), created: true }, 201);
 }

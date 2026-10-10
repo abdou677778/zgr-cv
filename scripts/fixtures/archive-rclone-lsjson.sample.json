@@ -1,0 +1,29 @@
+[
+  {
+    "Path": "001 - Client Exemple - CV Canadian/INFOS/coordonnees.txt",
+    "Name": "coordonnees.txt",
+    "Size": 128,
+    "MimeType": "text/plain",
+    "ModTime": "2023-08-27T10:30:00.000Z",
+    "IsDir": false,
+    "Hashes": { "quickxor": "EXEMPLE" }
+  },
+  {
+    "Path": "001 - Client Exemple - CV Canadian/CV Canadian - Client Exemple.pdf",
+    "Name": "CV Canadian - Client Exemple.pdf",
+    "Size": 2048,
+    "MimeType": "application/pdf",
+    "ModTime": "2023-08-29T14:15:00.000Z",
+    "IsDir": false,
+    "Hashes": { "quickxor": "EXEMPLE2" }
+  },
+  {
+    "Path": "001 - Client Exemple - CV Canadian/photo_2023-08-27_15-50-35.jpg",
+    "Name": "photo_2023-08-27_15-50-35.jpg",
+    "Size": 1024,
+    "MimeType": "image/jpeg",
+    "ModTime": "2023-08-27T15:50:35.000Z",
+    "IsDir": false,
+    "Hashes": { "quickxor": "EXEMPLE3" }
+  }
+]

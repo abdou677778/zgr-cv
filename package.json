@@ -22,6 +22,8 @@
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "check:pwa": "node scripts/check-pwa.mjs",
     "update:noc": "node scripts/update-noc-data.mjs",
+    "archive:scan": "node scripts/migrate-onedrive-archives.mjs scan",
+    "archive:migrate": "node scripts/migrate-onedrive-archives.mjs migrate",
     "quality": "npm run typecheck && npm run lint && npm test && npm run build:spa && npm run check:bundle && npm run check:pwa && npm run check:worker && npm run test:e2e",
     "format": "prettier --write ."
   },

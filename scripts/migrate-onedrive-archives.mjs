@@ -713,6 +713,8 @@ async function syncDrive(client, context, onProgress) {
     client.driveFolderId = payload.driveFolderId || client.driveFolderId || "";
     if (payload.complete !== false) {
       delete client.driveSyncOffset;
+      delete client.lastError;
+      delete client.lastErrorAt;
       client.status = "completed";
       client.completedAt = new Date().toISOString();
       await onProgress();

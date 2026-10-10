@@ -49,6 +49,11 @@ Un inventaire rclone déjà exporté peut aussi être utilisé :
   node scripts/migrate-onedrive-archives.mjs migrate \\
     --manifest ".zgr-migrations/archive-2022-2025.json"
 
+Validation automatique des dates à confiance élevée ou moyenne :
+  node scripts/migrate-onedrive-archives.mjs approve-dates \\
+    --manifest ".zgr-migrations/archive-2022-2025.json" \\
+    --confidence "HIGH,MEDIUM"
+
 Étape 3 — copie réelle, reprenable et non destructive :
   $env:ZGR_ARCHIVE_ADMIN_TOKEN="..."
   node scripts/migrate-onedrive-archives.mjs migrate \\
@@ -61,6 +66,7 @@ Options :
   --actor <nom>           Auteur affiché dans l’historique
   --execute               Autorise les écritures API/Drive
   --accept-inferred-dates Accepte la date déduite du plus ancien fichier
+  --only-confirmed        Migre uniquement les clients dont la date est confirmée
   --continue-on-error     Continue avec le client suivant après une erreur
   --review-report <csv>   Rapport CSV des dates et exclusions à vérifier
 
@@ -74,7 +80,11 @@ function parseArgs(argv) {
     const argument = rest[index];
     if (!argument.startsWith("--")) throw new Error(`Argument inattendu : ${argument}`);
     const key = argument.slice(2);
-    if (["execute", "accept-inferred-dates", "continue-on-error", "help"].includes(key)) {
+    if (
+      ["execute", "accept-inferred-dates", "only-confirmed", "continue-on-error", "help"].includes(
+        key,
+      )
+    ) {
       options[key] = true;
       continue;
     }
@@ -400,6 +410,33 @@ async function writeReviewReport(path, manifest) {
   );
 }
 
+function approveDatesByConfidence(
+  manifest,
+  allowedConfidences,
+  confirmedAt = new Date().toISOString(),
+) {
+  const allowed = new Set(allowedConfidences.map((value) => String(value).trim().toUpperCase()));
+  let approved = 0;
+  for (const client of manifest.clients || []) {
+    if (
+      client.eligibility === "excluded" ||
+      client.status === "excluded" ||
+      client.dateConfirmed ||
+      !allowed.has(String(client.dateConfidence || "").toUpperCase())
+    ) {
+      continue;
+    }
+    client.dateConfirmed = true;
+    client.dateConfirmation = {
+      method: "source-file-metadata-confidence",
+      confidence: client.dateConfidence,
+      confirmedAt,
+    };
+    approved += 1;
+  }
+  return approved;
+}
+
 async function atomicWriteJson(path, value) {
   const target = resolve(path);
   const temporary = `${target}.tmp`;
@@ -602,6 +639,33 @@ async function scanCommand(options) {
   console.log("Aucune donnée n’a été envoyée. Vérifiez les noms, services et dates avant migrate.");
 }
 
+async function approveDatesCommand(options) {
+  if (!options.manifest) throw new Error("--manifest est obligatoire.");
+  const manifestPath = resolve(options.manifest);
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.clients)) {
+    throw new Error("Format de manifeste non pris en charge.");
+  }
+  const confidences = String(options.confidence || "HIGH,MEDIUM")
+    .split(",")
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean);
+  if (
+    !confidences.length ||
+    confidences.some((value) => !["HIGH", "MEDIUM", "LOW"].includes(value))
+  ) {
+    throw new Error("--confidence doit contenir HIGH, MEDIUM ou LOW.");
+  }
+  const approved = approveDatesByConfidence(manifest, confidences);
+  await atomicWriteJson(manifestPath, manifest);
+  const reviewReportPath = resolve(
+    options["review-report"] || manifestPath.replace(/\.json$/i, ".review.csv"),
+  );
+  await writeReviewReport(reviewReportPath, manifest);
+  console.log(`${approved} date(s) confirmée(s) pour les niveaux ${confidences.join(", ")}.`);
+  console.log(`Rapport actualisé : ${reviewReportPath}`);
+}
+
 async function migrateCommand(options) {
   if (!options.manifest) throw new Error("--manifest est obligatoire.");
   const manifestPath = resolve(options.manifest);
@@ -609,18 +673,22 @@ async function migrateCommand(options) {
   if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.clients)) {
     throw new Error("Format de manifeste non pris en charge.");
   }
-  const eligibleClients = manifest.clients.filter(
+  const allEligibleClients = manifest.clients.filter(
     (client) => client.eligibility !== "excluded" && client.status !== "excluded",
   );
+  const eligibleClients = options["only-confirmed"]
+    ? allEligibleClients.filter((client) => client.dateConfirmed)
+    : allEligibleClients;
+  const deferredUnconfirmedCount = allEligibleClients.length - eligibleClients.length;
   const validation = eligibleClients.flatMap((client) =>
     validateClient(client, true).map((issue) => `${client.sourceFolder}: ${issue}`),
   );
   const pendingDateConfirmations = options["accept-inferred-dates"]
     ? []
     : eligibleClients.filter((client) => !client.dateConfirmed);
-  const excludedCount = manifest.clients.length - eligibleClients.length;
+  const excludedCount = manifest.clients.length - allEligibleClients.length;
   console.log(
-    `${eligibleClients.length} client(s) éligible(s) à contrôler, ${excludedCount} exclu(s).`,
+    `${eligibleClients.length} client(s) éligible(s) à contrôler, ${excludedCount} exclu(s), ${deferredUnconfirmedCount} reporté(s).`,
   );
   if (validation.length) {
     console.error(
@@ -709,11 +777,18 @@ async function main() {
     return;
   }
   if (command === "scan") return scanCommand(options);
+  if (command === "approve-dates") return approveDatesCommand(options);
   if (command === "migrate") return migrateCommand(options);
   throw new Error(`Commande inconnue : ${command}`);
 }
 
-export { buildManifest, clientPathParts, sourceEligibility, validateClient };
+export {
+  approveDatesByConfidence,
+  buildManifest,
+  clientPathParts,
+  sourceEligibility,
+  validateClient,
+};
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => {

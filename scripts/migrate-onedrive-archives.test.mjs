@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  approveDatesByConfidence,
   buildManifest,
   clientPathParts,
   sourceEligibility,
@@ -77,4 +78,26 @@ test("les chemins normaux conservent le premier dossier comme client", () => {
     eligibility: "eligible",
     exclusionReason: "",
   });
+});
+
+test("la validation automatique ne confirme que les niveaux autorisés", () => {
+  const manifest = buildManifest(
+    [
+      inventoryFile("Client Stable/CV.pdf", 128, "2023-08-27T10:00:00.000Z"),
+      inventoryFile("Client Stable/Lettre.pdf", 128, "2023-08-27T12:00:00.000Z"),
+      inventoryFile("Client À vérifier/CV.pdf", 128, "2023-01-01T10:00:00.000Z"),
+      inventoryFile("Client À vérifier/Lettre.pdf", 128, "2023-05-01T10:00:00.000Z"),
+    ],
+    "onedrive:archives",
+  );
+
+  assert.equal(approveDatesByConfidence(manifest, ["HIGH", "MEDIUM"]), 1);
+  assert.equal(
+    manifest.clients.find((client) => client.clientName === "Client Stable")?.dateConfirmed,
+    true,
+  );
+  assert.equal(
+    manifest.clients.find((client) => client.clientName === "Client À vérifier")?.dateConfirmed,
+    false,
+  );
 });

@@ -218,6 +218,7 @@ async function uploadToFolder(input: {
   size: number;
   body: BodyInit;
   sourceKey: string;
+  modifiedTime?: string;
   overwrite?: boolean;
 }) {
   const entries = await directoryEntries(input.cache, input.parentId);
@@ -230,6 +231,7 @@ async function uploadToFolder(input: {
     {
       name: input.name,
       ...(existing ? {} : { parents: [input.parentId] }),
+      ...(input.modifiedTime ? { modifiedTime: input.modifiedTime } : {}),
       appProperties: { zgrSourceKey: input.sourceKey.slice(0, 96) },
     },
     input.contentType,
@@ -435,17 +437,30 @@ export async function syncOrderToDrive(orderId: string) {
       true,
     );
 
-    for (const file of files) {
+    const usedSourceNames = new Map<string, number>();
+    for (const file of [...files].sort(
+      (a, b) =>
+        (a.sourceModifiedAt || a.createdAt).localeCompare(b.sourceModifiedAt || b.createdAt) ||
+        a.id.localeCompare(b.id),
+    )) {
       const object = await env.FILES.get(file.storageKey);
       if (!object) continue;
+      const baseName = safeFileName(file.originalName);
+      const nameKey = `${file.category}\u0000${baseName}`;
+      const occurrence = usedSourceNames.get(nameKey) ?? 0;
+      usedSourceNames.set(nameKey, occurrence + 1);
+      const driveName = occurrence
+        ? baseName.replace(/(\.[^.]+)?$/, `__${file.id.slice(0, 8)}$1`)
+        : baseName;
       await uploadToFolder({
         cache,
         parentId: sourceCategoryFolders[file.category] ?? sourceFolder,
-        name: file.originalName,
+        name: driveName,
         contentType: file.mimeType || "application/octet-stream",
         size: object.size,
         body: object.body,
         sourceKey: file.storageKey,
+        modifiedTime: file.sourceModifiedAt,
       });
     }
 

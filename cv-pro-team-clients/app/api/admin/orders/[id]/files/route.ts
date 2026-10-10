@@ -14,13 +14,53 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+const archiveCategories = new Set([
+  'CAPTURE_FACEBOOK',
+  'INFOS_CLIENT',
+  'LIVRABLE_HISTORIQUE',
+  'AUTRES_ARCHIVES',
+]);
+
+function normalizedSourceDate(value: FormDataEntryValue | null) {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const date = new Date(value);
+  const earliest = Date.UTC(1980, 0, 1);
+  const latest = Date.now() + 24 * 60 * 60 * 1000;
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getTime() < earliest ||
+    date.getTime() > latest
+  ) {
+    return null;
+  }
+  return date.toISOString();
+}
+
+function normalizedRelativePath(value: FormDataEntryValue | null) {
+  if (typeof value !== 'string') return '';
+  const segments = value
+    .replaceAll('\\', '/')
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (
+    !segments.length ||
+    segments.some((segment) => segment === '.' || segment === '..')
+  ) {
+    return segments.length ? null : '';
+  }
+  const normalized = segments.join('/');
+  return normalized.length <= 600 ? normalized : null;
+}
+
 export async function POST(request: Request, context: RouteContext) {
   const denial = requireAdmin(request);
   if (denial) return denial;
   await ensureSchema();
 
   const { id } = await context.params;
-  if (!(await getOrder(id))) {
+  const order = await getOrder(id);
+  if (!order) {
     return jsonResponse({ error: 'Commande introuvable.' }, 404);
   }
 
@@ -28,6 +68,27 @@ export async function POST(request: Request, context: RouteContext) {
   const candidate = formData.get('file');
   if (!(candidate instanceof File)) {
     return jsonResponse({ error: 'Aucun fichier valide reçu.' }, 400);
+  }
+  const categoryValue = formData.get('category');
+  const requestedCategory =
+    typeof categoryValue === 'string' && categoryValue.trim()
+      ? categoryValue.trim()
+      : 'AJOUT_MANUEL';
+  const category =
+    order.status === 'ARCHIVED' && archiveCategories.has(requestedCategory)
+      ? requestedCategory
+      : 'AJOUT_MANUEL';
+  const sourceModifiedAt = normalizedSourceDate(
+    formData.get('sourceModifiedAt'),
+  );
+  const sourceRelativePath = normalizedRelativePath(
+    formData.get('sourceRelativePath'),
+  );
+  if (sourceModifiedAt === null || sourceRelativePath === null) {
+    return jsonResponse(
+      { error: "La date ou le chemin d'origine du fichier est invalide." },
+      422,
+    );
   }
   if (candidate.size <= 0 || candidate.size > MAX_FILE_BYTES) {
     return jsonResponse(
@@ -71,7 +132,6 @@ export async function POST(request: Request, context: RouteContext) {
   const fileId = crypto.randomUUID();
   const originalName = candidate.name || 'document';
   const mimeType = candidate.type || 'application/octet-stream';
-  const category = 'AJOUT_MANUEL';
   const now = new Date().toISOString();
   const storageKey = `orders/${id}/01_DOCUMENTS_SOURCES/${category}/${fileId}__${safeFileName(originalName)}`;
 
@@ -83,6 +143,8 @@ export async function POST(request: Request, context: RouteContext) {
       originalName,
       sha256,
       createdAt: now,
+      ...(sourceModifiedAt ? { sourceModifiedAt } : {}),
+      ...(sourceRelativePath ? { sourceRelativePath } : {}),
       source: 'admin-manual',
     },
   });
@@ -92,8 +154,8 @@ export async function POST(request: Request, context: RouteContext) {
       .DB.prepare(
         `INSERT INTO order_files (
           id, order_id, category, original_name, storage_key, mime_type,
-          size_bytes, sha256, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          size_bytes, sha256, source_modified_at, source_relative_path, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         fileId,
@@ -104,6 +166,8 @@ export async function POST(request: Request, context: RouteContext) {
         mimeType,
         candidate.size,
         sha256,
+        sourceModifiedAt ?? null,
+        sourceRelativePath,
         now,
       )
       .run();
@@ -113,13 +177,18 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   await runtimeEnv()
-    .DB.prepare("UPDATE orders SET updated_at = ?, drive_status = 'PENDING' WHERE id = ?")
+    .DB.prepare(
+      "UPDATE orders SET updated_at = ?, drive_status = 'PENDING' WHERE id = ?",
+    )
     .bind(now, id)
     .run();
   await recordEvent(id, 'MANUAL_FILE_UPLOADED', {
     fileId,
     originalName,
     sizeBytes: candidate.size,
+    category,
+    sourceModifiedAt: sourceModifiedAt ?? null,
+    sourceRelativePath,
   });
 
   return jsonResponse(
@@ -132,6 +201,8 @@ export async function POST(request: Request, context: RouteContext) {
         mimeType,
         sizeBytes: candidate.size,
         sha256,
+        sourceModifiedAt,
+        sourceRelativePath,
         createdAt: now,
       },
     },

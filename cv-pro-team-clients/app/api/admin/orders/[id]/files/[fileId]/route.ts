@@ -42,14 +42,22 @@ export async function DELETE(request: Request, context: RouteContext) {
   const { id, fileId } = await context.params;
   const file = await runtimeEnv()
     .DB.prepare(
-      'SELECT original_name, storage_key, category FROM order_files WHERE id = ? AND order_id = ?',
+      `SELECT f.original_name, f.storage_key, f.category, o.status
+       FROM order_files f
+       JOIN orders o ON o.id = f.order_id
+       WHERE f.id = ? AND f.order_id = ?`,
     )
     .bind(fileId, id)
-    .first<{ original_name: string; storage_key: string; category: string }>();
+    .first<{
+      original_name: string;
+      storage_key: string;
+      category: string;
+      status: string;
+    }>();
   if (!file) return jsonResponse({ error: 'Fichier introuvable.' }, 404);
-  if (file.category !== 'AJOUT_MANUEL') {
+  if (file.category !== 'AJOUT_MANUEL' && file.status !== 'ARCHIVED') {
     return jsonResponse(
-      { error: 'Seuls les fichiers ajoutés manuellement peuvent être supprimés ici.' },
+      { error: 'Ce document protégé ne peut pas être supprimé ici.' },
       409,
     );
   }
@@ -61,7 +69,9 @@ export async function DELETE(request: Request, context: RouteContext) {
     .run();
   const now = new Date().toISOString();
   await runtimeEnv()
-    .DB.prepare("UPDATE orders SET updated_at = ?, drive_status = 'PENDING' WHERE id = ?")
+    .DB.prepare(
+      "UPDATE orders SET updated_at = ?, drive_status = 'PENDING' WHERE id = ?",
+    )
     .bind(now, id)
     .run();
   await recordEvent(id, 'MANUAL_FILE_DELETED', {

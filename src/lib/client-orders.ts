@@ -49,6 +49,8 @@ export interface ClientOrderFile {
   mimeType: string;
   sizeBytes: number;
   sha256: string;
+  sourceModifiedAt?: string;
+  sourceRelativePath: string;
   createdAt: string;
 }
 
@@ -209,9 +211,22 @@ export async function downloadClientOrderFile(orderId: string, file: ClientOrder
   await saveResponseBlob(response, file.originalName);
 }
 
-export async function addClientOrderSourceFile(orderId: string, file: File) {
+export interface ClientOrderSourceFileMetadata {
+  category?: string;
+  sourceModifiedAt?: string;
+  sourceRelativePath?: string;
+}
+
+export async function addClientOrderSourceFile(
+  orderId: string,
+  file: File,
+  metadata: ClientOrderSourceFileMetadata = {},
+) {
   const data = new FormData();
   data.append("file", file);
+  if (metadata.category) data.append("category", metadata.category);
+  if (metadata.sourceModifiedAt) data.append("sourceModifiedAt", metadata.sourceModifiedAt);
+  if (metadata.sourceRelativePath) data.append("sourceRelativePath", metadata.sourceRelativePath);
   const response = await authenticatedFetch(
     `/api/admin/client-orders/${encodeURIComponent(orderId)}/files`,
     { method: "POST", body: data },

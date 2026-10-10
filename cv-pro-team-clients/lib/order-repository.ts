@@ -33,6 +33,8 @@ export interface StoredOrderFile {
   mimeType: string;
   sizeBytes: number;
   sha256: string;
+  sourceModifiedAt?: string;
+  sourceRelativePath: string;
   createdAt: string;
 }
 
@@ -116,6 +118,8 @@ function mapFile(row: D1Row): StoredOrderFile {
     mimeType: String(row.mime_type),
     sizeBytes: Number(row.size_bytes),
     sha256: String(row.sha256),
+    sourceModifiedAt: textValue(row.source_modified_at) || undefined,
+    sourceRelativePath: textValue(row.source_relative_path),
     createdAt: String(row.created_at),
   };
 }

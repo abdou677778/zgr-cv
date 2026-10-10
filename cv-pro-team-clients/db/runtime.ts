@@ -33,6 +33,8 @@ const statements = [
     mime_type TEXT NOT NULL,
     size_bytes INTEGER NOT NULL,
     sha256 TEXT NOT NULL,
+    source_modified_at TEXT,
+    source_relative_path TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS json_versions (
@@ -165,6 +167,30 @@ export function ensureSchema() {
       );
     }
     if (migrations.length) await currentEnv.DB.batch(migrations);
+    const fileResult = await currentEnv.DB.prepare(
+      'PRAGMA table_info(order_files)',
+    ).all();
+    const fileColumns = new Set(
+      (fileResult.results as Array<{ name?: string }>).map(
+        (column) => column.name,
+      ),
+    );
+    const fileMigrations: D1PreparedStatement[] = [];
+    if (!fileColumns.has('source_modified_at')) {
+      fileMigrations.push(
+        currentEnv.DB.prepare(
+          'ALTER TABLE order_files ADD COLUMN source_modified_at TEXT',
+        ),
+      );
+    }
+    if (!fileColumns.has('source_relative_path')) {
+      fileMigrations.push(
+        currentEnv.DB.prepare(
+          "ALTER TABLE order_files ADD COLUMN source_relative_path TEXT NOT NULL DEFAULT ''",
+        ),
+      );
+    }
+    if (fileMigrations.length) await currentEnv.DB.batch(fileMigrations);
     await currentEnv.DB.prepare(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_archive_source_key ON orders(archive_source_key) WHERE archive_source_key <> ''",
     ).run();

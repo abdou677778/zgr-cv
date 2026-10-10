@@ -46,6 +46,8 @@ export const orderFiles = sqliteTable(
     mimeType: text('mime_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     sha256: text('sha256').notNull(),
+    sourceModifiedAt: text('source_modified_at'),
+    sourceRelativePath: text('source_relative_path').notNull().default(''),
     createdAt: text('created_at').notNull(),
   },
   (table) => [

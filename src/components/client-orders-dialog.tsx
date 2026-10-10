@@ -96,6 +96,44 @@ const LEGACY_ARCHIVE_FIRST_YEAR = 2022;
 const LEGACY_ARCHIVE_LAST_YEAR = 2025;
 const LEGACY_ARCHIVE_YEARS = [2025, 2024, 2023, 2022] as const;
 
+const ARCHIVE_FILE_CATEGORY_LABELS: Record<string, string> = {
+  CAPTURE_FACEBOOK: "Capture du compte Facebook",
+  INFOS_CLIENT: "Informations du client",
+  LIVRABLE_HISTORIQUE: "Ancien livrable",
+  AUTRES_ARCHIVES: "Autre fichier d’archive",
+  AJOUT_MANUEL: "Ajout manuel",
+};
+
+type FileWithRelativePath = File & { webkitRelativePath?: string };
+
+function archiveFileRelativePath(file: FileWithRelativePath) {
+  return (file.webkitRelativePath || file.name).replaceAll("\\", "/");
+}
+
+function archiveFileCategory(file: FileWithRelativePath) {
+  const relativePath = archiveFileRelativePath(file);
+  const normalizedPath = relativePath.toLocaleLowerCase("fr");
+  const extension = file.name.split(".").pop()?.toLocaleLowerCase("fr") || "";
+  const segments = relativePath.split("/").filter(Boolean);
+
+  if (segments.some((segment) => /^infos?$/i.test(segment)) || extension === "txt") {
+    return "INFOS_CLIENT";
+  }
+  if (
+    segments.some((segment) => /^pdfs?$/i.test(segment)) ||
+    ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"].includes(extension)
+  ) {
+    return "LIVRABLE_HISTORIQUE";
+  }
+  if (
+    file.type.startsWith("image/") ||
+    /(?:screenshot|capture|facebook|messenger|profile|profil|photo[_-]?\d)/i.test(normalizedPath)
+  ) {
+    return "CAPTURE_FACEBOOK";
+  }
+  return "AUTRES_ARCHIVES";
+}
+
 function emptyArchiveDraft() {
   return {
     clientName: "",
@@ -172,6 +210,7 @@ export function ClientOrdersDialog({
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const deliverableInputRef = useRef<HTMLInputElement>(null);
   const sourceInputRef = useRef<HTMLInputElement>(null);
+  const archiveFolderInputRef = useRef<HTMLInputElement>(null);
   const archiveInputRef = useRef<HTMLInputElement>(null);
   const [orders, setOrders] = useState<ClientOrderSummary[]>([]);
   const [detail, setDetail] = useState<ClientOrderDetail | null>(null);
@@ -367,7 +406,19 @@ export function ClientOrdersDialog({
     let addedCount = 0;
     try {
       for (const file of files) {
-        await addClientOrderSourceFile(detail.order.id, file);
+        const archiveFile = file as FileWithRelativePath;
+        await addClientOrderSourceFile(
+          detail.order.id,
+          file,
+          archiveMode
+            ? {
+                category: archiveFileCategory(archiveFile),
+                sourceModifiedAt:
+                  file.lastModified > 0 ? new Date(file.lastModified).toISOString() : undefined,
+                sourceRelativePath: archiveFileRelativePath(archiveFile),
+              }
+            : {},
+        );
         addedCount += 1;
       }
       let driveSynchronized = false;
@@ -388,6 +439,8 @@ export function ClientOrdersDialog({
         `${files.length} document${files.length > 1 ? "s" : ""} ajouté${
           files.length > 1 ? "s" : ""
         } au dossier de ${detail.order.clientName}.${
+          archiveMode ? " Dates d’origine, chemins et catégories conservés." : ""
+        }${
           driveSynchronized
             ? " Dossier Google Drive synchronisé automatiquement."
             : driveWarning
@@ -411,7 +464,7 @@ export function ClientOrdersDialog({
   };
 
   const deleteSourceFile = async (file: ClientOrderFile) => {
-    if (!detail || file.category !== "AJOUT_MANUEL") return;
+    if (!detail || (!archiveMode && file.category !== "AJOUT_MANUEL")) return;
     if (!window.confirm(`Supprimer définitivement « ${file.originalName} » du dossier client ?`)) {
       return;
     }
@@ -824,6 +877,23 @@ export function ClientOrdersDialog({
           }}
         />
         <input
+          ref={(node) => {
+            archiveFolderInputRef.current = node;
+            if (node) {
+              node.setAttribute("webkitdirectory", "");
+              node.setAttribute("directory", "");
+            }
+          }}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            const files = [...(event.target.files ?? [])];
+            event.target.value = "";
+            if (files.length) void addSourceFiles(files);
+          }}
+        />
+        <input
           ref={archiveInputRef}
           type="file"
           accept=".json,.csv,application/json,text/csv"
@@ -1180,6 +1250,14 @@ export function ClientOrdersDialog({
                         {detail.order.phone || ""} · {archiveMode ? "Commande du" : "Reçue"}{" "}
                         {new Date(detail.order.createdAt).toLocaleString("fr-DZ")}
                       </p>
+                      {archiveMode && (
+                        <div className="mt-3 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-950">
+                          <strong>Contrôle des dates :</strong> la date de commande ci-dessus reste
+                          la référence de classement. Chaque document conserve séparément sa date de
+                          modification d’origine et son chemin historique ; la date d’import dans la
+                          plateforme ne les remplace pas.
+                        </div>
+                      )}
                       <div className="mt-3 grid max-w-2xl gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
                         {(
                           [
@@ -1513,23 +1591,43 @@ export function ClientOrdersDialog({
                         <FileText className="h-4 w-4 text-blue-600" /> Documents sources ·{" "}
                         {detail.files.length}
                       </h3>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => sourceInputRef.current?.click()}
-                        disabled={Boolean(busy)}
-                      >
-                        {busy === "source-upload" ? (
-                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Paperclip className="mr-2 h-4 w-4" />
+                      <div className="flex flex-wrap gap-2">
+                        {archiveMode && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => archiveFolderInputRef.current?.click()}
+                            disabled={Boolean(busy)}
+                          >
+                            {busy === "source-upload" ? (
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <FolderOpen className="mr-2 h-4 w-4" />
+                            )}
+                            Importer le dossier client
+                          </Button>
                         )}
-                        Ajouter des fichiers
-                      </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => sourceInputRef.current?.click()}
+                          disabled={Boolean(busy)}
+                        >
+                          {busy === "source-upload" ? (
+                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Paperclip className="mr-2 h-4 w-4" />
+                          )}
+                          Ajouter des fichiers
+                        </Button>
+                      </div>
                     </div>
                     <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-                      Tous types de fichiers · 100 Mo maximum par fichier · stockage privé.
+                      {archiveMode
+                        ? "Le dossier INFOS, les captures Facebook et les anciens livrables sont classés automatiquement. La date de modification et le chemin d’origine de chaque fichier sont conservés."
+                        : "Tous types de fichiers · 100 Mo maximum par fichier · stockage privé."}
                     </p>
                     <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
                       {detail.files.length === 0 && (
@@ -1545,8 +1643,25 @@ export function ClientOrdersDialog({
                           <div className="min-w-0">
                             <p className="truncate text-xs font-semibold">{file.originalName}</p>
                             <p className="mt-0.5 text-[10px] text-muted-foreground">
-                              {file.category.replaceAll("_", " ")} · {formatBytes(file.sizeBytes)}
+                              {ARCHIVE_FILE_CATEGORY_LABELS[file.category] ||
+                                file.category.replaceAll("_", " ")}{" "}
+                              · {formatBytes(file.sizeBytes)}
                             </p>
+                            {file.sourceModifiedAt && (
+                              <p className="mt-0.5 text-[10px] font-medium text-amber-800">
+                                Modifié à l’origine :{" "}
+                                {new Date(file.sourceModifiedAt).toLocaleString("fr-DZ")}
+                              </p>
+                            )}
+                            {file.sourceRelativePath &&
+                              file.sourceRelativePath !== file.originalName && (
+                                <p
+                                  className="mt-0.5 truncate font-mono text-[9px] text-slate-500"
+                                  title={file.sourceRelativePath}
+                                >
+                                  {file.sourceRelativePath}
+                                </p>
+                              )}
                           </div>
                           <div className="flex shrink-0 items-center">
                             <Button
@@ -1562,7 +1677,7 @@ export function ClientOrdersDialog({
                                 <Download />
                               )}
                             </Button>
-                            {file.category === "AJOUT_MANUEL" && (
+                            {(archiveMode || file.category === "AJOUT_MANUEL") && (
                               <Button
                                 size="icon"
                                 variant="ghost"

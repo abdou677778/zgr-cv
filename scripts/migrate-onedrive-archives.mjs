@@ -14,8 +14,10 @@ const MAX_ORDER_BYTES = 500 * 1024 * 1024;
 const MAX_ARCHIVE_FILES = 500;
 const ARCHIVE_FIRST_YEAR = 2022;
 const ARCHIVE_LAST_YEAR = 2025;
-const DRIVE_SYNC_BATCH_SIZE = 3;
-const DEFAULT_UPLOAD_CONCURRENCY = 2;
+const DRIVE_SYNC_BATCH_SIZE = 5;
+const DEFAULT_UPLOAD_CONCURRENCY = 4;
+const API_REQUEST_TIMEOUT_MS = 90_000;
+const FILE_UPLOAD_TIMEOUT_MS = 5 * 60_000;
 
 const sourceContainerPatterns = [
   /(?:^|\b)waiting\s+for\s+payment(?:\b|$)/i,
@@ -83,7 +85,7 @@ Options :
   --expected-drive-root   Refuse Drive si la racine ne correspond pas à cet ID
   --max-clients <nombre>  Limite un passage de test à ce nombre de clients
   --client-folder <nom>   Traite uniquement ce dossier source exact
-  --upload-concurrency <n> Nombre de fichiers traités en parallèle (1 à 4, défaut 2)
+  --upload-concurrency <n> Nombre de fichiers traités en parallèle (1 à 4, défaut 4)
   --review-report <csv>   Rapport CSV des dates et exclusions à vérifier
 
 Les jetons ne doivent jamais être placés dans le manifeste ni dans Git.`;
@@ -570,7 +572,23 @@ async function apiRequest(baseUrl, path, token, actor, init = {}, attempts = 4) 
     const headers = new Headers(init.headers);
     headers.set("x-admin-token", token);
     headers.set("X-ZGR-Actor", actor);
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, { ...init, headers });
+    let response;
+    try {
+      response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
+        ...init,
+        headers,
+        signal: init.signal ?? AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (attempt < attempts) {
+        await new Promise((resolvePromise) =>
+          setTimeout(resolvePromise, Math.min(attempt * 5_000, 30_000)),
+        );
+        continue;
+      }
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`API indisponible après ${attempts} tentatives : ${reason}`);
+    }
     const bodyText = await response.text();
     let body;
     try {
@@ -638,6 +656,10 @@ async function uploadFile(client, file, context, temporaryDirectory) {
     "5",
     "--low-level-retries",
     "10",
+    "--contimeout",
+    "30s",
+    "--timeout",
+    "5m",
   ]);
   const localStat = await stat(localPath);
   if (localStat.size !== Number(file.sizeBytes)) {
@@ -654,25 +676,36 @@ async function uploadFile(client, file, context, temporaryDirectory) {
   try {
     let uploaded = false;
     for (let attempt = 1; attempt <= 5 && !uploaded; attempt += 1) {
-      const response = await fetch(
-        `${context.portalUrl.replace(/\/$/, "")}/api/admin/orders/${encodeURIComponent(client.orderId)}/archive-file`,
-        {
-          method: "POST",
-          headers: {
-            "x-admin-token": context.token,
-            "X-ZGR-Actor": context.actor,
-            "x-zgr-file-name-b64": encodedName,
-            "x-zgr-source-path-b64": encodedSourcePath,
-            "x-zgr-source-modified-at": file.modifiedAt,
-            "x-zgr-category": file.category,
-            "x-zgr-sha256": fileHash,
-            "Content-Type": file.mimeType || "application/octet-stream",
-            "Content-Length": String(localStat.size),
+      let response;
+      try {
+        response = await fetch(
+          `${context.portalUrl.replace(/\/$/, "")}/api/admin/orders/${encodeURIComponent(client.orderId)}/archive-file`,
+          {
+            method: "POST",
+            headers: {
+              "x-admin-token": context.token,
+              "X-ZGR-Actor": context.actor,
+              "x-zgr-file-name-b64": encodedName,
+              "x-zgr-source-path-b64": encodedSourcePath,
+              "x-zgr-source-modified-at": file.modifiedAt,
+              "x-zgr-category": file.category,
+              "x-zgr-sha256": fileHash,
+              "Content-Type": file.mimeType || "application/octet-stream",
+              "Content-Length": String(localStat.size),
+            },
+            body: createReadStream(localPath),
+            duplex: "half",
+            signal: AbortSignal.timeout(FILE_UPLOAD_TIMEOUT_MS),
           },
-          body: createReadStream(localPath),
-          duplex: "half",
-        },
-      );
+        );
+      } catch (error) {
+        if (attempt < 5) {
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, attempt * 3_000));
+          continue;
+        }
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Téléversement interrompu après 5 tentatives : ${reason}`);
+      }
       const responseText = await response.text();
       if (response.ok) {
         uploaded = true;

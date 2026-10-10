@@ -1,20 +1,35 @@
 param(
   [string]$Manifest = ".zgr-migrations\archive-01-abdou.json",
   [int]$RefreshSeconds = 5,
+  [switch]$FollowActive,
   [switch]$Once
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$manifestPath = if ([System.IO.Path]::IsPathRooted($Manifest)) {
+$defaultManifestPath = if ([System.IO.Path]::IsPathRooted($Manifest)) {
   $Manifest
 } else {
   Join-Path $projectRoot $Manifest
 }
+$activeManifestFile = Join-Path $projectRoot ".zgr-migrations\active-manifest.txt"
 $migrationLog = Join-Path $projectRoot ".zgr-migrations\migration.stdout.log"
 $migrationErrors = Join-Path $projectRoot ".zgr-migrations\migration.stderr.log"
 $continuationLog = Join-Path $projectRoot ".zgr-migrations\continuation.stdout.log"
 $continuationErrors = Join-Path $projectRoot ".zgr-migrations\continuation.stderr.log"
+$batchLog = Join-Path $projectRoot ".zgr-migrations\batch.stdout.log"
+$batchErrors = Join-Path $projectRoot ".zgr-migrations\batch.stderr.log"
+
+function Get-CurrentManifestPath {
+  if ($FollowActive -and (Test-Path -LiteralPath $activeManifestFile)) {
+    $selected = [string](Get-Content -LiteralPath $activeManifestFile -TotalCount 1)
+    if (-not [string]::IsNullOrWhiteSpace($selected)) {
+      if ([System.IO.Path]::IsPathRooted($selected)) { return $selected.Trim() }
+      return Join-Path $projectRoot $selected.Trim()
+    }
+  }
+  return $defaultManifestPath
+}
 
 function Format-Size([double]$Bytes) {
   if ($Bytes -ge 1GB) { return "{0:N2} Go" -f ($Bytes / 1GB) }
@@ -61,11 +76,12 @@ function Get-FriendlyError([string]$Message) {
 }
 
 function Show-MigrationStatus {
-  if (-not (Test-Path -LiteralPath $manifestPath)) {
-    throw "Manifeste introuvable : $manifestPath"
+  $currentManifestPath = Get-CurrentManifestPath
+  if (-not (Test-Path -LiteralPath $currentManifestPath)) {
+    throw "Manifeste introuvable : $currentManifestPath"
   }
 
-  $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+  $manifest = Get-Content -Raw -LiteralPath $currentManifestPath | ConvertFrom-Json
   $eligible = @($manifest.clients | Where-Object {
       $_.eligibility -ne "excluded" -and $_.status -ne "excluded"
     })
@@ -89,10 +105,22 @@ function Show-MigrationStatus {
   $temp = Get-TemporaryUsage
 
   $migrationProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -match "^(node|node\.exe|pwsh|pwsh\.exe)$" -and $_.CommandLine -match "migrate-onedrive-archives|continue-confirmed-archive-migration" })
+    Where-Object { $_.Name -match "^(node|node\.exe|pwsh|pwsh\.exe)$" -and $_.CommandLine -match "migrate-onedrive-archives|continue-confirmed-archive-migration|continue-archive-batches" })
+
+  $activityFiles = @($migrationLog, $migrationErrors, $continuationLog, $continuationErrors, $batchLog, $batchErrors) |
+    Where-Object { Test-Path -LiteralPath $_ } |
+    ForEach-Object { Get-Item -LiteralPath $_ }
+  $lastActivityAt = $activityFiles |
+    Sort-Object -Property LastWriteTime -Descending |
+    Select-Object -First 1 -ExpandProperty LastWriteTime
+  $stalled = $migrationProcesses.Count -gt 0 -and
+    $null -ne $lastActivityAt -and
+    ((Get-Date) - $lastActivityAt).TotalMinutes -ge 8
 
   $state = if ($completed.Count -eq $eligible.Count) {
     "TERMINE"
+  } elseif ($stalled) {
+    "BLOQUE - REPRISE NECESSAIRE"
   } elseif ($migrationProcesses.Count -gt 0) {
     "EN COURS"
   } elseif ($errors.Count -gt 0) {
@@ -105,8 +133,12 @@ function Show-MigrationStatus {
   Write-Host "============================================================" -ForegroundColor DarkCyan
   Write-Host "        ZGR - SUIVI DE LA MIGRATION DES ARCHIVES" -ForegroundColor Cyan
   Write-Host "============================================================" -ForegroundColor DarkCyan
+  Write-Host ("Lot         : {0}" -f [System.IO.Path]::GetFileNameWithoutExtension($currentManifestPath)) -ForegroundColor Cyan
   Write-Host ("Mise à jour : {0:dd/MM/yyyy HH:mm:ss}" -f (Get-Date))
   Write-Host "État        : $state" -ForegroundColor $(if ($state -eq "TERMINE") { "Green" } elseif ($state -eq "EN COURS") { "Yellow" } else { "Red" })
+  if ($null -ne $lastActivityAt) {
+    Write-Host ("Activité     : {0:dd/MM/yyyy HH:mm:ss} ({1:N1} min)" -f $lastActivityAt, ((Get-Date) - $lastActivityAt).TotalMinutes)
+  }
   Write-Host ""
   Write-Host ("Clients     : {0}/{1} terminés ({2} %)" -f $completed.Count, $eligible.Count, $clientPercent)
   Write-Host ("Fichiers    : {0}/{1} envoyés ({2} %)" -f $transferredFiles.Count, $files.Count, $filePercent)
@@ -131,16 +163,20 @@ function Show-MigrationStatus {
 
   Write-Host ""
   Write-Host ("Espace local temporaire : {0} dans {1} dossier(s)" -f (Format-Size $temp.Bytes), $temp.Directories) -ForegroundColor Green
-  Write-Host "Un seul fichier est téléchargé temporairement, envoyé, puis supprimé." -ForegroundColor Green
+  Write-Host "Jusqu’à 4 fichiers sont traités en parallèle, puis supprimés immédiatement." -ForegroundColor Green
   Write-Host "Aucune copie complète de l’archive n’est conservée sur ce PC." -ForegroundColor Green
   Write-Host ""
   $lastLine = Get-LastUsefulLine $migrationLog
   if ([string]::IsNullOrWhiteSpace($lastLine)) { $lastLine = Get-LastUsefulLine $continuationLog }
+  if ($FollowActive -and (Test-Path -LiteralPath $batchLog)) {
+    $batchLine = Get-LastUsefulLine $batchLog
+    if (-not [string]::IsNullOrWhiteSpace($batchLine)) { $lastLine = $batchLine }
+  }
   if (-not [string]::IsNullOrWhiteSpace($lastLine)) {
     Write-Host "Dernière opération : $lastLine"
   }
   $errorBytes = 0
-  foreach ($path in @($migrationErrors, $continuationErrors)) {
+  foreach ($path in @($migrationErrors, $continuationErrors, $batchErrors)) {
     if (Test-Path -LiteralPath $path) { $errorBytes += (Get-Item -LiteralPath $path).Length }
   }
   Write-Host "Journaux : $projectRoot\.zgr-migrations"

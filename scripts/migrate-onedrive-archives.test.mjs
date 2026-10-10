@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  applyDateDecisions,
   approveDatesByConfidence,
   buildManifest,
   clientPathParts,
@@ -100,4 +101,26 @@ test("la validation automatique ne confirme que les niveaux autorisés", () => {
     manifest.clients.find((client) => client.clientName === "Client À vérifier")?.dateConfirmed,
     false,
   );
+});
+
+test("les décisions manuelles corrigent une date avec une preuve traçable", () => {
+  const manifest = buildManifest(
+    [inventoryFile("Client À corriger/CV.pdf", 128, "2022-10-20T10:00:00.000Z")],
+    "onedrive:archives",
+  );
+  const client = manifest.clients[0];
+
+  assert.equal(
+    applyDateDecisions(manifest, [
+      {
+        sourceFolder: client.sourceFolder,
+        archiveDate: "2022-11-08",
+        evidence: "Premier lot de documents client spécifiques",
+      },
+    ]),
+    1,
+  );
+  assert.equal(client.archiveDate, "2022-11-08");
+  assert.equal(client.dateConfirmed, true);
+  assert.equal(client.dateConfirmation.method, "manual-source-evidence-review");
 });

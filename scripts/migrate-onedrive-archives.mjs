@@ -54,6 +54,11 @@ Validation automatique des dates à confiance élevée ou moyenne :
     --manifest ".zgr-migrations/archive-2022-2025.json" \\
     --confidence "HIGH,MEDIUM"
 
+Application de décisions manuelles documentées :
+  node scripts/migrate-onedrive-archives.mjs apply-date-decisions \\
+    --manifest ".zgr-migrations/archive-2022-2025.json" \\
+    --decisions ".zgr-migrations/archive-date-decisions.json"
+
 Étape 3 — copie réelle, reprenable et non destructive :
   $env:ZGR_ARCHIVE_ADMIN_TOKEN="..."
   node scripts/migrate-onedrive-archives.mjs migrate \\
@@ -437,6 +442,53 @@ function approveDatesByConfidence(
   return approved;
 }
 
+function applyDateDecisions(manifest, decisions, confirmedAt = new Date().toISOString()) {
+  if (!Array.isArray(decisions))
+    throw new Error("Le fichier de décisions doit contenir un tableau.");
+  const clientsBySourceFolder = new Map(
+    (manifest.clients || []).map((client) => [client.sourceFolder, client]),
+  );
+  const seen = new Set();
+  let applied = 0;
+  for (const decision of decisions) {
+    const sourceFolder = String(decision?.sourceFolder || "").trim();
+    const archiveDate = String(decision?.archiveDate || "").trim();
+    if (!sourceFolder || seen.has(sourceFolder)) {
+      throw new Error(`Décision en double ou sans dossier source : ${sourceFolder || "(vide)"}`);
+    }
+    seen.add(sourceFolder);
+    const client = clientsBySourceFolder.get(sourceFolder);
+    if (!client) throw new Error(`Dossier introuvable dans le manifeste : ${sourceFolder}`);
+    if (client.eligibility === "excluded" || client.status === "excluded") {
+      throw new Error(`Le dossier exclu ne peut pas être confirmé : ${sourceFolder}`);
+    }
+    const parsedDate = new Date(`${archiveDate}T12:00:00.000Z`);
+    const year = parsedDate.getUTCFullYear();
+    if (
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== archiveDate ||
+      year < ARCHIVE_FIRST_YEAR ||
+      year > ARCHIVE_LAST_YEAR
+    ) {
+      throw new Error(`Date manuelle invalide pour ${sourceFolder} : ${archiveDate}`);
+    }
+    const previousDate = client.archiveDate;
+    client.archiveDate = archiveDate;
+    client.dateConfirmed = true;
+    client.dateConfirmation = {
+      method: "manual-source-evidence-review",
+      ...(previousDate === archiveDate ? {} : { previousDate }),
+      evidence: String(decision.evidence || "Vérification manuelle des métadonnées source").slice(
+        0,
+        600,
+      ),
+      confirmedAt,
+    };
+    applied += 1;
+  }
+  return applied;
+}
+
 async function atomicWriteJson(path, value) {
   const target = resolve(path);
   const temporary = `${target}.tmp`;
@@ -666,6 +718,26 @@ async function approveDatesCommand(options) {
   console.log(`Rapport actualisé : ${reviewReportPath}`);
 }
 
+async function applyDateDecisionsCommand(options) {
+  if (!options.manifest || !options.decisions) {
+    throw new Error("--manifest et --decisions sont obligatoires.");
+  }
+  const manifestPath = resolve(options.manifest);
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const decisions = JSON.parse(await readFile(resolve(options.decisions), "utf8"));
+  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.clients)) {
+    throw new Error("Format de manifeste non pris en charge.");
+  }
+  const applied = applyDateDecisions(manifest, decisions);
+  await atomicWriteJson(manifestPath, manifest);
+  const reviewReportPath = resolve(
+    options["review-report"] || manifestPath.replace(/\.json$/i, ".review.csv"),
+  );
+  await writeReviewReport(reviewReportPath, manifest);
+  console.log(`${applied} décision(s) manuelle(s) appliquée(s).`);
+  console.log(`Rapport actualisé : ${reviewReportPath}`);
+}
+
 async function migrateCommand(options) {
   if (!options.manifest) throw new Error("--manifest est obligatoire.");
   const manifestPath = resolve(options.manifest);
@@ -778,11 +850,13 @@ async function main() {
   }
   if (command === "scan") return scanCommand(options);
   if (command === "approve-dates") return approveDatesCommand(options);
+  if (command === "apply-date-decisions") return applyDateDecisionsCommand(options);
   if (command === "migrate") return migrateCommand(options);
   throw new Error(`Commande inconnue : ${command}`);
 }
 
 export {
+  applyDateDecisions,
   approveDatesByConfidence,
   buildManifest,
   clientPathParts,

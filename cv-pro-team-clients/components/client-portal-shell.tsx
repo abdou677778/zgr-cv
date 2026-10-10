@@ -26,7 +26,7 @@ const copy = {
     secure: "فضاء آمن لإيداع الملفات",
     private: "خاص وسري",
     badge: "ملف العميل",
-    title: "أرسل لنا المعلومات والوثائق اللازمة لإعداد ملف ترشحك.",
+    title: "أرسل لنا المعلومات والوثائق اللازمة لإعداد ملفك",
     description:
       "اختر الوثائق المطلوبة، وضّح احتياجاتك، وتابع ملفًا واحدًا من مرحلة الإرسال إلى غاية التسليم.",
     footer: "تبقى وثائقك خاصة ولا تُستخدم إلا لإعداد طلبك.",
@@ -94,10 +94,20 @@ export function ClientPortalShell({
           </div>
         </header>
 
-        <section className="mb-5 rounded-3xl border border-primary/10 bg-primary px-6 py-7 text-primary-foreground shadow-[0_22px_70px_-42px_rgba(13,38,63,.65)] sm:px-9 sm:py-9">
-          <Badge className="mb-4 bg-white/10 text-white">{t.badge}</Badge>
-          <h1 className="max-w-2xl text-2xl font-black tracking-tight sm:text-4xl">{t.title}</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-white/80 sm:text-base">
+        <section className="mb-6 rounded-3xl border border-primary/10 bg-primary px-6 py-8 text-primary-foreground shadow-[0_22px_70px_-42px_rgba(13,38,63,.65)] sm:px-9 sm:py-10">
+          <Badge className="mb-5 bg-white/10 text-white">{t.badge}</Badge>
+          <h1
+            className={`max-w-2xl text-2xl font-black tracking-tight sm:text-4xl ${
+              ar ? "leading-[1.55] sm:leading-[1.5]" : "leading-tight"
+            }`}
+          >
+            {t.title}
+          </h1>
+          <p
+            className={`mt-5 max-w-2xl text-sm text-white/80 sm:text-base ${
+              ar ? "leading-8" : "leading-7"
+            }`}
+          >
             {t.description}
           </p>
         </section>

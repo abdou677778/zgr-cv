@@ -64,6 +64,7 @@ const SERVICE_LABELS: Record<string, string> = {
   CV_ARABE: "CV Arabe",
   LETTRE_FR: "Lettre FR",
   LETTRE_ENG: "Lettre ENG",
+  JOB_APPLICATIONS: "Candidature aux offres d’emploi",
   CONSEILS: "Conseils",
 };
 

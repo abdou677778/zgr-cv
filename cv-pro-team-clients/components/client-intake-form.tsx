@@ -184,6 +184,7 @@ const arabicServiceLabels: Record<ServiceId, string> = {
   CV_ARABE: "سيرة ذاتية بالعربية",
   LETTRE_FR: "رسالة تحفيز بالفرنسية",
   LETTRE_ENG: "رسالة تحفيز بالإنجليزية",
+  JOB_APPLICATIONS: "التقديم في فرص العمل المتاحة",
   CONSEILS: "استشارة مهنية",
 };
 
@@ -677,36 +678,36 @@ export function ClientIntakeForm({
       </div>
 
       <Card className="border-0 shadow-[0_22px_70px_-48px_rgba(13,38,63,.55)] ring-primary/10">
-        <CardHeader className="border-b border-border px-5 pb-5 sm:px-7">
+        <CardHeader className="gap-2.5 border-b border-border px-5 pb-6 sm:px-7">
           <CardTitle className="text-xl font-black text-primary">
             {step === 1 ? t.prepare : t.addDocuments}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className={ar ? "leading-7" : "leading-6"}>
             {step === 1
               ? t.prepareDescription
               : t.addDescription}
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-7 px-5 sm:px-7">
+        <CardContent className="space-y-8 px-5 sm:px-7">
           {step === 1 ? (
             <>
-              <section className="grid gap-4 sm:grid-cols-2">
-                <label htmlFor="client-name" className="space-y-2 text-sm font-bold text-primary">
-                  {t.fullName}
+              <section className="grid gap-x-5 gap-y-6 sm:grid-cols-2">
+                <label htmlFor="client-name" className="grid gap-2.5 text-sm font-bold text-primary">
+                  <span className="block leading-7">{t.fullName}</span>
                   <Input
                     id="client-name"
-                    className="h-11 bg-white"
+                    className="h-12 bg-white"
                     value={clientName}
                     onChange={(event) => setClientName(event.target.value)}
                     placeholder={t.fullNamePlaceholder}
                   />
                 </label>
-                <label htmlFor="client-email" className="space-y-2 text-sm font-bold text-primary">
-                  {t.email}
+                <label htmlFor="client-email" className="grid gap-2.5 text-sm font-bold text-primary">
+                  <span className="block leading-7">{t.email}</span>
                   <Input
                     id="client-email"
-                    className="h-11 bg-white text-left"
+                    className="h-12 bg-white text-left"
                     dir="ltr"
                     type="email"
                     value={email}
@@ -714,11 +715,11 @@ export function ClientIntakeForm({
                     placeholder={t.emailPlaceholder}
                   />
                 </label>
-                <label htmlFor="client-phone" className="space-y-2 text-sm font-bold text-primary">
-                  {t.phone}
+                <label htmlFor="client-phone" className="grid gap-2.5 text-sm font-bold text-primary">
+                  <span className="block leading-7">{t.phone}</span>
                   <Input
                     id="client-phone"
-                    className="h-11 bg-white text-left"
+                    className="h-12 bg-white text-left"
                     dir="ltr"
                     type="tel"
                     value={phone}
@@ -728,12 +729,12 @@ export function ClientIntakeForm({
                 </label>
                 <label
                   htmlFor="client-language"
-                  className="space-y-2 text-sm font-bold text-primary"
+                  className="grid gap-2.5 text-sm font-bold text-primary"
                 >
-                  {t.communicationLanguage}
+                  <span className="block leading-7">{t.communicationLanguage}</span>
                   <select
                     id="client-language"
-                    className="h-11 w-full rounded-lg border border-input bg-white px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/30"
+                    className="h-12 w-full rounded-lg border border-input bg-white px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/30"
                     value={language}
                     onChange={(event) => setLanguage(event.target.value as "fr" | "en" | "ar")}
                   >
@@ -745,22 +746,22 @@ export function ClientIntakeForm({
               </section>
 
               <section>
-                <div className="mb-3 flex items-end justify-between gap-3">
+                <div className="mb-4 flex items-end justify-between gap-4">
                   <div>
-                    <h2 className="font-black text-primary">{t.desiredDocuments}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{t.multiService}</p>
+                    <h2 className="font-black leading-7 text-primary">{t.desiredDocuments}</h2>
+                    <p className="mt-2 text-sm leading-7 text-muted-foreground">{t.multiService}</p>
                   </div>
                   <span className="text-xs font-semibold text-muted-foreground">
                     {services.length} {t.selected}
                   </span>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {serviceIds.map((service) => {
                     const checked = services.includes(service);
                     return (
                       <label
                         key={service}
-                        className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-sm font-bold transition ${
+                        className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-sm font-bold leading-6 transition ${
                           checked
                             ? "border-accent bg-accent/10 text-primary"
                             : "border-border bg-white text-primary hover:border-accent"
@@ -781,9 +782,9 @@ export function ClientIntakeForm({
 
               <label
                 htmlFor="client-notes"
-                className="block space-y-2 text-sm font-bold text-primary"
+                className="grid gap-2.5 text-sm font-bold text-primary"
               >
-                {t.notes}
+                <span className="block leading-7">{t.notes}</span>
                 <Textarea
                   id="client-notes"
                   className="min-h-28 resize-y bg-white font-normal leading-6"

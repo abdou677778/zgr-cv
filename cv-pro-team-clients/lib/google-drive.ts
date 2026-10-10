@@ -12,11 +12,46 @@ import {
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+const DRIVE_REQUEST_TIMEOUT_MS = 45_000;
+const OAUTH_REQUEST_TIMEOUT_MS = 20_000;
 
 type DriveEntry = { id: string; name: string; mimeType?: string };
 type DriveDirectoryCache = Map<string, Map<string, DriveEntry>>;
 
 let tokenCache: { token: string; expiresAt: number } | undefined;
+
+async function bufferedFetchWithHardTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+) {
+  const controller = new AbortController();
+  const timeoutError = new Error(`Délai Google dépassé après ${Math.round(timeoutMs / 1000)} s.`);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(url, { ...init, signal: controller.signal });
+        const body = await response.arrayBuffer();
+        return new Response(body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      })(),
+      timeoutPromise,
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    controller.abort();
+  }
+}
 
 export function driveConfigured() {
   const env = runtimeEnv();
@@ -38,11 +73,15 @@ async function accessToken() {
     refresh_token: env.GOOGLE_REFRESH_TOKEN!,
     grant_type: "refresh_token",
   });
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
+  const response = await bufferedFetchWithHardTimeout(
+    "https://oauth2.googleapis.com/token",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    },
+    OAUTH_REQUEST_TIMEOUT_MS,
+  );
   if (!response.ok) throw new Error(`Connexion Google refusée (${response.status}).`);
   const payload = (await response.json()) as {
     access_token: string;
@@ -58,10 +97,11 @@ async function accessToken() {
 async function driveFetch(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${await accessToken()}`);
-  const response = await fetch(path.startsWith("http") ? path : `${DRIVE_API}${path}`, {
-    ...init,
-    headers,
-  });
+  const response = await bufferedFetchWithHardTimeout(
+    path.startsWith("http") ? path : `${DRIVE_API}${path}`,
+    { ...init, headers },
+    DRIVE_REQUEST_TIMEOUT_MS,
+  );
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new Error(`Google Drive ${response.status}: ${detail.slice(0, 280)}`);

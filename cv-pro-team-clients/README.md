@@ -122,6 +122,13 @@ portail de soumission OpenAI.
 npm run lint
 npx tsc --noEmit
 npm run build
+cd ..
+npm run sync:client-portal-assets
 ```
+
+La synchronisation copie les fichiers statiques versionnés du portail dans la
+passerelle `zgr-cv.pages.dev`. Elle doit être relancée après toute modification
+visuelle du portail afin que le lien court conserve ses styles, ses scripts et
+ses polices sans exposer `workers.dev` au navigateur du client.
 
 Les fichiers sont limités à 100 Mo chacun, 50 fichiers et 500 Mo par commande. Le formulaire client accepte PDF, DOC/DOCX, JPG/JPEG, PNG, WebP et HEIC/HEIF. L’équipe peut ensuite joindre manuellement tout autre type de fichier depuis ZGR CV ; le téléchargement reste forcé en pièce jointe privée.

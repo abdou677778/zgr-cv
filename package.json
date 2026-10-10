@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:spa": "vite build --config vite.spa.config.ts && node scripts/finalize-pwa.mjs",
     "build:pages": "vite build --config vite.spa.config.ts && node scripts/finalize-pwa.mjs",
+    "sync:client-portal-assets": "node scripts/sync-client-portal-assets.mjs",
     "check:worker": "wrangler deploy --config wrangler.worker.jsonc --dry-run",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",

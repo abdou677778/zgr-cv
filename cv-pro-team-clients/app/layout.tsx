@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist, Geist_Mono, Noto_Kufi_Arabic } from 'next/font/google';
 import './globals.css';
 
 const geistSans = Geist({
@@ -12,24 +12,37 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+const notoKufiArabic = Noto_Kufi_Arabic({
+  variable: '--font-arabic',
+  subsets: ['arabic'],
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+    process.env.NEXT_PUBLIC_SITE_URL || 'https://zgr-cv.pages.dev',
   ),
   title: 'CV PRO TEAM — Espace client',
   description:
     'Déposez vos documents et vos consignes pour la préparation de votre CV et de vos lettres.',
   openGraph: {
     title: 'CV PRO TEAM — Espace client',
-    description: 'Votre dossier. Vos documents. Notre expertise.',
-    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'CV PRO TEAM' }],
+    description: 'Déposez votre dossier en français ou en arabe, dans un espace privé et sécurisé.',
+    images: [
+      {
+        url: '/client-invite-cover-v2.png',
+        width: 1732,
+        height: 908,
+        alt: 'CV PRO TEAM — espace client sécurisé',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'CV PRO TEAM — Espace client',
-    description: 'Votre dossier. Vos documents. Notre expertise.',
-    images: ['/og.png'],
+    description: 'Votre dossier privé, disponible en français et en arabe.',
+    images: ['/client-invite-cover-v2.png'],
   },
+  robots: { index: false, follow: false, nocache: true },
 };
 
 export default function RootLayout({
@@ -40,7 +53,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${notoKufiArabic.variable} antialiased`}
       >
         {children}
       </body>

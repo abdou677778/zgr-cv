@@ -16,6 +16,7 @@
   },
   "vars": {
     "ZGR_PUBLIC_API_URL": "https://zgr-cv-storage-api.zgrcv-wizi.workers.dev",
+    "PUBLIC_INVITE_BASE_URL": "https://zgr-cv.pages.dev/c",
   },
   "d1_databases": [
     {

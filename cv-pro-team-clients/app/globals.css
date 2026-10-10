@@ -52,6 +52,19 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+[lang='ar'],
+.font-arabic {
+  font-family: var(--font-arabic), Tahoma, Arial, sans-serif;
+  line-height: 1.75;
+}
+
+[dir='rtl'] input[type='email'],
+[dir='rtl'] input[type='tel'],
+[dir='rtl'] code {
+  direction: ltr;
+  text-align: left;
+}
+
 :root {
   --background: oklch(0.985 0.009 232);
   --foreground: oklch(0.145 0 0);

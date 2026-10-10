@@ -1,6 +1,10 @@
 import { requireAdmin } from '@/lib/admin-auth';
 import { ensureSchema, runtimeEnv } from '@/db/runtime';
-import { createSecretToken, jsonResponse, sha256Hex } from '@/lib/order-model';
+import {
+  createInvitationToken,
+  jsonResponse,
+  sha256Hex,
+} from '@/lib/order-model';
 
 export async function POST(request: Request) {
   const denial = requireAdmin(request);
@@ -11,7 +15,7 @@ export async function POST(request: Request) {
   // Ignore a legacy validDays payload so callers cannot weaken this policy.
   await request.json().catch(() => null);
   const days = 5;
-  const token = createSecretToken();
+  const token = createInvitationToken();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   const id = crypto.randomUUID();
@@ -27,8 +31,10 @@ export async function POST(request: Request) {
     )
     .run();
 
-  const url = new URL(request.url);
-  const inviteUrl = `${url.origin}/?invite=${encodeURIComponent(token)}`;
+  const publicBase = String(
+    runtimeEnv().PUBLIC_INVITE_BASE_URL || 'https://zgr-cv.pages.dev/c',
+  ).replace(/\/$/, '');
+  const inviteUrl = `${publicBase}/${encodeURIComponent(token)}`;
   return jsonResponse(
     { id, inviteUrl, expiresAt: expiresAt.toISOString(), validDays: days },
     201,

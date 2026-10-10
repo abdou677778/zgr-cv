@@ -11,7 +11,7 @@ export {
 export type { FileCategoryId, ServiceId } from '@/lib/order-constants';
 
 export const createOrderSchema = z.object({
-  invitationToken: z.string().min(32).max(128),
+  invitationToken: z.string().min(24).max(128),
   clientName: z.string().trim().min(2).max(120),
   email: z.email().trim().max(180),
   phone: z.string().trim().max(40).default(''),
@@ -64,6 +64,14 @@ export function createOrderId(now = new Date()) {
 
 export function createSecretToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return bytesToHex(bytes);
+}
+
+// 96 bits of entropy keep the public invitation code compact while remaining
+// impractical to guess during its five-day lifetime. Existing 64-character
+// invitation tokens remain accepted for backward compatibility.
+export function createInvitationToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
   return bytesToHex(bytes);
 }
 

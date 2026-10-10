@@ -8,5 +8,9 @@
       "binding": "ZGR_API",
       "service": "zgr-cv-storage-api",
     },
+    {
+      "binding": "CLIENT_PORTAL",
+      "service": "cv-pro-team-clients",
+    },
   ],
 }

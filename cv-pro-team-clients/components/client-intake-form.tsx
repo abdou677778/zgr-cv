@@ -28,6 +28,172 @@ import {
   serviceLabels,
   type ServiceId,
 } from "@/lib/order-constants";
+import type { ClientPortalLocale } from "@/components/client-portal-shell";
+
+const formCopy = {
+  fr: {
+    byte: "o",
+    kiloByte: "Ko",
+    megaByte: "Mo",
+    genericError: "Erreur",
+    uploadError: "Erreur pendant l’envoi.",
+    connectionInterrupted: "Connexion interrompue pendant l’envoi.",
+    unavailable: "Ce lien client est indisponible.",
+    invitationRequired: "Invitation nécessaire",
+    reservedPortal: "Ce portail est réservé aux clients.",
+    invitationHelp:
+      "Ouvrez le lien personnel transmis par CV PRO TEAM. Chaque invitation protège un seul dossier pendant 5 jours.",
+    secureOpening: "Ouverture sécurisée du dossier…",
+    linkUnavailable: "Lien indisponible",
+    renewLink: "Demandez un nouveau lien à CV PRO TEAM si les 5 jours sont terminés.",
+    invalidName: "Renseignez votre nom et prénom.",
+    invalidEmail: "Renseignez un email valide.",
+    serviceRequired: "Sélectionnez au moins un service.",
+    fileRequired: "Ajoutez au moins un document.",
+    consentRequired: "Confirmez votre accord avant l’envoi.",
+    invalidForm: "Création du dossier impossible.",
+    sendFailed: "Envoi impossible.",
+    deleteFailed: "Suppression impossible.",
+    received: "Dossier reçu",
+    thankYou: "Merci, votre commande est enregistrée.",
+    referenceIntro:
+      "Vos documents et vos consignes sont maintenant regroupés sous la référence suivante.",
+    copyReference: "Copier la référence",
+    bonusReady: "Votre cadeau de bienvenue est prêt",
+    bonusDetails:
+      "Ce dossier gratuit est réservé à votre première confirmation. Les livres payants ne sont jamais inclus automatiquement.",
+    openBonus: "Ouvrir mon cadeau",
+    usableUntil: "Ce même lien reste utilisable pour consulter et modifier votre dossier jusqu’au",
+    fiveDayTerm: "terme des 5 jours",
+    editOrder: "Modifier ma commande",
+    progressLabel: "Progression du dépôt",
+    steps: ["Vos besoins", "Vos fichiers", "Confirmation"],
+    prepare: "Préparer votre dossier",
+    addDocuments: "Ajouter vos documents",
+    prepareDescription: "Les informations resteront associées à votre numéro de commande.",
+    addDescription: "Classez les fichiers avant de confirmer l’envoi.",
+    fullName: "Nom et prénom *",
+    fullNamePlaceholder: "Ex. Amine Bensalem",
+    email: "Email *",
+    emailPlaceholder: "nom@exemple.com",
+    phone: "Téléphone / WhatsApp",
+    communicationLanguage: "Langue de communication",
+    desiredDocuments: "Documents souhaités *",
+    multiService: "Vous pouvez sélectionner plusieurs services.",
+    selected: "sélectionné(s)",
+    notes: "Remarques et consignes",
+    notesPlaceholder:
+      "Ex. Basez-vous sur mon ancien CV, ajoutez mes nouveaux diplômes et retirez l’expérience...",
+    dropDocuments: "Déposez vos documents ici",
+    dropDetails: "Ancien CV, diplômes, certificats, photos et documents PDF ou Word.",
+    chooseFiles: "Choisir les fichiers",
+    limits: "100 Mo maximum par fichier · 500 Mo par commande",
+    file: "fichier(s)",
+    alreadySaved: "déjà enregistré",
+    sent: "envoyé",
+    deleteFile: "Supprimer",
+    removeFile: "Retirer",
+    consent:
+      "J’autorise CV PRO TEAM à traiter ces documents uniquement pour préparer les services sélectionnés.",
+    secureUpload: "Envoi sécurisé en cours",
+    reviewHint: "Vous pourrez vérifier chaque document avant l’envoi.",
+    privacyHint: "Aucun autre client ne peut consulter votre dossier.",
+    back: "Retour",
+    continue: "Continuer",
+    sending: "Envoi…",
+    sendFolder: "Envoyer le dossier",
+    locale: "fr-DZ",
+  },
+  ar: {
+    byte: "بايت",
+    kiloByte: "ك.ب",
+    megaByte: "م.ب",
+    genericError: "خطأ",
+    uploadError: "حدث خطأ أثناء الإرسال.",
+    connectionInterrupted: "انقطع الاتصال أثناء رفع الملفات.",
+    unavailable: "رابط العميل غير متاح.",
+    invitationRequired: "الدعوة مطلوبة",
+    reservedPortal: "هذا الفضاء مخصّص لعملاء CV PRO TEAM.",
+    invitationHelp:
+      "افتح الرابط الشخصي الذي أرسلته لك CV PRO TEAM. كل دعوة تحمي ملفًا واحدًا لمدة خمسة أيام.",
+    secureOpening: "جارٍ فتح الملف بطريقة آمنة…",
+    linkUnavailable: "الرابط غير متاح",
+    renewLink: "اطلب رابطًا جديدًا من CV PRO TEAM إذا انتهت مدة الخمسة أيام.",
+    invalidName: "يرجى إدخال الاسم واللقب.",
+    invalidEmail: "يرجى إدخال بريد إلكتروني صحيح.",
+    serviceRequired: "اختر خدمة واحدة على الأقل.",
+    fileRequired: "أضف وثيقة واحدة على الأقل.",
+    consentRequired: "يرجى تأكيد موافقتك قبل الإرسال.",
+    invalidForm: "تعذّر إنشاء الملف.",
+    sendFailed: "تعذّر إرسال الملف.",
+    deleteFailed: "تعذّر حذف الوثيقة.",
+    received: "تم استلام الملف",
+    thankYou: "شكرًا، تم تسجيل طلبك بنجاح.",
+    referenceIntro: "جُمعت وثائقك وتعليماتك تحت الرقم المرجعي الآتي.",
+    copyReference: "نسخ الرقم المرجعي",
+    bonusReady: "هدية الترحيب الخاصة بك جاهزة",
+    bonusDetails:
+      "هذا المجلد المجاني مخصّص لأول تأكيد للطلب، ولا تُضاف الكتب المدفوعة تلقائيًا.",
+    openBonus: "فتح الهدية",
+    usableUntil: "يبقى هذا الرابط صالحًا للاطلاع على ملفك وتعديله إلى غاية",
+    fiveDayTerm: "نهاية مدة الخمسة أيام",
+    editOrder: "تعديل طلبي",
+    progressLabel: "مراحل إرسال الملف",
+    steps: ["احتياجاتك", "وثائقك", "التأكيد"],
+    prepare: "حضّر ملفك",
+    addDocuments: "أضف وثائقك",
+    prepareDescription: "ستبقى هذه المعلومات مرتبطة برقم طلبك.",
+    addDescription: "صنّف الملفات قبل تأكيد الإرسال.",
+    fullName: "الاسم واللقب *",
+    fullNamePlaceholder: "مثال: أمين بن سالم",
+    email: "البريد الإلكتروني *",
+    emailPlaceholder: "name@example.com",
+    phone: "الهاتف / واتساب",
+    communicationLanguage: "لغة التواصل",
+    desiredDocuments: "الخدمات المطلوبة *",
+    multiService: "يمكنك اختيار أكثر من خدمة.",
+    selected: "خدمة محددة",
+    notes: "ملاحظات وتعليمات",
+    notesPlaceholder:
+      "مثال: اعتمدوا على سيرتي القديمة، وأضيفوا الشهادات الجديدة، واحذفوا الخبرة...",
+    dropDocuments: "ضع وثائقك هنا",
+    dropDetails: "السيرة القديمة، الشهادات، الصور، وملفات PDF أو Word.",
+    chooseFiles: "اختيار الملفات",
+    limits: "الحد الأقصى 100 م.ب لكل ملف · 500 م.ب لكل طلب",
+    file: "ملف",
+    alreadySaved: "محفوظ مسبقًا",
+    sent: "تم الإرسال",
+    deleteFile: "حذف",
+    removeFile: "إزالة",
+    consent: "أوافق على معالجة CV PRO TEAM لهذه الوثائق فقط من أجل إعداد الخدمات المختارة.",
+    secureUpload: "جارٍ الإرسال الآمن",
+    reviewHint: "يمكنك التحقق من كل وثيقة قبل إرسالها.",
+    privacyHint: "لا يمكن لأي عميل آخر الاطلاع على ملفك.",
+    back: "رجوع",
+    continue: "متابعة",
+    sending: "جارٍ الإرسال…",
+    sendFolder: "إرسال الملف",
+    locale: "ar-DZ",
+  },
+} as const;
+
+const arabicServiceLabels: Record<ServiceId, string> = {
+  CV_EUROPASS: "سيرة ذاتية Europass",
+  CV_CANADIEN: "سيرة ذاتية كندية",
+  CV_ATS: "سيرة متوافقة مع ATS",
+  CV_ARABE: "سيرة ذاتية بالعربية",
+  LETTRE_FR: "رسالة تحفيز بالفرنسية",
+  LETTRE_ENG: "رسالة تحفيز بالإنجليزية",
+  CONSEILS: "استشارة مهنية",
+};
+
+const arabicFileCategoryLabels: Record<FileCategoryId, string> = {
+  ANCIEN_CV: "سيرة ذاتية قديمة",
+  DIPLOMES_CERTIFICATS: "الشهادات والدبلومات",
+  PHOTOS: "الصور",
+  DOCUMENTS_PROFESSIONNELS: "وثائق مهنية",
+  AUTRES: "وثائق أخرى",
+};
 
 interface PendingFile {
   id: string;
@@ -68,23 +234,45 @@ interface InvitationSessionResponse {
 
 const acceptedExtensions = ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.heif";
 
-function formatBytes(value: number) {
-  if (value < 1024) return `${value} o`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} Ko`;
-  return `${(value / 1024 / 1024).toFixed(1)} Mo`;
+function formatBytes(value: number, locale: ClientPortalLocale) {
+  const t = formCopy[locale];
+  if (value < 1024) return `${value} ${t.byte}`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} ${t.kiloByte}`;
+  return `${(value / 1024 / 1024).toFixed(1)} ${t.megaByte}`;
 }
 
-async function apiError(response: Response) {
+async function apiError(response: Response, locale: ClientPortalLocale) {
   const payload = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;
+  if (locale === "ar") {
+    if (response.status === 401 || response.status === 403)
+      return "رابط الدعوة غير صالح أو انتهت مدة صلاحيته.";
+    if (response.status === 404) return "تعذّر العثور على الطلب المرتبط بهذا الرابط.";
+    if (response.status === 413) return "حجم الملفات يتجاوز الحد المسموح به.";
+    if (response.status === 422) return "يرجى التحقق من المعلومات والوثائق المطلوبة.";
+    if (response.status >= 500) return "الخدمة غير متاحة مؤقتًا. يرجى المحاولة بعد قليل.";
+  }
   return payload?.error || `Erreur ${response.status}`;
 }
 
-function uploadFile(session: OrderSession, item: PendingFile, onProgress: (ratio: number) => void) {
+function clientApiUrl(path: string) {
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/c/")) {
+    return `/c/api${path.replace(/^\/api/, "")}`;
+  }
+  return path;
+}
+
+function uploadFile(
+  session: OrderSession,
+  item: PendingFile,
+  onProgress: (ratio: number) => void,
+  locale: ClientPortalLocale,
+) {
+  const t = formCopy[locale];
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/orders/${encodeURIComponent(session.id)}/files`);
+    xhr.open("POST", clientApiUrl(`/api/orders/${encodeURIComponent(session.id)}/files`));
     xhr.setRequestHeader("x-upload-token", session.uploadToken);
     xhr.setRequestHeader("x-file-name", encodeURIComponent(item.file.name));
     xhr.setRequestHeader("x-file-category", item.category);
@@ -100,25 +288,35 @@ function uploadFile(session: OrderSession, item: PendingFile, onProgress: (ratio
       }
       try {
         const payload = JSON.parse(xhr.responseText) as { error?: string };
-        reject(new Error(payload.error || `Erreur ${xhr.status}`));
+        reject(new Error(payload.error || `${t.genericError} ${xhr.status}`));
       } catch {
-        reject(new Error(`Erreur ${xhr.status} pendant l’envoi.`));
+        reject(new Error(`${t.genericError} ${xhr.status}. ${t.uploadError}`));
       }
     });
-    xhr.addEventListener("error", () =>
-      reject(new Error("Connexion interrompue pendant l’envoi.")),
-    );
+    xhr.addEventListener("error", () => reject(new Error(t.connectionInterrupted)));
     xhr.send(item.file);
   });
 }
 
-export function ClientIntakeForm({ invitationToken }: { invitationToken: string }) {
+export function ClientIntakeForm({
+  invitationToken,
+  locale,
+}: {
+  invitationToken: string;
+  locale: ClientPortalLocale;
+}) {
+  const t = formCopy[locale];
+  const ar = locale === "ar";
+  const labels = ar ? arabicServiceLabels : serviceLabels;
+  const categoryLabels = ar ? arabicFileCategoryLabels : fileCategoryLabels;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [clientName, setClientName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [language, setLanguage] = useState<"fr" | "en" | "ar">("fr");
+  const [language, setLanguage] = useState<"fr" | "en" | "ar">(() =>
+    locale === "ar" ? "ar" : "fr",
+  );
   const [notes, setNotes] = useState("");
   const [services, setServices] = useState<ServiceId[]>([]);
   const [files, setFiles] = useState<PendingFile[]>([]);
@@ -147,12 +345,12 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
     let cancelled = false;
     void (async () => {
       try {
-        const response = await fetch("/api/orders/session", {
+        const response = await fetch(clientApiUrl("/api/orders/session"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ invitationToken }),
         });
-        if (!response.ok) throw new Error(await apiError(response));
+        if (!response.ok) throw new Error(await apiError(response, locale));
         const payload = (await response.json()) as InvitationSessionResponse;
         if (cancelled) return;
         setExpiresAt(payload.expiresAt);
@@ -171,7 +369,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
       } catch (error) {
         if (cancelled) return;
         setAccessDenied(true);
-        setMessage(error instanceof Error ? error.message : "Ce lien client est indisponible.");
+        setMessage(error instanceof Error ? error.message : t.unavailable);
       } finally {
         if (!cancelled) setRestoring(false);
       }
@@ -179,7 +377,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
     return () => {
       cancelled = true;
     };
-  }, [invitationToken]);
+  }, [invitationToken, locale, t.unavailable]);
 
   if (!invitationToken) {
     return (
@@ -188,11 +386,10 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
           <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-amber-100 text-amber-800">
             <LockKeyhole className="size-8" />
           </div>
-          <Badge className="mb-4 bg-amber-100 text-amber-900">Invitation nécessaire</Badge>
-          <h2 className="text-2xl font-black text-primary">Ce portail est réservé aux clients.</h2>
+          <Badge className="mb-4 bg-amber-100 text-amber-900">{t.invitationRequired}</Badge>
+          <h2 className="text-2xl font-black text-primary">{t.reservedPortal}</h2>
           <p className="mx-auto mt-3 max-w-xl leading-7 text-muted-foreground">
-            Ouvrez le lien personnel transmis par CV PRO TEAM. Chaque invitation protège un seul
-            dossier pendant 5 jours.
+            {t.invitationHelp}
           </p>
         </CardContent>
       </Card>
@@ -205,7 +402,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
         <CardContent className="grid min-h-64 place-items-center px-6 py-10">
           <div>
             <LoaderCircle className="mx-auto size-9 animate-spin text-accent" />
-            <p className="mt-4 font-bold text-primary">Ouverture sécurisée du dossier…</p>
+            <p className="mt-4 font-bold text-primary">{t.secureOpening}</p>
           </div>
         </CardContent>
       </Card>
@@ -219,10 +416,10 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
           <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-red-100 text-red-700">
             <LockKeyhole className="size-8" />
           </div>
-          <h2 className="text-2xl font-black text-primary">Lien indisponible</h2>
+          <h2 className="text-2xl font-black text-primary">{t.linkUnavailable}</h2>
           <p className="mx-auto mt-3 max-w-xl leading-7 text-muted-foreground">{message}</p>
           <p className="mt-3 text-sm text-muted-foreground">
-            Demandez un nouveau lien à CV PRO TEAM si les 5 jours sont terminés.
+            {t.renewLink}
           </p>
         </CardContent>
       </Card>
@@ -258,22 +455,22 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
   };
 
   const moveToFiles = () => {
-    if (clientName.trim().length < 2) return setMessage("Renseignez votre nom et prénom.");
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setMessage("Renseignez un email valide.");
-    if (!services.length) return setMessage("Sélectionnez au moins un service.");
+    if (clientName.trim().length < 2) return setMessage(t.invalidName);
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setMessage(t.invalidEmail);
+    if (!services.length) return setMessage(t.serviceRequired);
     setMessage("");
     setStep(2);
   };
 
   const submit = async () => {
-    if (!files.length && !existingFiles.length) return setMessage("Ajoutez au moins un document.");
-    if (!consent) return setMessage("Confirmez votre accord avant l’envoi.");
+    if (!files.length && !existingFiles.length) return setMessage(t.fileRequired);
+    if (!consent) return setMessage(t.consentRequired);
     setSubmitting(true);
     setMessage("");
     try {
       let activeSession = session;
       if (!activeSession) {
-        const response = await fetch("/api/orders", {
+        const response = await fetch(clientApiUrl("/api/orders"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -286,11 +483,13 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
             services,
           }),
         });
-        if (!response.ok) throw new Error(await apiError(response));
+        if (!response.ok) throw new Error(await apiError(response, locale));
         activeSession = (await response.json()) as OrderSession;
         setSession(activeSession);
       } else {
-        const response = await fetch(`/api/orders/${encodeURIComponent(activeSession.id)}`, {
+        const response = await fetch(
+          clientApiUrl(`/api/orders/${encodeURIComponent(activeSession.id)}`),
+          {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
@@ -304,16 +503,22 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
             notes,
             services,
           }),
-        });
-        if (!response.ok) throw new Error(await apiError(response));
+          },
+        );
+        if (!response.ok) throw new Error(await apiError(response, locale));
       }
 
       const pending = files.filter((item) => !item.uploaded);
       for (let index = 0; index < pending.length; index += 1) {
         const item = pending[index];
-        await uploadFile(activeSession, item, (ratio) => {
-          setProgress(pending.length ? ((index + ratio) / pending.length) * 100 : 100);
-        });
+        await uploadFile(
+          activeSession,
+          item,
+          (ratio) => {
+            setProgress(pending.length ? ((index + ratio) / pending.length) * 100 : 100);
+          },
+          locale,
+        );
         setFiles((current) =>
           current.map((candidate) =>
             candidate.id === item.id ? { ...candidate, uploaded: true } : candidate,
@@ -321,11 +526,14 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
         );
       }
 
-      const response = await fetch(`/api/orders/${encodeURIComponent(activeSession.id)}/complete`, {
-        method: "POST",
-        headers: { "x-upload-token": activeSession.uploadToken },
-      });
-      if (!response.ok) throw new Error(await apiError(response));
+      const response = await fetch(
+        clientApiUrl(`/api/orders/${encodeURIComponent(activeSession.id)}/complete`),
+        {
+          method: "POST",
+          headers: { "x-upload-token": activeSession.uploadToken },
+        },
+      );
+      if (!response.ok) throw new Error(await apiError(response, locale));
       const completion = (await response.json()) as {
         bonusShareUrl?: string;
         bonusFileCount?: number;
@@ -333,7 +541,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
       setProgress(100);
       setCompletedOrderId(activeSession.id);
       setBonusShareUrl(completion.bonusShareUrl || "");
-      const restored = await fetch("/api/orders/session", {
+      const restored = await fetch(clientApiUrl("/api/orders/session"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ invitationToken }),
@@ -345,7 +553,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
       }
       setStep(3);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Envoi impossible.");
+      setMessage(error instanceof Error ? error.message : t.sendFailed);
     } finally {
       setSubmitting(false);
     }
@@ -357,16 +565,18 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
     setMessage("");
     try {
       const response = await fetch(
-        `/api/orders/${encodeURIComponent(session.id)}/files/${encodeURIComponent(file.id)}`,
+        clientApiUrl(
+          `/api/orders/${encodeURIComponent(session.id)}/files/${encodeURIComponent(file.id)}`,
+        ),
         {
           method: "DELETE",
           headers: { "x-upload-token": session.uploadToken },
         },
       );
-      if (!response.ok) throw new Error(await apiError(response));
+      if (!response.ok) throw new Error(await apiError(response, locale));
       setExistingFiles((current) => current.filter((candidate) => candidate.id !== file.id));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Suppression impossible.");
+      setMessage(error instanceof Error ? error.message : t.deleteFailed);
     } finally {
       setSubmitting(false);
     }
@@ -379,12 +589,12 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
           <div className="mx-auto mb-5 grid size-16 place-items-center rounded-full bg-emerald-100 text-emerald-700">
             <CheckCircle2 className="size-9" />
           </div>
-          <Badge className="mb-4 bg-emerald-100 text-emerald-800">Dossier reçu</Badge>
+          <Badge className="mb-4 bg-emerald-100 text-emerald-800">{t.received}</Badge>
           <h2 className="text-2xl font-black text-primary sm:text-3xl">
-            Merci, votre commande est enregistrée.
+            {t.thankYou}
           </h2>
           <p className="mx-auto mt-3 max-w-xl leading-7 text-muted-foreground">
-            Vos documents et vos consignes sont maintenant regroupés sous la référence suivante.
+            {t.referenceIntro}
           </p>
           <div className="mx-auto mt-7 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-primary/15 bg-muted px-4 py-4">
             <code className="overflow-hidden text-ellipsis text-sm font-black text-primary sm:text-base">
@@ -393,31 +603,32 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
             <Button
               variant="outline"
               size="icon"
-              aria-label="Copier la référence"
+              aria-label={t.copyReference}
               onClick={() => navigator.clipboard.writeText(completedOrderId)}
             >
               <Copy />
             </Button>
           </div>
           {bonusShareUrl && (
-            <div className="mx-auto mt-5 max-w-md rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-left">
-              <p className="font-black text-amber-950">Votre cadeau de bienvenue est prêt</p>
-              <p className="mt-1 text-sm leading-6 text-amber-800">
-                Ce dossier gratuit est réservé à votre première confirmation. Les livres payants ne
-                sont jamais inclus automatiquement.
-              </p>
+            <div
+              className={`mx-auto mt-5 max-w-md rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 ${
+                ar ? "text-right" : "text-left"
+              }`}
+            >
+              <p className="font-black text-amber-950">{t.bonusReady}</p>
+              <p className="mt-1 text-sm leading-7 text-amber-800">{t.bonusDetails}</p>
               <Button
                 type="button"
                 className="mt-3 w-full"
                 onClick={() => window.open(bonusShareUrl, "_blank", "noopener,noreferrer")}
               >
-                Ouvrir mon cadeau
+                {t.openBonus}
               </Button>
             </div>
           )}
           <p className="mt-5 text-sm text-muted-foreground">
-            Ce même lien reste utilisable pour consulter et modifier votre dossier jusqu’au{" "}
-            {expiresAt ? new Date(expiresAt).toLocaleString("fr-DZ") : "terme des 5 jours"}.
+            {t.usableUntil}{" "}
+            {expiresAt ? new Date(expiresAt).toLocaleString(t.locale) : t.fiveDayTerm}.
           </p>
           <Button
             type="button"
@@ -429,7 +640,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
               setStep(1);
             }}
           >
-            Modifier ma commande
+            {t.editOrder}
           </Button>
         </CardContent>
       </Card>
@@ -438,8 +649,8 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
 
   return (
     <>
-      <div className="mb-5 grid grid-cols-3 gap-2" aria-label="Progression du dépôt">
-        {["Vos besoins", "Vos fichiers", "Confirmation"].map((label, index) => {
+      <div className="mb-5 grid grid-cols-3 gap-2" aria-label={t.progressLabel}>
+        {t.steps.map((label, index) => {
           const number = index + 1;
           const active = number === step;
           const completed = number < step;
@@ -452,7 +663,11 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                   : "border-border bg-card text-muted-foreground"
               }`}
             >
-              <span className="mr-1 inline-grid size-5 place-items-center rounded-full bg-white/80 text-[11px] shadow-sm sm:mr-1.5">
+              <span
+                className={`inline-grid size-5 place-items-center rounded-full bg-white/80 text-[11px] shadow-sm ${
+                  ar ? "ml-1 sm:ml-1.5" : "mr-1 sm:mr-1.5"
+                }`}
+              >
                 {completed ? "✓" : number}
               </span>
               {label}
@@ -464,12 +679,12 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
       <Card className="border-0 shadow-[0_22px_70px_-48px_rgba(13,38,63,.55)] ring-primary/10">
         <CardHeader className="border-b border-border px-5 pb-5 sm:px-7">
           <CardTitle className="text-xl font-black text-primary">
-            {step === 1 ? "Préparer votre dossier" : "Ajouter vos documents"}
+            {step === 1 ? t.prepare : t.addDocuments}
           </CardTitle>
           <CardDescription>
             {step === 1
-              ? "Les informations resteront associées à votre numéro de commande."
-              : "Classez les fichiers avant de confirmer l’envoi."}
+              ? t.prepareDescription
+              : t.addDescription}
           </CardDescription>
         </CardHeader>
 
@@ -478,31 +693,34 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
             <>
               <section className="grid gap-4 sm:grid-cols-2">
                 <label htmlFor="client-name" className="space-y-2 text-sm font-bold text-primary">
-                  Nom et prénom *
+                  {t.fullName}
                   <Input
                     id="client-name"
                     className="h-11 bg-white"
                     value={clientName}
                     onChange={(event) => setClientName(event.target.value)}
-                    placeholder="Ex. Amine Bensalem"
+                    placeholder={t.fullNamePlaceholder}
                   />
                 </label>
                 <label htmlFor="client-email" className="space-y-2 text-sm font-bold text-primary">
-                  Email *
+                  {t.email}
                   <Input
                     id="client-email"
-                    className="h-11 bg-white"
+                    className="h-11 bg-white text-left"
+                    dir="ltr"
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="nom@exemple.com"
+                    placeholder={t.emailPlaceholder}
                   />
                 </label>
                 <label htmlFor="client-phone" className="space-y-2 text-sm font-bold text-primary">
-                  Téléphone / WhatsApp
+                  {t.phone}
                   <Input
                     id="client-phone"
-                    className="h-11 bg-white"
+                    className="h-11 bg-white text-left"
+                    dir="ltr"
+                    type="tel"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
                     placeholder="+213 ..."
@@ -512,7 +730,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                   htmlFor="client-language"
                   className="space-y-2 text-sm font-bold text-primary"
                 >
-                  Langue de communication
+                  {t.communicationLanguage}
                   <select
                     id="client-language"
                     className="h-11 w-full rounded-lg border border-input bg-white px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/30"
@@ -529,14 +747,11 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
               <section>
                 <div className="mb-3 flex items-end justify-between gap-3">
                   <div>
-                    <h2 className="font-black text-primary">Documents souhaités *</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Vous pouvez sélectionner plusieurs services.
-                    </p>
+                    <h2 className="font-black text-primary">{t.desiredDocuments}</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">{t.multiService}</p>
                   </div>
                   <span className="text-xs font-semibold text-muted-foreground">
-                    {services.length} sélectionné
-                    {services.length > 1 ? "s" : ""}
+                    {services.length} {t.selected}
                   </span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -557,7 +772,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                           checked={checked}
                           onChange={() => toggleService(service)}
                         />
-                        {serviceLabels[service]}
+                        {labels[service]}
                       </label>
                     );
                   })}
@@ -568,13 +783,13 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                 htmlFor="client-notes"
                 className="block space-y-2 text-sm font-bold text-primary"
               >
-                Remarques et consignes
+                {t.notes}
                 <Textarea
                   id="client-notes"
                   className="min-h-28 resize-y bg-white font-normal leading-6"
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
-                  placeholder="Ex. Basez-vous sur mon ancien CV, ajoutez mes nouveaux diplômes et retirez l’expérience..."
+                  placeholder={t.notesPlaceholder}
                 />
               </label>
             </>
@@ -610,9 +825,9 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                 <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-white text-accent shadow-sm">
                   <UploadCloud className="size-7" />
                 </div>
-                <h2 className="font-black text-primary">Déposez vos documents ici</h2>
+                <h2 className="font-black text-primary">{t.dropDocuments}</h2>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                  Ancien CV, diplômes, certificats, photos et documents PDF ou Word.
+                  {t.dropDetails}
                 </p>
                 <Button
                   type="button"
@@ -620,10 +835,10 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                   className="mt-4 h-10 border-primary/20 bg-white px-5 text-primary"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  Choisir les fichiers
+                  {t.chooseFiles}
                 </Button>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  100 Mo maximum par fichier · 500 Mo par commande
+                  {t.limits}
                 </p>
               </section>
 
@@ -631,11 +846,10 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h2 className="font-black text-primary">
-                      {files.length + existingFiles.length} fichier
-                      {files.length + existingFiles.length > 1 ? "s" : ""}
+                      {files.length + existingFiles.length} {t.file}
                     </h2>
                     <span className="text-xs font-semibold text-muted-foreground">
-                      {formatBytes(totalBytes)}
+                      {formatBytes(totalBytes, locale)}
                     </span>
                   </div>
                   {existingFiles.map((item) => (
@@ -652,19 +866,19 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                             {item.originalName}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {formatBytes(item.sizeBytes)} · déjà enregistré
+                            {formatBytes(item.sizeBytes, locale)} · {t.alreadySaved}
                           </p>
                         </div>
                       </div>
                       <div className="flex h-10 items-center rounded-lg border border-input bg-white px-3 text-sm">
-                        {fileCategoryLabels[item.category] ?? item.category}
+                        {categoryLabels[item.category] ?? item.category}
                       </div>
                       <Button
                         type="button"
                         size="icon"
                         variant="ghost"
                         disabled={submitting}
-                        aria-label={`Supprimer ${item.originalName}`}
+                        aria-label={`${t.deleteFile} ${item.originalName}`}
                         onClick={() => void deleteExistingFile(item)}
                       >
                         <Trash2 />
@@ -685,8 +899,8 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                             {item.file.name}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {formatBytes(item.file.size)}
-                            {item.uploaded ? " · envoyé" : ""}
+                            {formatBytes(item.file.size, locale)}
+                            {item.uploaded ? ` · ${t.sent}` : ""}
                           </p>
                         </div>
                       </div>
@@ -709,7 +923,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                       >
                         {fileCategoryIds.map((category) => (
                           <option key={category} value={category}>
-                            {fileCategoryLabels[category]}
+                            {categoryLabels[category]}
                           </option>
                         ))}
                       </select>
@@ -718,7 +932,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                         size="icon"
                         variant="ghost"
                         disabled={submitting || item.uploaded}
-                        aria-label={`Retirer ${item.file.name}`}
+                        aria-label={`${t.removeFile} ${item.file.name}`}
                         onClick={() =>
                           setFiles((current) =>
                             current.filter((candidate) => candidate.id !== item.id),
@@ -739,13 +953,12 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                   checked={consent}
                   onChange={(event) => setConsent(event.target.checked)}
                 />
-                J’autorise CV PRO TEAM à traiter ces documents uniquement pour préparer les services
-                sélectionnés.
+                {t.consent}
               </label>
 
               {submitting && (
                 <Progress value={progress}>
-                  <ProgressLabel>Envoi sécurisé en cours</ProgressLabel>
+                  <ProgressLabel>{t.secureUpload}</ProgressLabel>
                   <ProgressValue>
                     {(_formattedValue, value) => `${Math.round(value ?? progress)} %`}
                   </ProgressValue>
@@ -772,8 +985,8 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
               )}
               <p>
                 {step === 1
-                  ? "Vous pourrez vérifier chaque document avant l’envoi."
-                  : "Aucun autre client ne peut consulter votre dossier."}
+                  ? t.reviewHint
+                  : t.privacyHint}
               </p>
             </div>
             <div className="flex gap-2">
@@ -788,7 +1001,7 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
                     setMessage("");
                   }}
                 >
-                  <ArrowLeft /> Retour
+                  {ar ? <ArrowRight /> : <ArrowLeft />} {t.back}
                 </Button>
               )}
               <Button
@@ -799,15 +1012,15 @@ export function ClientIntakeForm({ invitationToken }: { invitationToken: string 
               >
                 {submitting ? (
                   <>
-                    <LoaderCircle className="animate-spin" /> Envoi…
+                    <LoaderCircle className="animate-spin" /> {t.sending}
                   </>
                 ) : step === 1 ? (
                   <>
-                    Continuer <ArrowRight />
+                    {t.continue} {ar ? <ArrowLeft /> : <ArrowRight />}
                   </>
                 ) : (
                   <>
-                    Envoyer le dossier <UploadCloud />
+                    {t.sendFolder} <UploadCloud />
                   </>
                 )}
               </Button>

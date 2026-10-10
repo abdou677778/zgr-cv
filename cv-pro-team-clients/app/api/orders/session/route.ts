@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   } catch {
     return jsonResponse({ error: 'Le lien client est invalide.' }, 400);
   }
-  if (invitationToken.length < 32 || invitationToken.length > 128) {
+  if (invitationToken.length < 24 || invitationToken.length > 128) {
     return jsonResponse({ error: 'Le lien client est invalide.' }, 401);
   }
 

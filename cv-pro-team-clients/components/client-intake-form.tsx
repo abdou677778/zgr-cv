@@ -186,6 +186,7 @@ const arabicServiceLabels: Record<ServiceId, string> = {
   LETTRE_ENG: "رسالة تحفيز بالإنجليزية",
   JOB_APPLICATIONS: "التقديم في فرص العمل المتاحة",
   CONSEILS: "استشارة مهنية",
+  AUTRE: "خدمة أخرى",
 };
 
 const arabicFileCategoryLabels: Record<FileCategoryId, string> = {
@@ -756,7 +757,7 @@ export function ClientIntakeForm({
                   </span>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {serviceIds.map((service) => {
+                  {serviceIds.filter((service) => service !== "AUTRE").map((service) => {
                     const checked = services.includes(service);
                     return (
                       <label

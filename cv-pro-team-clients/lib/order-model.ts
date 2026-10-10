@@ -22,6 +22,10 @@ export const createOrderSchema = z.object({
 
 export const orderDetailsSchema = createOrderSchema.omit({
   invitationToken: true,
+}).extend({
+  // Les dossiers historiques peuvent ne contenir qu’un téléphone. Les nouvelles
+  // commandes publiques gardent l’e-mail obligatoire via createOrderSchema.
+  email: z.union([z.literal(''), z.email().trim().max(180)]),
 });
 
 export const acceptedMimeTypes = new Set([

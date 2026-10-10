@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
+  ArchiveRestore,
   CalendarDays,
   CircleCheck,
   Cloud,
@@ -11,6 +12,7 @@ import {
   FileJson,
   FileText,
   FolderOpen,
+  FolderPlus,
   LoaderCircle,
   Link2,
   PackageOpen,
@@ -30,6 +32,7 @@ import { FullPageWorkspace } from "@/components/full-page-workspace";
 import { Input } from "@/components/ui/input";
 import {
   createClientInvitation,
+  createArchivedClientOrder,
   addClientOrderSourceFile,
   addClientOrderDeliverable,
   deleteClientOrderSourceFile,
@@ -66,6 +69,7 @@ const SERVICE_LABELS: Record<string, string> = {
   LETTRE_ENG: "Lettre ENG",
   JOB_APPLICATIONS: "Candidature aux offres d’emploi",
   CONSEILS: "Conseils",
+  AUTRE: "Autre / non précisé",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -87,6 +91,23 @@ const STATUS_STYLES: Record<string, string> = {
   DELIVERED: "bg-emerald-100 text-emerald-800",
   ARCHIVED: "bg-zinc-100 text-zinc-700",
 };
+
+const LEGACY_ARCHIVE_FIRST_YEAR = 2022;
+const LEGACY_ARCHIVE_LAST_YEAR = 2025;
+const LEGACY_ARCHIVE_YEARS = [2025, 2024, 2023, 2022] as const;
+
+function emptyArchiveDraft() {
+  return {
+    clientName: "",
+    email: "",
+    phone: "",
+    facebookUrl: "",
+    language: "fr" as "fr" | "en" | "ar",
+    notes: "",
+    services: ["AUTRE"],
+    archiveDate: `${LEGACY_ARCHIVE_LAST_YEAR}-01-01`,
+  };
+}
 
 const EVENT_LABELS: Record<string, string> = {
   ORDER_CREATED: "Commande créée",
@@ -136,6 +157,7 @@ export function ClientOrdersDialog({
   activeOrderId,
   onCreateCurrentDeliverable,
   user,
+  archiveMode = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -145,6 +167,7 @@ export function ClientOrdersDialog({
     order: ClientOrderSummary,
   ) => Promise<{ file: File; service: string }>;
   user: SessionUser;
+  archiveMode?: boolean;
 }) {
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const deliverableInputRef = useRef<HTMLInputElement>(null);
@@ -153,8 +176,13 @@ export function ClientOrdersDialog({
   const [orders, setOrders] = useState<ClientOrderSummary[]>([]);
   const [detail, setDetail] = useState<ClientOrderDetail | null>(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("ALL");
-  const [archiveYear, setArchiveYear] = useState(new Date().getFullYear());
+  const [status, setStatus] = useState(archiveMode ? "ARCHIVED" : "ALL");
+  const [archiveYear, setArchiveYear] = useState(
+    archiveMode ? LEGACY_ARCHIVE_LAST_YEAR : new Date().getFullYear(),
+  );
+  const [archiveListYear, setArchiveListYear] = useState("ALL");
+  const [archiveFormOpen, setArchiveFormOpen] = useState(false);
+  const [archiveDraft, setArchiveDraft] = useState(emptyArchiveDraft);
   const [teamMembers, setTeamMembers] = useState<OrderTeamMember[]>([]);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -193,28 +221,41 @@ export function ClientOrdersDialog({
     }
   };
 
-  const loadOrders = useCallback(async (selectedId?: string) => {
-    setBusy("refresh");
-    setMessage("");
-    try {
-      const [next, members] = await Promise.all([listClientOrders(), listOrderTeamMembers()]);
-      setOrders(next);
-      setTeamMembers(members);
-      if (selectedId && next.some((order) => order.id === selectedId)) {
-        setDetail(await getClientOrder(selectedId));
-      } else if (next[0]) {
-        setDetail(await getClientOrder(next[0].id));
-      } else {
+  const loadOrders = useCallback(
+    async (selectedId?: string) => {
+      setBusy("refresh");
+      setMessage("");
+      try {
+        const [next, members] = await Promise.all([listClientOrders(), listOrderTeamMembers()]);
+        setOrders(next);
+        setTeamMembers(members);
+        const selectable = archiveMode
+          ? next.filter((order) => {
+              const year = new Date(order.createdAt).getUTCFullYear();
+              return (
+                order.status === "ARCHIVED" &&
+                year >= LEGACY_ARCHIVE_FIRST_YEAR &&
+                year <= LEGACY_ARCHIVE_LAST_YEAR
+              );
+            })
+          : next;
+        if (selectedId && selectable.some((order) => order.id === selectedId)) {
+          setDetail(await getClientOrder(selectedId));
+        } else if (selectable[0]) {
+          setDetail(await getClientOrder(selectable[0].id));
+        } else {
+          setDetail(null);
+        }
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Commandes indisponibles.");
+        setOrders([]);
         setDetail(null);
+      } finally {
+        setBusy("");
       }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Commandes indisponibles.");
-      setOrders([]);
-      setDetail(null);
-    } finally {
-      setBusy("");
-    }
-  }, []);
+    },
+    [archiveMode],
+  );
 
   const selectedOrderId = detail?.order.id;
   const refresh = useCallback(
@@ -223,8 +264,11 @@ export function ClientOrdersDialog({
   );
 
   useEffect(() => {
-    if (open) void loadOrders();
-  }, [loadOrders, open]);
+    if (!open) return;
+    setStatus(archiveMode ? "ARCHIVED" : "ALL");
+    if (archiveMode) setArchiveYear(LEGACY_ARCHIVE_LAST_YEAR);
+    void loadOrders();
+  }, [archiveMode, loadOrders, open]);
 
   const firstOrderService = detail?.order.services[0] || "AUTRE";
   useEffect(() => {
@@ -248,27 +292,34 @@ export function ClientOrdersDialog({
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
     return orders.filter((order) => {
-      if (status !== "ALL" && order.status !== status) return false;
+      const orderYear = new Date(order.createdAt).getUTCFullYear();
+      if (archiveMode) {
+        if (order.status !== "ARCHIVED") return false;
+        if (orderYear < LEGACY_ARCHIVE_FIRST_YEAR || orderYear > LEGACY_ARCHIVE_LAST_YEAR) {
+          return false;
+        }
+        if (archiveListYear !== "ALL" && orderYear !== Number(archiveListYear)) return false;
+      } else if (status !== "ALL" && order.status !== status) return false;
       if (!query) return true;
       return [order.id, order.clientName, order.email, order.phone, ...order.services].some(
         (value) => value.toLocaleLowerCase("fr").includes(query),
       );
     });
-  }, [orders, search, status]);
+  }, [archiveListYear, archiveMode, orders, search, status]);
 
   const grouped = useMemo(() => {
     const result = new Map<string, ClientOrderSummary[]>();
     for (const order of filtered) {
       const label =
-        status === "ARCHIVED"
+        archiveMode || status === "ARCHIVED"
           ? `Archives ${new Date(order.createdAt).getFullYear()}`
           : dayLabel(order.createdAt);
       result.set(label, [...(result.get(label) ?? []), order]);
     }
     return [...result.entries()].sort((left, right) =>
-      status === "ARCHIVED" ? right[0].localeCompare(left[0]) : 0,
+      archiveMode || status === "ARCHIVED" ? right[0].localeCompare(left[0]) : 0,
     );
-  }, [filtered, status]);
+  }, [archiveMode, filtered, status]);
 
   const openOrder = async (orderId: string) => {
     setBusy(`open:${orderId}`);
@@ -319,11 +370,30 @@ export function ClientOrdersDialog({
         await addClientOrderSourceFile(detail.order.id, file);
         addedCount += 1;
       }
+      let driveSynchronized = false;
+      let driveWarning = "";
+      if (archiveMode) {
+        try {
+          await syncClientOrderDrive(detail.order.id);
+          driveSynchronized = true;
+        } catch (error) {
+          driveWarning =
+            error instanceof Error
+              ? error.message
+              : "La synchronisation Drive devra être relancée.";
+        }
+      }
       await refresh();
       setMessage(
         `${files.length} document${files.length > 1 ? "s" : ""} ajouté${
           files.length > 1 ? "s" : ""
-        } manuellement au dossier de ${detail.order.clientName}.`,
+        } au dossier de ${detail.order.clientName}.${
+          driveSynchronized
+            ? " Dossier Google Drive synchronisé automatiquement."
+            : driveWarning
+              ? ` Les fichiers sont enregistrés en privé ; Drive : ${driveWarning}`
+              : ""
+        }`,
       );
     } catch (error) {
       if (addedCount) await refresh();
@@ -382,7 +452,7 @@ export function ClientOrdersDialog({
       setMessage("Le nom du client doit contenir au moins 2 caractères.");
       return;
     }
-    if (!/^\S+@\S+\.\S+$/.test(editDraft.email.trim())) {
+    if (editDraft.email.trim() && !/^\S+@\S+\.\S+$/.test(editDraft.email.trim())) {
       setMessage("Saisissez une adresse email valide.");
       return;
     }
@@ -472,6 +542,44 @@ export function ClientOrdersDialog({
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Import des archives impossible.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const createManualArchive = async () => {
+    if (archiveDraft.clientName.trim().length < 2) {
+      setMessage("Le nom du client doit contenir au moins 2 caractères.");
+      return;
+    }
+    if (archiveDraft.email.trim() && !/^\S+@\S+\.\S+$/.test(archiveDraft.email.trim())) {
+      setMessage("Saisissez une adresse email valide ou laissez le champ vide.");
+      return;
+    }
+    if (!archiveDraft.services.length) {
+      setMessage("Sélectionnez au moins un service ou « Autre / non précisé ».");
+      return;
+    }
+    setBusy("archive-create");
+    setMessage("");
+    try {
+      const created = await createArchivedClientOrder(archiveDraft);
+      let driveMessage = "";
+      try {
+        await syncClientOrderDrive(created.id);
+        driveMessage = " Le dossier Drive structuré a été créé.";
+      } catch (error) {
+        driveMessage = ` La fiche est sauvegardée ; la synchronisation Drive reste en attente : ${
+          error instanceof Error ? error.message : "service indisponible"
+        }`;
+      }
+      setArchiveFormOpen(false);
+      setArchiveDraft(emptyArchiveDraft());
+      setArchiveListYear(String(new Date(created.createdAt).getUTCFullYear()));
+      await loadOrders(created.id);
+      setMessage(`Ancien dossier créé pour ${created.clientName}.${driveMessage}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Création de l’archive impossible.");
     } finally {
       setBusy("");
     }
@@ -644,25 +752,37 @@ export function ClientOrdersDialog({
     <FullPageWorkspace
       open={open}
       onOpenChange={onOpenChange}
-      title="Commandes CV PRO TEAM"
-      description="Dossiers reçus par date, Pack IA, documents sources et versions JSON ZGR."
-      icon={<PackageOpen className="h-5 w-5" />}
-      iconClassName="bg-cyan-100 text-cyan-800"
+      title={archiveMode ? "Archive clients 2022–2025" : "Commandes CV PRO TEAM"}
+      description={
+        archiveMode
+          ? "Anciens dossiers sans JSON : coordonnées, documents privés et classement Google Drive par année, mois et client."
+          : "Dossiers reçus par date, Pack IA, documents sources et versions JSON ZGR."
+      }
+      icon={
+        archiveMode ? <ArchiveRestore className="h-5 w-5" /> : <PackageOpen className="h-5 w-5" />
+      }
+      iconClassName={archiveMode ? "bg-amber-100 text-amber-800" : "bg-cyan-100 text-cyan-800"}
       actions={
         canAdminOrders ? (
           <Button
             type="button"
             size="sm"
-            className="bg-cyan-700 hover:bg-cyan-800"
-            onClick={() => void createInvitation()}
+            className={
+              archiveMode ? "bg-amber-700 hover:bg-amber-800" : "bg-cyan-700 hover:bg-cyan-800"
+            }
+            onClick={() =>
+              archiveMode ? setArchiveFormOpen((current) => !current) : void createInvitation()
+            }
             disabled={Boolean(busy)}
           >
-            {busy === "invite" ? (
+            {busy === "invite" || busy === "archive-create" ? (
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            ) : archiveMode ? (
+              <FolderPlus className="mr-2 h-4 w-4" />
             ) : (
               <Link2 className="mr-2 h-4 w-4" />
             )}
-            Nouveau lien client
+            {archiveMode ? "Nouveau dossier archivé" : "Nouveau lien client"}
           </Button>
         ) : undefined
       }
@@ -715,6 +835,165 @@ export function ClientOrdersDialog({
           }}
         />
 
+        {archiveMode && archiveFormOpen && (
+          <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-black text-amber-950">Créer un ancien dossier client</h2>
+                <p className="mt-1 text-xs leading-5 text-amber-800">
+                  Le JSON n’est pas obligatoire. La date détermine automatiquement le classement
+                  Drive dans l’année et le mois correspondants.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setArchiveFormOpen(false)}
+              >
+                Fermer
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label className="space-y-1 text-xs font-bold text-slate-700">
+                Nom du client *
+                <Input
+                  value={archiveDraft.clientName}
+                  onChange={(event) =>
+                    setArchiveDraft((current) => ({
+                      ...current,
+                      clientName: event.target.value,
+                    }))
+                  }
+                  placeholder="Nom et prénom"
+                  className="bg-white"
+                />
+              </label>
+              <label className="space-y-1 text-xs font-bold text-slate-700">
+                Date de l’ancienne commande *
+                <Input
+                  type="date"
+                  min={`${LEGACY_ARCHIVE_FIRST_YEAR}-01-01`}
+                  max={`${LEGACY_ARCHIVE_LAST_YEAR}-12-31`}
+                  value={archiveDraft.archiveDate}
+                  onChange={(event) =>
+                    setArchiveDraft((current) => ({
+                      ...current,
+                      archiveDate: event.target.value,
+                    }))
+                  }
+                  className="bg-white"
+                />
+              </label>
+              <label className="space-y-1 text-xs font-bold text-slate-700">
+                Email
+                <Input
+                  type="email"
+                  value={archiveDraft.email}
+                  onChange={(event) =>
+                    setArchiveDraft((current) => ({ ...current, email: event.target.value }))
+                  }
+                  placeholder="Facultatif"
+                  className="bg-white"
+                />
+              </label>
+              <label className="space-y-1 text-xs font-bold text-slate-700">
+                Téléphone / WhatsApp
+                <Input
+                  value={archiveDraft.phone}
+                  onChange={(event) =>
+                    setArchiveDraft((current) => ({ ...current, phone: event.target.value }))
+                  }
+                  placeholder="Facultatif"
+                  className="bg-white"
+                />
+              </label>
+              <label className="space-y-1 text-xs font-bold text-slate-700 md:col-span-2">
+                Lien Facebook
+                <Input
+                  type="url"
+                  value={archiveDraft.facebookUrl}
+                  onChange={(event) =>
+                    setArchiveDraft((current) => ({
+                      ...current,
+                      facebookUrl: event.target.value,
+                    }))
+                  }
+                  placeholder="https://www.facebook.com/... (facultatif)"
+                  className="bg-white"
+                />
+              </label>
+              <label className="space-y-1 text-xs font-bold text-slate-700">
+                Langue
+                <select
+                  value={archiveDraft.language}
+                  onChange={(event) =>
+                    setArchiveDraft((current) => ({
+                      ...current,
+                      language: event.target.value as "fr" | "en" | "ar",
+                    }))
+                  }
+                  className="h-8 w-full rounded-md border bg-white px-3 text-sm"
+                >
+                  <option value="fr">Français</option>
+                  <option value="en">English</option>
+                  <option value="ar">العربية</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-bold text-slate-700">
+                Service initial
+                <select
+                  value={archiveDraft.services[0] || "AUTRE"}
+                  onChange={(event) =>
+                    setArchiveDraft((current) => ({
+                      ...current,
+                      services: [event.target.value],
+                    }))
+                  }
+                  className="h-8 w-full rounded-md border bg-white px-3 text-sm"
+                >
+                  {Object.entries(SERVICE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-bold text-slate-700 md:col-span-2 xl:col-span-4">
+                Informations et remarques connues
+                <textarea
+                  value={archiveDraft.notes}
+                  onChange={(event) =>
+                    setArchiveDraft((current) => ({ ...current, notes: event.target.value }))
+                  }
+                  rows={3}
+                  className="w-full resize-y rounded-md border bg-white px-3 py-2 text-sm font-normal leading-6"
+                  placeholder="Poste, pays, service demandé, remarques historiques…"
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-amber-800">
+                Après création, ouvrez la fiche et utilisez « Ajouter des fichiers ». Chaque ajout
+                est ensuite synchronisé vers le même dossier Drive.
+              </p>
+              <Button
+                type="button"
+                className="bg-amber-700 hover:bg-amber-800"
+                onClick={() => void createManualArchive()}
+                disabled={Boolean(busy)}
+              >
+                {busy === "archive-create" ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FolderPlus className="mr-2 h-4 w-4" />
+                )}
+                Créer et préparer le dossier Drive
+              </Button>
+            </div>
+          </section>
+        )}
+
         <div className="grid min-h-[620px] gap-4 lg:grid-cols-[23rem_minmax(0,1fr)]">
           <aside className="space-y-3 rounded-xl border bg-slate-50/80 p-3">
             <div className="flex gap-2">
@@ -737,18 +1016,34 @@ export function ClientOrdersDialog({
                 <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
               </Button>
             </div>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-              className="h-9 w-full rounded-md border bg-white px-3 text-sm"
-            >
-              <option value="ALL">Tous les statuts</option>
-              {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            {archiveMode ? (
+              <select
+                value={archiveListYear}
+                onChange={(event) => setArchiveListYear(event.target.value)}
+                className="h-9 w-full rounded-md border bg-white px-3 text-sm"
+                aria-label="Filtrer les archives par année"
+              >
+                <option value="ALL">Toutes les années · 2022–2025</option>
+                {LEGACY_ARCHIVE_YEARS.map((year) => (
+                  <option key={year} value={year}>
+                    Archive {year}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+                className="h-9 w-full rounded-md border bg-white px-3 text-sm"
+              >
+                <option value="ALL">Tous les statuts</option>
+                {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {canAdminOrders && (
               <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2.5">
@@ -756,8 +1051,8 @@ export function ClientOrdersDialog({
                 <div className="mt-2 flex gap-2">
                   <Input
                     type="number"
-                    min={2000}
-                    max={new Date().getFullYear()}
+                    min={archiveMode ? LEGACY_ARCHIVE_FIRST_YEAR : 2000}
+                    max={archiveMode ? LEGACY_ARCHIVE_LAST_YEAR : new Date().getFullYear()}
                     value={archiveYear}
                     onChange={(event) => setArchiveYear(Number(event.target.value))}
                     className="h-8 w-24 bg-white text-xs"
@@ -776,12 +1071,12 @@ export function ClientOrdersDialog({
                     ) : (
                       <Upload className="mr-1.5 h-3.5 w-3.5" />
                     )}
-                    Importer JSON / CSV
+                    Importer une liste CSV / JSON
                   </Button>
                 </div>
                 <p className="mt-1.5 text-[10px] leading-relaxed text-amber-800">
-                  Contrôle anti-doublon actif. Une ligne dont la date ne correspond pas à l’année
-                  sélectionnée est refusée et signalée sans bloquer les autres.
+                  Import en masse des fiches clients uniquement, sans JSON de CV. Contrôle
+                  anti-doublon actif ; les documents sont ajoutés ensuite dans chaque fiche.
                 </p>
               </div>
             )}
@@ -881,7 +1176,8 @@ export function ClientOrdersDialog({
                       </p>
                       <p className="mt-2 text-xs text-muted-foreground">
                         {detail.order.email}
-                        {detail.order.phone ? ` · ${detail.order.phone}` : ""} · Reçue{" "}
+                        {detail.order.email && detail.order.phone ? " · " : ""}
+                        {detail.order.phone || ""} · {archiveMode ? "Commande du" : "Reçue"}{" "}
                         {new Date(detail.order.createdAt).toLocaleString("fr-DZ")}
                       </p>
                       <div className="mt-3 grid max-w-2xl gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
@@ -1296,7 +1592,9 @@ export function ClientOrdersDialog({
                     <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
                       {detail.jsonVersions.length === 0 ? (
                         <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
-                          Téléchargez le Pack IA, traitez le dossier puis importez le JSON produit.
+                          {archiveMode
+                            ? "Aucun JSON dans cet ancien dossier. Vous pourrez en produire ou en importer un plus tard sans perdre les documents archivés."
+                            : "Téléchargez le Pack IA, traitez le dossier puis importez le JSON produit."}
                         </div>
                       ) : (
                         detail.jsonVersions.map((version) => {

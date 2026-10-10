@@ -684,6 +684,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     approved: 0,
   });
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
+  const [clientArchivesOpen, setClientArchivesOpen] = useState(false);
   const [canadaOpportunitiesOpen, setCanadaOpportunitiesOpen] = useState(false);
   const [profileOpportunitiesOpen, setProfileOpportunitiesOpen] = useState(false);
   const [opportunityPlan, setOpportunityPlan] = useState<OpportunityPlan | undefined>();
@@ -4632,7 +4633,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             onWorkflowCountsChange={setWorkflowCounts}
             onOpenOrderArchives={() => {
               setClientDatabaseOpen(false);
-              setClientOrdersOpen(true);
+              setClientArchivesOpen(true);
             }}
           />
         ) : null}
@@ -4641,6 +4642,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             open={clientOrdersOpen}
             onOpenChange={setClientOrdersOpen}
             user={user}
+            onOpenJson={openClientOrderJson}
+            activeOrderId={activeClientOrder?.id}
+            onCreateCurrentDeliverable={createCurrentOrderDeliverable}
+          />
+        ) : null}
+        {clientArchivesOpen ? (
+          <ClientOrdersDialog
+            open={clientArchivesOpen}
+            onOpenChange={setClientArchivesOpen}
+            user={user}
+            archiveMode
             onOpenJson={openClientOrderJson}
             activeOrderId={activeClientOrder?.id}
             onCreateCurrentDeliverable={createCurrentOrderDeliverable}

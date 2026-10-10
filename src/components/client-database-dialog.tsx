@@ -947,7 +947,7 @@ export function ClientDatabaseDialog({
       actions={
         onOpenOrderArchives ? (
           <Button type="button" size="sm" variant="outline" onClick={onOpenOrderArchives}>
-            <ArchiveRestore className="mr-2 h-4 w-4" /> Archives des commandes
+            <ArchiveRestore className="mr-2 h-4 w-4" /> Archive 2022–2025
           </Button>
         ) : undefined
       }

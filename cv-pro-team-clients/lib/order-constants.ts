@@ -7,6 +7,7 @@ export const serviceIds = [
   'LETTRE_ENG',
   'JOB_APPLICATIONS',
   'CONSEILS',
+  'AUTRE',
 ] as const;
 
 export const fileCategoryIds = [
@@ -26,6 +27,7 @@ export const serviceLabels: Record<(typeof serviceIds)[number], string> = {
   LETTRE_ENG: 'Lettre ENG',
   JOB_APPLICATIONS: 'Candidature aux offres d’emploi',
   CONSEILS: 'Conseils',
+  AUTRE: 'Autre / non précisé',
 };
 
 export const fileCategoryLabels: Record<

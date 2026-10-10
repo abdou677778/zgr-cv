@@ -155,6 +155,26 @@ export async function importArchivedClientOrders(file: File, year: number) {
   }>(response);
 }
 
+export interface ArchivedClientOrderInput {
+  clientName: string;
+  email: string;
+  phone: string;
+  facebookUrl: string;
+  language: "fr" | "en" | "ar";
+  notes: string;
+  services: string[];
+  archiveDate: string;
+}
+
+export async function createArchivedClientOrder(input: ArchivedClientOrderInput) {
+  const response = await authenticatedFetch("/api/admin/client-orders/archive-create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return responseJson<{ order: ClientOrderSummary }>(response).then((body) => body.order);
+}
+
 export async function createClientInvitation(validDays = 5) {
   const response = await authenticatedFetch("/api/admin/client-orders/invitations", {
     method: "POST",

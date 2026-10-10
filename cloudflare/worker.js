@@ -4823,6 +4823,7 @@ async function route(request, env, ctx) {
     const orderAdminOnly =
       request.method === "DELETE" ||
       /\/invitations(?:\/|$)/.test(url.pathname) ||
+      /\/archive-create$/.test(url.pathname) ||
       /\/archive-import$/.test(url.pathname);
     if (orderAdminOnly && !canAdministerOrders(actor))
       return json({ error: "Rôle Admin clients requis pour cette action." }, 403, origin);

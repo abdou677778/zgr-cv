@@ -6,6 +6,7 @@ import {
   approveDatesByConfidence,
   buildManifest,
   clientPathParts,
+  prepareDriveRootRepair,
   sourceEligibility,
   validateClient,
 } from "./migrate-onedrive-archives.mjs";
@@ -123,4 +124,25 @@ test("les décisions manuelles corrigent une date avec une preuve traçable", ()
   assert.equal(client.archiveDate, "2022-11-08");
   assert.equal(client.dateConfirmed, true);
   assert.equal(client.dateConfirmation.method, "manual-source-evidence-review");
+});
+
+test("la réparation Drive force la resynchronisation sans perdre les fichiers importés", () => {
+  const manifest = buildManifest(
+    [inventoryFile("Client déjà migré/CV.pdf", 128, "2023-05-10T10:00:00.000Z")],
+    "onedrive:archives",
+  );
+  const client = manifest.clients[0];
+  client.orderId = "CPT-20230510-ABC123";
+  client.driveFolderId = "ancien-dossier-drive";
+  client.driveSyncOffset = 10;
+  client.status = "completed";
+  client.files[0].status = "uploaded";
+
+  assert.equal(prepareDriveRootRepair(manifest, "12ZWlrOkzQUlW52F1QCU0FaZjxzxwK_Qj"), 1);
+  assert.equal(client.status, "created");
+  assert.equal(client.files[0].status, "uploaded");
+  assert.equal(client.driveFolderId, "");
+  assert.equal(client.driveSyncOffset, undefined);
+  assert.equal(client.driveRootRepair.previousDriveFolderId, "ancien-dossier-drive");
+  assert.equal(manifest.expectedDriveRootId, "12ZWlrOkzQUlW52F1QCU0FaZjxzxwK_Qj");
 });

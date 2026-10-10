@@ -366,7 +366,9 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
   const env = runtimeEnv();
   const rootId = env.GOOGLE_DRIVE_ROOT_FOLDER_ID!;
   const startedAt = new Date().toISOString();
-  const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  // A terminated Worker request can leave SYNCING behind. Batches are deliberately
+  // small, so five minutes is enough to avoid overlap while recovering promptly.
+  const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
   const lock = await env.DB.prepare(
     "UPDATE orders SET drive_status = 'SYNCING', updated_at = ? WHERE id = ? AND (drive_status <> 'SYNCING' OR updated_at < ?)",
@@ -542,6 +544,7 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
     });
     return {
       configured: true as const,
+      rootFolderId: rootId,
       driveFolderId: clientFolder,
       complete,
       syncedFileCount: selectedFiles.length,

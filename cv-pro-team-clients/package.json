@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "deploy:production": "npm run build && wrangler deploy --config wrangler.production.jsonc --keep-vars",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint app components/client-intake-form.tsx db lib",
     "format": "oxfmt",

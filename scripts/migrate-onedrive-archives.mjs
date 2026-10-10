@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { access, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,7 +14,7 @@ const MAX_ORDER_BYTES = 500 * 1024 * 1024;
 const MAX_ARCHIVE_FILES = 500;
 const ARCHIVE_FIRST_YEAR = 2022;
 const ARCHIVE_LAST_YEAR = 2025;
-const DRIVE_SYNC_BATCH_SIZE = 10;
+const DRIVE_SYNC_BATCH_SIZE = 3;
 
 const sourceContainerPatterns = [
   /(?:^|\b)waiting\s+for\s+payment(?:\b|$)/i,
@@ -59,6 +60,11 @@ Application de décisions manuelles documentées :
     --manifest ".zgr-migrations/archive-2022-2025.json" \\
     --decisions ".zgr-migrations/archive-date-decisions.json"
 
+Correction contrôlée du dossier racine Google Drive :
+  node scripts/migrate-onedrive-archives.mjs prepare-drive-repair \\
+    --manifest ".zgr-migrations/archive-2022-2025.json" \\
+    --drive-root-id "ID_DOSSIER_CORRECT"
+
 Étape 3 — copie réelle, reprenable et non destructive :
   $env:ZGR_ARCHIVE_ADMIN_TOKEN="..."
   node scripts/migrate-onedrive-archives.mjs migrate \\
@@ -73,6 +79,9 @@ Options :
   --accept-inferred-dates Accepte la date déduite du plus ancien fichier
   --only-confirmed        Migre uniquement les clients dont la date est confirmée
   --continue-on-error     Continue avec le client suivant après une erreur
+  --expected-drive-root   Refuse Drive si la racine ne correspond pas à cet ID
+  --max-clients <nombre>  Limite un passage de test à ce nombre de clients
+  --client-folder <nom>   Traite uniquement ce dossier source exact
   --review-report <csv>   Rapport CSV des dates et exclusions à vérifier
 
 Les jetons ne doivent jamais être placés dans le manifeste ni dans Git.`;
@@ -489,6 +498,30 @@ function applyDateDecisions(manifest, decisions, confirmedAt = new Date().toISOS
   return applied;
 }
 
+function prepareDriveRootRepair(manifest, driveRootId, preparedAt = new Date().toISOString()) {
+  const normalizedRootId = String(driveRootId || "").trim();
+  if (!/^[A-Za-z0-9_-]{10,100}$/.test(normalizedRootId)) {
+    throw new Error("Identifiant du dossier racine Google Drive invalide.");
+  }
+  let reset = 0;
+  for (const client of manifest.clients || []) {
+    if (client.eligibility === "excluded" || client.status === "excluded" || !client.orderId) {
+      continue;
+    }
+    client.driveRootRepair = {
+      preparedAt,
+      targetRootId: normalizedRootId,
+      ...(client.driveFolderId ? { previousDriveFolderId: client.driveFolderId } : {}),
+    };
+    client.driveFolderId = "";
+    delete client.driveSyncOffset;
+    if (client.status === "completed") client.status = "created";
+    reset += 1;
+  }
+  manifest.expectedDriveRootId = normalizedRootId;
+  return reset;
+}
+
 async function atomicWriteJson(path, value) {
   const target = resolve(path);
   const temporary = `${target}.tmp`;
@@ -545,12 +578,22 @@ async function apiRequest(baseUrl, path, token, actor, init = {}, attempts = 4) 
     }
     if (response.ok) return body;
     if (attempt < attempts && (response.status === 429 || response.status >= 500)) {
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 2 ** (attempt - 1) * 1000));
+      const driveBusy = /synchronisation Google Drive est déjà en cours/i.test(body.error || "");
+      const delay = driveBusy
+        ? Math.min(attempt * 15_000, 30_000)
+        : 2 ** (attempt - 1) * 2_000;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, delay));
       continue;
     }
     throw new Error(`${response.status} ${body.error || response.statusText}`);
   }
   throw new Error("API indisponible après plusieurs tentatives.");
+}
+
+async function sha256File(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
 }
 
 async function createArchive(client, context) {
@@ -600,29 +643,52 @@ async function uploadFile(client, file, context, temporaryDirectory) {
       `taille différente pour ${file.sourcePath} (${localStat.size} au lieu de ${file.sizeBytes})`,
     );
   }
-  const bytes = await readFile(localPath);
-  const form = new FormData();
-  form.append("file", new Blob([bytes], { type: file.mimeType }), file.name);
-  form.append("category", file.category);
-  form.append("sourceModifiedAt", file.modifiedAt);
-  form.append("sourceRelativePath", `${client.sourceFolder}/${file.relativePath}`);
+  const fileHash = await sha256File(localPath);
+  const encodedName = Buffer.from(file.name, "utf8").toString("base64url");
+  const encodedSourcePath = Buffer.from(
+    `${client.sourceFolder}/${file.relativePath}`,
+    "utf8",
+  ).toString("base64url");
   try {
-    await apiRequest(
-      context.portalUrl,
-      `/api/admin/orders/${encodeURIComponent(client.orderId)}/files`,
-      context.token,
-      context.actor,
-      { method: "POST", body: form },
-    );
+    let uploaded = false;
+    for (let attempt = 1; attempt <= 5 && !uploaded; attempt += 1) {
+      const response = await fetch(
+        `${context.portalUrl.replace(/\/$/, "")}/api/admin/orders/${encodeURIComponent(client.orderId)}/archive-file`,
+        {
+          method: "POST",
+          headers: {
+            "x-admin-token": context.token,
+            "X-ZGR-Actor": context.actor,
+            "x-zgr-file-name-b64": encodedName,
+            "x-zgr-source-path-b64": encodedSourcePath,
+            "x-zgr-source-modified-at": file.modifiedAt,
+            "x-zgr-category": file.category,
+            "x-zgr-sha256": fileHash,
+            "Content-Type": file.mimeType || "application/octet-stream",
+            "Content-Length": String(localStat.size),
+          },
+          body: createReadStream(localPath),
+          duplex: "half",
+        },
+      );
+      const responseText = await response.text();
+      if (response.ok) {
+        uploaded = true;
+        break;
+      }
+      if (response.status === 409) {
+        file.status = "duplicate";
+        file.uploadedAt = new Date().toISOString();
+        return;
+      }
+      if (attempt < 5 && (response.status === 429 || response.status >= 500)) {
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, attempt * 3_000));
+        continue;
+      }
+      throw new Error(`${response.status} ${responseText.slice(0, 500)}`);
+    }
     file.status = "uploaded";
     file.uploadedAt = new Date().toISOString();
-  } catch (error) {
-    if (/409\s/.test(String(error))) {
-      file.status = "duplicate";
-      file.uploadedAt = new Date().toISOString();
-      return;
-    }
-    throw error;
   } finally {
     await rm(localPath, { force: true });
   }
@@ -637,7 +703,11 @@ async function syncDrive(client, context, onProgress) {
       context.token,
       context.actor,
       { method: "POST" },
+      14,
     );
+    if (context.expectedDriveRoot && payload.rootFolderId !== context.expectedDriveRoot) {
+      throw new Error(`Racine Google Drive refusée : ${payload.rootFolderId || "absente"}`);
+    }
     client.driveFolderId = payload.driveFolderId || client.driveFolderId || "";
     if (payload.complete !== false) {
       delete client.driveSyncOffset;
@@ -738,6 +808,20 @@ async function applyDateDecisionsCommand(options) {
   console.log(`Rapport actualisé : ${reviewReportPath}`);
 }
 
+async function prepareDriveRepairCommand(options) {
+  if (!options.manifest || !options["drive-root-id"]) {
+    throw new Error("--manifest et --drive-root-id sont obligatoires.");
+  }
+  const manifestPath = resolve(options.manifest);
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.clients)) {
+    throw new Error("Format de manifeste non pris en charge.");
+  }
+  const reset = prepareDriveRootRepair(manifest, options["drive-root-id"]);
+  await atomicWriteJson(manifestPath, manifest);
+  console.log(`${reset} dossier(s) préparé(s) pour la nouvelle racine Google Drive.`);
+}
+
 async function migrateCommand(options) {
   if (!options.manifest) throw new Error("--manifest est obligatoire.");
   const manifestPath = resolve(options.manifest);
@@ -748,9 +832,23 @@ async function migrateCommand(options) {
   const allEligibleClients = manifest.clients.filter(
     (client) => client.eligibility !== "excluded" && client.status !== "excluded",
   );
-  const eligibleClients = options["only-confirmed"]
+  let eligibleClients = options["only-confirmed"]
     ? allEligibleClients.filter((client) => client.dateConfirmed)
     : allEligibleClients;
+  if (options["client-folder"]) {
+    const requestedFolder = String(options["client-folder"]).trim();
+    eligibleClients = eligibleClients.filter((client) => client.sourceFolder === requestedFolder);
+    if (!eligibleClients.length) {
+      throw new Error(`Dossier client introuvable ou non confirmé : ${requestedFolder}`);
+    }
+  }
+  if (options["max-clients"] !== undefined) {
+    const maxClients = Number(options["max-clients"]);
+    if (!Number.isInteger(maxClients) || maxClients < 1 || maxClients > 1000) {
+      throw new Error("--max-clients doit être un entier compris entre 1 et 1000.");
+    }
+    eligibleClients = eligibleClients.slice(0, maxClients);
+  }
   const deferredUnconfirmedCount = allEligibleClients.length - eligibleClients.length;
   const validation = eligibleClients.flatMap((client) =>
     validateClient(client, true).map((issue) => `${client.sourceFolder}: ${issue}`),
@@ -797,6 +895,9 @@ async function migrateCommand(options) {
     rclone: options.rclone || "rclone",
     portalUrl: options["portal-url"] || DEFAULT_PORTAL_URL,
     actor: (options.actor || "migration-onedrive").slice(0, 64),
+    expectedDriveRoot: String(
+      options["expected-drive-root"] || manifest.expectedDriveRootId || "",
+    ).trim(),
   };
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "zgr-archive-"));
   const resolvedTemp = resolve(temporaryDirectory);
@@ -851,6 +952,7 @@ async function main() {
   if (command === "scan") return scanCommand(options);
   if (command === "approve-dates") return approveDatesCommand(options);
   if (command === "apply-date-decisions") return applyDateDecisionsCommand(options);
+  if (command === "prepare-drive-repair") return prepareDriveRepairCommand(options);
   if (command === "migrate") return migrateCommand(options);
   throw new Error(`Commande inconnue : ${command}`);
 }
@@ -860,6 +962,7 @@ export {
   approveDatesByConfidence,
   buildManifest,
   clientPathParts,
+  prepareDriveRootRepair,
   sourceEligibility,
   validateClient,
 };

@@ -15,6 +15,7 @@ const MAX_ARCHIVE_FILES = 500;
 const ARCHIVE_FIRST_YEAR = 2022;
 const ARCHIVE_LAST_YEAR = 2025;
 const DRIVE_SYNC_BATCH_SIZE = 3;
+const DEFAULT_UPLOAD_CONCURRENCY = 2;
 
 const sourceContainerPatterns = [
   /(?:^|\b)waiting\s+for\s+payment(?:\b|$)/i,
@@ -82,6 +83,7 @@ Options :
   --expected-drive-root   Refuse Drive si la racine ne correspond pas à cet ID
   --max-clients <nombre>  Limite un passage de test à ce nombre de clients
   --client-folder <nom>   Traite uniquement ce dossier source exact
+  --upload-concurrency <n> Nombre de fichiers traités en parallèle (1 à 4, défaut 2)
   --review-report <csv>   Rapport CSV des dates et exclusions à vérifier
 
 Les jetons ne doivent jamais être placés dans le manifeste ni dans Git.`;
@@ -726,6 +728,39 @@ async function syncDrive(client, context, onProgress) {
   }
 }
 
+async function uploadPendingFiles(
+  client,
+  context,
+  temporaryDirectory,
+  concurrency,
+  persistProgress,
+) {
+  const pendingFiles = client.files
+    .map((file, index) => ({ file, index }))
+    .filter(({ file }) => !["uploaded", "duplicate"].includes(file.status));
+  let nextIndex = 0;
+
+  async function worker() {
+    for (;;) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= pendingFiles.length) return;
+      const { file, index } = pendingFiles[currentIndex];
+      console.log(`  ${index + 1}/${client.files.length} ${file.relativePath}`);
+      await uploadFile(client, file, context, temporaryDirectory);
+      await persistProgress();
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, pendingFiles.length) },
+    () => worker(),
+  );
+  const results = await Promise.allSettled(workers);
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+}
+
 async function scanCommand(options) {
   if (!options.source) throw new Error("--source est obligatoire.");
   const manifestPath = resolve(options.manifest || ".zgr-migrations/archive-2022-2025.json");
@@ -899,6 +934,12 @@ async function migrateCommand(options) {
       options["expected-drive-root"] || manifest.expectedDriveRootId || "",
     ).trim(),
   };
+  const uploadConcurrency = Number(
+    options["upload-concurrency"] ?? DEFAULT_UPLOAD_CONCURRENCY,
+  );
+  if (!Number.isInteger(uploadConcurrency) || uploadConcurrency < 1 || uploadConcurrency > 4) {
+    throw new Error("--upload-concurrency doit être un entier compris entre 1 et 4.");
+  }
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "zgr-archive-"));
   const resolvedTemp = resolve(temporaryDirectory);
   const allowedTempRoot = `${resolve(tmpdir())}${sep}`.toLocaleLowerCase();
@@ -920,12 +961,18 @@ async function migrateCommand(options) {
           await createArchive(client, context);
           await atomicWriteJson(manifestPath, manifest);
         }
-        for (const [index, file] of client.files.entries()) {
-          if (["uploaded", "duplicate"].includes(file.status)) continue;
-          console.log(`  ${index + 1}/${client.files.length} ${file.relativePath}`);
-          await uploadFile(client, file, context, temporaryDirectory);
-          await atomicWriteJson(manifestPath, manifest);
-        }
+        let progressWrite = Promise.resolve();
+        const persistProgress = () => {
+          progressWrite = progressWrite.then(() => atomicWriteJson(manifestPath, manifest));
+          return progressWrite;
+        };
+        await uploadPendingFiles(
+          client,
+          context,
+          temporaryDirectory,
+          uploadConcurrency,
+          persistProgress,
+        );
         console.log(`Synchronisation Google Drive : ${client.clientName}`);
         await syncDrive(client, context, () => atomicWriteJson(manifestPath, manifest));
         console.log(`✓ ${client.clientName}`);

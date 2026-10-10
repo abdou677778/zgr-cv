@@ -3,15 +3,34 @@
 import { createHash } from "node:crypto";
 import { access, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 
 const DEFAULT_PORTAL_URL = "https://cv-pro-team-clients.zgrcv-wizi.workers.dev";
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_ORDER_BYTES = 500 * 1024 * 1024;
-const MAX_ORDER_FILES = 50;
+const MAX_ARCHIVE_FILES = 500;
 const ARCHIVE_FIRST_YEAR = 2022;
 const ARCHIVE_LAST_YEAR = 2025;
+const DRIVE_SYNC_BATCH_SIZE = 10;
+
+const sourceContainerPatterns = [
+  /(?:^|\b)waiting\s+for\s+payment(?:\b|$)/i,
+  /(?:^|\b)en\s+attente\s+(?:du\s+)?paiement(?:\b|$)/i,
+  /(?:^|\b)unpaid(?:\b|$)/i,
+  /(?:^|\b)rejected?(?:\b|$)/i,
+  /(?:^|\b)orders?(?:\b|$)/i,
+];
+
+const excludedSourcePatterns = [
+  {
+    reason: "WAITING_PAYMENT",
+    pattern: /(?:waiting\s+for\s+payment|en\s+attente\s+(?:du\s+)?paiement|unpaid)/i,
+  },
+  { reason: "REJECTED", pattern: /(?:^|[/\\\s_-])rejected?(?:$|[/\\\s_-])/i },
+  { reason: "CANCELLED", pattern: /(?:annul(?:e|é|er|ée)?|cancel(?:led|ed)?)/i },
+];
 
 function usage() {
   return `Migration OneDrive -> Archives ZGR -> Google Drive
@@ -43,6 +62,7 @@ Options :
   --execute               Autorise les écritures API/Drive
   --accept-inferred-dates Accepte la date déduite du plus ancien fichier
   --continue-on-error     Continue avec le client suivant après une erreur
+  --review-report <csv>   Rapport CSV des dates et exclusions à vérifier
 
 Les jetons ne doivent jamais être placés dans le manifeste ni dans Git.`;
 }
@@ -82,6 +102,29 @@ function sourceItemPath(item) {
   return normalizePath(item.Path || item.path || item.Name || item.name);
 }
 
+function isSourceContainer(segment) {
+  return sourceContainerPatterns.some((pattern) => pattern.test(segment));
+}
+
+function clientPathParts(segments) {
+  let clientIndex = 0;
+  while (clientIndex < segments.length - 2 && isSourceContainer(segments[clientIndex])) {
+    clientIndex += 1;
+  }
+  return {
+    sourceFolder: segments.slice(0, clientIndex + 1).join("/"),
+    clientFolder: segments[clientIndex],
+    relativePath: segments.slice(clientIndex + 1).join("/"),
+  };
+}
+
+function sourceEligibility(sourceFolder) {
+  const exclusion = excludedSourcePatterns.find(({ pattern }) => pattern.test(sourceFolder));
+  return exclusion
+    ? { eligibility: "excluded", exclusionReason: exclusion.reason }
+    : { eligibility: "eligible", exclusionReason: "" };
+}
+
 function itemModifiedAt(item) {
   const value = item.ModTime || item.modTime || item.ModifiedTime || item.modifiedTime;
   const date = value ? new Date(value) : null;
@@ -118,15 +161,24 @@ function inferServices(text) {
   if (/canad(?:a|ian|ien)/.test(value)) services.push("CV_CANADIEN");
   if (/(?:^|[^a-z])ats(?:[^a-z]|$)/.test(value)) services.push("CV_ATS");
   if (/cv\s*(?:arabe|arabic)/.test(value)) services.push("CV_ARABE");
-  if (/(?:cover|lettre).*(?:eng|anglais|english)|(?:eng|anglais|english).*(?:cover|lettre)/.test(value)) {
+  if (
+    /(?:cover|lettre).*(?:eng|anglais|english)|(?:eng|anglais|english).*(?:cover|lettre)/.test(
+      value,
+    )
+  ) {
     services.push("LETTRE_ENG");
   }
-  if (/(?:cover|lettre)/.test(value) && !services.includes("LETTRE_ENG")) services.push("LETTRE_FR");
+  if (/(?:cover|lettre)/.test(value) && !services.includes("LETTRE_ENG"))
+    services.push("LETTRE_FR");
   return services.length ? [...new Set(services)] : ["AUTRE"];
 }
 
 function inferClientName(folderName) {
-  const withoutIndex = folderName.replace(/^\s*\d{1,3}\s*(?:[-_.:]\s*)?/, "").trim();
+  const withoutStatus = folderName.replace(
+    /^\s*(?:annul(?:e|é|er|ée)?|cancel(?:led|ed)?)\s*[-_.:]\s*/i,
+    "",
+  );
+  const withoutIndex = withoutStatus.replace(/^\s*\d{1,3}\s*(?:[-_.:]\s*)?/, "").trim();
   const parts = withoutIndex.split(/\s+-\s+/);
   const serviceStart = parts.findIndex(
     (part, index) =>
@@ -205,6 +257,7 @@ function buildManifest(items, source) {
   if (!Array.isArray(items)) throw new Error("L’inventaire rclone doit être un tableau JSON.");
   const clientsByFolder = new Map();
   const ignoredRootFiles = [];
+  const skippedFiles = [];
   for (const item of items) {
     if (item.IsDir || item.isDir) continue;
     const path = sourceItemPath(item);
@@ -213,8 +266,16 @@ function buildManifest(items, source) {
       ignoredRootFiles.push(path);
       continue;
     }
-    const sourceFolder = segments[0];
-    const relativePath = segments.slice(1).join("/");
+    if (Number(item.Size ?? item.size ?? 0) <= 0) {
+      skippedFiles.push({
+        sourcePath: path,
+        reason: "EMPTY_FILE",
+        sizeBytes: Number(item.Size ?? item.size ?? 0),
+        modifiedAt: itemModifiedAt(item),
+      });
+      continue;
+    }
+    const { sourceFolder, clientFolder, relativePath } = clientPathParts(segments);
     const file = {
       sourcePath: path,
       relativePath,
@@ -234,20 +295,39 @@ function buildManifest(items, source) {
   const clients = [...clientsByFolder.entries()]
     .map(([sourceFolder, files]) => {
       files.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath, "fr"));
-      const validDates = files.map((file) => file.modifiedAt).filter(Boolean).sort();
+      const validDates = files
+        .map((file) => file.modifiedAt)
+        .filter(Boolean)
+        .sort();
       const inferredDate = validDates[0]?.slice(0, 10) || "";
+      const dateSpanDays =
+        validDates.length > 1
+          ? Math.round(
+              ((new Date(validDates.at(-1)).getTime() - new Date(validDates[0]).getTime()) /
+                (24 * 60 * 60 * 1000)) *
+                10,
+            ) / 10
+          : 0;
+      const dateConfidence = dateSpanDays <= 1 ? "HIGH" : dateSpanDays <= 31 ? "MEDIUM" : "LOW";
+      const clientFolder = sourceFolder.split("/").at(-1) || sourceFolder;
+      const eligibility = sourceEligibility(sourceFolder);
       return {
         migrationKey: `onedrive:${sha256(`${source}\0${sourceFolder}`)}`,
         sourceFolder,
-        clientName: inferClientName(sourceFolder),
+        clientName: inferClientName(clientFolder),
+        ...eligibility,
         archiveDate: inferredDate,
         dateSource: inferredDate ? "earliest-file-modified-time" : "missing",
+        dateConfidence,
+        dateSpanDays,
         dateConfirmed: false,
         email: "",
         phone: "",
         facebookUrl: "",
         language: "fr",
-        services: inferServices(`${sourceFolder} ${files.map((file) => file.relativePath).join(" ")}`),
+        services: inferServices(
+          `${sourceFolder} ${files.map((file) => file.relativePath).join(" ")}`,
+        ),
         notes: `Archive importée depuis OneDrive. Dossier source : ${sourceFolder}`,
         totals: {
           files: files.length,
@@ -255,7 +335,7 @@ function buildManifest(items, source) {
           earliestModifiedAt: validDates[0] || "",
           latestModifiedAt: validDates.at(-1) || "",
         },
-        status: "pending",
+        status: eligibility.eligibility === "eligible" ? "pending" : "excluded",
         orderId: "",
         driveFolderId: "",
         files,
@@ -274,8 +354,50 @@ function buildManifest(items, source) {
       archiveYears: [ARCHIVE_FIRST_YEAR, ARCHIVE_LAST_YEAR],
     },
     ignoredRootFiles,
+    skippedFiles,
     clients,
   };
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n;]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+async function writeReviewReport(path, manifest) {
+  const header = [
+    "dossier_source",
+    "client",
+    "eligibilite",
+    "motif_exclusion",
+    "date_proposee",
+    "date_confirmee",
+    "confiance_date",
+    "ecart_dates_jours",
+    "date_fichier_plus_ancien",
+    "date_fichier_plus_recent",
+    "nombre_fichiers",
+    "taille_octets",
+  ];
+  const rows = manifest.clients.map((client) => [
+    client.sourceFolder,
+    client.clientName,
+    client.eligibility,
+    client.exclusionReason,
+    client.archiveDate,
+    client.dateConfirmed,
+    client.dateConfidence,
+    client.dateSpanDays,
+    client.totals.earliestModifiedAt,
+    client.totals.latestModifiedAt,
+    client.totals.files,
+    client.totals.bytes,
+  ]);
+  await writeFile(
+    resolve(path),
+    [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n") + "\r\n",
+    "utf8",
+  );
 }
 
 async function atomicWriteJson(path, value) {
@@ -287,6 +409,7 @@ async function atomicWriteJson(path, value) {
 
 function validateClient(client, acceptInferredDates) {
   const issues = [];
+  if (client.eligibility === "excluded" || client.status === "excluded") return issues;
   const archiveDate = new Date(`${client.archiveDate}T12:00:00.000Z`);
   const year = archiveDate.getUTCFullYear();
   if (
@@ -298,19 +421,22 @@ function validateClient(client, acceptInferredDates) {
     issues.push(`date d’archive invalide (${client.archiveDate || "absente"})`);
   }
   if (!client.dateConfirmed && !acceptInferredDates) {
-    issues.push("date non confirmée (mettre dateConfirmed=true ou utiliser --accept-inferred-dates)");
+    issues.push(
+      "date non confirmée (mettre dateConfirmed=true ou utiliser --accept-inferred-dates)",
+    );
   }
   if (!client.clientName || client.clientName.length < 2) issues.push("nom client absent");
   if (!Array.isArray(client.files) || !client.files.length) issues.push("aucun fichier");
-  if (client.files?.length > MAX_ORDER_FILES) {
-    issues.push(`${client.files.length} fichiers, limite plateforme ${MAX_ORDER_FILES}`);
+  if (client.files?.length > MAX_ARCHIVE_FILES) {
+    issues.push(`${client.files.length} fichiers, limite archive ${MAX_ARCHIVE_FILES}`);
   }
   const totalBytes = client.files?.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0) || 0;
   if (totalBytes > MAX_ORDER_BYTES) issues.push("taille totale supérieure à 500 Mo");
   for (const file of client.files || []) {
     if (!file.modifiedAt) issues.push(`date source absente : ${file.sourcePath}`);
     if (Number(file.sizeBytes) <= 0) issues.push(`fichier vide : ${file.sourcePath}`);
-    if (Number(file.sizeBytes) > MAX_FILE_BYTES) issues.push(`fichier > 100 Mo : ${file.sourcePath}`);
+    if (Number(file.sizeBytes) > MAX_FILE_BYTES)
+      issues.push(`fichier > 100 Mo : ${file.sourcePath}`);
   }
   return issues;
 }
@@ -360,7 +486,8 @@ async function createArchive(client, context) {
       }),
     },
   );
-  if (!payload.order?.id) throw new Error("La création de l’archive n’a renvoyé aucun identifiant.");
+  if (!payload.order?.id)
+    throw new Error("La création de l’archive n’a renvoyé aucun identifiant.");
   client.orderId = payload.order.id;
   client.status = "created";
 }
@@ -369,10 +496,20 @@ async function uploadFile(client, file, context, temporaryDirectory) {
   const safeTemporaryName = `${sha256(file.sourcePath).slice(0, 16)}${extname(file.name)}`;
   const localPath = join(temporaryDirectory, safeTemporaryName);
   const remotePath = `${context.source.replace(/\/$/, "")}/${file.sourcePath}`;
-  await run(context.rclone, ["copyto", remotePath, localPath, "--retries", "5", "--low-level-retries", "10"]);
+  await run(context.rclone, [
+    "copyto",
+    remotePath,
+    localPath,
+    "--retries",
+    "5",
+    "--low-level-retries",
+    "10",
+  ]);
   const localStat = await stat(localPath);
   if (localStat.size !== Number(file.sizeBytes)) {
-    throw new Error(`taille différente pour ${file.sourcePath} (${localStat.size} au lieu de ${file.sizeBytes})`);
+    throw new Error(
+      `taille différente pour ${file.sourcePath} (${localStat.size} au lieu de ${file.sizeBytes})`,
+    );
   }
   const bytes = await readFile(localPath);
   const form = new FormData();
@@ -402,17 +539,32 @@ async function uploadFile(client, file, context, temporaryDirectory) {
   }
 }
 
-async function syncDrive(client, context) {
-  const payload = await apiRequest(
-    context.portalUrl,
-    `/api/admin/orders/${encodeURIComponent(client.orderId)}/sync-drive`,
-    context.token,
-    context.actor,
-    { method: "POST" },
-  );
-  client.driveFolderId = payload.driveFolderId || "";
-  client.status = "completed";
-  client.completedAt = new Date().toISOString();
+async function syncDrive(client, context, onProgress) {
+  let offset = Number(client.driveSyncOffset || 0);
+  for (;;) {
+    const payload = await apiRequest(
+      context.portalUrl,
+      `/api/admin/orders/${encodeURIComponent(client.orderId)}/sync-drive?offset=${offset}&batchSize=${DRIVE_SYNC_BATCH_SIZE}`,
+      context.token,
+      context.actor,
+      { method: "POST" },
+    );
+    client.driveFolderId = payload.driveFolderId || client.driveFolderId || "";
+    if (payload.complete !== false) {
+      delete client.driveSyncOffset;
+      client.status = "completed";
+      client.completedAt = new Date().toISOString();
+      await onProgress();
+      return;
+    }
+    const nextOffset = Number(payload.nextOffset);
+    if (!Number.isInteger(nextOffset) || nextOffset <= offset) {
+      throw new Error("La synchronisation Google Drive n’a pas renvoyé un curseur valide.");
+    }
+    offset = nextOffset;
+    client.driveSyncOffset = offset;
+    await onProgress();
+  }
 }
 
 async function scanCommand(options) {
@@ -425,9 +577,25 @@ async function scanCommand(options) {
   const inventory = await readInventory(options);
   const manifest = buildManifest(inventory, options.source);
   await atomicWriteJson(manifestPath, manifest);
+  const reviewReportPath = resolve(
+    options["review-report"] || manifestPath.replace(/\.json$/i, ".review.csv"),
+  );
+  await writeReviewReport(reviewReportPath, manifest);
   const fileCount = manifest.clients.reduce((sum, client) => sum + client.files.length, 0);
+  const eligibleCount = manifest.clients.filter(
+    (client) => client.eligibility === "eligible",
+  ).length;
+  const excludedCount = manifest.clients.length - eligibleCount;
   console.log(`Inventaire créé : ${manifestPath}`);
-  console.log(`${manifest.clients.length} client(s), ${fileCount} fichier(s).`);
+  console.log(`Rapport de contrôle : ${reviewReportPath}`);
+  console.log(
+    `${eligibleCount} client(s) éligible(s), ${excludedCount} exclu(s), ${fileCount} fichier(s).`,
+  );
+  if (manifest.skippedFiles.length) {
+    console.log(
+      `${manifest.skippedFiles.length} fichier(s) vide(s) isolé(s) et non importable(s).`,
+    );
+  }
   if (manifest.ignoredRootFiles.length) {
     console.log(`${manifest.ignoredRootFiles.length} fichier(s) à la racine ignoré(s).`);
   }
@@ -441,22 +609,46 @@ async function migrateCommand(options) {
   if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.clients)) {
     throw new Error("Format de manifeste non pris en charge.");
   }
-  const validation = manifest.clients.flatMap((client) =>
-    validateClient(client, Boolean(options["accept-inferred-dates"])).map(
-      (issue) => `${client.sourceFolder}: ${issue}`,
-    ),
+  const eligibleClients = manifest.clients.filter(
+    (client) => client.eligibility !== "excluded" && client.status !== "excluded",
   );
-  console.log(`${manifest.clients.length} client(s) à contrôler.`);
+  const validation = eligibleClients.flatMap((client) =>
+    validateClient(client, true).map((issue) => `${client.sourceFolder}: ${issue}`),
+  );
+  const pendingDateConfirmations = options["accept-inferred-dates"]
+    ? []
+    : eligibleClients.filter((client) => !client.dateConfirmed);
+  const excludedCount = manifest.clients.length - eligibleClients.length;
+  console.log(
+    `${eligibleClients.length} client(s) éligible(s) à contrôler, ${excludedCount} exclu(s).`,
+  );
   if (validation.length) {
-    console.error(validation.slice(0, 100).map((issue) => `- ${issue}`).join("\n"));
-    throw new Error(`${validation.length} problème(s) bloquent la migration.`);
+    console.error(
+      validation
+        .slice(0, 100)
+        .map((issue) => `- ${issue}`)
+        .join("\n"),
+    );
+  }
+  if (pendingDateConfirmations.length) {
+    console.error(
+      `${pendingDateConfirmations.length} date(s) restent à confirmer dans le rapport CSV ou le manifeste.`,
+    );
+  }
+  if (validation.length || pendingDateConfirmations.length) {
+    throw new Error(
+      `${validation.length} anomalie(s) technique(s) et ${pendingDateConfirmations.length} date(s) non confirmée(s) bloquent la migration.`,
+    );
   }
   if (!options.execute) {
-    console.log("Contrôle réussi. Aucune écriture effectuée (ajoutez --execute pour lancer la copie). ");
+    console.log(
+      "Contrôle réussi. Aucune écriture effectuée (ajoutez --execute pour lancer la copie). ",
+    );
     return;
   }
   const token = process.env.ZGR_ARCHIVE_ADMIN_TOKEN?.trim();
-  if (!token) throw new Error("La variable ZGR_ARCHIVE_ADMIN_TOKEN est obligatoire avec --execute.");
+  if (!token)
+    throw new Error("La variable ZGR_ARCHIVE_ADMIN_TOKEN est obligatoire avec --execute.");
   const source = manifest.source?.remotePath;
   if (!source) throw new Error("Chemin source absent du manifeste.");
   const context = {
@@ -469,11 +661,14 @@ async function migrateCommand(options) {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "zgr-archive-"));
   const resolvedTemp = resolve(temporaryDirectory);
   const allowedTempRoot = `${resolve(tmpdir())}${sep}`.toLocaleLowerCase();
-  if (!resolvedTemp.toLocaleLowerCase().startsWith(allowedTempRoot) || !basename(resolvedTemp).startsWith("zgr-archive-")) {
+  if (
+    !resolvedTemp.toLocaleLowerCase().startsWith(allowedTempRoot) ||
+    !basename(resolvedTemp).startsWith("zgr-archive-")
+  ) {
     throw new Error("Répertoire temporaire inattendu : migration arrêtée.");
   }
   try {
-    for (const client of manifest.clients) {
+    for (const client of eligibleClients) {
       if (client.status === "completed") {
         console.log(`✓ ${client.clientName} déjà terminé`);
         continue;
@@ -491,8 +686,7 @@ async function migrateCommand(options) {
           await atomicWriteJson(manifestPath, manifest);
         }
         console.log(`Synchronisation Google Drive : ${client.clientName}`);
-        await syncDrive(client, context);
-        await atomicWriteJson(manifestPath, manifest);
+        await syncDrive(client, context, () => atomicWriteJson(manifestPath, manifest));
         console.log(`✓ ${client.clientName}`);
       } catch (error) {
         client.status = "error";
@@ -519,7 +713,11 @@ async function main() {
   throw new Error(`Commande inconnue : ${command}`);
 }
 
-main().catch((error) => {
-  console.error(`Erreur : ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-});
+export { buildManifest, clientPathParts, sourceEligibility, validateClient };
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().catch((error) => {
+    console.error(`Erreur : ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  });
+}

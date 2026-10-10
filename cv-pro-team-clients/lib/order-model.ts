@@ -20,13 +20,15 @@ export const createOrderSchema = z.object({
   services: z.array(z.enum(serviceIds)).min(1).max(serviceIds.length),
 });
 
-export const orderDetailsSchema = createOrderSchema.omit({
-  invitationToken: true,
-}).extend({
-  // Les dossiers historiques peuvent ne contenir qu’un téléphone. Les nouvelles
-  // commandes publiques gardent l’e-mail obligatoire via createOrderSchema.
-  email: z.union([z.literal(''), z.email().trim().max(180)]),
-});
+export const orderDetailsSchema = createOrderSchema
+  .omit({
+    invitationToken: true,
+  })
+  .extend({
+    // Les dossiers historiques peuvent ne contenir qu’un téléphone. Les nouvelles
+    // commandes publiques gardent l’e-mail obligatoire via createOrderSchema.
+    email: z.union([z.literal(''), z.email().trim().max(180)]),
+  });
 
 export const acceptedMimeTypes = new Set([
   'application/pdf',
@@ -54,6 +56,10 @@ export const acceptedExtensions = new Set([
 export const MAX_FILE_BYTES = 100 * 1024 * 1024;
 export const MAX_ORDER_BYTES = 500 * 1024 * 1024;
 export const MAX_ORDER_FILES = 50;
+// Historical archives are uploaded only by authenticated administrators. They
+// may legitimately contain many small source documents, while the public
+// intake form remains capped at MAX_ORDER_FILES.
+export const MAX_ARCHIVE_FILES = 500;
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export function createOrderId(now = new Date()) {

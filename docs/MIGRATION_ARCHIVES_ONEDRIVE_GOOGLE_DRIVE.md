@@ -34,6 +34,9 @@ Une copie directe `rclone OneDrive -> Google Drive` transférerait les fichiers,
 - Une clé `migrationKey` stable empêche de recréer une deuxième fiche client après une coupure.
 - Après chaque fichier, le manifeste est sauvegardé. Une relance reprend au fichier suivant.
 - Les fichiers déjà présents avec le même SHA-256 sont traités comme doublons et ne sont pas réimportés.
+- La synchronisation Google Drive se fait par lots de 10 fichiers avec un curseur sauvegardé ; une coupure reprend au dernier lot confirmé.
+- Les dossiers `Waiting for payment`, `Rejected`, `Annuler` et équivalents sont exclus automatiquement de l’archive des commandes terminées.
+- Les fichiers de zéro octet sont consignés dans `skippedFiles` et ne sont jamais envoyés.
 
 > La date affichée sur un dossier OneDrive peut correspondre à un déplacement ou à un repartage. Pour cette raison, le script ne l’utilise pas comme preuve de date de commande.
 
@@ -62,7 +65,7 @@ npm run archive:scan -- `
   --manifest ".zgr-migrations/archive-2022-2025.json"
 ```
 
-Le manifeste contient, pour chaque client : nom proposé, services détectés, date inférée, fichiers, chemins, tailles, catégories et dates source.
+Le manifeste contient, pour chaque client : nom proposé, services détectés, date inférée, fichiers, chemins, tailles, catégories, dates source et décision d’éligibilité. Un rapport CSV `*.review.csv` est généré à côté du manifeste pour contrôler les dates et exclusions sans modifier le JSON à l’aveugle.
 
 Pour tester le mécanisme sans compte ni données réelles :
 
@@ -80,9 +83,11 @@ Vérifier au minimum :
 - `clientName` ;
 - `archiveDate` ;
 - `services` ;
-- les dossiers qui dépassent 50 fichiers ou 500 Mo ;
+- les archives qui dépassent 500 fichiers ou 500 Mo ;
 - les fichiers individuels qui dépassent 100 Mo ;
 - les dossiers homonymes qui pourraient appartenir au même client.
+
+La limite du formulaire public reste fixée à 50 fichiers. Seules les archives administrateur authentifiées peuvent aller jusqu’à 500 fichiers.
 
 Pour confirmer manuellement une date, conserver la date ISO `AAAA-MM-JJ` et définir :
 
@@ -134,6 +139,7 @@ Conserver le manifeste final comme journal technique privé de la migration. Le 
 - Le script refuse une date hors 2022–2025.
 - Il s’arrête avant l’écriture si une limite de fichier est dépassée.
 - Les transferts sont séquentiels pour réduire les erreurs de quota et faciliter la reprise.
+- Les envois Google Drive sont découpés en lots de 10 pour rester sous les limites de sous-requêtes Cloudflare.
 - Les erreurs 429 et 5xx sont réessayées avec attente progressive.
 - Aucun partage public Google Drive n’est créé par cette migration.
 - La migration ne lit pas le contenu des documents pour déduire des données personnelles ; elle se limite aux noms, chemins, tailles et dates nécessaires au classement.

@@ -2,6 +2,7 @@ import { ensureSchema, recordEvent, runtimeEnv } from '@/db/runtime';
 import { requireAdmin } from '@/lib/admin-auth';
 import {
   jsonResponse,
+  MAX_ARCHIVE_FILES,
   MAX_FILE_BYTES,
   MAX_ORDER_BYTES,
   MAX_ORDER_FILES,
@@ -103,9 +104,13 @@ export async function POST(request: Request, context: RouteContext) {
     )
     .bind(id)
     .first<{ file_count: number; total_bytes: number }>();
-  if ((totals?.file_count ?? 0) >= MAX_ORDER_FILES) {
+  const fileLimit =
+    order.status === 'ARCHIVED' ? MAX_ARCHIVE_FILES : MAX_ORDER_FILES;
+  if ((totals?.file_count ?? 0) >= fileLimit) {
     return jsonResponse(
-      { error: 'La limite de 50 fichiers par commande est atteinte.' },
+      {
+        error: `La limite de ${fileLimit} fichiers par commande est atteinte.`,
+      },
       413,
     );
   }

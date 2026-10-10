@@ -354,18 +354,24 @@ function clientFolderName(order: StoredOrder) {
   return `${date}_${order.id}_${client}`;
 }
 
-export async function syncOrderToDrive(orderId: string) {
+interface DriveSyncOptions {
+  offset?: number;
+  batchSize?: number;
+}
+
+export async function syncOrderToDrive(orderId: string, options: DriveSyncOptions = {}) {
   if (!driveConfigured()) return { configured: false as const };
   const order = await getOrder(orderId);
   if (!order) throw new Error("Commande introuvable.");
   const env = runtimeEnv();
   const rootId = env.GOOGLE_DRIVE_ROOT_FOLDER_ID!;
   const startedAt = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
   const lock = await env.DB.prepare(
-    "UPDATE orders SET drive_status = 'SYNCING', updated_at = ? WHERE id = ? AND drive_status <> 'SYNCING'",
+    "UPDATE orders SET drive_status = 'SYNCING', updated_at = ? WHERE id = ? AND (drive_status <> 'SYNCING' OR updated_at < ?)",
   )
-    .bind(startedAt, orderId)
+    .bind(startedAt, orderId, staleBefore)
     .run();
   if (!Number(lock.meta.changes))
     throw new Error("Une synchronisation Google Drive est déjà en cours.");
@@ -374,6 +380,16 @@ export async function syncOrderToDrive(orderId: string) {
     const files = await getOrderFiles(orderId);
     const versions = await getJsonVersions(orderId);
     const deliverables = await getDeliverables(orderId);
+    const sortedFiles = [...files].sort(
+      (a, b) =>
+        (a.sourceModifiedAt || a.createdAt).localeCompare(b.sourceModifiedAt || b.createdAt) ||
+        a.id.localeCompare(b.id),
+    );
+    const offset = Math.min(Math.max(0, options.offset ?? 0), sortedFiles.length);
+    const batchSize = options.batchSize ?? Math.max(1, sortedFiles.length - offset);
+    const selectedFiles = sortedFiles.slice(offset, offset + batchSize);
+    const nextOffset = offset + selectedFiles.length;
+    const complete = nextOffset >= sortedFiles.length;
     const date = new Date(order.createdAt);
     const year = String(date.getUTCFullYear());
     const month = `${String(date.getUTCMonth() + 1).padStart(2, "0")}_${date
@@ -438,20 +454,21 @@ export async function syncOrderToDrive(orderId: string) {
     );
 
     const usedSourceNames = new Map<string, number>();
-    for (const file of [...files].sort(
-      (a, b) =>
-        (a.sourceModifiedAt || a.createdAt).localeCompare(b.sourceModifiedAt || b.createdAt) ||
-        a.id.localeCompare(b.id),
-    )) {
-      const object = await env.FILES.get(file.storageKey);
-      if (!object) continue;
+    const sourceDriveNames = new Map<string, string>();
+    for (const file of sortedFiles) {
       const baseName = safeFileName(file.originalName);
       const nameKey = `${file.category}\u0000${baseName}`;
       const occurrence = usedSourceNames.get(nameKey) ?? 0;
       usedSourceNames.set(nameKey, occurrence + 1);
-      const driveName = occurrence
-        ? baseName.replace(/(\.[^.]+)?$/, `__${file.id.slice(0, 8)}$1`)
-        : baseName;
+      sourceDriveNames.set(
+        file.id,
+        occurrence ? baseName.replace(/(\.[^.]+)?$/, `__${file.id.slice(0, 8)}$1`) : baseName,
+      );
+    }
+    for (const file of selectedFiles) {
+      const object = await env.FILES.get(file.storageKey);
+      if (!object) continue;
+      const driveName = sourceDriveNames.get(file.id) ?? safeFileName(file.originalName);
       await uploadToFolder({
         cache,
         parentId: sourceCategoryFolders[file.category] ?? sourceFolder,
@@ -464,7 +481,7 @@ export async function syncOrderToDrive(orderId: string) {
       });
     }
 
-    for (const version of versions) {
+    for (const version of complete ? versions : []) {
       const object = await env.FILES.get(version.storageKey);
       if (!object) continue;
       await uploadToFolder({
@@ -481,7 +498,7 @@ export async function syncOrderToDrive(orderId: string) {
     // Keep generated PDFs private in their service folders. Client delivery is a
     // separate, explicit operation that copies only approved files to a shareable folder.
     const usedDeliverableNames = new Map<string, number>();
-    for (const deliverable of [...deliverables].sort(
+    for (const deliverable of [...(complete ? deliverables : [])].sort(
       (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
     )) {
       let serviceFolder = serviceFolders.get(deliverable.service);
@@ -510,17 +527,27 @@ export async function syncOrderToDrive(orderId: string) {
 
     const now = new Date().toISOString();
     await env.DB.prepare(
-      "UPDATE orders SET drive_folder_id = ?, drive_status = 'SYNCED', updated_at = ? WHERE id = ?",
+      "UPDATE orders SET drive_folder_id = ?, drive_status = ?, updated_at = ? WHERE id = ?",
     )
-      .bind(clientFolder, now, orderId)
+      .bind(clientFolder, complete ? "SYNCED" : "PENDING", now, orderId)
       .run();
-    await recordEvent(orderId, "DRIVE_SYNCED", {
+    await recordEvent(orderId, complete ? "DRIVE_SYNCED" : "DRIVE_SYNC_BATCHED", {
       driveFolderId: clientFolder,
-      fileCount: files.length,
-      jsonVersionCount: versions.length,
-      deliverableCount: deliverables.length,
+      offset,
+      syncedFileCount: selectedFiles.length,
+      totalFileCount: files.length,
+      nextOffset: complete ? null : nextOffset,
+      jsonVersionCount: complete ? versions.length : 0,
+      deliverableCount: complete ? deliverables.length : 0,
     });
-    return { configured: true as const, driveFolderId: clientFolder };
+    return {
+      configured: true as const,
+      driveFolderId: clientFolder,
+      complete,
+      syncedFileCount: selectedFiles.length,
+      totalFileCount: files.length,
+      nextOffset: complete ? null : nextOffset,
+    };
   } catch (error) {
     await env.DB.prepare("UPDATE orders SET drive_status = 'ERROR' WHERE id = ?")
       .bind(orderId)

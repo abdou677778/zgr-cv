@@ -14,9 +14,12 @@ const MAX_ORDER_BYTES = 500 * 1024 * 1024;
 const MAX_ARCHIVE_FILES = 500;
 const ARCHIVE_FIRST_YEAR = 2022;
 const ARCHIVE_LAST_YEAR = 2025;
-const DRIVE_SYNC_BATCH_SIZE = 5;
+// Smaller Drive batches keep a Worker request bounded even when Google is slow.
+const DRIVE_SYNC_BATCH_SIZE = 2;
 const DEFAULT_UPLOAD_CONCURRENCY = 4;
 const API_REQUEST_TIMEOUT_MS = 90_000;
+const DRIVE_SYNC_REQUEST_TIMEOUT_MS = 240_000;
+const DRIVE_SYNC_API_ATTEMPTS = 3;
 const FILE_UPLOAD_TIMEOUT_MS = 5 * 60_000;
 
 const sourceContainerPatterns = [
@@ -592,7 +595,15 @@ function validateClient(client, acceptInferredDates) {
   return issues;
 }
 
-async function apiRequest(baseUrl, path, token, actor, init = {}, attempts = 4) {
+async function apiRequest(
+  baseUrl,
+  path,
+  token,
+  actor,
+  init = {},
+  attempts = 4,
+  timeoutMs = API_REQUEST_TIMEOUT_MS,
+) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const headers = new Headers(init.headers);
     headers.set("x-admin-token", token);
@@ -603,16 +614,17 @@ async function apiRequest(baseUrl, path, token, actor, init = {}, attempts = 4) 
       ({ response, bodyText } = await fetchTextWithHardTimeout(
         `${baseUrl.replace(/\/$/, "")}${path}`,
         { ...init, headers },
-        API_REQUEST_TIMEOUT_MS,
+        timeoutMs,
       ));
     } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
       if (attempt < attempts) {
+        console.log(`  ↻ Reprise API ${attempt}/${attempts} après : ${reason}`);
         await new Promise((resolvePromise) =>
           setTimeout(resolvePromise, Math.min(attempt * 5_000, 30_000)),
         );
         continue;
       }
-      const reason = error instanceof Error ? error.message : String(error);
       throw new Error(`API indisponible après ${attempts} tentatives : ${reason}`);
     }
     let body;
@@ -627,6 +639,9 @@ async function apiRequest(baseUrl, path, token, actor, init = {}, attempts = 4) 
       const delay = driveBusy
         ? Math.min(attempt * 15_000, 30_000)
         : 2 ** (attempt - 1) * 2_000;
+      console.log(
+        `  ↻ Reprise API ${attempt}/${attempts} après HTTP ${response.status}${driveBusy ? " (Drive occupé)" : ""}.`,
+      );
       await new Promise((resolvePromise) => setTimeout(resolvePromise, delay));
       continue;
     }
@@ -763,7 +778,8 @@ async function syncDrive(client, context, onProgress) {
       context.token,
       context.actor,
       { method: "POST" },
-      14,
+      DRIVE_SYNC_API_ATTEMPTS,
+      DRIVE_SYNC_REQUEST_TIMEOUT_MS,
     );
     if (context.expectedDriveRoot && payload.rootFolderId !== context.expectedDriveRoot) {
       throw new Error(`Racine Google Drive refusée : ${payload.rootFolderId || "absente"}`);

@@ -224,22 +224,46 @@ function multipartUploadBody(metadata: object, contentType: string, size: number
   );
   const suffix = encoder.encode(`\r\n--${boundary}--\r\n`);
   const source = bodyStream(body);
+  const reader = source.getReader();
+  let prefixSent = false;
+  let sourceDone = false;
+  let readerReleased = false;
+  const releaseReader = () => {
+    if (readerReleased) return;
+    readerReleased = true;
+    reader.releaseLock();
+  };
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      controller.enqueue(prefix);
-      const reader = source.getReader();
+    async pull(controller) {
       try {
-        while (true) {
+        if (!prefixSent) {
+          prefixSent = true;
+          controller.enqueue(prefix);
+          return;
+        }
+        if (!sourceDone) {
           const { done, value } = await reader.read();
-          if (done) break;
-          controller.enqueue(value);
+          if (!done) {
+            controller.enqueue(value);
+            return;
+          }
+          sourceDone = true;
+          releaseReader();
         }
         controller.enqueue(suffix);
         controller.close();
       } catch (error) {
+        releaseReader();
         controller.error(error);
-      } finally {
-        reader.releaseLock();
+      }
+    },
+    async cancel(reason) {
+      if (!readerReleased) {
+        try {
+          await reader.cancel(reason);
+        } finally {
+          releaseReader();
+        }
       }
     },
   });

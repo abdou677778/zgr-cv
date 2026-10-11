@@ -651,6 +651,7 @@ function arabicOpportunityTitle(value: string) {
   const mappings: Array<[RegExp, string]> = [
     [/reforestation.*granada|healthy living/, "التشجير ونمط العيش الصحي في جبال غرناطة"],
     [/youth office.*esslingen/, "تطوّع في مكتب الشباب بمدينة إسلينغن"],
+    [/youth office/, "تطوّع في مكتب للشباب"],
     [/non.formal school.*black forest/, "تطوّع في مدرسة للتعليم غير النظامي بمنطقة الغابة السوداء"],
     [/multicultural kindergarten/, "تجربة تطوعية لمدة سنة في روضة أطفال متعددة الثقافات"],
     [/circus.*children.*artists/, "تطوّع في السيرك مع الأطفال والفنانين"],
@@ -728,7 +729,7 @@ function addUnique(target: string[], value: string) {
 }
 
 function arabicConditions(proof: PublicationEvidence) {
-  const haystack = folded(`${proof.conditions.join(" ")} ${proof.description}`);
+  const haystack = folded(proof.conditions.join(" "));
   const result: string[] = [];
   if (/18.{0,12}30|18-30|18 to 30/.test(haystack)) addUnique(result, "السن بين 18 و30 سنة");
   if (/experience|expérience/.test(haystack))
@@ -771,20 +772,23 @@ function arabicDocuments(values: string[]) {
     else if (/offre d.emploi|job offer/.test(document))
       addUnique(result, "عرض العمل عند طلبه في المسار");
   });
-  if (!result.length) result.push("الوثائق المحددة في الإعلان الرسمي");
   return result.slice(0, 4);
 }
 
-function arabicPositions(values: string[]) {
+function opportunityScope(values: string[]) {
   const joined = folded(values.join(" "));
-  if (!joined) return "المجال المهني المحدد في الإعلان";
-  if (/team/.test(joined)) return "تطوّع ضمن فريق";
-  if (/individual/.test(joined)) return "تطوّع فردي";
-  if (/batiment|construction/.test(joined)) return "مهن البناء والأشغال";
-  if (/child|enfant|education/.test(joined)) return "الطفولة المبكرة والعمل التربوي";
-  if (/mecan|mechan/.test(joined)) return "الميكانيك والصيانة الصناعية";
-  if (/health|sante|santé/.test(joined)) return "الصحة والرعاية";
-  return "المجال المهني المذكور في العرض الرسمي";
+  if (!joined) return null;
+  if (/team/.test(joined)) return { label: "🤝 نوع المشاركة", value: "تطوّع ضمن فريق" };
+  if (/individual/.test(joined)) return { label: "🤝 نوع المشاركة", value: "تطوّع فردي" };
+  if (/batiment|construction/.test(joined))
+    return { label: "💼 المجال أو الاختصاص", value: "مهن البناء والأشغال" };
+  if (/child|enfant|education/.test(joined))
+    return { label: "💼 المجال أو الاختصاص", value: "الطفولة المبكرة والعمل التربوي" };
+  if (/mecan|mechan/.test(joined))
+    return { label: "💼 المجال أو الاختصاص", value: "الميكانيك والصيانة الصناعية" };
+  if (/health|sante|santé/.test(joined))
+    return { label: "💼 المجال أو الاختصاص", value: "الصحة والرعاية" };
+  return null;
 }
 
 function linesWith(prefix: string, values: string[]) {
@@ -830,7 +834,7 @@ function localBody(
   const destination = arabicDestination(proof.destination);
   const flag = destinationFlag(proof.destination);
   const source = arabicSource(proof.source);
-  const positions = arabicPositions(proof.positions);
+  const scope = opportunityScope(proof.positions);
   const conditions = arabicConditions(proof);
   const documents = arabicDocuments(proof.requiredDocuments);
   const deadline = localDeadline(proof.deadlineAt, page.market);
@@ -839,26 +843,28 @@ function localBody(
     const opening =
       objective === "deadline"
         ? "⏰ الوقت مهم والملف الكامل يصنع الفرق"
-        : "📢 فرصة مؤكدة من مصدر رسمي";
+        : "📢 فرصة منشورة من مصدر رسمي";
     return [
       `${flag} ${opening}`,
-      `📌 عنوان الفرصة\n${title}`,
+      `📌 الفرصة المتاحة\n${title}`,
       `📍 الوجهة\n${destination}`,
       `🏛️ الجهة الرسمية\n${source}`,
       `⏳ آخر أجل للتقديم\n${deadline}`,
       `✅ الشروط الأساسية\n${linesWith("✅", conditions)}`,
-      `📄 الوثائق المطلوبة\n${linesWith("▪️", documents)}`,
+      documents.length ? `📄 الوثائق المطلوبة\n${linesWith("▪️", documents)}` : "",
+      scope ? `${scope.label}\n${scope.value}` : "",
       [
         "🧭 خطوات التقديم",
-        "1️⃣ قارن الشروط مع بروفايلك",
+        "1️⃣ قارن الشروط مع خبرتك ومؤهلاتك",
         "2️⃣ حضّر سيرة ذاتية ورسالة تحفيزية مخصصتين",
         "3️⃣ قدّم عبر الرابط الرسمي الموجود أسفل المنشور",
       ].join("\n"),
-      `🔎 المجال\n${positions}`,
       "💼 فريقنا يقدر يعاونك في إعداد الملف والتقديم بطريقة منظمة",
       "⚠️ الخدمة ما تعنيش ضمان التوظيف أو التأشيرة والقرار يرجع للجهة الرسمية",
       PAGE_HASHTAGS[page.id],
-    ].join("\n\n");
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   if (page.id === "emplois-immigration-tunis") {
@@ -868,12 +874,12 @@ function localBody(
       [
         "📋 المعطيات الأساسية",
         `▪️ الوجهة: ${destination}`,
-        `▪️ المجال: ${positions}`,
+        scope ? `▪️ ${scope.label.replace(/^..\s/, "")}: ${scope.value}` : "",
         `▪️ الجهة الناشرة: ${source}`,
         `▪️ آخر أجل: ${deadline}`,
       ].join("\n"),
       `✅ شنوّة يلزمك\n${linesWith("✅", conditions)}`,
-      `📑 حضّر الوثائق هاذي\n${linesWith("▪️", documents)}`,
+      documents.length ? `📑 حضّر الوثائق هاذي\n${linesWith("▪️", documents)}` : "",
       [
         "📝 كيفاش تترشح",
         "1️⃣ اقرأ البلاغ الرسمي للآخر",
@@ -883,7 +889,9 @@ function localBody(
       "🤝 ننجمو نعاونوك في إعداد ملف ترشح واضح ومنظم",
       "⚠️ ما فماش ضمان تشغيل أو تأشيرة والقرار النهائي للجهة المنتدبة",
       PAGE_HASHTAGS[page.id],
-    ].join("\n\n");
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   return [
@@ -892,21 +900,25 @@ function localBody(
     [
       "💡 علاش الفرصة تستحق الاهتمام",
       `▪️ منشورة عن طريق ${source}`,
-      `▪️ المجال: ${positions}`,
+      scope ? `▪️ ${scope.label.replace(/^..\s/, "")}: ${scope.value}` : "",
       `▪️ آخر أجل هو ${deadline}`,
-    ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n"),
     `🎯 شكون ينجم يترشح\n${linesWith("✅", conditions)}`,
-    `🧰 حضّر ملفك\n${linesWith("✨", documents)}`,
+    documents.length ? `🧰 حضّر ملفك\n${linesWith("✨", documents)}` : "",
     [
       "🚀 خطوتك توا",
-      "1️⃣ تأكد إن الشروط تناسب بروفايلك",
+      "1️⃣ تأكد إن الشروط تناسب خبرتك ومؤهلاتك",
       "2️⃣ حضّر ترشح مخصص يبرز نقاط قوتك",
       "3️⃣ استعمل الرابط الرسمي الموجود مع المنشور",
     ].join("\n"),
     "❤️ إذا تحب ملف مرتب ومقنع نرافقوك في إعداد السيرة الذاتية ورسالة التحفيز والتقديم",
     "🛡️ نرافقوك باحتراف أما القبول والتأشيرة يبقاو من صلاحيات الجهات الرسمية",
     PAGE_HASHTAGS[page.id],
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function localComments(page: PublicationPage, proof: PublicationEvidence) {
@@ -917,7 +929,7 @@ function localComments(page: PublicationPage, proof: PublicationEvidence) {
     return [
       `🔗 المصدر الرسمي هو ${source} والرابط تلقاه مع المنشور`,
       `⏳ آخر أجل المعلن: ${deadline}`,
-      `📄 حضّر من الآن: ${documents}`,
+      documents ? `📄 حضّر من الآن: ${documents}` : "📄 راجع الوثائق المطلوبة في الاستمارة الرسمية",
       "⚠️ ما تبعث حتى وثيقة حساسة خارج القنوات الرسمية",
       "💬 قولولنا المجال اللي حابين نركزو عليه في المنشورات الجاية",
     ].map(withoutParentheses);
@@ -926,7 +938,7 @@ function localComments(page: PublicationPage, proof: PublicationEvidence) {
     return [
       `📌 البلاغ صادر عن ${source}`,
       `⏰ آخر أجل المعلن: ${deadline}`,
-      `📑 الوثائق الأساسية: ${documents}`,
+      documents ? `📑 الوثائق الأساسية: ${documents}` : "📑 راجع الوثائق المطلوبة في البلاغ الرسمي",
       "🔐 قدّم كان عبر الرابط الرسمي وما تدفع حتى معلوم لجهة مجهولة",
       "🗨️ شنوة الاختصاص اللي تحبوا نبحثولكم على فرص فيه",
     ].map(withoutParentheses);
@@ -934,7 +946,9 @@ function localComments(page: PublicationPage, proof: PublicationEvidence) {
   return [
     `✅ المعلومة متثبت منها عبر ${source}`,
     `🕰️ تاريخ غلق الترشحات: ${deadline}`,
-    `✨ باش تبدأ حضّر: ${documents}`,
+    documents
+      ? `✨ باش تبدأ حضّر: ${documents}`
+      : "✨ باش تبدأ راجع الوثائق المطلوبة في المصدر الرسمي",
     "💡 الملف المخصص للعرض أقوى من نفس السيرة الذاتية لكل الفرص",
     "🤍 ابعث المنشور لشخص تنجم تهمو الفرصة",
   ].map(withoutParentheses);
@@ -987,11 +1001,12 @@ export function buildLocalPublicationBatch(options: {
                   : options.page.id === "emplois-immigration-tunis"
                     ? "انتداب دولي للتونسيين"
                     : "خطوتك المهنية الجاية",
-              title: LOCAL_HEADLINES[options.page.id][index],
-              subtitle: `${destinationFlag(proof.destination)} ${title} · ${destination}`.slice(
-                0,
-                140,
-              ),
+              title,
+              subtitle:
+                `${destinationFlag(proof.destination)} الوجهة: ${destination} · آخر أجل: ${localDeadline(proof.deadlineAt, options.page.market)}`.slice(
+                  0,
+                  140,
+                ),
               cta:
                 options.page.id === "cv-pro-algeria"
                   ? "راجع المصدر وقدّم"

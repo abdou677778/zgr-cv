@@ -123,10 +123,10 @@ async function downloadVisual(post: PublicationDraft, page: PublicationPage) {
   if (!post.visual) return;
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
-  canvas.height = 1080;
+  canvas.height = 1350;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas indisponible.");
-  const gradient = context.createLinearGradient(0, 0, 1080, 1080);
+  const gradient = context.createLinearGradient(0, 0, 1080, 1350);
   gradient.addColorStop(0, page.accentDark);
   gradient.addColorStop(0.58, page.accent);
   gradient.addColorStop(1, "#0f172a");
@@ -136,78 +136,77 @@ async function downloadVisual(post: PublicationDraft, page: PublicationPage) {
   context.globalAlpha = 0.14;
   context.fillStyle = "#ffffff";
   context.beginPath();
-  context.arc(965, 120, 260, 0, Math.PI * 2);
+  context.arc(960, 130, 280, 0, Math.PI * 2);
   context.fill();
   context.beginPath();
-  context.arc(120, 980, 320, 0, Math.PI * 2);
+  context.arc(100, 1280, 360, 0, Math.PI * 2);
   context.fill();
   context.globalAlpha = 1;
 
   const logo = await loadImage(new URL(page.logoUrl, window.location.origin).toString());
   context.save();
   context.beginPath();
-  context.arc(110, 110, 60, 0, Math.PI * 2);
+  context.arc(930, 115, 58, 0, Math.PI * 2);
   context.clip();
-  context.drawImage(logo, 50, 50, 120, 120);
+  context.drawImage(logo, 872, 57, 116, 116);
   context.restore();
   context.strokeStyle = "rgba(255,255,255,.75)";
   context.lineWidth = 5;
   context.beginPath();
-  context.arc(110, 110, 62, 0, Math.PI * 2);
+  context.arc(930, 115, 60, 0, Math.PI * 2);
   context.stroke();
-
-  context.fillStyle = "#ffffff";
-  context.textAlign = "left";
-  context.direction = "ltr";
-  context.font = "700 34px Arial";
-  context.fillText(page.name, 200, 100);
-  context.font = "400 24px Arial";
-  context.fillStyle = "rgba(255,255,255,.78)";
-  context.fillText(page.location, 200, 140);
 
   context.textAlign = "right";
   context.direction = "rtl";
+  context.fillStyle = "rgba(255,255,255,.16)";
+  context.beginPath();
+  context.roundRect(110, 65, 540, 68, 34);
+  context.fill();
   context.fillStyle = "#fef08a";
-  context.font = "700 30px Tahoma, Arial";
-  context.fillText(post.visual.eyebrow, 940, 270);
+  context.font = "700 28px Arial, Tahoma";
+  context.fillText("معلومة من مصدر رسمي", 610, 109);
+
+  context.fillStyle = "#fef08a";
+  context.font = "700 32px Arial, Tahoma";
+  context.fillText(post.visual.eyebrow, 940, 285);
 
   context.fillStyle = "#ffffff";
-  context.font = "900 72px Tahoma, Arial";
-  const titleLines = canvasLines(context, post.visual.title, 850, 4);
-  titleLines.forEach((line, index) => context.fillText(line, 940, 370 + index * 92));
-  const subtitleY = 400 + titleLines.length * 92;
-  context.font = "500 34px Tahoma, Arial";
+  context.font = "900 76px Arial, Tahoma";
+  const titleLines = canvasLines(context, post.visual.title, 850, 3);
+  titleLines.forEach((line, index) => context.fillText(line, 940, 395 + index * 104));
+  const subtitleY = 445 + titleLines.length * 104;
+  context.font = "600 36px Arial, Tahoma";
   context.fillStyle = "rgba(255,255,255,.88)";
   canvasLines(context, post.visual.subtitle, 850, 3).forEach((line, index) =>
-    context.fillText(line, 940, subtitleY + index * 50),
+    context.fillText(line, 940, subtitleY + index * 58),
   );
 
   let badgeX = 940;
-  context.font = "700 25px Tahoma, Arial";
+  context.font = "700 26px Arial, Tahoma";
   post.visual.badges.slice(0, 3).forEach((badge) => {
     const width = context.measureText(badge).width + 50;
     badgeX -= width;
     context.fillStyle = "rgba(255,255,255,.16)";
     context.beginPath();
-    context.roundRect(badgeX, 795, width - 12, 54, 27);
+    context.roundRect(badgeX, 1025, width - 12, 58, 29);
     context.fill();
     context.fillStyle = "#ffffff";
-    context.fillText(badge, badgeX + width - 32, 831);
+    context.fillText(badge, badgeX + width - 32, 1064);
     badgeX -= 14;
   });
 
   context.fillStyle = "#facc15";
   context.beginPath();
-  context.roundRect(570, 900, 370, 94, 47);
+  context.roundRect(310, 1140, 630, 104, 52);
   context.fill();
   context.fillStyle = "#172033";
-  context.font = "900 34px Tahoma, Arial";
-  context.fillText(post.visual.cta, 900, 960);
+  context.font = "900 38px Arial, Tahoma";
+  context.fillText(post.visual.cta, 880, 1206);
   context.fillStyle = "rgba(255,255,255,.72)";
-  context.font = "500 21px Arial";
-  context.textAlign = "left";
-  context.direction = "ltr";
-  context.fillText("Source vérifiée · ZGR Publication Studio", 65, 1030);
+  context.font = "500 23px Arial, Tahoma";
+  context.textAlign = "center";
+  context.direction = "rtl";
+  context.fillText("راجع المصدر الرسمي قبل إرسال ملفك", 540, 1305);
 
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob(
@@ -238,35 +237,37 @@ function VisualPreview({ post, page }: { post: PublicationDraft; page: Publicati
   if (!post.visual) return null;
   return (
     <div
-      className="relative isolate mt-4 aspect-square w-full overflow-hidden rounded-2xl p-6 text-white shadow-inner sm:p-8"
+      className="relative isolate mt-4 aspect-[4/5] w-full overflow-hidden rounded-2xl p-6 text-white shadow-inner sm:p-8"
       style={{
         background: `linear-gradient(145deg, ${page.accentDark}, ${page.accent} 58%, #0f172a)`,
+        fontFamily: "Arial, Tahoma, sans-serif",
       }}
       dir="rtl"
     >
       <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
-      <div className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-white/10" />
+      <div className="absolute -bottom-28 -left-16 h-80 w-80 rounded-full bg-white/10" />
       <div className="relative z-10 flex h-full flex-col">
-        <div className="flex items-center justify-between" dir="ltr">
+        <div className="flex items-center justify-between">
+          <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold">
+            معلومة من مصدر رسمي
+          </span>
           <div className="flex items-center gap-3">
             <PageLogo page={page} />
             <div>
-              <div className="font-black">{page.name}</div>
-              <div className="text-xs text-white/70">{page.location}</div>
+              <div className="text-right text-xs font-bold text-white/70">منشور موثوق</div>
             </div>
           </div>
-          <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold">
-            مصدر موثوق
-          </span>
         </div>
         <div className="my-auto">
-          <div className="mb-3 text-sm font-black text-amber-200">{post.visual.eyebrow}</div>
-          <h3 className="text-2xl font-black leading-[1.5] sm:text-4xl">{post.visual.title}</h3>
-          <p className="mt-4 max-w-[90%] text-sm font-semibold leading-7 text-white/85 sm:text-base">
+          <div className="mb-4 text-sm font-black text-amber-200 sm:text-base">
+            {post.visual.eyebrow}
+          </div>
+          <h3 className="text-2xl font-black leading-[1.65] sm:text-4xl">{post.visual.title}</h3>
+          <p className="mt-5 max-w-[92%] text-sm font-semibold leading-8 text-white/90 sm:text-base">
             {post.visual.subtitle}
           </p>
         </div>
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
             {post.visual.badges.map((badge) => (
               <span key={badge} className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold">
@@ -274,9 +275,12 @@ function VisualPreview({ post, page }: { post: PublicationDraft; page: Publicati
               </span>
             ))}
           </div>
-          <span className="rounded-full bg-amber-300 px-5 py-2.5 text-sm font-black text-slate-950">
+          <span className="block rounded-full bg-amber-300 px-5 py-3 text-center text-sm font-black text-slate-950 sm:text-base">
             {post.visual.cta}
           </span>
+          <p className="text-center text-xs font-medium text-white/70">
+            راجع المصدر الرسمي قبل إرسال ملفك
+          </p>
         </div>
       </div>
     </div>

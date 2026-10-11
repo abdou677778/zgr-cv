@@ -149,6 +149,23 @@ test("the local engine translates source meaning without leaking foreign-languag
   assert.doesNotMatch(batch.posts[0].body, /[A-Za-zÀ-ÖØ-öø-ÿ]/);
 });
 
+test("labels team volunteering as participation, never as an ambiguous professional field", () => {
+  const batch = buildLocalPublicationBatch({
+    page,
+    evidence: [
+      {
+        ...evidence[0],
+        title: "Volunteer in youth office",
+        destination: "Germany",
+        positions: ["teams"],
+      },
+    ],
+  });
+  assert.match(batch.posts[0].body, /🤝 نوع المشاركة\nتطوّع ضمن فريق/);
+  assert.doesNotMatch(batch.posts[0].body, /🔎 المجال/);
+  assert.doesNotMatch(batch.posts[0].body, /المجال المهني المحدد في الإعلان/);
+});
+
 test("rejects AI output that leaks Latin text or misses final Arabic hashtags", () => {
   assert.throws(
     () =>

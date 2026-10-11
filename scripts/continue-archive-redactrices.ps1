@@ -90,7 +90,9 @@ if ($prerequisiteRemaining.Count -gt 0) {
   throw "Le lot AMIR conserve $($prerequisiteRemaining.Count) dossier(s) confirmé(s) non terminé(s). Les lots des rédactrices restent en attente."
 }
 
-Invoke-ArchiveBatch "06 - MERIEM" $MeriemManifest "Meriem (rédactrice)"
-Invoke-ArchiveBatch "07 - AYA KHOUSSA" $AyaManifest "Aya Khoussa (rédactrice)"
+# HTTP header values must remain ASCII. Stable account-style actor IDs keep the
+# audit trail portable while the UI can resolve them to the accented display name.
+Invoke-ArchiveBatch "06 - MERIEM" $MeriemManifest "meriem-redactrice"
+Invoke-ArchiveBatch "07 - AYA KHOUSSA" $AyaManifest "aya-khoussa-redactrice"
 
 Write-Output "File des rédactrices terminée pour toutes les dates confirmées."

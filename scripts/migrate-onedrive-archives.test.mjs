@@ -8,10 +8,17 @@ import {
   buildManifest,
   clientPathParts,
   fetchTextWithHardTimeout,
+  headerSafeActor,
   prepareDriveRootRepair,
   sourceEligibility,
   validateClient,
 } from "./migrate-onedrive-archives.mjs";
+
+test("l'identité d'audit reste compatible avec les en-têtes HTTP", () => {
+  assert.equal(headerSafeActor("Meriem (rédactrice)"), "Meriem (redactrice)");
+  assert.equal(headerSafeActor("Aya\r\nX-ZGR: injecté"), "Aya X-ZGR: injecte");
+  assert.match(headerSafeActor("محررة"), /^[\x20-\x7e]+$/);
+});
 
 test("le timeout dur interrompt une réponse HTTP qui ne se termine jamais", async (context) => {
   const server = createServer(() => {});

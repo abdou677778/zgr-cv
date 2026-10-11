@@ -421,6 +421,7 @@ function clientFolderName(order: StoredOrder) {
 interface DriveSyncOptions {
   offset?: number;
   batchSize?: number;
+  deferFinalization?: boolean;
 }
 
 export async function syncOrderToDrive(orderId: string, options: DriveSyncOptions = {}) {
@@ -430,9 +431,10 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
   const env = runtimeEnv();
   const rootId = env.GOOGLE_DRIVE_ROOT_FOLDER_ID!;
   const startedAt = new Date().toISOString();
-  // A terminated Worker request can leave SYNCING behind. Batches are deliberately
-  // small, so five minutes is enough to avoid overlap while recovering promptly.
-  const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  // A terminated Worker request can leave SYNCING behind. Batched migration calls
+  // now stream a single file and have a 45 s Google timeout, so two minutes prevents
+  // overlap while recovering much faster after a killed process or Worker restart.
+  const staleBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
 
   const lock = await env.DB.prepare(
     "UPDATE orders SET drive_status = 'SYNCING', updated_at = ? WHERE id = ? AND (drive_status <> 'SYNCING' OR updated_at < ?)",
@@ -444,8 +446,6 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
   try {
     const cache: DriveDirectoryCache = new Map();
     const files = await getOrderFiles(orderId);
-    const versions = await getJsonVersions(orderId);
-    const deliverables = await getDeliverables(orderId);
     const sortedFiles = [...files].sort(
       (a, b) =>
         (a.sourceModifiedAt || a.createdAt).localeCompare(b.sourceModifiedAt || b.createdAt) ||
@@ -455,69 +455,42 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
     const batchSize = options.batchSize ?? Math.max(1, sortedFiles.length - offset);
     const selectedFiles = sortedFiles.slice(offset, offset + batchSize);
     const nextOffset = offset + selectedFiles.length;
-    const complete = nextOffset >= sortedFiles.length;
-    const date = new Date(order.createdAt);
-    const year = String(date.getUTCFullYear());
-    const month = `${String(date.getUTCMonth() + 1).padStart(2, "0")}_${date
-      .toLocaleString("fr-FR", { month: "long", timeZone: "UTC" })
-      .toUpperCase()}`;
-    const yearFolder = await ensureFolder(cache, rootId, year);
-    const monthFolder = await ensureFolder(cache, yearFolder, month);
-    const clientFolder = await ensureFolder(cache, monthFolder, clientFolderName(order));
-    const commandFolder = await ensureFolder(cache, clientFolder, "00_COMMANDE");
+    // Batched callers get a dedicated metadata/folder finalization request after
+    // the last binary. Keeping binary streaming and final tree construction in
+    // separate invocations stays within the CPU budget of the free Worker plan.
+    const complete =
+      nextOffset >= sortedFiles.length &&
+      !(options.deferFinalization && selectedFiles.length > 0);
+    const versions = complete ? await getJsonVersions(orderId) : [];
+    const deliverables = complete ? await getDeliverables(orderId) : [];
+
+    // Once the client folder is known, reuse its ID for every following batch.
+    // Rewalking year/month/client and rebuilding the complete tree on every batch
+    // caused unnecessary Drive calls and could exhaust the Worker's CPU budget.
+    let clientFolder = order.driveFolderId;
+    if (!clientFolder) {
+      const date = new Date(order.createdAt);
+      const year = String(date.getUTCFullYear());
+      const month = `${String(date.getUTCMonth() + 1).padStart(2, "0")}_${date
+        .toLocaleString("fr-FR", { month: "long", timeZone: "UTC" })
+        .toUpperCase()}`;
+      const yearFolder = await ensureFolder(cache, rootId, year);
+      const monthFolder = await ensureFolder(cache, yearFolder, month);
+      clientFolder = await ensureFolder(cache, monthFolder, clientFolderName(order));
+      // Persist immediately: if this request is interrupted, the next retry resumes
+      // directly in the same folder instead of repeating the hierarchy lookup.
+      await env.DB.prepare("UPDATE orders SET drive_folder_id = ?, updated_at = ? WHERE id = ?")
+        .bind(clientFolder, new Date().toISOString(), orderId)
+        .run();
+    }
+
     const sourceFolder = await ensureFolder(cache, clientFolder, "01_DOCUMENTS_SOURCES");
-    const aiFolder = await ensureFolder(cache, clientFolder, "02_TRAITEMENT_IA");
-    const jsonFolder = await ensureFolder(cache, aiFolder, "JSON_ZGR");
-    await ensureFolder(cache, aiFolder, "PACKS_IA");
-    await ensureFolder(cache, aiFolder, "RAPPORTS_VALIDATION");
-    await ensureFolder(cache, clientFolder, "03_PRODUCTION");
-    const deliverablesFolder = await ensureFolder(cache, clientFolder, "04_LIVRABLES");
-    await ensureFolder(cache, clientFolder, "05_ARCHIVES");
-    const serviceFolders = new Map<string, string>();
-    for (const service of order.services)
-      serviceFolders.set(service, await ensureFolder(cache, deliverablesFolder, service));
 
     const sourceCategoryFolders: Record<string, string> = {};
-    const usedCategories = new Set(files.map((file) => file.category));
+    const usedCategories = new Set(selectedFiles.map((file) => file.category));
     for (const category of usedCategories) {
       sourceCategoryFolders[category] = await ensureFolder(cache, sourceFolder, category);
     }
-
-    const manifest = {
-      schemaVersion: 1,
-      order: { ...order, driveFolderId: clientFolder },
-      files: files.map(({ storageKey: _storageKey, ...file }) => file),
-    };
-    const brief = [
-      `COMMANDE : ${order.id}`,
-      `CLIENT : ${order.clientName}`,
-      `EMAIL : ${order.email}`,
-      `TÉLÉPHONE : ${order.phone || "Non renseigné"}`,
-      `FACEBOOK : ${order.facebookUrl || "Non renseigné"}`,
-      `LANGUE : ${order.language}`,
-      `SERVICES : ${order.services.join(", ")}`,
-      "",
-      "REMARQUES DU CLIENT",
-      order.notes || "Aucune remarque.",
-    ].join("\n");
-    await uploadText(
-      cache,
-      commandFolder,
-      "commande.json",
-      JSON.stringify(manifest, null, 2),
-      "application/json; charset=utf-8",
-      `${orderId}/commande.json`,
-      true,
-    );
-    await uploadText(
-      cache,
-      commandFolder,
-      "brief-client.txt",
-      brief,
-      "text/plain; charset=utf-8",
-      `${orderId}/brief-client.txt`,
-      true,
-    );
 
     const usedSourceNames = new Map<string, number>();
     const sourceDriveNames = new Map<string, string>();
@@ -547,12 +520,64 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
       });
     }
 
-    for (const version of complete ? versions : []) {
+    let jsonFolder: string | undefined;
+    let deliverablesFolder: string | undefined;
+    const serviceFolders = new Map<string, string>();
+    if (complete) {
+      const commandFolder = await ensureFolder(cache, clientFolder, "00_COMMANDE");
+      const aiFolder = await ensureFolder(cache, clientFolder, "02_TRAITEMENT_IA");
+      jsonFolder = await ensureFolder(cache, aiFolder, "JSON_ZGR");
+      await ensureFolder(cache, aiFolder, "PACKS_IA");
+      await ensureFolder(cache, aiFolder, "RAPPORTS_VALIDATION");
+      await ensureFolder(cache, clientFolder, "03_PRODUCTION");
+      deliverablesFolder = await ensureFolder(cache, clientFolder, "04_LIVRABLES");
+      await ensureFolder(cache, clientFolder, "05_ARCHIVES");
+      for (const service of order.services)
+        serviceFolders.set(service, await ensureFolder(cache, deliverablesFolder, service));
+
+      const manifest = {
+        schemaVersion: 1,
+        order: { ...order, driveFolderId: clientFolder },
+        files: files.map(({ storageKey: _storageKey, ...file }) => file),
+      };
+      const brief = [
+        `COMMANDE : ${order.id}`,
+        `CLIENT : ${order.clientName}`,
+        `EMAIL : ${order.email}`,
+        `TÉLÉPHONE : ${order.phone || "Non renseigné"}`,
+        `FACEBOOK : ${order.facebookUrl || "Non renseigné"}`,
+        `LANGUE : ${order.language}`,
+        `SERVICES : ${order.services.join(", ")}`,
+        "",
+        "REMARQUES DU CLIENT",
+        order.notes || "Aucune remarque.",
+      ].join("\n");
+      await uploadText(
+        cache,
+        commandFolder,
+        "commande.json",
+        JSON.stringify(manifest, null, 2),
+        "application/json; charset=utf-8",
+        `${orderId}/commande.json`,
+        true,
+      );
+      await uploadText(
+        cache,
+        commandFolder,
+        "brief-client.txt",
+        brief,
+        "text/plain; charset=utf-8",
+        `${orderId}/brief-client.txt`,
+        true,
+      );
+    }
+
+    for (const version of versions) {
       const object = await env.FILES.get(version.storageKey);
       if (!object) continue;
       await uploadToFolder({
         cache,
-        parentId: jsonFolder,
+        parentId: jsonFolder!,
         name: `CV_GLOBAL_7_LANGUES__v${String(version.versionNumber).padStart(3, "0")}.json`,
         contentType: "application/json; charset=utf-8",
         size: object.size,
@@ -564,12 +589,12 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
     // Keep generated PDFs private in their service folders. Client delivery is a
     // separate, explicit operation that copies only approved files to a shareable folder.
     const usedDeliverableNames = new Map<string, number>();
-    for (const deliverable of [...(complete ? deliverables : [])].sort(
+    for (const deliverable of [...deliverables].sort(
       (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
     )) {
       let serviceFolder = serviceFolders.get(deliverable.service);
       if (!serviceFolder) {
-        serviceFolder = await ensureFolder(cache, deliverablesFolder, deliverable.service);
+        serviceFolder = await ensureFolder(cache, deliverablesFolder!, deliverable.service);
         serviceFolders.set(deliverable.service, serviceFolder);
       }
       const baseName = safeFileName(deliverable.originalName);

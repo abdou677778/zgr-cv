@@ -29,6 +29,7 @@ export async function POST(request: Request, context: RouteContext) {
     const result = await syncOrderToDrive(id, {
       offset: offsetValue,
       batchSize: batchSizeValue,
+      deferFinalization: batchSizeValue !== undefined,
     });
     if (!result.configured) {
       return jsonResponse(

@@ -15,7 +15,9 @@ const MAX_ARCHIVE_FILES = 500;
 const ARCHIVE_FIRST_YEAR = 2022;
 const ARCHIVE_LAST_YEAR = 2026;
 // Smaller Drive batches keep a Worker request bounded even when Google is slow.
-const DRIVE_SYNC_BATCH_SIZE = 2;
+// A single streamed binary per Worker invocation avoids CPU-limit failures on
+// the free Cloudflare plan. The script remains fast through resumable retries.
+const DRIVE_SYNC_BATCH_SIZE = 1;
 const DEFAULT_UPLOAD_CONCURRENCY = 4;
 const API_REQUEST_TIMEOUT_MS = 90_000;
 const DRIVE_SYNC_REQUEST_TIMEOUT_MS = 240_000;
@@ -118,6 +120,18 @@ function parseArgs(argv) {
     index += 1;
   }
   return { command, options };
+}
+
+function headerSafeActor(value) {
+  const normalized = String(value || "migration-onedrive")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[^\x20-\x7e]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 64);
+  return normalized || "migration-onedrive";
 }
 
 function sha256(value) {
@@ -1052,7 +1066,7 @@ async function migrateCommand(options) {
     source,
     rclone: options.rclone || "rclone",
     portalUrl: options["portal-url"] || DEFAULT_PORTAL_URL,
-    actor: (options.actor || "migration-onedrive").slice(0, 64),
+    actor: headerSafeActor(options.actor),
     expectedDriveRoot: String(
       options["expected-drive-root"] || manifest.expectedDriveRootId || "",
     ).trim(),
@@ -1134,6 +1148,7 @@ export {
   clientPathParts,
   excludeExactDuplicateClients,
   fetchTextWithHardTimeout,
+  headerSafeActor,
   prepareDriveRootRepair,
   sourceEligibility,
   validateClient,

@@ -13,7 +13,7 @@ const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_ORDER_BYTES = 500 * 1024 * 1024;
 const MAX_ARCHIVE_FILES = 500;
 const ARCHIVE_FIRST_YEAR = 2022;
-const ARCHIVE_LAST_YEAR = 2025;
+const ARCHIVE_LAST_YEAR = 2026;
 // Smaller Drive batches keep a Worker request bounded even when Google is slow.
 const DRIVE_SYNC_BATCH_SIZE = 2;
 const DEFAULT_UPLOAD_CONCURRENCY = 4;
@@ -28,6 +28,9 @@ const sourceContainerPatterns = [
   /(?:^|\b)unpaid(?:\b|$)/i,
   /(?:^|\b)rejected?(?:\b|$)/i,
   /(?:^|\b)orders?(?:\b|$)/i,
+  /^[^\p{L}\p{N}]*20\d{2}\s*-\s*20\d{2}\s*$/iu,
+  /^[^\p{L}\p{N}]*done(?:\s+for\s+free)?\s*$/iu,
+  /^[^\p{L}\p{N}]*training\s*$/iu,
 ];
 
 const excludedSourcePatterns = [
@@ -154,6 +157,48 @@ function sourceEligibility(sourceFolder) {
   return exclusion
     ? { eligibility: "excluded", exclusionReason: exclusion.reason }
     : { eligibility: "eligible", exclusionReason: "" };
+}
+
+function exactClientSignature(client) {
+  const files = (client.files || []).map((file) => {
+    const hashes = Object.entries(file.hashes || {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([name, value]) => `${name}:${value}`)
+      .join(",");
+    return [file.relativePath, file.sizeBytes, file.modifiedAt, hashes].join("\0");
+  });
+  return sha256(files.sort().join("\n"));
+}
+
+function duplicatePreference(client) {
+  const depth = String(client.sourceFolder || "").split("/").length;
+  const copyPenalty = /(?:\(\d+\)|\bcopy\b)/i.test(client.sourceFolder || "") ? 100 : 0;
+  return depth * 10 - copyPenalty;
+}
+
+function excludeExactDuplicateClients(clients) {
+  const groups = new Map();
+  for (const client of clients) {
+    if (client.eligibility !== "eligible" || !client.files?.length) continue;
+    const signature = exactClientSignature(client);
+    const group = groups.get(signature) || [];
+    group.push(client);
+    groups.set(signature, group);
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const [canonical, ...duplicates] = [...group].sort(
+      (left, right) =>
+        duplicatePreference(right) - duplicatePreference(left) ||
+        left.sourceFolder.localeCompare(right.sourceFolder, "fr"),
+    );
+    for (const duplicate of duplicates) {
+      duplicate.eligibility = "excluded";
+      duplicate.exclusionReason = "DUPLICATE_SOURCE_FOLDER";
+      duplicate.status = "excluded";
+      duplicate.duplicateOfSourceFolder = canonical.sourceFolder;
+    }
+  }
 }
 
 function itemModifiedAt(item) {
@@ -373,6 +418,8 @@ function buildManifest(items, source) {
       };
     })
     .sort((a, b) => a.clientName.localeCompare(b.clientName, "fr"));
+
+  excludeExactDuplicateClients(clients);
 
   return {
     schemaVersion: 1,
@@ -1085,6 +1132,7 @@ export {
   approveDatesByConfidence,
   buildManifest,
   clientPathParts,
+  excludeExactDuplicateClients,
   fetchTextWithHardTimeout,
   prepareDriveRootRepair,
   sourceEligibility,

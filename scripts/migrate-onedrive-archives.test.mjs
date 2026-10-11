@@ -98,6 +98,42 @@ test("les chemins normaux conservent le premier dossier comme client", () => {
   });
 });
 
+test("les conteneurs annuels, gratuits et formation exposent leurs vrais clients", () => {
+  for (const container of ["✅️ 2023 - 2024", "2025 - 2026", "🎁 DONE FOR FREE", "📍TRAINING"]) {
+    assert.deepEqual(clientPathParts([container, "Client Exemple", "Infos", "info.txt"]), {
+      sourceFolder: `${container}/Client Exemple`,
+      clientFolder: "Client Exemple",
+      relativePath: "Infos/info.txt",
+    });
+  }
+});
+
+test("une copie strictement identique est exclue au profit du dossier canonique", () => {
+  const sharedModifiedAt = "2024-12-19T17:31:53.000Z";
+  const manifest = buildManifest(
+    [
+      {
+        ...inventoryFile("Client Exemple (1)/CV.pdf", 2048, sharedModifiedAt),
+        Hashes: { SHA1: "contenu-identique" },
+      },
+      {
+        ...inventoryFile("2025 - 2026/Client Exemple/CV.pdf", 2048, sharedModifiedAt),
+        Hashes: { SHA1: "contenu-identique" },
+      },
+    ],
+    "onedrive:archives",
+  );
+  const canonical = manifest.clients.find(
+    (client) => client.sourceFolder === "2025 - 2026/Client Exemple",
+  );
+  const duplicate = manifest.clients.find((client) => client.sourceFolder === "Client Exemple (1)");
+
+  assert.equal(canonical?.status, "pending");
+  assert.equal(duplicate?.status, "excluded");
+  assert.equal(duplicate?.exclusionReason, "DUPLICATE_SOURCE_FOLDER");
+  assert.equal(duplicate?.duplicateOfSourceFolder, canonical?.sourceFolder);
+});
+
 test("la validation automatique ne confirme que les niveaux autorisés", () => {
   const manifest = buildManifest(
     [

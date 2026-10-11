@@ -52,6 +52,7 @@ import {
   X,
   Sun,
   Moon,
+  Newspaper,
 } from "lucide-react";
 import { analyzeEuropassCoverage } from "@/lib/europass-coverage";
 import { EUROPASS_TEMPLATE_ID } from "@/lib/document-templates";
@@ -209,6 +210,10 @@ const AccountSettingsDialog = lazy(async () => {
 const PromptMasterDialog = lazy(async () => {
   const module = await import("@/components/prompt-master-dialog");
   return { default: module.PromptMasterDialog };
+});
+const PublicationsWorkspace = lazy(async () => {
+  const module = await import("@/components/publications-workspace");
+  return { default: module.PublicationsWorkspace };
 });
 const PreviewControlDock = lazy(async () => {
   const module = await import("@/components/preview-control-dock");
@@ -675,6 +680,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [promptMasterOpen, setPromptMasterOpen] = useState(false);
+  const [publicationsOpen, setPublicationsOpen] = useState(false);
   const [aiFieldRequest, setAiFieldRequest] = useState<AiFieldRequest | null>(null);
   const [clientDatabaseOpen, setClientDatabaseOpen] = useState(false);
   const [workflowCounts, setWorkflowCounts] = useState<ClientWorkflowCounts>({
@@ -3004,6 +3010,20 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                     </span>
                   </DropdownMenuItem>
                 )}
+                {user.permissions.aiUse && (
+                  <DropdownMenuItem
+                    onSelect={() => setPublicationsOpen(true)}
+                    className="items-start gap-3 rounded-lg px-3 py-3"
+                  >
+                    <Newspaper className="mt-0.5 h-4 w-4 text-rose-600" />
+                    <span className="flex flex-col">
+                      <span className="font-semibold">Publications</span>
+                      <span className="text-xs text-muted-foreground">
+                        Posts fiables pour vos pages Facebook
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
             <Button variant="ghost" size="sm" onClick={loadSample}>
@@ -4573,6 +4593,18 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         ) : null}
         {promptMasterOpen ? (
           <PromptMasterDialog open={promptMasterOpen} onOpenChange={setPromptMasterOpen} />
+        ) : null}
+        {publicationsOpen ? (
+          <PublicationsWorkspace
+            open={publicationsOpen}
+            onOpenChange={setPublicationsOpen}
+            settings={aiSettings}
+            onSettingsChange={setAiSettings}
+            onOpenAiSettings={() => {
+              setPublicationsOpen(false);
+              setAiSettingsOpen(true);
+            }}
+          />
         ) : null}
         {accountSettingsOpen ? (
           <AccountSettingsDialog

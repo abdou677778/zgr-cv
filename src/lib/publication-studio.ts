@@ -430,7 +430,8 @@ Tu es rédacteur senior spécialisé dans l'emploi international et la communica
 Tu travailles uniquement avec les preuves JSON fournies. Tu n'inventes jamais de poste, nombre, salaire, condition, Deadline, admissibilité ou URL.
 Chaque publication suit naturellement Problème → Solution → Arguments → Action, sans afficher ces quatre mots comme titres.
 Interdictions absolues : promesse d'embauche, garantie de visa, garantie d'acceptation, urgence artificielle, faux chiffre, faux Deadline, parenthèses rondes.
-Le service CV PRO TEAM peut être proposé comme aide à la rédaction de CV, Cover Letter et candidature, jamais comme intermédiaire officiel ni comme garantie.
+Le service peut être proposé comme aide à la rédaction du dossier et à la candidature, jamais comme intermédiaire officiel ni comme garantie.
+Tous les textes visibles doivent être écrits uniquement en arabe. Traduis le sens professionnel des intitulés, sources, métiers et conditions au lieu de les translittérer ou de les recopier en français ou en anglais.
 Réponds uniquement avec un objet JSON valide conforme à la structure demandée.
 `.trim();
 
@@ -449,13 +450,18 @@ PAGE
 MISSION
 Rédige exactement 5 publications différentes et directement copiables sur Facebook.
 - Utilise l'arabe dialectal du marché avec un style administratif correct et lisible.
-- Garde les termes professionnels utiles en anglais, par exemple Job Offer, Deadline, CV, Cover Letter, ATS, Apply.
+- Utilise uniquement l'arabe dans le titre, le corps, les commentaires, les mots mis en évidence et le visuel.
+- Organise le corps ligne par ligne avec des rubriques courtes, des espaces lisibles, des numéros et des émojis pertinents.
+- Utilise le drapeau 🇪🇺 pour les opportunités en Europe et le drapeau du pays ou de la région pour les autres destinations.
+- Présente chaque condition vérifiée sur une ligne commençant par ✅.
+- Les trois pages doivent avoir des structures, accroches, appels à l'action et hashtags réellement distincts.
 - N'utilise aucune parenthèse ronde dans headline, body, comments ou visual.
 - Alterne les formats : 2 publications short sans visuel et 3 publications visual.
 - Chaque publication doit s'appuyer sur une seule preuve, citer la source, conserver son lien officiel et son checkedAt.
-- Si deadlineAt vaut null, écris que le Deadline n'est pas publié. N'invente aucune date.
+- Si deadlineAt vaut null, écris en arabe que la date limite n'est pas publiée. N'invente aucune date.
 - Mentionne les documents et conditions uniquement s'ils existent dans la preuve.
-- Termine par une action claire : consulter la source, préparer le dossier ou demander le service CV.
+- Termine le corps par une ligne de hashtags arabes adaptée à la page.
+- Termine aussi par une action claire : consulter la source, préparer le dossier ou demander le service de rédaction.
 - Propose exactement 5 commentaires courts et utiles par publication. Ils doivent compléter la publication : source, documents, vigilance, service ou question d'engagement.
 - Le texte doit rester naturel et ne doit pas ressembler à cinq copies du même modèle.
 ${focus.trim() ? `- Priorité éditoriale demandée : ${focus.trim()}` : ""}
@@ -469,7 +475,7 @@ STRUCTURE JSON ATTENDUE
       "headline": "texte",
       "body": "texte",
       "comments": ["1", "2", "3", "4", "5"],
-      "highlightedTerms": ["Deadline", "CV"],
+      "highlightedTerms": ["السيرة الذاتية", "آخر أجل"],
       "evidenceId": "identifiant exact d'une preuve",
       "visual": null ou {
         "eyebrow": "texte court",
@@ -494,6 +500,25 @@ function normalizeStringArray(value: unknown, maximum: number) {
         .filter(Boolean)
         .slice(0, maximum)
     : [];
+}
+
+function cleanMultiline(value: string | null | undefined) {
+  return (value || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function hasLatinLetters(value: string) {
+  return /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(value);
+}
+
+function endsWithArabicHashtags(value: string) {
+  const lastLine = cleanMultiline(value).split("\n").filter(Boolean).at(-1) || "";
+  return /^#[\u0600-\u06ff\d_]+(?:\s+#[\u0600-\u06ff\d_]+)+$/.test(lastLine);
 }
 
 export function normalizePublicationBatch(
@@ -527,8 +552,8 @@ export function normalizePublicationBatch(
         createdAt: generatedAt,
         format,
         objective,
-        headline: clean(String(candidate.headline || proof.title)),
-        body: clean(String(candidate.body || "")),
+        headline: clean(String(candidate.headline || "فرصة مهنية موثوقة")),
+        body: cleanMultiline(String(candidate.body || "")),
         comments: normalizeStringArray(candidate.comments, 5),
         highlightedTerms: normalizeStringArray(candidate.highlightedTerms, 8),
         evidenceId: proof.id,
@@ -554,6 +579,18 @@ export function normalizePublicationBatch(
     throw new Error(`L’IA a produit ${posts.length} publication(s) vérifiables au lieu de 5.`);
   if (posts.some((post) => /[()]/.test(`${post.headline}${post.body}${post.comments.join("")}`)))
     throw new Error("Une publication contient des parenthèses interdites. Relancez la génération.");
+  if (
+    posts.some((post) =>
+      hasLatinLetters(
+        `${post.headline}${post.body}${post.comments.join("")}${post.highlightedTerms.join("")}${post.visual ? Object.values(post.visual).flat().join("") : ""}`,
+      ),
+    )
+  )
+    throw new Error(
+      "Une publication contient du texte non arabe. Le moteur local sécurisé prend le relais.",
+    );
+  if (posts.some((post) => !endsWithArabicHashtags(post.body)))
+    throw new Error("Une publication ne se termine pas par des hashtags arabes.");
   return {
     version: 1,
     pageId: page.id,
@@ -590,10 +627,7 @@ function focusedEvidence(evidence: PublicationEvidence[], focus: string) {
 }
 
 function localDeadline(value: string | null, market: PublicationMarket) {
-  if (!value)
-    return market === "DZ"
-      ? "الـ Deadline ما هوش منشور، لازم تراجع المصدر الرسمي قبل التقديم."
-      : "الـ Deadline موش منشور، يلزمك تراجع المصدر الرسمي قبل التقديم.";
+  if (!value) return "غير منشور في المصدر الرسمي";
   const date = new Date(value);
   const label = Number.isNaN(date.getTime())
     ? withoutParentheses(value)
@@ -602,43 +636,189 @@ function localDeadline(value: string | null, market: PublicationMarket) {
         month: "long",
         day: "numeric",
       });
-  return market === "DZ"
-    ? `الـ Deadline المنشور هو ${label}، راجعه مرة أخرى في المصدر الرسمي.`
-    : `الـ Deadline المنشور هو ${label}، ثبّت التاريخ مرة أخرى من المصدر الرسمي.`;
+  return label;
 }
 
-function listLabel(values: string[], maximum = 3) {
-  const normalized = values.map(withoutParentheses).filter(Boolean);
-  const concise = normalized.filter((value) => value.length <= 180);
-  const selected = (concise.length ? concise : normalized)
-    .slice(0, maximum)
-    .map((value) => (value.length > 180 ? `${value.slice(0, 177).trim()}…` : value));
-  const joined = selected.join("، ");
-  return joined.length > 320 ? `${joined.slice(0, 317).trim()}…` : joined;
+function folded(value: string) {
+  return withoutParentheses(value)
+    .toLocaleLowerCase("fr")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function arabicOpportunityTitle(value: string) {
+  const title = folded(value);
+  const mappings: Array<[RegExp, string]> = [
+    [/reforestation.*granada|healthy living/, "التشجير ونمط العيش الصحي في جبال غرناطة"],
+    [/youth office.*esslingen/, "تطوّع في مكتب الشباب بمدينة إسلينغن"],
+    [/non.formal school.*black forest/, "تطوّع في مدرسة للتعليم غير النظامي بمنطقة الغابة السوداء"],
+    [/multicultural kindergarten/, "تجربة تطوعية لمدة سنة في روضة أطفال متعددة الثقافات"],
+    [/circus.*children.*artists/, "تطوّع في السيرك مع الأطفال والفنانين"],
+    [/kita.*kleine prinz/, "تطوّع أوروبي في روضة الأمير الصغير"],
+    [/project yatra|yatra 2026/, "مشروع ياترا للتطوع الجماعي في تطوان ومرتيل"],
+    [/heavy equipment operator/, "مشغّل معدات ثقيلة"],
+    [/industrial mechanic/, "ميكانيكي صناعي"],
+    [/registered massage therapist/, "معالج تدليك مرخّص"],
+    [/home child care provider/, "مقدّم رعاية أطفال منزلية"],
+    [/construction helper/, "مساعد في أشغال البناء"],
+    [/mobilite francophone/, "التنقل الفرنكوفوني للعمل خارج كيبيك"],
+    [/immigration.*atlantique/, "برنامج الهجرة إلى كندا الأطلسية"],
+    [/eures|emplois officiels.*europe/, "عروض العمل الرسمية عبر الشبكة الأوروبية لخدمات التوظيف"],
+    [/prince.edouard|expression of interest/, "الهجرة والتصريح بالاهتمام في جزيرة الأمير إدوارد"],
+    [/thamm|tunisie.*italie.*batiment/, "المسار التونسي الإيطالي لمهن البناء"],
+    [/offre officielle/, "عرض مهني رسمي"],
+    [/educateur|petite enfance/, "انتداب مربّين ومربّيات في الطفولة المبكرة"],
+    [/chauffeur|truck driver/, "انتداب سائقي شاحنات نقل"],
+    [/soudeur|welder/, "انتداب لحّامين مؤهلين"],
+    [/electricien|electrician/, "انتداب كهربائيين مؤهلين"],
+    [/mecanicien|mechanic/, "انتداب ميكانيكيين مؤهلين"],
+    [/infirmier|nurs/, "انتداب مهنيين في قطاع الصحة"],
+    [/volunteer|volontariat|volontaire/, "فرصة تطوع دولية"],
+  ];
+  return mappings.find(([pattern]) => pattern.test(title))?.[1] || "فرصة مهنية دولية موثوقة";
+}
+
+function arabicDestination(value: string) {
+  const destination = folded(value);
+  if (/canada|quebec|ontario|prince.edouard|atlanti/.test(destination)) return "كندا";
+  if (/orgiva|granada|spain|espagne/.test(destination)) return "إسبانيا";
+  if (/esslingen|black forest|st georgen|karlsruhe|germany|allemagne/.test(destination))
+    return "ألمانيا";
+  if (/italy|italie/.test(destination)) return "إيطاليا";
+  if (/france/.test(destination)) return "فرنسا";
+  if (/portugal/.test(destination)) return "البرتغال";
+  if (/belg/.test(destination)) return "بلجيكا";
+  if (/morocco|maroc|tetouan|martil/.test(destination)) return "المغرب";
+  if (/alger|dz/.test(destination)) return "الجزائر";
+  if (/tunis|tn/.test(destination)) return "تونس";
+  if (/europe|europ/.test(destination)) return "أوروبا";
+  return "الوجهة المحددة في الإعلان الرسمي";
+}
+
+function destinationFlag(value: string) {
+  const destination = folded(value);
+  if (/canada|quebec|ontario|prince.edouard|atlanti/.test(destination)) return "🇨🇦";
+  if (/morocco|maroc|tetouan|martil/.test(destination)) return "🇲🇦";
+  if (/alger|dz/.test(destination)) return "🇩🇿";
+  if (/tunis|tn/.test(destination)) return "🇹🇳";
+  if (
+    /europe|europ|spain|espagne|germany|allemagne|italy|italie|france|portugal|belg/.test(
+      destination,
+    )
+  )
+    return "🇪🇺";
+  return "🌍";
+}
+
+function arabicSource(value: string) {
+  const source = folded(value);
+  if (/portail europeen.*jeunesse/.test(source)) return "البوابة الأوروبية للشباب";
+  if (/guichet.emplois/.test(source)) return "بنك الوظائف الكندي";
+  if (/immigration.*refugies|ircc/.test(source)) return "وزارة الهجرة واللاجئين والمواطنة الكندية";
+  if (/eures|union europeenne/.test(source)) return "الشبكة الأوروبية لخدمات التوظيف";
+  if (/prince.edouard/.test(source)) return "حكومة جزيرة الأمير إدوارد";
+  if (/aneti/.test(source)) return "الوكالة الوطنية للتشغيل والعمل المستقل في تونس";
+  if (/atct/.test(source)) return "الوكالة التونسية للتعاون الفني";
+  if (/offres.*algerie/.test(source)) return "منصة عروض العمل في الجزائر";
+  return "الجهة الرسمية الناشرة للعرض";
+}
+
+function addUnique(target: string[], value: string) {
+  if (value && !target.includes(value)) target.push(value);
+}
+
+function arabicConditions(proof: PublicationEvidence) {
+  const haystack = folded(`${proof.conditions.join(" ")} ${proof.description}`);
+  const result: string[] = [];
+  if (/18.{0,12}30|18-30|18 to 30/.test(haystack)) addUnique(result, "السن بين 18 و30 سنة");
+  if (/experience|expérience/.test(haystack))
+    addUnique(result, "خبرة مهنية حسب ما هو مذكور في العرض");
+  if (/english|anglais/.test(haystack)) addUnique(result, "مستوى مناسب في اللغة الإنجليزية");
+  if (/german|allemand/.test(haystack))
+    addUnique(result, "معرفة باللغة الألمانية حسب متطلبات العرض");
+  if (/spanish|espagnol/.test(haystack))
+    addUnique(result, "معرفة باللغة الإسبانية حسب متطلبات العرض");
+  if (/french|francais|français|linguist/.test(haystack))
+    addUnique(result, "إثبات المستوى المطلوب في اللغة الفرنسية");
+  if (/driver|driving|permis de conduire/.test(haystack))
+    addUnique(result, "رخصة السياقة حسب طبيعة المنصب");
+  if (/children|child|enfant|youth|jeune/.test(haystack))
+    addUnique(result, "الاهتمام بالعمل مع الأطفال أو الشباب");
+  if (/team|equipe|équipe/.test(haystack)) addUnique(result, "القدرة على العمل ضمن فريق");
+  if (/physical|physique|outdoor/.test(haystack)) addUnique(result, "الاستعداد للأنشطة الميدانية");
+  if (/designated employer|employeur designe|employeur désigné/.test(haystack))
+    addUnique(result, "الحصول على عرض عمل من مشغّل معتمد");
+  if (/job offer|offre d.emploi/.test(haystack))
+    addUnique(result, "الحصول على عرض عمل مستوف للشروط");
+  if (/diplom|education|etude|étude|formation/.test(haystack))
+    addUnique(result, "مؤهل دراسي أو تكوين مناسب حسب العرض");
+  if (!result.length) addUnique(result, "مراجعة الشروط التفصيلية المنشورة في المصدر الرسمي");
+  return result.slice(0, 4);
+}
+
+function arabicDocuments(values: string[]) {
+  const result: string[] = [];
+  values.forEach((value) => {
+    const document = folded(value);
+    if (/cv|curriculum/.test(document)) addUnique(result, "سيرة ذاتية مكيّفة مع العرض");
+    else if (/cover letter|lettre|motivation/.test(document))
+      addUnique(result, "رسالة تحفيزية مخصصة");
+    else if (/langue|language|francais|français/.test(document))
+      addUnique(result, "إثبات المستوى اللغوي المطلوب");
+    else if (/diplom|certificat|formation/.test(document))
+      addUnique(result, "الشهادات والمؤهلات المهنية");
+    else if (/experience|travail/.test(document)) addUnique(result, "شهادات الخبرة والعمل");
+    else if (/offre d.emploi|job offer/.test(document))
+      addUnique(result, "عرض العمل عند طلبه في المسار");
+  });
+  if (!result.length) result.push("الوثائق المحددة في الإعلان الرسمي");
+  return result.slice(0, 4);
+}
+
+function arabicPositions(values: string[]) {
+  const joined = folded(values.join(" "));
+  if (!joined) return "المجال المهني المحدد في الإعلان";
+  if (/team/.test(joined)) return "تطوّع ضمن فريق";
+  if (/individual/.test(joined)) return "تطوّع فردي";
+  if (/batiment|construction/.test(joined)) return "مهن البناء والأشغال";
+  if (/child|enfant|education/.test(joined)) return "الطفولة المبكرة والعمل التربوي";
+  if (/mecan|mechan/.test(joined)) return "الميكانيك والصيانة الصناعية";
+  if (/health|sante|santé/.test(joined)) return "الصحة والرعاية";
+  return "المجال المهني المذكور في العرض الرسمي";
+}
+
+function linesWith(prefix: string, values: string[]) {
+  return values.map((value) => `${prefix} ${value}`).join("\n");
 }
 
 const LOCAL_HEADLINES: Record<PublicationPageId, string[]> = {
   "cv-pro-algeria": [
-    "فرصة موثوقة وخطوات واضحة قبل إرسال الـ CV",
-    "الـ Deadline ما يتخمنش، راجع المصدر الرسمي",
-    "ملفك لازم يكون مهيأ للعرض الحقيقي",
-    "قبل Apply تأكد من الشروط والوثائق",
-    "فرصة رسمية تستاهل تحضير منظم",
+    "فرصة موثوقة للجزائريين وخطوات التقديم واضحة",
+    "ما تفوّتش آخر أجل بسبب ملف ناقص",
+    "حضّر ترشحك على أساس الشروط الرسمية",
+    "قبل ما تبعث ملفك تأكد من كل التفاصيل",
+    "فرصة رسمية تستاهل ملف منظم ومخصص",
   ],
   "emplois-immigration-tunis": [
-    "فرصة دولية موثوقة وخطوات الترشح واضحة",
-    "قبل ما تبعث الـ CV راجع الشروط والـ Deadline",
-    "الترشح الصحيح يبدأ من المصدر الرسمي",
+    "فرصة دولية للتونسيين وشروط الترشح واضحة",
+    "ثبّت آخر أجل قبل ما تبعث مطلبك",
+    "الترشح الصحيح يبدأ من البلاغ الرسمي",
     "حضّر ملفك حسب العرض موش بطريقة عامة",
-    "عرض جديد يلزمو ملف مرتب ومعلومات صحيحة",
+    "عرض جديد يلزمو وثائق مرتبة ومعلومات صحيحة",
   ],
   "bissane-career": [
     "فرصتك تنجم تبدأ بملف مرتب ومعلومة صحيحة",
-    "ما تخليش الـ Deadline يفوتك بسبب ملف ناقص",
-    "CV قوي ومصدر رسمي وخطوات واضحة",
+    "ما تخليش آخر أجل يفوتك بسبب ملف ناقص",
+    "سيرة ذاتية قوية ومصدر رسمي وخطوات واضحة",
     "قبل الترشح تأكد إن العرض يناسب بروفايلك",
     "خطوة صغيرة اليوم تنجم تقربك لفرصة أحسن",
   ],
+};
+
+const PAGE_HASHTAGS: Record<PublicationPageId, string> = {
+  "cv-pro-algeria": "#فرص_للجزائريين #فرص_موثوقة #سيرة_ذاتية #رسالة_تحفيزية #تقديم_وظائف",
+  "emplois-immigration-tunis": "#انتداب_دولي #فرص_للتونسيين #خدمة_بالخارج #ملف_ترشح #عروض_موثوقة",
+  "bissane-career": "#فرصتك_تبدأ_من_هنا #مسارك_المهني #تونس #ترشح_ناجح #معلومة_موثوقة",
 };
 
 function localBody(
@@ -646,82 +826,117 @@ function localBody(
   proof: PublicationEvidence,
   objective: PublicationDraft["objective"],
 ) {
-  const title = withoutParentheses(proof.title);
-  const destination = withoutParentheses(proof.destination);
-  const source = withoutParentheses(proof.source);
-  const positions = listLabel(proof.positions);
-  const conditions = listLabel(proof.conditions);
-  const documents = listLabel(proof.requiredDocuments);
+  const title = arabicOpportunityTitle(proof.title);
+  const destination = arabicDestination(proof.destination);
+  const flag = destinationFlag(proof.destination);
+  const source = arabicSource(proof.source);
+  const positions = arabicPositions(proof.positions);
+  const conditions = arabicConditions(proof);
+  const documents = arabicDocuments(proof.requiredDocuments);
   const deadline = localDeadline(proof.deadlineAt, page.market);
 
-  if (page.market === "DZ") {
+  if (page.id === "cv-pro-algeria") {
     const opening =
-      objective === "service"
-        ? "كثير من المترشحين يلقاو الفرصة المناسبة بصح يبعثو نفس الملف لكل عرض. الحل هو ملف مخصص ومعلومة مؤكدة."
-        : objective === "deadline"
-          ? "المشكل ماشي غير تلقى الفرصة، لازم تعرف الوقت والشروط قبل ما تبعث ملفك."
-          : "كاينة معلومة مهنية موثوقة تستاهل تراجعها إذا راك تحوس على فرصة منظمة.";
+      objective === "deadline"
+        ? "⏰ الوقت مهم والملف الكامل يصنع الفرق"
+        : "📢 فرصة مؤكدة من مصدر رسمي";
     return [
-      opening,
-      `الفرصة هي ${title} نحو ${destination}. المصدر الرسمي هو ${source}.`,
-      positions
-        ? `المناصب أو المجالات المذكورة: ${positions}.`
-        : "المهنة المقبولة تتحدد حسب العرض الرسمي والملف.",
-      conditions
-        ? `أهم الشروط المنشورة: ${conditions}.`
-        : "الشروط التفصيلية لازم تتراجع مباشرة في المصدر.",
-      deadline,
-      documents ? `الوثائق المذكورة: ${documents}.` : "حضّر CV والوثائق اللي يطلبها الإعلان فقط.",
-      "راجع الرابط الرسمي، قارن الشروط مع بروفايلك، ومن بعد حضّر CV و Cover Letter مخصصين قبل Apply.",
-      "CV PRO TEAM يقدر يساعدك في إعداد الملف والتقديم، بدون أي وعد بالتوظيف أو الفيزا.",
+      `${flag} ${opening}`,
+      `📌 عنوان الفرصة\n${title}`,
+      `📍 الوجهة\n${destination}`,
+      `🏛️ الجهة الرسمية\n${source}`,
+      `⏳ آخر أجل للتقديم\n${deadline}`,
+      `✅ الشروط الأساسية\n${linesWith("✅", conditions)}`,
+      `📄 الوثائق المطلوبة\n${linesWith("▪️", documents)}`,
+      [
+        "🧭 خطوات التقديم",
+        "1️⃣ قارن الشروط مع بروفايلك",
+        "2️⃣ حضّر سيرة ذاتية ورسالة تحفيزية مخصصتين",
+        "3️⃣ قدّم عبر الرابط الرسمي الموجود أسفل المنشور",
+      ].join("\n"),
+      `🔎 المجال\n${positions}`,
+      "💼 فريقنا يقدر يعاونك في إعداد الملف والتقديم بطريقة منظمة",
+      "⚠️ الخدمة ما تعنيش ضمان التوظيف أو التأشيرة والقرار يرجع للجهة الرسمية",
+      PAGE_HASHTAGS[page.id],
     ].join("\n\n");
   }
 
-  const opening =
-    page.id === "bissane-career"
-      ? "برشة فرص تتفلت خاطر المعلومة توصل ناقصة ولا الملف يكون عام. البداية الصحيحة هي مصدر رسمي وملف يخدم هدف واضح."
-      : objective === "deadline"
-        ? "قبل ما تبعث مطلبك، أهم خطوة هي تثبّت الـ Deadline والشروط من المصدر الرسمي."
-        : "فمّا فرصة مهنية موثوقة تنجم تهم الناس اللي تحب تحضّر ترشح منظم.";
+  if (page.id === "emplois-immigration-tunis") {
+    return [
+      `${flag} 📢 فرصة دولية موجهة للتونسيين`,
+      `🔹 شنوّة الفرصة\n${title}`,
+      [
+        "📋 المعطيات الأساسية",
+        `▪️ الوجهة: ${destination}`,
+        `▪️ المجال: ${positions}`,
+        `▪️ الجهة الناشرة: ${source}`,
+        `▪️ آخر أجل: ${deadline}`,
+      ].join("\n"),
+      `✅ شنوّة يلزمك\n${linesWith("✅", conditions)}`,
+      `📑 حضّر الوثائق هاذي\n${linesWith("▪️", documents)}`,
+      [
+        "📝 كيفاش تترشح",
+        "1️⃣ اقرأ البلاغ الرسمي للآخر",
+        "2️⃣ كيّف سيرتك الذاتية ورسالة التحفيز مع العرض",
+        "3️⃣ ابعث الترشح من الرابط الرسمي فقط",
+      ].join("\n"),
+      "🤝 ننجمو نعاونوك في إعداد ملف ترشح واضح ومنظم",
+      "⚠️ ما فماش ضمان تشغيل أو تأشيرة والقرار النهائي للجهة المنتدبة",
+      PAGE_HASHTAGS[page.id],
+    ].join("\n\n");
+  }
+
   return [
-    opening,
-    `الفرصة هي ${title} نحو ${destination}. المصدر الرسمي هو ${source}.`,
-    positions
-      ? `الاختصاصات أو المجالات المذكورة: ${positions}.`
-      : "الاختصاص المقبول يتحدد حسب العرض الرسمي والبروفايل.",
-    conditions
-      ? `أهم الشروط المنشورة: ${conditions}.`
-      : "الشروط التفصيلية يلزم تتراجع مباشرة في المصدر.",
-    deadline,
-    documents ? `الوثائق المذكورة: ${documents}.` : "حضّر CV والوثائق المطلوبة في الإعلان فقط.",
-    "افتح الرابط الرسمي، قارن الشروط ببروفايلك، وبعد حضّر CV و Cover Letter مخصصين قبل Apply.",
-    "فريقنا ينجم يعاونك في إعداد الملف والتقديم، من غير وعود بالتشغيل أو الفيزا.",
+    "🌟 فرصتك الجاية تبدأ بمعلومة صحيحة وملف يحكي على قيمتك",
+    `${flag} ${title}\n📍 ${destination}`,
+    [
+      "💡 علاش الفرصة تستحق الاهتمام",
+      `▪️ منشورة عن طريق ${source}`,
+      `▪️ المجال: ${positions}`,
+      `▪️ آخر أجل هو ${deadline}`,
+    ].join("\n"),
+    `🎯 شكون ينجم يترشح\n${linesWith("✅", conditions)}`,
+    `🧰 حضّر ملفك\n${linesWith("✨", documents)}`,
+    [
+      "🚀 خطوتك توا",
+      "1️⃣ تأكد إن الشروط تناسب بروفايلك",
+      "2️⃣ حضّر ترشح مخصص يبرز نقاط قوتك",
+      "3️⃣ استعمل الرابط الرسمي الموجود مع المنشور",
+    ].join("\n"),
+    "❤️ إذا تحب ملف مرتب ومقنع نرافقوك في إعداد السيرة الذاتية ورسالة التحفيز والتقديم",
+    "🛡️ نرافقوك باحتراف أما القبول والتأشيرة يبقاو من صلاحيات الجهات الرسمية",
+    PAGE_HASHTAGS[page.id],
   ].join("\n\n");
 }
 
 function localComments(page: PublicationPage, proof: PublicationEvidence) {
-  const source = withoutParentheses(proof.source);
-  const documents = listLabel(proof.requiredDocuments);
+  const source = arabicSource(proof.source);
+  const documents = arabicDocuments(proof.requiredDocuments).join("، ");
   const deadline = localDeadline(proof.deadlineAt, page.market);
-  if (page.market === "DZ") {
+  if (page.id === "cv-pro-algeria") {
     return [
-      `المصدر الرسمي هو ${source} والرابط موجود مع المنشور.`,
-      deadline,
-      documents
-        ? `قبل Apply حضّر هاذ الوثائق: ${documents}.`
-        : "قبل Apply راجع قائمة الوثائق في الإعلان الرسمي.",
-      "خدمة CV PRO TEAM تخص إعداد CV و Cover Letter والمساعدة في التقديم فقط، وماشي ضمان توظيف.",
-      "قولولنا في التعليقات شنو هو المجال اللي حابين نركزو عليه في المنشورات الجاية.",
+      `🔗 المصدر الرسمي هو ${source} والرابط تلقاه مع المنشور`,
+      `⏳ آخر أجل المعلن: ${deadline}`,
+      `📄 حضّر من الآن: ${documents}`,
+      "⚠️ ما تبعث حتى وثيقة حساسة خارج القنوات الرسمية",
+      "💬 قولولنا المجال اللي حابين نركزو عليه في المنشورات الجاية",
+    ].map(withoutParentheses);
+  }
+  if (page.id === "emplois-immigration-tunis") {
+    return [
+      `📌 البلاغ صادر عن ${source}`,
+      `⏰ آخر أجل المعلن: ${deadline}`,
+      `📑 الوثائق الأساسية: ${documents}`,
+      "🔐 قدّم كان عبر الرابط الرسمي وما تدفع حتى معلوم لجهة مجهولة",
+      "🗨️ شنوة الاختصاص اللي تحبوا نبحثولكم على فرص فيه",
     ].map(withoutParentheses);
   }
   return [
-    `المصدر الرسمي هو ${source} والرابط موجود مع المنشور.`,
-    deadline,
-    documents
-      ? `قبل Apply حضّر الوثائق هاذي: ${documents}.`
-      : "قبل Apply ثبّت قائمة الوثائق في الإعلان الرسمي.",
-    "خدمتنا تخص إعداد CV و Cover Letter والمساعدة في التقديم فقط، وما هيش ضمان تشغيل.",
-    "اكتبولنا في التعليقات شنوّة الاختصاص اللي تحبوا نركزوا عليه في المنشورات الجاية.",
+    `✅ المعلومة متثبت منها عبر ${source}`,
+    `🕰️ تاريخ غلق الترشحات: ${deadline}`,
+    `✨ باش تبدأ حضّر: ${documents}`,
+    "💡 الملف المخصص للعرض أقوى من نفس السيرة الذاتية لكل الفرص",
+    "🤍 ابعث المنشور لشخص تنجم تهمو الفرصة",
   ].map(withoutParentheses);
 }
 
@@ -745,8 +960,8 @@ export function buildLocalPublicationBatch(options: {
   const posts = Array.from({ length: 5 }, (_, index): PublicationDraft => {
     const proof = ranked[index % ranked.length];
     const format: PublicationFormat = index < 2 ? "short" : "visual";
-    const title = withoutParentheses(proof.title);
-    const destination = withoutParentheses(proof.destination);
+    const title = arabicOpportunityTitle(proof.title);
+    const destination = arabicDestination(proof.destination);
     return {
       id: `${options.page.id}-${generatedAt}-local-${index}`,
       pageId: options.page.id,
@@ -756,7 +971,7 @@ export function buildLocalPublicationBatch(options: {
       headline: LOCAL_HEADLINES[options.page.id][index],
       body: localBody(options.page, proof, objectives[index]),
       comments: localComments(options.page, proof),
-      highlightedTerms: ["CV", "Cover Letter", "Deadline", "Apply"],
+      highlightedTerms: ["السيرة الذاتية", "رسالة تحفيزية", "آخر أجل", "التقديم"],
       evidenceId: proof.id,
       sourceLabel: proof.source,
       sourceUrl: proof.sourceUrl,
@@ -766,11 +981,24 @@ export function buildLocalPublicationBatch(options: {
       visual:
         format === "visual"
           ? {
-              eyebrow: options.page.market === "DZ" ? "فرصة موثوقة" : "فرصة متثبت منها",
+              eyebrow:
+                options.page.id === "cv-pro-algeria"
+                  ? "فرصة موثوقة للجزائريين"
+                  : options.page.id === "emplois-immigration-tunis"
+                    ? "انتداب دولي للتونسيين"
+                    : "خطوتك المهنية الجاية",
               title: LOCAL_HEADLINES[options.page.id][index],
-              subtitle: `${title} · ${destination}`.slice(0, 140),
-              cta: options.page.market === "DZ" ? "راجع المصدر الرسمي" : "ثبّت من المصدر الرسمي",
-              badges: ["CV", "Deadline", "Apply"],
+              subtitle: `${destinationFlag(proof.destination)} ${title} · ${destination}`.slice(
+                0,
+                140,
+              ),
+              cta:
+                options.page.id === "cv-pro-algeria"
+                  ? "راجع المصدر وقدّم"
+                  : options.page.id === "emplois-immigration-tunis"
+                    ? "ثبّت الشروط وترشّح"
+                    : "حضّر خطوتك بثقة",
+              badges: ["سيرة ذاتية", "آخر أجل", "رابط رسمي"],
             }
           : null,
     };

@@ -28,7 +28,7 @@ const evidence: PublicationEvidence[] = [
   },
 ];
 
-function fivePosts(body = "معلومة موثوقة مع CV و Deadline غير منشور") {
+function fivePosts(body = "📢 معلومة موثوقة\n\n✅ الشروط واضحة\n\n#فرصة_موثوقة #ملف_ترشح") {
   return {
     posts: Array.from({ length: 5 }, (_, index) => ({
       format: index < 2 ? "short" : "visual",
@@ -36,7 +36,7 @@ function fivePosts(body = "معلومة موثوقة مع CV و Deadline غير 
       headline: `فرصة رقم ${index + 1}`,
       body,
       comments: ["تعليق 1", "تعليق 2", "تعليق 3", "تعليق 4", "تعليق 5"],
-      highlightedTerms: ["CV", "Deadline"],
+      highlightedTerms: ["السيرة الذاتية", "آخر أجل"],
       evidenceId: "official:1",
       visual:
         index < 2
@@ -46,7 +46,7 @@ function fivePosts(body = "معلومة موثوقة مع CV و Deadline غير 
               title: "حضّر ملفك",
               subtitle: "راجع المصدر الرسمي",
               cta: "شوف التفاصيل",
-              badges: ["CV", "Apply"],
+              badges: ["سيرة ذاتية", "تقديم"],
             },
     })),
   };
@@ -81,6 +81,7 @@ test("the prompt carries page-specific dialect and source evidence", () => {
   assert.match(prompt, /official:1/);
   assert.match(prompt, /CV ATS/);
   assert.match(prompt, /N'invente aucune date/);
+  assert.match(prompt, /uniquement l'arabe/);
 });
 
 test("the local engine always creates five safe Algerian publications without an API", () => {
@@ -99,6 +100,12 @@ test("the local engine always creates five safe Algerian publications without an
     assert.equal(post.comments.length, 5);
     assert.equal(post.sourceUrl, evidence[0].sourceUrl);
     assert.doesNotMatch(`${post.headline}${post.body}${post.comments.join("")}`, /[()]/);
+    assert.doesNotMatch(
+      `${post.headline}${post.body}${post.comments.join("")}${post.highlightedTerms.join("")}${post.visual ? Object.values(post.visual).flat().join("") : ""}`,
+      /[A-Za-zÀ-ÖØ-öø-ÿ]/,
+    );
+    assert.match(post.body, /✅/);
+    assert.match(post.body.split("\n").filter(Boolean).at(-1) || "", /^#.+\s+#/);
   });
 });
 
@@ -108,8 +115,11 @@ test("the local engine applies distinct Tunisian page voices", () => {
   assert.equal(emplois.posts.length, 5);
   assert.equal(bissane.posts.length, 5);
   assert.notEqual(emplois.posts[0].headline, bissane.posts[0].headline);
-  assert.match(emplois.posts[0].body, /فمّا|يلزم/);
-  assert.match(bissane.posts[0].body, /برشة/);
+  assert.notEqual(emplois.posts[0].body, bissane.posts[0].body);
+  assert.match(emplois.posts[0].body, /شنوّة الفرصة/);
+  assert.match(bissane.posts[0].body, /علاش الفرصة تستحق الاهتمام/);
+  assert.match(emplois.posts[0].body, /#انتداب_دولي/);
+  assert.match(bissane.posts[0].body, /#فرصتك_تبدأ_من_هنا/);
 });
 
 test("the built-in verified catalog can prepare all pages without waiting for APIs", () => {
@@ -121,14 +131,36 @@ test("the built-in verified catalog can prepare all pages without waiting for AP
   assert.ok(tn.some((item) => item.id === "baseline:thamm-plus"));
 });
 
-test("the local engine keeps long source conditions readable for Facebook", () => {
+test("the local engine translates source meaning without leaking foreign-language text", () => {
   const longEvidence = [
     {
       ...evidence[0],
-      conditions: ["Condition officielle très longue ".repeat(40)],
+      title: "heavy equipment operator",
+      destination: "Granada, Spain",
+      source: "Portail européen de la jeunesse",
+      conditions: ["English required and previous experience requested"],
     },
   ];
   const batch = buildLocalPublicationBatch({ page, evidence: longEvidence });
   assert.ok(batch.posts[0].body.length < 1_500);
-  assert.match(batch.posts[0].body, /…/);
+  assert.match(batch.posts[0].body, /مشغّل معدات ثقيلة/);
+  assert.match(batch.posts[0].body, /🇪🇺/);
+  assert.match(batch.posts[0].body, /اللغة الإنجليزية/);
+  assert.doesNotMatch(batch.posts[0].body, /[A-Za-zÀ-ÖØ-öø-ÿ]/);
+});
+
+test("rejects AI output that leaks Latin text or misses final Arabic hashtags", () => {
+  assert.throws(
+    () =>
+      normalizePublicationBatch(
+        fivePosts("معلومة فيها CV\n\n#فرصة_موثوقة #ملف_ترشح"),
+        page,
+        evidence,
+      ),
+    /non arabe/,
+  );
+  assert.throws(
+    () => normalizePublicationBatch(fivePosts("معلومة عربية بلا وسوم"), page, evidence),
+    /hashtags arabes/,
+  );
 });

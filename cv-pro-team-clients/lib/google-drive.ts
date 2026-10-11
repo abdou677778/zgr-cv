@@ -506,7 +506,7 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
     }
     for (const file of selectedFiles) {
       const object = await env.FILES.get(file.storageKey);
-      if (!object) continue;
+      if (!object) throw new Error(`Fichier source R2 introuvable : ${file.originalName}`);
       const driveName = sourceDriveNames.get(file.id) ?? safeFileName(file.originalName);
       await uploadToFolder({
         cache,
@@ -517,6 +517,9 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
         body: object.body,
         sourceKey: file.storageKey,
         modifiedTime: file.sourceModifiedAt,
+        // A retry after a lost HTTP response must verify the content, not merely
+        // trust a same-named Drive entry left by the interrupted request.
+        overwrite: true,
       });
     }
 
@@ -574,7 +577,9 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
 
     for (const version of versions) {
       const object = await env.FILES.get(version.storageKey);
-      if (!object) continue;
+      if (!object) {
+        throw new Error(`Version JSON R2 introuvable : v${version.versionNumber}`);
+      }
       await uploadToFolder({
         cache,
         parentId: jsonFolder!,

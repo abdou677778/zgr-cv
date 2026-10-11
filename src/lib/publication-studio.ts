@@ -223,6 +223,12 @@ const BASELINE_EVIDENCE: Array<PublicationEvidence & { markets: PublicationMarke
   },
 ];
 
+export function getBaselinePublicationEvidence(market: PublicationMarket) {
+  return BASELINE_EVIDENCE.filter((item) => item.markets.includes(market)).map(
+    ({ markets: _markets, ...item }) => ({ ...item }),
+  );
+}
+
 const clean = (value: string | null | undefined) => (value || "").replace(/\s+/g, " ").trim();
 
 function safeUrl(value: string | null | undefined) {
@@ -404,11 +410,9 @@ export async function collectPublicationEvidence(
       unique.set(evidenceKey(item), item);
     });
   });
-  BASELINE_EVIDENCE.filter((item) => item.markets.includes(page.market)).forEach(
-    ({ markets: _markets, ...item }) => {
-      unique.set(evidenceKey(item), item);
-    },
-  );
+  getBaselinePublicationEvidence(page.market).forEach((item) => {
+    unique.set(evidenceKey(item), item);
+  });
   const evidence = [...unique.values()]
     .sort((left, right) => {
       const leftDeadline = left.deadlineAt ? Date.parse(left.deadlineAt) : Number.POSITIVE_INFINITY;

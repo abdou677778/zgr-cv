@@ -32,6 +32,7 @@ import {
   buildLocalPublicationBatch,
   collectPublicationEvidence,
   generatePublicationBatch,
+  getBaselinePublicationEvidence,
   normalizePublicationBatch,
   publicationPrompt,
   type PublicationBatch,
@@ -414,48 +415,36 @@ export function PublicationsWorkspace({
     });
   };
 
-  const generateAllPagesLocally = async () => {
+  const generateAllPagesLocally = () => {
     abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
     setGeneratingAll(true);
     setMessage(null);
     try {
-      const dzPage = PUBLICATION_PAGES.find((item) => item.market === "DZ")!;
-      const tnPage = PUBLICATION_PAGES.find((item) => item.market === "TN")!;
-      const [dzResult, tnResult] = await Promise.all([
-        collectPublicationEvidence(dzPage, controller.signal),
-        collectPublicationEvidence(tnPage, controller.signal),
-      ]);
+      const dzEvidence =
+        page.market === "DZ" && evidence.length ? evidence : getBaselinePublicationEvidence("DZ");
+      const tnEvidence =
+        page.market === "TN" && evidence.length ? evidence : getBaselinePublicationEvidence("TN");
       const generated = Object.fromEntries(
         PUBLICATION_PAGES.map((item) => {
-          const source = item.market === "DZ" ? dzResult : tnResult;
-          return [
-            item.id,
-            buildLocalPublicationBatch({ page: item, evidence: source.evidence, focus }),
-          ];
+          const source = item.market === "DZ" ? dzEvidence : tnEvidence;
+          return [item.id, buildLocalPublicationBatch({ page: item, evidence: source, focus })];
         }),
       ) as Record<PublicationPageId, PublicationBatch>;
       setBatches((current) => ({ ...current, ...generated }));
-      const currentResult = page.market === "DZ" ? dzResult : tnResult;
-      setEvidence(currentResult.evidence);
-      setEvidenceCheckedAt(currentResult.checkedAt);
-      setWarnings([...new Set([...dzResult.warnings, ...tnResult.warnings])]);
       setMessage({
         ok: true,
         text: "15 publications prêtes : 5 pour CV PRO Algérie, 5 pour Emplois & Immigration et 5 pour Bissane Career Expert. Aucun quota IA utilisé.",
       });
     } catch (error) {
-      if (!controller.signal.aborted)
-        setMessage({
-          ok: false,
-          text:
-            error instanceof Error
-              ? error.message
-              : "Préparation des trois pages momentanément impossible.",
-        });
+      setMessage({
+        ok: false,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Préparation des trois pages momentanément impossible.",
+      });
     } finally {
-      if (!controller.signal.aborted) setGeneratingAll(false);
+      setGeneratingAll(false);
     }
   };
 
@@ -695,7 +684,7 @@ export function PublicationsWorkspace({
                 <Button
                   variant="outline"
                   className="w-full border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
-                  onClick={() => void generateAllPagesLocally()}
+                  onClick={generateAllPagesLocally}
                   disabled={generating || generatingAll || loadingEvidence}
                 >
                   {generatingAll ? (

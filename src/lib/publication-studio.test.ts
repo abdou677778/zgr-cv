@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PUBLICATION_PAGES,
   buildLocalPublicationBatch,
+  getBaselinePublicationEvidence,
   normalizePublicationBatch,
   publicationPrompt,
   type PublicationEvidence,
@@ -109,4 +110,13 @@ test("the local engine applies distinct Tunisian page voices", () => {
   assert.notEqual(emplois.posts[0].headline, bissane.posts[0].headline);
   assert.match(emplois.posts[0].body, /فمّا|يلزم/);
   assert.match(bissane.posts[0].body, /برشة/);
+});
+
+test("the built-in verified catalog can prepare all pages without waiting for APIs", () => {
+  const dz = getBaselinePublicationEvidence("DZ");
+  const tn = getBaselinePublicationEvidence("TN");
+  assert.ok(dz.length >= 4);
+  assert.ok(tn.length >= 5);
+  assert.ok(dz.every((item) => item.sourceUrl.startsWith("https://")));
+  assert.ok(tn.some((item) => item.id === "baseline:thamm-plus"));
 });

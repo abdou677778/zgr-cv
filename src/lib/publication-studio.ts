@@ -448,7 +448,7 @@ PAGE
 - Angle : ${page.editorialAngle}
 
 MISSION
-Rédige exactement 5 publications différentes et directement copiables sur Facebook.
+Rédige exactement 10 publications différentes et directement copiables sur Facebook.
 - Utilise l'arabe dialectal du marché avec un style administratif correct et lisible.
 - Utilise uniquement l'arabe dans le titre, le corps, les commentaires, les mots mis en évidence et le visuel.
 - Organise le corps ligne par ligne avec des rubriques courtes, des espaces lisibles, des numéros et des émojis pertinents.
@@ -456,7 +456,7 @@ Rédige exactement 5 publications différentes et directement copiables sur Face
 - Présente chaque condition vérifiée sur une ligne commençant par ✅.
 - Les trois pages doivent avoir des structures, accroches, appels à l'action et hashtags réellement distincts.
 - N'utilise aucune parenthèse ronde dans headline, body, comments ou visual.
-- Alterne les formats : 2 publications short sans visuel et 3 publications visual.
+- Chaque publication est obligatoirement au format visual et comporte les données d'un visuel Facebook vertical 4:5.
 - Chaque publication doit s'appuyer sur une seule preuve, citer la source, conserver son lien officiel et son checkedAt.
 - Si deadlineAt vaut null, écris en arabe que la date limite n'est pas publiée. N'invente aucune date.
 - Mentionne les documents et conditions uniquement s'ils existent dans la preuve.
@@ -470,14 +470,14 @@ STRUCTURE JSON ATTENDUE
 {
   "posts": [
     {
-      "format": "short ou visual",
+      "format": "visual",
       "objective": "information ou deadline ou service ou engagement",
       "headline": "texte",
       "body": "texte",
       "comments": ["1", "2", "3", "4", "5"],
       "highlightedTerms": ["السيرة الذاتية", "آخر أجل"],
       "evidenceId": "identifiant exact d'une preuve",
-      "visual": null ou {
+      "visual": {
         "eyebrow": "texte court",
         "title": "maximum 70 caractères",
         "subtitle": "maximum 110 caractères",
@@ -535,7 +535,9 @@ export function normalizePublicationBatch(
     const candidate = item as Record<string, unknown>;
     const proof = evidenceById.get(clean(String(candidate.evidenceId || "")));
     if (!proof) return [];
-    const format: PublicationFormat = candidate.format === "short" ? "short" : "visual";
+    // The publishing flow always exports a matching visual.  Do not accept a text-only
+    // draft from an external model, otherwise the batch cannot be archived consistently.
+    const format: PublicationFormat = "visual";
     const objective = ["information", "deadline", "service", "engagement"].includes(
       String(candidate.objective),
     )
@@ -562,21 +564,18 @@ export function normalizePublicationBatch(
         applicationUrl: proof.applicationUrl,
         deadlineAt: proof.deadlineAt,
         checkedAt: proof.checkedAt,
-        visual:
-          format === "visual" && visualSource
-            ? {
-                eyebrow: clean(String(visualSource.eyebrow || page.name)).slice(0, 60),
-                title: clean(String(visualSource.title || proof.title)).slice(0, 90),
-                subtitle: clean(String(visualSource.subtitle || proof.destination)).slice(0, 140),
-                cta: clean(String(visualSource.cta || "شوف التفاصيل")).slice(0, 45),
-                badges: normalizeStringArray(visualSource.badges, 3),
-              }
-            : null,
+        visual: {
+          eyebrow: clean(String(visualSource?.eyebrow || page.name)).slice(0, 60),
+          title: clean(String(visualSource?.title || proof.title)).slice(0, 90),
+          subtitle: clean(String(visualSource?.subtitle || proof.destination)).slice(0, 140),
+          cta: clean(String(visualSource?.cta || "شوف التفاصيل")).slice(0, 45),
+          badges: normalizeStringArray(visualSource?.badges, 3),
+        },
       },
     ];
   });
-  if (posts.length !== 5)
-    throw new Error(`L’IA a produit ${posts.length} publication(s) vérifiables au lieu de 5.`);
+  if (posts.length !== 10)
+    throw new Error(`L’IA a produit ${posts.length} publication(s) vérifiables au lieu de 10.`);
   if (posts.some((post) => /[()]/.test(`${post.headline}${post.body}${post.comments.join("")}`)))
     throw new Error("Une publication contient des parenthèses interdites. Relancez la génération.");
   if (
@@ -802,6 +801,11 @@ const LOCAL_HEADLINES: Record<PublicationPageId, string[]> = {
     "حضّر ترشحك على أساس الشروط الرسمية",
     "قبل ما تبعث ملفك تأكد من كل التفاصيل",
     "فرصة رسمية تستاهل ملف منظم ومخصص",
+    "التفاصيل الرسمية هي البداية الصحيحة لترشحك",
+    "خلي خبرتك تظهر بوضوح في ملف الترشح",
+    "فرصة دولية تتطلب ملفا مخصصا وليس نسخة عامة",
+    "التقديم من المصدر الرسمي يحميك من المعلومات الخاطئة",
+    "رتب ملفك اليوم وخلي قرارك مبني على معلومات موثوقة",
   ],
   "emplois-immigration-tunis": [
     "فرصة دولية للتونسيين وشروط الترشح واضحة",
@@ -809,6 +813,11 @@ const LOCAL_HEADLINES: Record<PublicationPageId, string[]> = {
     "الترشح الصحيح يبدأ من البلاغ الرسمي",
     "حضّر ملفك حسب العرض موش بطريقة عامة",
     "عرض جديد يلزمو وثائق مرتبة ومعلومات صحيحة",
+    "معلومة موثوقة وفرصة تستحق ملف ترشح مضبوط",
+    "كي تكون الشروط واضحة الترشح يولي أسهل",
+    "خطوات بسيطة تنجم تقربك من فرصة دولية",
+    "ما تراهنش على إشاعة وخذ المعلومة من مصدرها",
+    "ملفك هو أول فرصة باش تبرز خبرتك بطريقة صحيحة",
   ],
   "bissane-career": [
     "فرصتك تنجم تبدأ بملف مرتب ومعلومة صحيحة",
@@ -816,6 +825,11 @@ const LOCAL_HEADLINES: Record<PublicationPageId, string[]> = {
     "سيرة ذاتية قوية ومصدر رسمي وخطوات واضحة",
     "قبل الترشح تأكد إن العرض يناسب بروفايلك",
     "خطوة صغيرة اليوم تنجم تقربك لفرصة أحسن",
+    "المعلومة الصحيحة والملف المرتب يصنعوا الفرق",
+    "كل فرصة عندها شروطها وملفك لازم يحكي عليها",
+    "وقت الترشح المنظم هو الوقت المناسب باش تبرز",
+    "عرض موثوق وخطوة عملية نحو مسارك المهني",
+    "خلّي ملفك جاهز قبل ما يوصل آخر أجل",
   ],
 };
 
@@ -970,10 +984,15 @@ export function buildLocalPublicationBatch(options: {
     "service",
     "engagement",
     "information",
+    "deadline",
+    "service",
+    "engagement",
+    "information",
+    "deadline",
   ];
-  const posts = Array.from({ length: 5 }, (_, index): PublicationDraft => {
+  const posts = Array.from({ length: 10 }, (_, index): PublicationDraft => {
     const proof = ranked[index % ranked.length];
-    const format: PublicationFormat = index < 2 ? "short" : "visual";
+    const format: PublicationFormat = "visual";
     const title = arabicOpportunityTitle(proof.title);
     const destination = arabicDestination(proof.destination);
     return {

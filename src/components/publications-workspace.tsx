@@ -15,7 +15,6 @@ import {
   MessageCircleMore,
   Newspaper,
   RefreshCw,
-  Send,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -119,7 +118,7 @@ function canvasLines(
   return lines;
 }
 
-async function downloadVisual(post: PublicationDraft, page: PublicationPage) {
+async function renderVisualBlob(post: PublicationDraft, page: PublicationPage) {
   if (!post.visual) return;
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
@@ -131,7 +130,7 @@ async function downloadVisual(post: PublicationDraft, page: PublicationPage) {
   gradient.addColorStop(0.58, page.accent);
   gradient.addColorStop(1, "#0f172a");
   context.fillStyle = gradient;
-  context.fillRect(0, 0, 1080, 1080);
+  context.fillRect(0, 0, 1080, 1350);
 
   context.globalAlpha = 0.14;
   context.fillStyle = "#ffffff";
@@ -208,18 +207,54 @@ async function downloadVisual(post: PublicationDraft, page: PublicationPage) {
   context.direction = "rtl";
   context.fillText("راجع المصدر الرسمي قبل إرسال ملفك", 540, 1305);
 
-  const blob = await new Promise<Blob>((resolve, reject) =>
+  return new Promise<Blob>((resolve, reject) =>
     canvas.toBlob(
       (value) => (value ? resolve(value) : reject(new Error("Export PNG impossible."))),
       "image/png",
       0.94,
     ),
   );
+}
+
+function downloadBlob(blob: Blob, filename: string) {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `${page.id}-${post.id.slice(-8)}.png`;
+  link.download = filename;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(link.href), 5_000);
+}
+
+async function downloadVisual(post: PublicationDraft, page: PublicationPage) {
+  const blob = await renderVisualBlob(post, page);
+  if (!blob) return;
+  downloadBlob(blob, `${page.id}-${post.id.slice(-8)}.png`);
+}
+
+async function downloadVisualArchive(batch: PublicationBatch, page: PublicationPage) {
+  const { strToU8, zipSync } = await import("fflate");
+  const files: Record<string, Uint8Array> = {};
+  const root = `PUBLICATIONS/${page.id}`;
+  const manifest = [
+    "ZGR PUBLICATIONS",
+    `Page: ${page.name}`,
+    "Format: Facebook vertical 4:5 - 1080x1350 PNG",
+    "Source: brouillons vérifiés dans ZGR CV",
+    "",
+  ];
+
+  for (const [index, post] of batch.posts.entries()) {
+    const blob = await renderVisualBlob(post, page);
+    if (!blob) continue;
+    const filename = `${String(index + 1).padStart(2, "0")}_${page.id}_${post.id.slice(-8)}.png`;
+    files[`${root}/${filename}`] = new Uint8Array(await blob.arrayBuffer());
+    manifest.push(`${filename} | ${post.sourceUrl}`);
+  }
+  files[`${root}/MANIFEST.txt`] = strToU8(`${manifest.join("\n")}\n`);
+  const archive = zipSync(files, { level: 6 });
+  downloadBlob(
+    new Blob([archive.buffer as ArrayBuffer], { type: "application/zip" }),
+    `PUBLICATIONS_${page.id}_${batch.generatedAt.slice(0, 10)}.zip`,
+  );
 }
 
 function PageLogo({ page, size = "md" }: { page: PublicationPage; size?: "sm" | "md" | "lg" }) {
@@ -393,8 +428,8 @@ export function PublicationsWorkspace({
       setMessage({
         ok: true,
         text: result.fallbackUsed
-          ? "Les fournisseurs IA sont momentanément indisponibles. Le moteur éditorial local ZGR a généré 5 publications vérifiées, sans perdre votre travail."
-          : `5 publications générées avec ${result.connectionLabel} · ${result.model}. Validation humaine requise avant Facebook.`,
+          ? "Les fournisseurs IA sont momentanément indisponibles. Le moteur éditorial local ZGR a généré 10 publications vérifiées avec visuel, sans perdre votre travail."
+          : `10 publications avec visuel générées avec ${result.connectionLabel} · ${result.model}. Validation humaine requise avant Facebook.`,
       });
     } catch (error) {
       setMessage({
@@ -415,7 +450,7 @@ export function PublicationsWorkspace({
     setBatches((current) => ({ ...current, [page.id]: batch }));
     setMessage({
       ok: true,
-      text: "5 publications disponibles immédiatement avec le moteur éditorial local ZGR. Aucune clé API ni quota n’a été utilisé.",
+      text: "10 publications avec visuel sont disponibles immédiatement avec le moteur éditorial local ZGR. Aucune clé API ni quota n’a été utilisé.",
     });
   };
 
@@ -437,7 +472,7 @@ export function PublicationsWorkspace({
       setBatches((current) => ({ ...current, ...generated }));
       setMessage({
         ok: true,
-        text: "15 publications prêtes : 5 pour CV PRO Algérie, 5 pour Emplois & Immigration et 5 pour Bissane Career Expert. Aucun quota IA utilisé.",
+        text: "30 publications prêtes : 10 pour CV PRO Algérie, 10 pour Emplois & Immigration et 10 pour Bissane Career Expert. Chaque brouillon possède son visuel 4:5. Aucun quota IA utilisé.",
       });
     } catch (error) {
       setMessage({
@@ -470,7 +505,10 @@ export function PublicationsWorkspace({
       const batch = normalizePublicationBatch(JSON.parse(codexJson), page, evidence);
       setBatches((current) => ({ ...current, [page.id]: batch }));
       setCodexJson("");
-      setMessage({ ok: true, text: "Réponse Codex importée : 5 publications vérifiées." });
+      setMessage({
+        ok: true,
+        text: "Réponse Codex importée : 10 publications vérifiées avec visuel.",
+      });
     } catch (error) {
       setMessage({
         ok: false,
@@ -683,7 +721,7 @@ export function PublicationsWorkspace({
                   ) : (
                     <Bot className="mr-2 h-4 w-4" />
                   )}
-                  Générer 5 publications vérifiées
+                  Générer 10 publications avec visuel
                 </Button>
                 <Button
                   variant="outline"
@@ -696,7 +734,7 @@ export function PublicationsWorkspace({
                   ) : (
                     <Newspaper className="mr-2 h-4 w-4" />
                   )}
-                  Préparer 15 publications pour les 3 pages
+                  Préparer 30 publications pour les 3 pages
                 </Button>
               </div>
             ) : (
@@ -725,7 +763,7 @@ export function PublicationsWorkspace({
                   onClick={importCodexResult}
                   disabled={!codexJson.trim() || !evidence.length}
                 >
-                  <FileCheck2 className="mr-2 h-4 w-4" /> Importer les 5 publications
+                  <FileCheck2 className="mr-2 h-4 w-4" /> Importer les 10 publications
                 </Button>
               </div>
             )}
@@ -745,154 +783,167 @@ export function PublicationsWorkspace({
           )}
 
           {currentBatch?.posts.length ? (
-            currentBatch.posts.map((post, index) => {
-              const copyValue = `${post.headline}\n\n${post.body}\n\nالمصدر الرسمي\n${post.sourceUrl}`;
-              return (
-                <article
-                  key={post.id}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-                >
-                  <header className="flex items-start gap-3 p-4">
-                    <PageLogo page={page} />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-black text-slate-950">{page.name}</div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                        <span>Brouillon {index + 1}/5</span>
-                        <span>·</span>
-                        <span>
-                          {post.format === "visual" ? "Texte + visuel" : "Publication courte"}
-                        </span>
-                        <span>·</span>
-                        <BadgeCheck className="h-3.5 w-3.5 text-blue-600" />
-                        <span>source vérifiée</span>
-                      </div>
-                    </div>
-                    <a
-                      href={page.facebookUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Ouvrir la page Facebook"
-                    >
-                      <ExternalLink className="h-4 w-4 text-slate-400" />
-                    </a>
-                  </header>
-                  <div
-                    className="px-4 pb-4 sm:px-5"
-                    dir="rtl"
-                    style={{ fontFamily: "Tahoma, Arial, sans-serif" }}
-                  >
-                    <h3 className="text-right text-lg font-black leading-8 text-slate-950">
-                      {post.headline}
-                    </h3>
-                    <p className="mt-2 whitespace-pre-wrap text-right text-[15px] font-medium leading-8 text-slate-800">
-                      {post.body}
+            <>
+              <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="font-black text-emerald-950">Archive des visuels</h3>
+                    <p className="mt-1 text-sm leading-6 text-emerald-900">
+                      Exportez les 10 images en PNG 1080 × 1350 dans une archive organisée sous
+                      <span className="mx-1 rounded bg-white px-1.5 py-0.5 font-mono text-xs">
+                        PUBLICATIONS/{page.id}
+                      </span>
+                      pour son import dans le dossier Google Drive correspondant.
                     </p>
-                    <div className="mt-3 flex flex-wrap justify-end gap-2">
-                      {post.highlightedTerms.map((term) => (
-                        <span
-                          key={term}
-                          dir="ltr"
-                          className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-900"
-                        >
-                          {term}
-                        </span>
-                      ))}
-                    </div>
-                    <VisualPreview post={post} page={page} />
                   </div>
-                  <div className="border-y border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 sm:px-5">
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      <span className="inline-flex items-center gap-1.5 font-bold text-slate-800">
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> {post.sourceLabel}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <CalendarClock className="h-3.5 w-3.5" /> {exactDeadline(post.deadlineAt)}
-                      </span>
-                      <span>Vérifié {formattedDate(post.checkedAt)}</span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-3">
+                  <Button
+                    className="shrink-0 bg-emerald-700 hover:bg-emerald-800"
+                    onClick={() => void downloadVisualArchive(currentBatch, page)}
+                  >
+                    <Download className="mr-2 h-4 w-4" /> Exporter les 10 visuels ZIP
+                  </Button>
+                </div>
+              </section>
+              {currentBatch.posts.map((post, index) => {
+                const copyValue = `${post.headline}\n\n${post.body}\n\nالمصدر الرسمي\n${post.sourceUrl}`;
+                return (
+                  <article
+                    key={post.id}
+                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                  >
+                    <header className="flex items-start gap-3 p-4">
+                      <PageLogo page={page} />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-black text-slate-950">{page.name}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                          <span>Brouillon {index + 1}/10</span>
+                          <span>·</span>
+                          <span>Texte + visuel 4:5</span>
+                          <span>·</span>
+                          <BadgeCheck className="h-3.5 w-3.5 text-blue-600" />
+                          <span>source vérifiée</span>
+                        </div>
+                      </div>
                       <a
-                        href={post.sourceUrl}
+                        href={page.facebookUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="font-bold text-blue-700 hover:underline"
+                        title="Ouvrir la page Facebook"
                       >
-                        Source officielle
+                        <ExternalLink className="h-4 w-4 text-slate-400" />
                       </a>
-                      {post.applicationUrl && (
-                        <a
-                          href={post.applicationUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-bold text-emerald-700 hover:underline"
-                        >
-                          Lien de candidature
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <div className="grid gap-2 p-3 sm:grid-cols-3">
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        await copyText(copyValue);
-                        markCopied(`post-${post.id}`);
-                      }}
-                    >
-                      {copied === `post-${post.id}` ? (
-                        <Check className="mr-2 h-4 w-4" />
-                      ) : (
-                        <Copy className="mr-2 h-4 w-4" />
-                      )}
-                      Copier la publication
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        await copyText(
-                          post.comments
-                            .map((comment, commentIndex) => `${commentIndex + 1}. ${comment}`)
-                            .join("\n\n"),
-                        );
-                        markCopied(`comments-${post.id}`);
-                      }}
-                    >
-                      <MessageCircleMore className="mr-2 h-4 w-4" /> Copier 5 commentaires
-                    </Button>
-                    {post.visual ? (
-                      <Button variant="outline" onClick={() => void downloadVisual(post, page)}>
-                        <Download className="mr-2 h-4 w-4" /> Télécharger le visuel
-                      </Button>
-                    ) : (
-                      <Button variant="outline" asChild>
-                        <a href={page.facebookUrl} target="_blank" rel="noreferrer">
-                          <Send className="mr-2 h-4 w-4" /> Ouvrir Facebook
-                        </a>
-                      </Button>
-                    )}
-                  </div>
-                  <details className="border-t border-slate-100 px-4 py-3 sm:px-5">
-                    <summary className="cursor-pointer text-sm font-bold text-slate-700">
-                      Voir les 5 commentaires proposés
-                    </summary>
-                    <ol
-                      className="mt-3 space-y-2"
+                    </header>
+                    <div
+                      className="px-4 pb-4 sm:px-5"
                       dir="rtl"
                       style={{ fontFamily: "Tahoma, Arial, sans-serif" }}
                     >
-                      {post.comments.map((comment, commentIndex) => (
-                        <li
-                          key={`${post.id}-${commentIndex}`}
-                          className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm leading-7 text-slate-700"
+                      <h3 className="text-right text-lg font-black leading-8 text-slate-950">
+                        {post.headline}
+                      </h3>
+                      <p className="mt-2 whitespace-pre-wrap text-right text-[15px] font-medium leading-8 text-slate-800">
+                        {post.body}
+                      </p>
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        {post.highlightedTerms.map((term) => (
+                          <span
+                            key={term}
+                            dir="ltr"
+                            className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-900"
+                          >
+                            {term}
+                          </span>
+                        ))}
+                      </div>
+                      <VisualPreview post={post} page={page} />
+                    </div>
+                    <div className="border-y border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 sm:px-5">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <span className="inline-flex items-center gap-1.5 font-bold text-slate-800">
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />{" "}
+                          {post.sourceLabel}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <CalendarClock className="h-3.5 w-3.5" /> {exactDeadline(post.deadlineAt)}
+                        </span>
+                        <span>Vérifié {formattedDate(post.checkedAt)}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        <a
+                          href={post.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-bold text-blue-700 hover:underline"
                         >
-                          {comment}
-                        </li>
-                      ))}
-                    </ol>
-                  </details>
-                </article>
-              );
-            })
+                          Source officielle
+                        </a>
+                        {post.applicationUrl && (
+                          <a
+                            href={post.applicationUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-bold text-emerald-700 hover:underline"
+                          >
+                            Lien de candidature
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid gap-2 p-3 sm:grid-cols-3">
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          await copyText(copyValue);
+                          markCopied(`post-${post.id}`);
+                        }}
+                      >
+                        {copied === `post-${post.id}` ? (
+                          <Check className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Copy className="mr-2 h-4 w-4" />
+                        )}
+                        Copier la publication
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          await copyText(
+                            post.comments
+                              .map((comment, commentIndex) => `${commentIndex + 1}. ${comment}`)
+                              .join("\n\n"),
+                          );
+                          markCopied(`comments-${post.id}`);
+                        }}
+                      >
+                        <MessageCircleMore className="mr-2 h-4 w-4" /> Copier 5 commentaires
+                      </Button>
+                      <Button variant="outline" onClick={() => void downloadVisual(post, page)}>
+                        <Download className="mr-2 h-4 w-4" /> Télécharger le visuel
+                      </Button>
+                    </div>
+                    <details className="border-t border-slate-100 px-4 py-3 sm:px-5">
+                      <summary className="cursor-pointer text-sm font-bold text-slate-700">
+                        Voir les 5 commentaires proposés
+                      </summary>
+                      <ol
+                        className="mt-3 space-y-2"
+                        dir="rtl"
+                        style={{ fontFamily: "Tahoma, Arial, sans-serif" }}
+                      >
+                        {post.comments.map((comment, commentIndex) => (
+                          <li
+                            key={`${post.id}-${commentIndex}`}
+                            className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm leading-7 text-slate-700"
+                          >
+                            {comment}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  </article>
+                );
+              })}
+            </>
           ) : (
             <section className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
               <div className="max-w-md">
@@ -903,8 +954,9 @@ export function PublicationsWorkspace({
                   Votre fil éditorial est prêt
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Choisissez le moteur, puis générez cinq publications propres à cette page. Les
-                  brouillons resteront ici jusqu’à leur remplacement.
+                  Choisissez le moteur, puis générez dix publications propres à cette page. Chaque
+                  brouillon comporte un visuel Facebook vertical 4:5. Les brouillons resteront ici
+                  jusqu’à leur remplacement.
                 </p>
               </div>
             </section>

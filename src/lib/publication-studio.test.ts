@@ -28,49 +28,42 @@ const evidence: PublicationEvidence[] = [
   },
 ];
 
-function fivePosts(body = "📢 معلومة موثوقة\n\n✅ الشروط واضحة\n\n#فرصة_موثوقة #ملف_ترشح") {
+function tenPosts(body = "📢 معلومة موثوقة\n\n✅ الشروط واضحة\n\n#فرصة_موثوقة #ملف_ترشح") {
   return {
-    posts: Array.from({ length: 5 }, (_, index) => ({
-      format: index < 2 ? "short" : "visual",
+    posts: Array.from({ length: 10 }, (_, index) => ({
+      format: "visual",
       objective: "information",
       headline: `فرصة رقم ${index + 1}`,
       body,
       comments: ["تعليق 1", "تعليق 2", "تعليق 3", "تعليق 4", "تعليق 5"],
       highlightedTerms: ["السيرة الذاتية", "آخر أجل"],
       evidenceId: "official:1",
-      visual:
-        index < 2
-          ? null
-          : {
-              eyebrow: "فرصة موثوقة",
-              title: "حضّر ملفك",
-              subtitle: "راجع المصدر الرسمي",
-              cta: "شوف التفاصيل",
-              badges: ["سيرة ذاتية", "تقديم"],
-            },
+      visual: {
+        eyebrow: "فرصة موثوقة",
+        title: "حضّر ملفك",
+        subtitle: "راجع المصدر الرسمي",
+        cta: "شوف التفاصيل",
+        badges: ["سيرة ذاتية", "تقديم"],
+      },
     })),
   };
 }
 
-test("builds exactly five drafts from referenced evidence", () => {
-  const batch = normalizePublicationBatch(fivePosts(), page, evidence, "2026-10-11T13:00:00Z");
-  assert.equal(batch.posts.length, 5);
+test("builds exactly ten visual drafts from referenced evidence", () => {
+  const batch = normalizePublicationBatch(tenPosts(), page, evidence, "2026-10-11T13:00:00Z");
+  assert.equal(batch.posts.length, 10);
   assert.equal(batch.posts[0].sourceUrl, evidence[0].sourceUrl);
   assert.equal(batch.posts[0].deadlineAt, null);
-  assert.equal(batch.posts[4].visual?.badges.length, 2);
+  assert.equal(batch.posts[9].visual?.badges.length, 2);
 });
 
 test("rejects invented evidence and forbidden parentheses", () => {
-  const unknown = fivePosts();
+  const unknown = tenPosts();
   unknown.posts[0].evidenceId = "invented:99";
-  assert.throws(() => normalizePublicationBatch(unknown, page, evidence), /au lieu de 5/);
+  assert.throws(() => normalizePublicationBatch(unknown, page, evidence), /au lieu de 10/);
   assert.throws(
     () =>
-      normalizePublicationBatch(
-        fivePosts("Texte interdit avec parenthèses (faux)"),
-        page,
-        evidence,
-      ),
+      normalizePublicationBatch(tenPosts("Texte interdit avec parenthèses (faux)"), page, evidence),
     /parenthèses interdites/,
   );
 });
@@ -84,18 +77,15 @@ test("the prompt carries page-specific dialect and source evidence", () => {
   assert.match(prompt, /uniquement l'arabe/);
 });
 
-test("the local engine always creates five safe Algerian publications without an API", () => {
+test("the local engine always creates ten safe visual Algerian publications without an API", () => {
   const batch = buildLocalPublicationBatch({
     page,
     evidence,
     focus: "technicien",
     generatedAt: "2026-10-11T14:00:00.000Z",
   });
-  assert.equal(batch.posts.length, 5);
-  assert.deepEqual(
-    batch.posts.map((post) => post.format),
-    ["short", "short", "visual", "visual", "visual"],
-  );
+  assert.equal(batch.posts.length, 10);
+  assert.ok(batch.posts.every((post) => post.format === "visual" && post.visual));
   batch.posts.forEach((post) => {
     assert.equal(post.comments.length, 5);
     assert.equal(post.sourceUrl, evidence[0].sourceUrl);
@@ -112,8 +102,8 @@ test("the local engine always creates five safe Algerian publications without an
 test("the local engine applies distinct Tunisian page voices", () => {
   const emplois = buildLocalPublicationBatch({ page: PUBLICATION_PAGES[1], evidence });
   const bissane = buildLocalPublicationBatch({ page: PUBLICATION_PAGES[2], evidence });
-  assert.equal(emplois.posts.length, 5);
-  assert.equal(bissane.posts.length, 5);
+  assert.equal(emplois.posts.length, 10);
+  assert.equal(bissane.posts.length, 10);
   assert.notEqual(emplois.posts[0].headline, bissane.posts[0].headline);
   assert.notEqual(emplois.posts[0].body, bissane.posts[0].body);
   assert.match(emplois.posts[0].body, /شنوّة الفرصة/);
@@ -170,14 +160,14 @@ test("rejects AI output that leaks Latin text or misses final Arabic hashtags", 
   assert.throws(
     () =>
       normalizePublicationBatch(
-        fivePosts("معلومة فيها CV\n\n#فرصة_موثوقة #ملف_ترشح"),
+        tenPosts("معلومة فيها CV\n\n#فرصة_موثوقة #ملف_ترشح"),
         page,
         evidence,
       ),
     /non arabe/,
   );
   assert.throws(
-    () => normalizePublicationBatch(fivePosts("معلومة عربية بلا وسوم"), page, evidence),
+    () => normalizePublicationBatch(tenPosts("معلومة عربية بلا وسوم"), page, evidence),
     /hashtags arabes/,
   );
 });

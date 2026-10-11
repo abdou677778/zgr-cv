@@ -120,3 +120,15 @@ test("the built-in verified catalog can prepare all pages without waiting for AP
   assert.ok(dz.every((item) => item.sourceUrl.startsWith("https://")));
   assert.ok(tn.some((item) => item.id === "baseline:thamm-plus"));
 });
+
+test("the local engine keeps long source conditions readable for Facebook", () => {
+  const longEvidence = [
+    {
+      ...evidence[0],
+      conditions: ["Condition officielle très longue ".repeat(40)],
+    },
+  ];
+  const batch = buildLocalPublicationBatch({ page, evidence: longEvidence });
+  assert.ok(batch.posts[0].body.length < 1_500);
+  assert.match(batch.posts[0].body, /…/);
+});

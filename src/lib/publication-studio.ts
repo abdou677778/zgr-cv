@@ -608,7 +608,13 @@ function localDeadline(value: string | null, market: PublicationMarket) {
 }
 
 function listLabel(values: string[], maximum = 3) {
-  return values.map(withoutParentheses).filter(Boolean).slice(0, maximum).join("، ");
+  const normalized = values.map(withoutParentheses).filter(Boolean);
+  const concise = normalized.filter((value) => value.length <= 180);
+  const selected = (concise.length ? concise : normalized)
+    .slice(0, maximum)
+    .map((value) => (value.length > 180 ? `${value.slice(0, 177).trim()}…` : value));
+  const joined = selected.join("، ");
+  return joined.length > 320 ? `${joined.slice(0, 317).trim()}…` : joined;
 }
 
 const LOCAL_HEADLINES: Record<PublicationPageId, string[]> = {

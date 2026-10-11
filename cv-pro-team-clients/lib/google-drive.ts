@@ -13,6 +13,8 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const DRIVE_REQUEST_TIMEOUT_MS = 45_000;
+const DRIVE_UPLOAD_TIMEOUT_MS = 120_000;
+const RESUMABLE_UPLOAD_THRESHOLD_BYTES = 128 * 1024;
 const OAUTH_REQUEST_TIMEOUT_MS = 20_000;
 
 type DriveEntry = { id: string; name: string; mimeType?: string };
@@ -94,13 +96,17 @@ async function accessToken() {
   return tokenCache.token;
 }
 
-async function driveFetch(path: string, init: RequestInit = {}) {
+async function driveFetch(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = DRIVE_REQUEST_TIMEOUT_MS,
+) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${await accessToken()}`);
   const response = await bufferedFetchWithHardTimeout(
     path.startsWith("http") ? path : `${DRIVE_API}${path}`,
     { ...init, headers },
-    DRIVE_REQUEST_TIMEOUT_MS,
+    timeoutMs,
   );
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
@@ -291,13 +297,49 @@ async function uploadToFolder(input: {
   const uploadPath = existing
     ? `${DRIVE_UPLOAD_API}/files/${existing.id}?uploadType=multipart&fields=id,name,mimeType`
     : `${DRIVE_UPLOAD_API}/files?uploadType=multipart&fields=id,name,mimeType`;
+  const metadata = {
+    name: input.name,
+    ...(existing ? {} : { parents: [input.parentId] }),
+    ...(input.modifiedTime ? { modifiedTime: input.modifiedTime } : {}),
+    appProperties: { zgrSourceKey: input.sourceKey.slice(0, 96) },
+  };
+  if (input.size >= RESUMABLE_UPLOAD_THRESHOLD_BYTES) {
+    // Multipart requires a JavaScript stream to prepend/append boundaries. That
+    // copying can exceed the 10 ms CPU allowance of the free Worker plan even for
+    // medium PDFs. A resumable session lets Cloudflare pass the R2 stream through
+    // to Google unchanged and also makes large uploads atomic.
+    const resumablePath = existing
+      ? `${DRIVE_UPLOAD_API}/files/${existing.id}?uploadType=resumable&fields=id,name,mimeType`
+      : `${DRIVE_UPLOAD_API}/files?uploadType=resumable&fields=id,name,mimeType`;
+    const session = await driveFetch(resumablePath, {
+      method: existing ? "PATCH" : "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "X-Upload-Content-Type": input.contentType,
+        "X-Upload-Content-Length": String(input.size),
+      },
+      body: JSON.stringify(metadata),
+    });
+    const location = session.headers.get("Location");
+    if (!location) throw new Error("Google Drive n’a pas ouvert la session d’envoi.");
+    const response = await driveFetch(
+      location,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": input.contentType,
+          "Content-Length": String(input.size),
+        },
+        body: input.body,
+      },
+      DRIVE_UPLOAD_TIMEOUT_MS,
+    );
+    const uploaded = (await response.json()) as DriveEntry;
+    entries.set(input.name, { ...uploaded, name: input.name });
+    return;
+  }
   const multipart = multipartUploadBody(
-    {
-      name: input.name,
-      ...(existing ? {} : { parents: [input.parentId] }),
-      ...(input.modifiedTime ? { modifiedTime: input.modifiedTime } : {}),
-      appProperties: { zgrSourceKey: input.sourceKey.slice(0, 96) },
-    },
+    metadata,
     input.contentType,
     input.size,
     input.body,

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   PUBLICATION_PAGES,
+  buildLocalPublicationBatch,
   normalizePublicationBatch,
   publicationPrompt,
   type PublicationEvidence,
@@ -79,4 +80,33 @@ test("the prompt carries page-specific dialect and source evidence", () => {
   assert.match(prompt, /official:1/);
   assert.match(prompt, /CV ATS/);
   assert.match(prompt, /N'invente aucune date/);
+});
+
+test("the local engine always creates five safe Algerian publications without an API", () => {
+  const batch = buildLocalPublicationBatch({
+    page,
+    evidence,
+    focus: "technicien",
+    generatedAt: "2026-10-11T14:00:00.000Z",
+  });
+  assert.equal(batch.posts.length, 5);
+  assert.deepEqual(
+    batch.posts.map((post) => post.format),
+    ["short", "short", "visual", "visual", "visual"],
+  );
+  batch.posts.forEach((post) => {
+    assert.equal(post.comments.length, 5);
+    assert.equal(post.sourceUrl, evidence[0].sourceUrl);
+    assert.doesNotMatch(`${post.headline}${post.body}${post.comments.join("")}`, /[()]/);
+  });
+});
+
+test("the local engine applies distinct Tunisian page voices", () => {
+  const emplois = buildLocalPublicationBatch({ page: PUBLICATION_PAGES[1], evidence });
+  const bissane = buildLocalPublicationBatch({ page: PUBLICATION_PAGES[2], evidence });
+  assert.equal(emplois.posts.length, 5);
+  assert.equal(bissane.posts.length, 5);
+  assert.notEqual(emplois.posts[0].headline, bissane.posts[0].headline);
+  assert.match(emplois.posts[0].body, /فمّا|يلزم/);
+  assert.match(bissane.posts[0].body, /برشة/);
 });

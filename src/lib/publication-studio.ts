@@ -113,6 +113,116 @@ export type PublicationEvidenceResult = {
   checkedAt: string;
 };
 
+const BASELINE_CHECKED_AT = "2026-10-06T12:00:00.000Z";
+
+const BASELINE_EVIDENCE: Array<PublicationEvidence & { markets: PublicationMarket[] }> = [
+  {
+    id: "baseline:canada-francophone-mobility",
+    markets: ["DZ", "TN"],
+    title: "Mobilité francophone — permis de travail hors Québec",
+    destination: "Canada hors Québec",
+    source: "Immigration, Réfugiés et Citoyenneté Canada",
+    description:
+      "Voie officielle facilitant l’embauche de travailleurs francophones lorsque le candidat, l’offre et l’employeur respectent les critères du programme.",
+    deadlineAt: null,
+    positions: [],
+    conditions: [
+      "Obtenir une offre d’emploi admissible hors Québec",
+      "Respecter les critères linguistiques publiés par IRCC",
+      "L’employeur doit déposer l’offre dans le Portail des employeurs",
+    ],
+    requiredDocuments: ["CV canadien", "Offre d’emploi", "Preuve de français"],
+    applicationUrl:
+      "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec.html",
+    sourceUrl:
+      "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/travailler-canada/embaucher-etranger-temporaires/travailleurs-francophones-bilingues-exterieur-quebec.html",
+    checkedAt: BASELINE_CHECKED_AT,
+  },
+  {
+    id: "baseline:canada-atlantic-immigration",
+    markets: ["DZ", "TN"],
+    title: "Programme d’immigration au Canada atlantique",
+    destination: "Provinces atlantiques du Canada",
+    source: "Immigration, Réfugiés et Citoyenneté Canada",
+    description:
+      "Parcours officiel pour les candidats qui disposent d’une offre d’un employeur désigné et remplissent toutes les conditions du programme.",
+    deadlineAt: null,
+    positions: [],
+    conditions: [
+      "Offre d’emploi d’un employeur désigné",
+      "Expérience, études et langue selon le profil",
+      "Plan d’établissement et approbation provinciale",
+    ],
+    requiredDocuments: ["CV canadien", "Offre d’emploi", "Preuve de langue", "Diplômes"],
+    applicationUrl:
+      "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/immigrer-canada/programme-immigration-atlantique.html",
+    sourceUrl:
+      "https://www.canada.ca/fr/immigration-refugies-citoyennete/services/immigrer-canada/programme-immigration-atlantique.html",
+    checkedAt: BASELINE_CHECKED_AT,
+  },
+  {
+    id: "baseline:eures-jobs",
+    markets: ["DZ", "TN"],
+    title: "Emplois officiels EURES en Europe",
+    destination: "Europe",
+    source: "EURES — Union européenne",
+    description:
+      "Portail officiel d’offres d’emploi et d’informations sur les conditions de vie et de travail en Europe.",
+    deadlineAt: null,
+    positions: [],
+    conditions: [
+      "Vérifier dans chaque offre si les candidatures hors Union européenne sont acceptées",
+      "Contrôler les exigences de visa ou de permis de travail",
+    ],
+    requiredDocuments: ["CV Europass ou CV adapté", "Lettre de motivation"],
+    applicationUrl: "https://eures.europa.eu/jobseekers_fr",
+    sourceUrl: "https://eures.europa.eu/jobseekers_fr",
+    checkedAt: BASELINE_CHECKED_AT,
+  },
+  {
+    id: "baseline:pei-immigration",
+    markets: ["DZ", "TN"],
+    title: "Immigration et Expression of Interest à l’Île-du-Prince-Édouard",
+    destination: "Île-du-Prince-Édouard, Canada",
+    source: "Gouvernement de l’Île-du-Prince-Édouard",
+    description:
+      "Information officielle sur les parcours provinciaux. Une Expression of Interest permet d’entrer dans le système de sélection, sans constituer une acceptation.",
+    deadlineAt: null,
+    positions: [],
+    conditions: [
+      "Vérifier le parcours correspondant au profil",
+      "Une Expression of Interest n’est pas une acceptation finale",
+      "Certains parcours nécessitent une offre d’emploi et une preuve linguistique",
+    ],
+    requiredDocuments: ["CV canadien", "Diplômes", "Preuves d’expérience"],
+    applicationUrl:
+      "https://www.princeedwardisland.ca/en/service/submit-your-expression-of-interest-profile",
+    sourceUrl: "https://www.princeedwardisland.ca/en/topic/office-immigration",
+    checkedAt: BASELINE_CHECKED_AT,
+  },
+  {
+    id: "baseline:thamm-plus",
+    markets: ["TN"],
+    title: "THAMM PLUS — parcours Tunisie–Italie pour les métiers du bâtiment",
+    destination: "Italie",
+    source: "ANCE et ANETI International",
+    description:
+      "Programme de mobilité professionnelle pour des travailleurs tunisiens qualifiés du bâtiment. La candidature sûre passe uniquement par un appel ANETI ouvert.",
+    deadlineAt: null,
+    positions: ["Métiers qualifiés du bâtiment"],
+    conditions: [
+      "Être éligible à un appel ANETI ouvert",
+      "Vérifier le métier, l’expérience, l’âge et le diplôme dans l’avis officiel",
+      "Ne pas envoyer une candidature spontanée à des adresses non confirmées",
+    ],
+    requiredDocuments: ["CV", "Diplôme ou certificat professionnel", "Preuves d’expérience"],
+    applicationUrl: "https://www.aneti-international.tn/",
+    sourceUrl:
+      "https://ance.it/2026/03/progetto-thamm-plus-towards-a-holistic-approach-to-labour-migration-governance-and-labour-mobility-in-italy-and-north-africa/",
+    checkedAt: BASELINE_CHECKED_AT,
+  },
+];
+
 const clean = (value: string | null | undefined) => (value || "").replace(/\s+/g, " ").trim();
 
 function safeUrl(value: string | null | undefined) {
@@ -294,6 +404,11 @@ export async function collectPublicationEvidence(
       unique.set(evidenceKey(item), item);
     });
   });
+  BASELINE_EVIDENCE.filter((item) => item.markets.includes(page.market)).forEach(
+    ({ markets: _markets, ...item }) => {
+      unique.set(evidenceKey(item), item);
+    },
+  );
   const evidence = [...unique.values()]
     .sort((left, right) => {
       const leftDeadline = left.deadlineAt ? Date.parse(left.deadlineAt) : Number.POSITIVE_INFINITY;
@@ -444,6 +559,221 @@ export function normalizePublicationBatch(
   };
 }
 
+function withoutParentheses(value: string | null | undefined) {
+  return clean(value).replace(/[()]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function focusedEvidence(evidence: PublicationEvidence[], focus: string) {
+  const terms = clean(focus)
+    .toLocaleLowerCase("fr")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter((term) => term.length >= 3);
+  if (!terms.length) return evidence;
+  const scored = evidence.map((item, index) => {
+    const haystack = withoutParentheses(
+      `${item.title} ${item.destination} ${item.description} ${item.positions.join(" ")} ${item.conditions.join(" ")}`,
+    )
+      .toLocaleLowerCase("fr")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return { item, index, score: terms.filter((term) => haystack.includes(term)).length };
+  });
+  return scored
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map(({ item }) => item);
+}
+
+function localDeadline(value: string | null, market: PublicationMarket) {
+  if (!value)
+    return market === "DZ"
+      ? "الـ Deadline ما هوش منشور، لازم تراجع المصدر الرسمي قبل التقديم."
+      : "الـ Deadline موش منشور، يلزمك تراجع المصدر الرسمي قبل التقديم.";
+  const date = new Date(value);
+  const label = Number.isNaN(date.getTime())
+    ? withoutParentheses(value)
+    : date.toLocaleDateString(market === "DZ" ? "ar-DZ" : "ar-TN", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+  return market === "DZ"
+    ? `الـ Deadline المنشور هو ${label}، راجعه مرة أخرى في المصدر الرسمي.`
+    : `الـ Deadline المنشور هو ${label}، ثبّت التاريخ مرة أخرى من المصدر الرسمي.`;
+}
+
+function listLabel(values: string[], maximum = 3) {
+  return values.map(withoutParentheses).filter(Boolean).slice(0, maximum).join("، ");
+}
+
+const LOCAL_HEADLINES: Record<PublicationPageId, string[]> = {
+  "cv-pro-algeria": [
+    "فرصة موثوقة وخطوات واضحة قبل إرسال الـ CV",
+    "الـ Deadline ما يتخمنش، راجع المصدر الرسمي",
+    "ملفك لازم يكون مهيأ للعرض الحقيقي",
+    "قبل Apply تأكد من الشروط والوثائق",
+    "فرصة رسمية تستاهل تحضير منظم",
+  ],
+  "emplois-immigration-tunis": [
+    "فرصة دولية موثوقة وخطوات الترشح واضحة",
+    "قبل ما تبعث الـ CV راجع الشروط والـ Deadline",
+    "الترشح الصحيح يبدأ من المصدر الرسمي",
+    "حضّر ملفك حسب العرض موش بطريقة عامة",
+    "عرض جديد يلزمو ملف مرتب ومعلومات صحيحة",
+  ],
+  "bissane-career": [
+    "فرصتك تنجم تبدأ بملف مرتب ومعلومة صحيحة",
+    "ما تخليش الـ Deadline يفوتك بسبب ملف ناقص",
+    "CV قوي ومصدر رسمي وخطوات واضحة",
+    "قبل الترشح تأكد إن العرض يناسب بروفايلك",
+    "خطوة صغيرة اليوم تنجم تقربك لفرصة أحسن",
+  ],
+};
+
+function localBody(
+  page: PublicationPage,
+  proof: PublicationEvidence,
+  objective: PublicationDraft["objective"],
+) {
+  const title = withoutParentheses(proof.title);
+  const destination = withoutParentheses(proof.destination);
+  const source = withoutParentheses(proof.source);
+  const positions = listLabel(proof.positions);
+  const conditions = listLabel(proof.conditions);
+  const documents = listLabel(proof.requiredDocuments);
+  const deadline = localDeadline(proof.deadlineAt, page.market);
+
+  if (page.market === "DZ") {
+    const opening =
+      objective === "service"
+        ? "كثير من المترشحين يلقاو الفرصة المناسبة بصح يبعثو نفس الملف لكل عرض. الحل هو ملف مخصص ومعلومة مؤكدة."
+        : objective === "deadline"
+          ? "المشكل ماشي غير تلقى الفرصة، لازم تعرف الوقت والشروط قبل ما تبعث ملفك."
+          : "كاينة معلومة مهنية موثوقة تستاهل تراجعها إذا راك تحوس على فرصة منظمة.";
+    return [
+      opening,
+      `الفرصة هي ${title} نحو ${destination}. المصدر الرسمي هو ${source}.`,
+      positions
+        ? `المناصب أو المجالات المذكورة: ${positions}.`
+        : "المهنة المقبولة تتحدد حسب العرض الرسمي والملف.",
+      conditions
+        ? `أهم الشروط المنشورة: ${conditions}.`
+        : "الشروط التفصيلية لازم تتراجع مباشرة في المصدر.",
+      deadline,
+      documents ? `الوثائق المذكورة: ${documents}.` : "حضّر CV والوثائق اللي يطلبها الإعلان فقط.",
+      "راجع الرابط الرسمي، قارن الشروط مع بروفايلك، ومن بعد حضّر CV و Cover Letter مخصصين قبل Apply.",
+      "CV PRO TEAM يقدر يساعدك في إعداد الملف والتقديم، بدون أي وعد بالتوظيف أو الفيزا.",
+    ].join("\n\n");
+  }
+
+  const opening =
+    page.id === "bissane-career"
+      ? "برشة فرص تتفلت خاطر المعلومة توصل ناقصة ولا الملف يكون عام. البداية الصحيحة هي مصدر رسمي وملف يخدم هدف واضح."
+      : objective === "deadline"
+        ? "قبل ما تبعث مطلبك، أهم خطوة هي تثبّت الـ Deadline والشروط من المصدر الرسمي."
+        : "فمّا فرصة مهنية موثوقة تنجم تهم الناس اللي تحب تحضّر ترشح منظم.";
+  return [
+    opening,
+    `الفرصة هي ${title} نحو ${destination}. المصدر الرسمي هو ${source}.`,
+    positions
+      ? `الاختصاصات أو المجالات المذكورة: ${positions}.`
+      : "الاختصاص المقبول يتحدد حسب العرض الرسمي والبروفايل.",
+    conditions
+      ? `أهم الشروط المنشورة: ${conditions}.`
+      : "الشروط التفصيلية يلزم تتراجع مباشرة في المصدر.",
+    deadline,
+    documents ? `الوثائق المذكورة: ${documents}.` : "حضّر CV والوثائق المطلوبة في الإعلان فقط.",
+    "افتح الرابط الرسمي، قارن الشروط ببروفايلك، وبعد حضّر CV و Cover Letter مخصصين قبل Apply.",
+    "فريقنا ينجم يعاونك في إعداد الملف والتقديم، من غير وعود بالتشغيل أو الفيزا.",
+  ].join("\n\n");
+}
+
+function localComments(page: PublicationPage, proof: PublicationEvidence) {
+  const source = withoutParentheses(proof.source);
+  const documents = listLabel(proof.requiredDocuments);
+  const deadline = localDeadline(proof.deadlineAt, page.market);
+  if (page.market === "DZ") {
+    return [
+      `المصدر الرسمي هو ${source} والرابط موجود مع المنشور.`,
+      deadline,
+      documents
+        ? `قبل Apply حضّر هاذ الوثائق: ${documents}.`
+        : "قبل Apply راجع قائمة الوثائق في الإعلان الرسمي.",
+      "خدمة CV PRO TEAM تخص إعداد CV و Cover Letter والمساعدة في التقديم فقط، وماشي ضمان توظيف.",
+      "قولولنا في التعليقات شنو هو المجال اللي حابين نركزو عليه في المنشورات الجاية.",
+    ].map(withoutParentheses);
+  }
+  return [
+    `المصدر الرسمي هو ${source} والرابط موجود مع المنشور.`,
+    deadline,
+    documents
+      ? `قبل Apply حضّر الوثائق هاذي: ${documents}.`
+      : "قبل Apply ثبّت قائمة الوثائق في الإعلان الرسمي.",
+    "خدمتنا تخص إعداد CV و Cover Letter والمساعدة في التقديم فقط، وما هيش ضمان تشغيل.",
+    "اكتبولنا في التعليقات شنوّة الاختصاص اللي تحبوا نركزوا عليه في المنشورات الجاية.",
+  ].map(withoutParentheses);
+}
+
+export function buildLocalPublicationBatch(options: {
+  page: PublicationPage;
+  evidence: PublicationEvidence[];
+  focus?: string;
+  generatedAt?: string;
+}): PublicationBatch {
+  if (!options.evidence.length)
+    throw new Error("Aucune opportunité vérifiée n’est disponible pour la génération locale.");
+  const generatedAt = options.generatedAt || new Date().toISOString();
+  const ranked = focusedEvidence(options.evidence, options.focus || "");
+  const objectives: PublicationDraft["objective"][] = [
+    "information",
+    "deadline",
+    "service",
+    "engagement",
+    "information",
+  ];
+  const posts = Array.from({ length: 5 }, (_, index): PublicationDraft => {
+    const proof = ranked[index % ranked.length];
+    const format: PublicationFormat = index < 2 ? "short" : "visual";
+    const title = withoutParentheses(proof.title);
+    const destination = withoutParentheses(proof.destination);
+    return {
+      id: `${options.page.id}-${generatedAt}-local-${index}`,
+      pageId: options.page.id,
+      createdAt: generatedAt,
+      format,
+      objective: objectives[index],
+      headline: LOCAL_HEADLINES[options.page.id][index],
+      body: localBody(options.page, proof, objectives[index]),
+      comments: localComments(options.page, proof),
+      highlightedTerms: ["CV", "Cover Letter", "Deadline", "Apply"],
+      evidenceId: proof.id,
+      sourceLabel: proof.source,
+      sourceUrl: proof.sourceUrl,
+      applicationUrl: proof.applicationUrl,
+      deadlineAt: proof.deadlineAt,
+      checkedAt: proof.checkedAt,
+      visual:
+        format === "visual"
+          ? {
+              eyebrow: options.page.market === "DZ" ? "فرصة موثوقة" : "فرصة متثبت منها",
+              title: LOCAL_HEADLINES[options.page.id][index],
+              subtitle: `${title} · ${destination}`.slice(0, 140),
+              cta: options.page.market === "DZ" ? "راجع المصدر الرسمي" : "ثبّت من المصدر الرسمي",
+              badges: ["CV", "Deadline", "Apply"],
+            }
+          : null,
+    };
+  });
+  return {
+    version: 1,
+    pageId: options.page.id,
+    generatedAt,
+    evidenceCheckedAt: generatedAt,
+    posts,
+  };
+}
+
 export async function generatePublicationBatch(options: {
   page: PublicationPage;
   evidence: PublicationEvidence[];
@@ -451,17 +781,35 @@ export async function generatePublicationBatch(options: {
   focus: string;
   signal?: AbortSignal;
 }) {
-  const { runAiJson } = await import("./ai-client");
-  const result = await runAiJson<unknown>(
-    options.settings,
-    PUBLICATION_SYSTEM_PROMPT,
-    publicationPrompt(options.page, options.evidence, options.focus),
-    { signal: options.signal, maxTotalMs: 150_000 },
-  );
-  return {
-    batch: normalizePublicationBatch(result.data, options.page, options.evidence),
-    nextSettings: result.nextSettings,
-    model: result.model,
-    connectionLabel: result.connectionLabel,
-  };
+  try {
+    const { runAiJson } = await import("./ai-client");
+    const result = await runAiJson<unknown>(
+      options.settings,
+      PUBLICATION_SYSTEM_PROMPT,
+      publicationPrompt(options.page, options.evidence, options.focus),
+      { signal: options.signal, maxTotalMs: 150_000 },
+    );
+    return {
+      batch: normalizePublicationBatch(result.data, options.page, options.evidence),
+      nextSettings: result.nextSettings,
+      model: result.model,
+      connectionLabel: result.connectionLabel,
+      fallbackUsed: false,
+      providerError: "",
+    };
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    return {
+      batch: buildLocalPublicationBatch({
+        page: options.page,
+        evidence: options.evidence,
+        focus: options.focus,
+      }),
+      nextSettings: options.settings,
+      model: "ZGR Local Editorial v1",
+      connectionLabel: "moteur éditorial local sécurisé",
+      fallbackUsed: true,
+      providerError: error instanceof Error ? error.message : "Fournisseurs IA indisponibles",
+    };
+  }
 }

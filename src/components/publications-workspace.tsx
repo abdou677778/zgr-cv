@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { AiSettings } from "@/lib/ai-types";
 import {
   PUBLICATION_PAGES,
+  buildLocalPublicationBatch,
   collectPublicationEvidence,
   generatePublicationBatch,
   normalizePublicationBatch,
@@ -43,7 +44,7 @@ import {
 
 const STORAGE_KEY = "zgr-publication-studio-v1";
 
-type GeneratorMode = "project_ai" | "codex_local";
+type GeneratorMode = "zgr_local" | "project_ai" | "codex_local";
 
 function readStoredBatches() {
   if (typeof window === "undefined") return {};
@@ -296,13 +297,14 @@ export function PublicationsWorkspace({
 }) {
   const [market, setMarket] = useState<PublicationMarket>("DZ");
   const [pageId, setPageId] = useState<PublicationPageId>("cv-pro-algeria");
-  const [mode, setMode] = useState<GeneratorMode>("project_ai");
+  const [mode, setMode] = useState<GeneratorMode>("zgr_local");
   const [focus, setFocus] = useState("");
   const [evidence, setEvidence] = useState<PublicationEvidence[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [evidenceCheckedAt, setEvidenceCheckedAt] = useState("");
   const [loadingEvidence, setLoadingEvidence] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generatingAll, setGeneratingAll] = useState(false);
   const [batches, setBatches] = useState<Partial<Record<PublicationPageId, PublicationBatch>>>(() =>
     readStoredBatches(),
   );
@@ -385,7 +387,9 @@ export function PublicationsWorkspace({
       onSettingsChange(result.nextSettings);
       setMessage({
         ok: true,
-        text: `5 publications générées avec ${result.connectionLabel} · ${result.model}. Validation humaine requise avant Facebook.`,
+        text: result.fallbackUsed
+          ? "Les fournisseurs IA sont momentanément indisponibles. Le moteur éditorial local ZGR a généré 5 publications vérifiées, sans perdre votre travail."
+          : `5 publications générées avec ${result.connectionLabel} · ${result.model}. Validation humaine requise avant Facebook.`,
       });
     } catch (error) {
       setMessage({
@@ -394,6 +398,64 @@ export function PublicationsWorkspace({
       });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const generateLocally = () => {
+    if (!evidence.length) {
+      setMessage({ ok: false, text: "Actualisez d’abord les opportunités vérifiées." });
+      return;
+    }
+    const batch = buildLocalPublicationBatch({ page, evidence, focus });
+    setBatches((current) => ({ ...current, [page.id]: batch }));
+    setMessage({
+      ok: true,
+      text: "5 publications disponibles immédiatement avec le moteur éditorial local ZGR. Aucune clé API ni quota n’a été utilisé.",
+    });
+  };
+
+  const generateAllPagesLocally = async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setGeneratingAll(true);
+    setMessage(null);
+    try {
+      const dzPage = PUBLICATION_PAGES.find((item) => item.market === "DZ")!;
+      const tnPage = PUBLICATION_PAGES.find((item) => item.market === "TN")!;
+      const [dzResult, tnResult] = await Promise.all([
+        collectPublicationEvidence(dzPage, controller.signal),
+        collectPublicationEvidence(tnPage, controller.signal),
+      ]);
+      const generated = Object.fromEntries(
+        PUBLICATION_PAGES.map((item) => {
+          const source = item.market === "DZ" ? dzResult : tnResult;
+          return [
+            item.id,
+            buildLocalPublicationBatch({ page: item, evidence: source.evidence, focus }),
+          ];
+        }),
+      ) as Record<PublicationPageId, PublicationBatch>;
+      setBatches((current) => ({ ...current, ...generated }));
+      const currentResult = page.market === "DZ" ? dzResult : tnResult;
+      setEvidence(currentResult.evidence);
+      setEvidenceCheckedAt(currentResult.checkedAt);
+      setWarnings([...new Set([...dzResult.warnings, ...tnResult.warnings])]);
+      setMessage({
+        ok: true,
+        text: "15 publications prêtes : 5 pour CV PRO Algérie, 5 pour Emplois & Immigration et 5 pour Bissane Career Expert. Aucun quota IA utilisé.",
+      });
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setMessage({
+          ok: false,
+          text:
+            error instanceof Error
+              ? error.message
+              : "Préparation des trois pages momentanément impossible.",
+        });
+    } finally {
+      if (!controller.signal.aborted) setGeneratingAll(false);
     }
   };
 
@@ -546,7 +608,23 @@ export function PublicationsWorkspace({
               </a>
             </div>
 
-            <div className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setMode("zgr_local")}
+                className={`rounded-xl border p-3 text-left ${
+                  mode === "zgr_local"
+                    ? "border-emerald-500 bg-white ring-2 ring-emerald-100"
+                    : "border-transparent hover:bg-white"
+                }`}
+              >
+                <span className="flex items-center gap-2 font-black text-slate-950">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" /> Moteur ZGR fiable
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                  Immédiat, sans API, sans quota et basé uniquement sur les sources vérifiées.
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={() => setMode("project_ai")}
@@ -560,7 +638,7 @@ export function PublicationsWorkspace({
                   <Sparkles className="h-4 w-4 text-violet-600" /> IA du projet
                 </span>
                 <span className="mt-1 block text-xs leading-5 text-slate-500">
-                  Auto-switch avec les clés actives déjà configurées.
+                  Auto-switch avec secours ZGR automatique si toutes les clés échouent.
                 </span>
               </button>
               <button
@@ -594,19 +672,40 @@ export function PublicationsWorkspace({
               />
             </div>
 
-            {mode === "project_ai" ? (
-              <Button
-                className="mt-4 w-full bg-violet-600 hover:bg-violet-700"
-                onClick={generate}
-                disabled={generating || loadingEvidence || !evidence.length}
-              >
-                {generating ? (
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Bot className="mr-2 h-4 w-4" />
-                )}
-                Générer 5 publications vérifiées
-              </Button>
+            {mode !== "codex_local" ? (
+              <div className="mt-4 space-y-2">
+                <Button
+                  className={`w-full ${
+                    mode === "zgr_local"
+                      ? "bg-emerald-700 hover:bg-emerald-800"
+                      : "bg-violet-600 hover:bg-violet-700"
+                  }`}
+                  onClick={mode === "zgr_local" ? generateLocally : generate}
+                  disabled={generating || generatingAll || loadingEvidence || !evidence.length}
+                >
+                  {generating ? (
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  ) : mode === "zgr_local" ? (
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Bot className="mr-2 h-4 w-4" />
+                  )}
+                  Générer 5 publications vérifiées
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                  onClick={() => void generateAllPagesLocally()}
+                  disabled={generating || generatingAll || loadingEvidence}
+                >
+                  {generatingAll ? (
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Newspaper className="mr-2 h-4 w-4" />
+                  )}
+                  Préparer 15 publications pour les 3 pages
+                </Button>
+              </div>
             ) : (
               <div className="mt-4 space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
                 <Button

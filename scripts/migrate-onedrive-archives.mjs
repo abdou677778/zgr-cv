@@ -21,7 +21,9 @@ const DRIVE_SYNC_BATCH_SIZE = 1;
 const DEFAULT_UPLOAD_CONCURRENCY = 4;
 const API_REQUEST_TIMEOUT_MS = 90_000;
 const DRIVE_SYNC_REQUEST_TIMEOUT_MS = 240_000;
-const DRIVE_SYNC_API_ATTEMPTS = 3;
+// Six attempts cover the two-minute stale-lock recovery window after an abrupt
+// Worker/process stop, without failing the client and postponing it to a later pass.
+const DRIVE_SYNC_API_ATTEMPTS = 6;
 const FILE_UPLOAD_TIMEOUT_MS = 5 * 60_000;
 
 const sourceContainerPatterns = [

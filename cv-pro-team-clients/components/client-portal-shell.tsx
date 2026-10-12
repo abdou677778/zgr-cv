@@ -56,6 +56,7 @@ export function ClientPortalShell({
 
   return (
     <main
+      data-portal-runtime="2026-10-12.2"
       lang={locale}
       dir={ar ? "rtl" : "ltr"}
       className={`min-h-screen bg-background px-4 py-5 text-foreground sm:px-6 sm:py-8 ${

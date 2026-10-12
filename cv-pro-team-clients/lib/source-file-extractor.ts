@@ -190,14 +190,20 @@ export async function extractSourceText(input: {
           page.cleanup();
         }
         const text = pages.join('\n\n').trim();
+        // A blank separator, scan cover, or signature page must not invalidate
+        // text extracted from the other pages.  The MCP returns the complete
+        // extracted text and reports the pages that still deserve a visual
+        // check; it only blocks the workflow when *no* usable text exists.
         return {
-          status: emptyPages.length || !text ? 'needs_visual_review' : 'text',
+          status: text ? 'text' : 'needs_visual_review',
           extractionMethod: 'pdf-text',
           text,
           totalPages: pdf.numPages,
           emptyPages,
           ...(emptyPages.length || !text
-            ? { message: 'Certaines pages ne contiennent pas de texte exploitable et doivent être lues visuellement.' }
+            ? { message: text
+                ? 'Texte exploitable extrait. Certaines pages ne contiennent pas de texte ; vérifiez-les visuellement si elles peuvent contenir des informations utiles.'
+                : 'Aucun texte exploitable : le document doit être lu visuellement.' }
             : {}),
         };
       } finally {

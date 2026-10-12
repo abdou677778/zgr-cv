@@ -74,14 +74,25 @@ pour ne retourner que les recrutements internationaux. Un lien ou identifiant pr
 déclenche obligatoirement l’inspection de la fiche officielle avant toute
 réponse sur l’admissibilité, l’échéance ou la méthode de candidature.
 
-`read_source_file` extrait le texte des PDF, DOC/DOCX, RTF, fichiers texte,
-HTML/XML/JSON/CSV, classeurs XLSX, présentations PPTX et formats OpenDocument.
-Les images JPEG, PNG et WebP sont envoyées directement au modèle pour analyse
-visuelle. Après chaque dossier, `get_source_reading_status` doit retourner
-`complete: true`. `save_json_version` refuse côté serveur toute sauvegarde tant
-qu’un fichier est absent, partiellement paginé, trop volumineux, illisible ou
-dans un format non extractible. Convertir les images HEIC/HEIF en JPEG/PNG avant
-la génération IA afin qu’elles puissent être analysées visuellement.
+`get_source_options` est le point de décision pour un dossier hétérogène : il
+retourne, document par document, l’action exacte à proposer dans la conversation
+MCP. `read_source_file` extrait le texte des PDF (100 pages maximum), DOC/DOCX,
+RTF, fichiers texte, HTML/XML/JSON/CSV, classeurs XLSX, présentations PPTX et
+formats OpenDocument. Les images JPEG, PNG et WebP sont envoyées directement au
+modèle pour analyse visuelle. Les PDF dont une page est blanche ou scannée restent
+lisibles lorsque les autres pages contiennent du texte ; les pages visuelles sont
+signalées au modèle.
+
+Les fichiers natifs Google doivent être exportés en PDF, DOCX, XLSX ou PPTX avant
+l’import dans la commande ; les archives ZIP/RAR/7z doivent être extraites avant
+l’import ; l’audio et la vidéo requièrent une transcription relue ; les images
+HEIC/HEIF/TIFF/GIF/BMP doivent être converties en JPEG, PNG ou WebP. Le MCP ne
+parcourt jamais un Drive personnel ou un lien externe : il ne travaille que sur
+les fichiers explicitement rattachés à la commande. Après chaque dossier,
+`get_source_reading_status` doit retourner `complete: true`.
+`save_json_version` refuse côté serveur toute sauvegarde tant qu’un fichier
+nécessaire est absent, partiellement paginé, trop volumineux, illisible ou dans un
+format non extractible.
 
 Pour modifier un JSON existant, le client appelle d’abord `get_json_version`
 sans numéro afin de charger la version active, puis transmet

@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, open, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
@@ -619,9 +619,58 @@ async function fetchTextWithHardTimeout(url, init, timeoutMs) {
 
 async function atomicWriteJson(path, value) {
   const target = resolve(path);
-  const temporary = `${target}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, target);
+  // A unique temporary name prevents two interrupted Windows processes from
+  // overwriting each other's `.tmp` file. The manifest lock below prevents a
+  // concurrent live migration; this retry only handles short antivirus/indexer
+  // file handles during the atomic replacement.
+  const temporary = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    let lastError;
+    for (let attempt = 1; attempt <= 8; attempt += 1) {
+      try {
+        await rename(temporary, target);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 8 && ["EPERM", "EACCES", "EBUSY"].includes(error?.code)) {
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, attempt * 300));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError;
+  } finally {
+    await rm(temporary, { force: true }).catch(() => {});
+  }
+}
+
+async function acquireManifestLock(manifestPath) {
+  const lockPath = `${resolve(manifestPath)}.migration.lock`;
+  try {
+    const handle = await open(lockPath, "wx");
+    await handle.writeFile(`${JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })}\n`);
+    return { lockPath, handle };
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    const existing = await stat(lockPath).catch(() => undefined);
+    const ageMs = existing ? Date.now() - existing.mtimeMs : 0;
+    // A killed local process leaves no cleanup hook. Never remove a fresh lock:
+    // its worker may still be uploading to Drive. A 20-minute-old lock is safe
+    // to reclaim because every request has a hard timeout below that duration.
+    if (existing && ageMs > 20 * 60_000) {
+      await unlink(lockPath).catch(() => {});
+      return acquireManifestLock(manifestPath);
+    }
+    throw new Error("Une migration locale de ce lot est déjà en cours. Reprise refusée pour protéger le manifeste.");
+  }
+}
+
+async function releaseManifestLock(lock) {
+  if (!lock) return;
+  await lock.handle.close().catch(() => {});
+  await unlink(lock.lockPath).catch(() => {});
 }
 
 function validateClient(client, acceptInferredDates) {
@@ -1079,6 +1128,7 @@ async function migrateCommand(options) {
   if (!Number.isInteger(uploadConcurrency) || uploadConcurrency < 1 || uploadConcurrency > 4) {
     throw new Error("--upload-concurrency doit être un entier compris entre 1 et 4.");
   }
+  const manifestLock = await acquireManifestLock(manifestPath);
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "zgr-archive-"));
   const resolvedTemp = resolve(temporaryDirectory);
   const allowedTempRoot = `${resolve(tmpdir())}${sep}`.toLocaleLowerCase();
@@ -1126,6 +1176,7 @@ async function migrateCommand(options) {
     }
   } finally {
     await rm(resolvedTemp, { recursive: true, force: true });
+    await releaseManifestLock(manifestLock);
   }
 }
 

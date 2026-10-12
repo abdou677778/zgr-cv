@@ -1307,7 +1307,9 @@ export function AccountSettingsDialog({
                             );
                           }}
                         >
-                          {(Object.keys(accessLevelLabels) as AccessLevel[]).map((level) => (
+                          {(Object.keys(accessLevelLabels) as AccessLevel[])
+                            .filter((level) => level !== "none" || (scope !== "orders" && scope !== "archives"))
+                            .map((level) => (
                             <option key={level} value={level}>{accessLevelLabels[level]}</option>
                           ))}
                         </select>

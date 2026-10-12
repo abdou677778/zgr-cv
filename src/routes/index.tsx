@@ -2906,7 +2906,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               </span>
             )}
             <div className="zgr-toolbar-group flex flex-wrap items-center gap-2">
-              {user.permissions.ordersRead && (
+              {user.permissions.ordersRead !== false && (
                 <Button
                   variant="outline"
                   size="sm"

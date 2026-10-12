@@ -12,7 +12,18 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 
 if ([string]::IsNullOrWhiteSpace($env:ZGR_ARCHIVE_ADMIN_TOKEN)) {
-  throw "ZGR_ARCHIVE_ADMIN_TOKEN est absent. Définissez-le dans cette fenêtre avant la reprise ; il n’est jamais enregistré dans ce script."
+  # The token is requested only in memory for this PowerShell process. It is
+  # neither written to the manifest nor persisted as a Windows environment value.
+  $secureToken = Read-Host "Jeton administrateur de migration" -AsSecureString
+  $tokenPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
+  try {
+    $env:ZGR_ARCHIVE_ADMIN_TOKEN = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tokenPointer)
+  }
+  if ([string]::IsNullOrWhiteSpace($env:ZGR_ARCHIVE_ADMIN_TOKEN)) {
+    throw "Aucun jeton n’a été saisi. La migration n’a pas été démarrée."
+  }
 }
 
 $manifestPath = if ([IO.Path]::IsPathRooted($Manifest)) { $Manifest } else { Join-Path $projectRoot $Manifest }

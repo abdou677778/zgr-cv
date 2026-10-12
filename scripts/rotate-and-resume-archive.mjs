@@ -13,18 +13,19 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, '..');
 const token = randomBytes(36).toString('hex');
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const wranglerArgs = [
-  'wrangler',
-  'secret',
-  'put',
-  'ADMIN_API_TOKEN',
-  '--config',
-  'cv-pro-team-clients/wrangler.production.jsonc',
+const secretTargets = [
+  // The portal validates the request forwarded from the ZGR Worker.
+  { name: 'ADMIN_API_TOKEN', config: 'cv-pro-team-clients/wrangler.production.jsonc' },
+  // The Worker must always receive the exact same value to avoid a proxy 401
+  // that could otherwise be mistaken by the browser for a user logout.
+  { name: 'CLIENT_PORTAL_ADMIN_TOKEN', config: 'wrangler.worker.jsonc' },
 ];
 
-function runSecretUpdate() {
+function runSecretUpdate(target) {
   return new Promise((resolve, reject) => {
-    const child = spawn(npx, wranglerArgs, {
+    const child = spawn(npx, [
+      'wrangler', 'secret', 'put', target.name, '--config', target.config,
+    ], {
       cwd: projectRoot,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
@@ -43,7 +44,7 @@ function runSecretUpdate() {
   });
 }
 
-await runSecretUpdate();
+for (const target of secretTargets) await runSecretUpdate(target);
 
 // A migration is never started blindly: confirm that the Worker has accepted
 // the newly rotated secret. The response body and token are deliberately not

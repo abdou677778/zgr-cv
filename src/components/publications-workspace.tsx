@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Sparkles,
   TriangleAlert,
+  Upload,
 } from "lucide-react";
 
 import { FullPageWorkspace } from "@/components/full-page-workspace";
@@ -44,8 +45,45 @@ import {
 } from "@/lib/publication-studio";
 
 const STORAGE_KEY = "zgr-publication-studio-v2";
+const IMAGE_DB_NAME = "zgr-publication-images-v1";
+const IMAGE_STORE = "assets";
+const MAX_PUBLICATION_IMAGE_BYTES = 8 * 1024 * 1024;
 
 type GeneratorMode = "zgr_local" | "project_ai" | "codex_local";
+
+function openPublicationImageDb() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = window.indexedDB.open(IMAGE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(IMAGE_STORE))
+        request.result.createObjectStore(IMAGE_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Stockage d’image indisponible."));
+  });
+}
+
+async function savePublicationImage(postId: string, image: Blob) {
+  const db = await openPublicationImageDb();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(IMAGE_STORE, "readwrite");
+    transaction.objectStore(IMAGE_STORE).put(image, postId);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error("Image non enregistrée."));
+  });
+  db.close();
+}
+
+async function readPublicationImage(postId: string) {
+  const db = await openPublicationImageDb();
+  const image = await new Promise<Blob | null>((resolve, reject) => {
+    const request = db.transaction(IMAGE_STORE, "readonly").objectStore(IMAGE_STORE).get(postId);
+    request.onsuccess = () => resolve(request.result instanceof Blob ? request.result : null);
+    request.onerror = () => reject(request.error || new Error("Image non lisible."));
+  });
+  db.close();
+  return image;
+}
 
 function readStoredBatches() {
   if (typeof window === "undefined") return {};
@@ -121,7 +159,25 @@ function canvasLines(
   return lines;
 }
 
-async function renderVisualBlob(post: PublicationDraft, page: PublicationPage) {
+function drawCover(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+) {
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const renderedWidth = image.naturalWidth * scale;
+  const renderedHeight = image.naturalHeight * scale;
+  context.drawImage(
+    image,
+    (width - renderedWidth) / 2,
+    (height - renderedHeight) / 2,
+    renderedWidth,
+    renderedHeight,
+  );
+}
+
+async function renderVisualBlob(post: PublicationDraft, page: PublicationPage, imageUrl?: string) {
   if (!post.visual) return;
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
@@ -132,8 +188,17 @@ async function renderVisualBlob(post: PublicationDraft, page: PublicationPage) {
   gradient.addColorStop(0, page.accentDark);
   gradient.addColorStop(0.58, page.accent);
   gradient.addColorStop(1, "#0f172a");
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, 1080, 1350);
+  if (imageUrl) {
+    const image = await loadImage(imageUrl);
+    drawCover(context, image, 1080, 1350);
+    context.globalAlpha = 0.78;
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 1080, 1350);
+    context.globalAlpha = 1;
+  } else {
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 1080, 1350);
+  }
 
   context.globalAlpha = 0.14;
   context.fillStyle = "#ffffff";
@@ -227,13 +292,17 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(link.href), 5_000);
 }
 
-async function downloadVisual(post: PublicationDraft, page: PublicationPage) {
-  const blob = await renderVisualBlob(post, page);
+async function downloadVisual(post: PublicationDraft, page: PublicationPage, imageUrl?: string) {
+  const blob = await renderVisualBlob(post, page, imageUrl);
   if (!blob) return;
   downloadBlob(blob, `${page.id}-${post.id.slice(-8)}.png`);
 }
 
-async function downloadVisualArchive(batch: PublicationBatch, page: PublicationPage) {
+async function downloadVisualArchive(
+  batch: PublicationBatch,
+  page: PublicationPage,
+  imageUrls: Record<string, string>,
+) {
   const { strToU8, zipSync } = await import("fflate");
   const files: Record<string, Uint8Array> = {};
   const root = `PUBLICATIONS/${page.id}`;
@@ -246,7 +315,7 @@ async function downloadVisualArchive(batch: PublicationBatch, page: PublicationP
   ];
 
   for (const [index, post] of batch.posts.entries()) {
-    const blob = await renderVisualBlob(post, page);
+    const blob = await renderVisualBlob(post, page, imageUrls[post.id]);
     if (!blob) continue;
     const filename = `${String(index + 1).padStart(2, "0")}_${page.id}_${post.id.slice(-8)}.png`;
     files[`${root}/${filename}`] = new Uint8Array(await blob.arrayBuffer());
@@ -271,13 +340,23 @@ function PageLogo({ page, size = "md" }: { page: PublicationPage; size?: "sm" | 
   );
 }
 
-function VisualPreview({ post, page }: { post: PublicationDraft; page: PublicationPage }) {
+function VisualPreview({
+  post,
+  page,
+  imageUrl,
+}: {
+  post: PublicationDraft;
+  page: PublicationPage;
+  imageUrl?: string;
+}) {
   if (!post.visual) return null;
   return (
     <div
       className="relative isolate mt-4 aspect-[4/5] w-full overflow-hidden rounded-2xl p-6 text-white shadow-inner sm:p-8"
       style={{
-        background: `linear-gradient(145deg, ${page.accentDark}, ${page.accent} 58%, #0f172a)`,
+        background: imageUrl
+          ? `linear-gradient(145deg, ${page.accentDark}d9, ${page.accent}c7 58%, #0f172ad9), url("${imageUrl}") center / cover`
+          : `linear-gradient(145deg, ${page.accentDark}, ${page.accent} 58%, #0f172a)`,
         fontFamily: "Arial, Tahoma, sans-serif",
       }}
       dir="rtl"
@@ -354,6 +433,7 @@ export function PublicationsWorkspace({
   const [codexJson, setCodexJson] = useState("");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState("");
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const abortRef = useRef<AbortController | null>(null);
 
   const pages = useMemo(() => PUBLICATION_PAGES.filter((page) => page.market === market), [market]);
@@ -362,6 +442,33 @@ export function PublicationsWorkspace({
     [pageId],
   );
   const currentBatch = batches[page.id];
+
+  useEffect(() => {
+    let disposed = false;
+    const objectUrls: string[] = [];
+    const loadImages = async () => {
+      if (!currentBatch?.posts.length) {
+        if (!disposed) setImageUrls({});
+        return;
+      }
+      const entries = await Promise.all(
+        currentBatch.posts.map(async (post) => {
+          const blob = await readPublicationImage(post.id).catch(() => null);
+          if (!blob) return null;
+          const url = URL.createObjectURL(blob);
+          objectUrls.push(url);
+          return [post.id, url] as const;
+        }),
+      );
+      if (!disposed)
+        setImageUrls(Object.fromEntries(entries.filter(Boolean) as Array<[string, string]>));
+    };
+    void loadImages();
+    return () => {
+      disposed = true;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [currentBatch]);
 
   useEffect(() => {
     if (page.market === market) return;
@@ -415,6 +522,35 @@ export function PublicationsWorkspace({
   const markCopied = (id: string) => {
     setCopied(id);
     window.setTimeout(() => setCopied((current) => (current === id ? "" : current)), 1_500);
+  };
+
+  const importPublicationImage = async (post: PublicationDraft, file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setMessage({ ok: false, text: "Choisissez une image PNG, JPG ou WebP." });
+      return;
+    }
+    if (file.size > MAX_PUBLICATION_IMAGE_BYTES) {
+      setMessage({ ok: false, text: "L’image ne doit pas dépasser 8 Mo." });
+      return;
+    }
+    try {
+      await savePublicationImage(post.id, file);
+      const url = URL.createObjectURL(file);
+      setImageUrls((current) => {
+        if (current[post.id]) URL.revokeObjectURL(current[post.id]);
+        return { ...current, [post.id]: url };
+      });
+      setMessage({
+        ok: true,
+        text: "Image GPT associée au brouillon. Elle sera incluse dans le PNG et le ZIP exportés.",
+      });
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Import de l’image impossible.",
+      });
+    }
   };
 
   const generate = async () => {
@@ -801,7 +937,7 @@ export function PublicationsWorkspace({
                   </div>
                   <Button
                     className="shrink-0 bg-emerald-700 hover:bg-emerald-800"
-                    onClick={() => void downloadVisualArchive(currentBatch, page)}
+                    onClick={() => void downloadVisualArchive(currentBatch, page, imageUrls)}
                   >
                     <Download className="mr-2 h-4 w-4" /> Exporter les 10 visuels ZIP
                   </Button>
@@ -822,6 +958,12 @@ export function PublicationsWorkspace({
                           <span>Brouillon {index + 1}/10</span>
                           <span>·</span>
                           <span>Texte + visuel 4:5</span>
+                          <span>·</span>
+                          <span
+                            className={imageUrls[post.id] ? "text-emerald-700" : "text-amber-700"}
+                          >
+                            {imageUrls[post.id] ? "image IA associée" : "image IA à associer"}
+                          </span>
                           <span>·</span>
                           <BadgeCheck className="h-3.5 w-3.5 text-blue-600" />
                           <span>source vérifiée</span>
@@ -858,7 +1000,7 @@ export function PublicationsWorkspace({
                           </span>
                         ))}
                       </div>
-                      <VisualPreview post={post} page={page} />
+                      <VisualPreview post={post} page={page} imageUrl={imageUrls[post.id]} />
                     </div>
                     <div className="border-y border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 sm:px-5">
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -892,7 +1034,7 @@ export function PublicationsWorkspace({
                         )}
                       </div>
                     </div>
-                    <div className="grid gap-2 p-3 sm:grid-cols-4">
+                    <div className="grid gap-2 p-3 sm:grid-cols-5">
                       <Button
                         variant="outline"
                         onClick={async () => {
@@ -934,7 +1076,25 @@ export function PublicationsWorkspace({
                         )}
                         Prompt image GPT
                       </Button>
-                      <Button variant="outline" onClick={() => void downloadVisual(post, page)}>
+                      <Button variant="outline" asChild>
+                        <label className="cursor-pointer">
+                          <Upload className="mr-2 h-4 w-4" />
+                          {imageUrls[post.id] ? "Remplacer l’image" : "Importer image GPT"}
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="sr-only"
+                            onChange={(event) => {
+                              void importPublicationImage(post, event.target.files?.[0] || null);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => void downloadVisual(post, page, imageUrls[post.id])}
+                      >
                         <Download className="mr-2 h-4 w-4" /> Télécharger le visuel
                       </Button>
                     </div>

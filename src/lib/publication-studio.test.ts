@@ -6,6 +6,7 @@ import {
   buildLocalPublicationBatch,
   getBaselinePublicationEvidence,
   normalizePublicationBatch,
+  publicationImagePrompt,
   publicationPrompt,
   type PublicationEvidence,
 } from "./publication-studio";
@@ -97,6 +98,15 @@ test("the local engine always creates ten safe visual Algerian publications with
     assert.match(post.body, /✅/);
     assert.match(post.body.split("\n").filter(Boolean).at(-1) || "", /^#.+\s+#/);
   });
+});
+
+test("provides a safe text-free GPT image prompt for every visual draft", () => {
+  const batch = buildLocalPublicationBatch({ page, evidence });
+  const prompt = publicationImagePrompt(batch.posts[0], page);
+  assert.match(prompt, /4:5/);
+  assert.match(prompt, /1080 × 1350/);
+  assert.match(prompt, /Aucun texte/);
+  assert.match(prompt, /sans collage publicitaire/);
 });
 
 test("the local engine applies distinct Tunisian page voices", () => {

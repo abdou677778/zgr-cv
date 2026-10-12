@@ -33,6 +33,7 @@ import {
   generatePublicationBatch,
   getBaselinePublicationEvidence,
   normalizePublicationBatch,
+  publicationImagePrompt,
   publicationPrompt,
   type PublicationBatch,
   type PublicationDraft,
@@ -42,7 +43,7 @@ import {
   type PublicationPageId,
 } from "@/lib/publication-studio";
 
-const STORAGE_KEY = "zgr-publication-studio-v1";
+const STORAGE_KEY = "zgr-publication-studio-v2";
 
 type GeneratorMode = "zgr_local" | "project_ai" | "codex_local";
 
@@ -57,8 +58,10 @@ function readStoredBatches() {
       Object.entries(parsed).filter(
         ([pageId, batch]) =>
           PUBLICATION_PAGES.some((page) => page.id === pageId) &&
-          batch?.version === 1 &&
-          Array.isArray(batch.posts),
+          batch?.version === 2 &&
+          Array.isArray(batch.posts) &&
+          batch.posts.length === 10 &&
+          batch.posts.every((post) => post?.format === "visual" && post?.visual),
       ),
     ) as Partial<Record<PublicationPageId, PublicationBatch>>;
   } catch {
@@ -889,7 +892,7 @@ export function PublicationsWorkspace({
                         )}
                       </div>
                     </div>
-                    <div className="grid gap-2 p-3 sm:grid-cols-3">
+                    <div className="grid gap-2 p-3 sm:grid-cols-4">
                       <Button
                         variant="outline"
                         onClick={async () => {
@@ -916,6 +919,20 @@ export function PublicationsWorkspace({
                         }}
                       >
                         <MessageCircleMore className="mr-2 h-4 w-4" /> Copier 5 commentaires
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          await copyText(publicationImagePrompt(post, page));
+                          markCopied(`image-prompt-${post.id}`);
+                        }}
+                      >
+                        {copied === `image-prompt-${post.id}` ? (
+                          <Check className="mr-2 h-4 w-4" />
+                        ) : (
+                          <ImageIcon className="mr-2 h-4 w-4" />
+                        )}
+                        Prompt image GPT
                       </Button>
                       <Button variant="outline" onClick={() => void downloadVisual(post, page)}>
                         <Download className="mr-2 h-4 w-4" /> Télécharger le visuel

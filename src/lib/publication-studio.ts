@@ -100,7 +100,7 @@ export type PublicationDraft = {
 };
 
 export type PublicationBatch = {
-  version: 1;
+  version: 2;
   pageId: PublicationPageId;
   generatedAt: string;
   evidenceCheckedAt: string;
@@ -591,7 +591,7 @@ export function normalizePublicationBatch(
   if (posts.some((post) => !endsWithArabicHashtags(post.body)))
     throw new Error("Une publication ne se termine pas par des hashtags arabes.");
   return {
-    version: 1,
+    version: 2,
     pageId: page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,
@@ -1038,12 +1038,31 @@ export function buildLocalPublicationBatch(options: {
     };
   });
   return {
-    version: 1,
+    version: 2,
     pageId: options.page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,
     posts,
   };
+}
+
+/**
+ * This prompt deliberately asks for a text-free editorial photograph. The Arabic copy,
+ * source and call-to-action stay in the ZGR layout, where they remain editable and legible.
+ */
+export function publicationImagePrompt(post: PublicationDraft, page: PublicationPage) {
+  const market = page.market === "DZ" ? "algérien" : "tunisien";
+  const subject = post.visual?.title || post.headline;
+  const destination = post.visual?.subtitle || "opportunité internationale vérifiée";
+  return [
+    "Créer une photographie éditoriale réaliste et professionnelle pour une publication Facebook emploi international.",
+    `Sujet exact : ${subject}.`,
+    `Contexte : ${destination}. Public ciblé : candidats ${market}s adultes.`,
+    "Montrer une personne réelle ou une petite équipe dans un environnement cohérent avec le métier ou le programme, tenue professionnelle, lumière naturelle, composition crédible et inclusive.",
+    "Format portrait 4:5, 1080 × 1350 px, zone calme au centre et en bas pour la surimpression du texte arabe RTL.",
+    "Aucun texte, aucune lettre, aucun chiffre, aucun logo, aucun faux drapeau, aucun filigrane, aucune promesse de visa ou d'embauche.",
+    "Style photojournalistique premium, net, humain et sobre, sans collage publicitaire ni illustration 3D.",
+  ].join("\n");
 }
 
 export async function generatePublicationBatch(options: {

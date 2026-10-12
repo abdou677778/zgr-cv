@@ -488,9 +488,26 @@ export function ClientOrdersDialog({
     try {
       const result = await updateClientOrderFacebook(detail.order.id, facebookUrl);
       setFacebookUrl(result.facebookUrl);
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              order: { ...current.order, facebookUrl: result.facebookUrl },
+            }
+          : current,
+      );
+      setOrders((current) =>
+        current.map((order) =>
+          order.id === detail.order.id
+            ? { ...order, facebookUrl: result.facebookUrl, updatedAt: result.updatedAt }
+            : order,
+        ),
+      );
       await refresh();
       setMessage(
-        result.facebookUrl ? "Lien Facebook du client enregistré." : "Lien Facebook supprimé.",
+        result.facebookUrl
+          ? "Lien Facebook ou Instagram du client enregistré."
+          : "Lien de profil supprimé.",
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Enregistrement impossible.");
@@ -979,7 +996,7 @@ export function ClientOrdersDialog({
                 />
               </label>
               <label className="space-y-1 text-xs font-bold text-slate-700 md:col-span-2">
-                Lien Facebook
+                Lien Facebook ou Instagram
                 <Input
                   type="url"
                   value={archiveDraft.facebookUrl}
@@ -989,7 +1006,7 @@ export function ClientOrdersDialog({
                       facebookUrl: event.target.value,
                     }))
                   }
-                  placeholder="https://www.facebook.com/... (facultatif)"
+                  placeholder="https://www.facebook.com/... ou instagram.com/... (facultatif)"
                   className="bg-white"
                 />
               </label>
@@ -1302,8 +1319,8 @@ export function ClientOrdersDialog({
                                 void saveFacebook();
                               }
                             }}
-                            placeholder="Lien Facebook du client"
-                            aria-label="Lien Facebook du client"
+                            placeholder="Lien Facebook ou Instagram du client"
+                            aria-label="Lien Facebook ou Instagram du client"
                             className="h-9 bg-white pl-9 text-xs"
                           />
                         </div>
@@ -1487,7 +1504,7 @@ export function ClientOrdersDialog({
                           </select>
                         </label>
                         <label className="space-y-1 text-xs font-bold text-slate-700 sm:col-span-2">
-                          Lien Facebook
+                          Lien Facebook ou Instagram
                           <Input
                             type="url"
                             value={editDraft.facebookUrl}

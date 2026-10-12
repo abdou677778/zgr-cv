@@ -47,7 +47,7 @@ export async function GET(request: Request, context: RouteContext) {
   });
 }
 
-function normalizedFacebookUrl(value: unknown) {
+function normalizedSocialProfileUrl(value: unknown) {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return '';
@@ -63,7 +63,13 @@ function normalizedFacebookUrl(value: unknown) {
         host === 'facebook.com' ||
         host.endsWith('.facebook.com') ||
         host === 'fb.com' ||
-        host.endsWith('.fb.com')
+        host.endsWith('.fb.com') ||
+        host === 'fb.watch' ||
+        host.endsWith('.fb.watch') ||
+        host === 'instagram.com' ||
+        host.endsWith('.instagram.com') ||
+        host === 'instagr.am' ||
+        host.endsWith('.instagr.am')
       )
     ) {
       return null;
@@ -134,10 +140,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   const facebookUrl =
     parsed.data.facebookUrl === undefined
       ? order.facebookUrl
-      : normalizedFacebookUrl(parsed.data.facebookUrl);
+      : normalizedSocialProfileUrl(parsed.data.facebookUrl);
   if (facebookUrl === null) {
     return jsonResponse(
-      { error: 'Saisissez un lien Facebook valide et sécurisé (https).' },
+      { error: 'Saisissez un lien Facebook ou Instagram valide et sécurisé (https).' },
       422,
     );
   }

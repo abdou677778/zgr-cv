@@ -29,7 +29,7 @@ const archiveOrderSchema = z.object({
     .optional(),
 });
 
-function secureFacebookUrl(value: string) {
+function secureSocialProfileUrl(value: string) {
   if (!value) return '';
   const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
   try {
@@ -41,7 +41,13 @@ function secureFacebookUrl(value: string) {
         host === 'facebook.com' ||
         host.endsWith('.facebook.com') ||
         host === 'fb.com' ||
-        host.endsWith('.fb.com')
+        host.endsWith('.fb.com') ||
+        host === 'fb.watch' ||
+        host.endsWith('.fb.watch') ||
+        host === 'instagram.com' ||
+        host.endsWith('.instagram.com') ||
+        host === 'instagr.am' ||
+        host.endsWith('.instagr.am')
       )
     ) {
       return null;
@@ -85,10 +91,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const facebookUrl = secureFacebookUrl(parsed.data.facebookUrl);
+  const facebookUrl = secureSocialProfileUrl(parsed.data.facebookUrl);
   if (facebookUrl === null) {
     return jsonResponse(
-      { error: 'Saisissez un lien Facebook sécurisé appartenant à facebook.com.' },
+      { error: 'Saisissez un lien Facebook ou Instagram sécurisé.' },
       422,
     );
   }

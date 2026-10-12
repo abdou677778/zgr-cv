@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Save,
   ShieldCheck,
+  SlidersHorizontal,
   TriangleAlert,
   Trash2,
   UserPlus,
@@ -48,7 +49,14 @@ import {
   type ManagedUser,
   type OperationalMonitoring,
 } from "@/lib/account-client";
-import type { AccountRole, SessionUser, TeamRole } from "@/lib/auth-client";
+import {
+  ACCESS_SCOPES,
+  type AccessLevel,
+  type AccessScope,
+  type AccountRole,
+  type SessionUser,
+  type TeamRole,
+} from "@/lib/auth-client";
 
 const roleLabels: Record<AccountRole, string> = {
   admin: "Administrateur",
@@ -60,6 +68,31 @@ const roleBadgeClasses: Record<AccountRole, string> = {
   admin: "bg-violet-100 text-violet-800",
   editor: "bg-sky-100 text-sky-800",
   viewer: "bg-slate-100 text-slate-700",
+};
+
+const accessScopeLabels: Record<AccessScope, string> = {
+  orders: "Commandes",
+  archives: "Archives",
+  clients: "Profils clients",
+  documents: "Documents et PDF",
+  opportunities: "Opportunités",
+  publications: "Publications",
+  ai: "Assistant IA",
+  database: "Base de données",
+  settings: "Paramètres",
+  api: "API et intégrations",
+  team: "Équipe",
+  users: "Utilisateurs",
+  backups: "Sauvegardes",
+  billing: "Facturation",
+  audit: "Journal d’audit",
+};
+
+const accessLevelLabels: Record<AccessLevel, string> = {
+  none: "Aucun accès",
+  read: "Lecture seule",
+  write: "Lire et modifier",
+  approve: "Valider / administrer",
 };
 
 const eventLabels: Record<string, string> = {
@@ -166,6 +199,10 @@ export function AccountSettingsDialog({
   const [accountSessions, setAccountSessions] = useState<AccountSession[]>([]);
   const [legacySession, setLegacySession] = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [permissionEditorUsername, setPermissionEditorUsername] = useState<string | null>(null);
+  const permissionProfile = permissionEditorUsername
+    ? users.find((profile) => profile.username === permissionEditorUsername) || null
+    : null;
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -319,6 +356,7 @@ export function AccountSettingsDialog({
         role: profile.role,
         workflowManager: profile.workflowManager,
         teamRoles: profile.teamRoles,
+        accessMatrix: profile.accessMatrix,
       });
       setUsers((current) =>
         current.map((item) => (item.username === profile.username ? updated : item)),
@@ -1230,6 +1268,70 @@ export function AccountSettingsDialog({
               </form>
             </section>
 
+            {permissionProfile && (
+              <section className="space-y-4 rounded-2xl border-2 border-violet-200 bg-violet-50/40 p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="flex items-center gap-2 font-semibold text-violet-950">
+                      <ShieldCheck className="h-5 w-5 text-violet-700" />
+                      Droits détaillés — {permissionProfile.displayName}
+                    </p>
+                    <p className="mt-1 max-w-3xl text-xs leading-relaxed text-violet-900/80">
+                      15 domaines et 4 niveaux, soit 60 autorisations possibles. Commandes et Archives restent visibles en lecture pour tous les comptes actifs. Les changements sont appliqués uniquement après sauvegarde.
+                    </p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setPermissionEditorUsername(null)}>
+                    Fermer
+                  </Button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {ACCESS_SCOPES.map((scope) => {
+                    const matrix = permissionProfile.accessMatrix || permissionProfile.permissions.accessMatrix;
+                    const isAdmin = permissionProfile.role === "admin";
+                    return (
+                      <label key={scope} className="flex items-center justify-between gap-3 rounded-lg border border-violet-100 bg-white px-3 py-2 text-sm">
+                        <span className="font-medium text-slate-800">{accessScopeLabels[scope]}</span>
+                        <select
+                          className="h-8 min-w-[145px] rounded-md border border-input bg-white px-2 text-xs shadow-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 disabled:opacity-60"
+                          aria-label={`Droit ${accessScopeLabels[scope]} pour ${permissionProfile.username}`}
+                          value={matrix[scope]}
+                          disabled={isAdmin}
+                          onChange={(event) => {
+                            const level = event.target.value as AccessLevel;
+                            setUsers((current) =>
+                              current.map((profile) =>
+                                profile.username === permissionProfile.username
+                                  ? { ...profile, accessMatrix: { ...(profile.accessMatrix || profile.permissions.accessMatrix), [scope]: level } }
+                                  : profile,
+                              ),
+                            );
+                          }}
+                        >
+                          {(Object.keys(accessLevelLabels) as AccessLevel[]).map((level) => (
+                            <option key={level} value={level}>{accessLevelLabels[level]}</option>
+                          ))}
+                        </select>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-violet-100 pt-3">
+                  <p className="text-xs text-muted-foreground">
+                    Administrateur : tous les droits sont inclus et ne peuvent pas être réduits depuis cette ligne.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-violet-700 hover:bg-violet-800"
+                    disabled={busy === `save-${permissionProfile.username}`}
+                    onClick={() => void saveProfile(users.find((profile) => profile.username === permissionProfile.username) || permissionProfile)}
+                  >
+                    <Save className="mr-1.5 h-3.5 w-3.5" /> Sauvegarder les droits
+                  </Button>
+                </div>
+              </section>
+            )}
+
             <section className="space-y-4 rounded-2xl border bg-white p-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -1262,7 +1364,7 @@ export function AccountSettingsDialog({
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white shadow-sm">
-                  <table className="w-full min-w-[1500px] border-collapse text-left text-sm">
+                  <table className="w-full min-w-[1660px] border-collapse text-left text-sm">
                     <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
                       <tr>
                         <th className="w-[250px] border-b border-r px-3 py-3">Utilisateur</th>
@@ -1279,6 +1381,9 @@ export function AccountSettingsDialog({
                         </th>
                         <th className="w-[170px] border-b border-r px-3 py-3 text-center">
                           Responsable de validation
+                        </th>
+                        <th className="w-[155px] border-b border-r px-3 py-3 text-center">
+                          Droits détaillés
                         </th>
                         <th className="min-w-[300px] border-b px-3 py-3">Nouveau mot de passe</th>
                       </tr>
@@ -1456,6 +1561,25 @@ export function AccountSettingsDialog({
                                       : "Non"}
                                 </span>
                               </label>
+                            </td>
+                            <td className="border-b border-r px-3 py-3 text-center align-top">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-9 border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100"
+                                title="Afficher les 60 droits de ce profil"
+                                onClick={() => setPermissionEditorUsername(profile.username)}
+                                onContextMenu={(event) => {
+                                  event.preventDefault();
+                                  setPermissionEditorUsername(profile.username);
+                                }}
+                              >
+                                <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> 60 droits
+                              </Button>
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                Clic droit ou bouton
+                              </p>
                             </td>
                             <td className="border-b px-3 py-3 align-top">
                               <div className="flex items-center gap-2">

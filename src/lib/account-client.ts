@@ -1,6 +1,7 @@
 import {
   authenticatedFetch,
   type AccountRole,
+  type AccessMatrix,
   type SessionUser,
   type TeamRole,
 } from "@/lib/auth-client";
@@ -150,6 +151,7 @@ export async function createManagedUser(input: {
   role: AccountRole;
   workflowManager: boolean;
   teamRoles: TeamRole[];
+  accessMatrix?: AccessMatrix;
 }) {
   return (await apiJson<{ user: ManagedUser }>("/api/admin/users", jsonRequest("POST", input)))
     .user;
@@ -163,6 +165,7 @@ export async function updateManagedUser(
     role: AccountRole;
     workflowManager: boolean;
     teamRoles: TeamRole[];
+    accessMatrix?: AccessMatrix;
   },
 ) {
   return (

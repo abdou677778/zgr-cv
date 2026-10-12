@@ -121,6 +121,13 @@ function apiNetworkError(failure: unknown) {
 
 export type AccountRole = "admin" | "editor" | "viewer";
 export type TeamRole = "order_admin" | "writer";
+export const ACCESS_SCOPES = [
+  "orders", "archives", "clients", "documents", "opportunities", "publications", "ai",
+  "database", "settings", "api", "team", "users", "backups", "billing", "audit",
+] as const;
+export type AccessScope = (typeof ACCESS_SCOPES)[number];
+export type AccessLevel = "none" | "read" | "write" | "approve";
+export type AccessMatrix = Record<AccessScope, AccessLevel>;
 
 export type AccountPermissions = {
   clientsRead: boolean;
@@ -131,6 +138,9 @@ export type AccountPermissions = {
   clientsDownload: boolean;
   aiUse: boolean;
   manageUsers: boolean;
+  ordersRead: boolean;
+  archivesRead: boolean;
+  accessMatrix: AccessMatrix;
 };
 
 export type SessionUser = {
@@ -139,6 +149,7 @@ export type SessionUser = {
   role: AccountRole;
   workflowManager: boolean;
   teamRoles: TeamRole[];
+  accessMatrix: AccessMatrix;
   permissions: AccountPermissions;
   active: boolean;
   createdAt: string | null;
@@ -191,6 +202,14 @@ const permissionsForRole = (role: AccountRole): AccountPermissions => ({
   clientsDownload: true,
   aiUse: role === "admin" || role === "editor",
   manageUsers: role === "admin",
+  ordersRead: true,
+  archivesRead: true,
+  accessMatrix: Object.fromEntries(
+    ACCESS_SCOPES.map((scope) => [
+      scope,
+      role === "admin" ? "approve" : scope === "orders" || scope === "archives" ? "read" : role === "editor" ? "write" : "none",
+    ]),
+  ) as AccessMatrix,
 });
 
 function normalizeSessionUser(value: unknown): SessionUser | null {
@@ -229,6 +248,10 @@ function normalizeSessionUser(value: unknown): SessionUser | null {
           ? ["writer"]
           : [],
     permissions,
+    accessMatrix:
+      user.accessMatrix && typeof user.accessMatrix === "object"
+        ? (user.accessMatrix as AccessMatrix)
+        : fallback.accessMatrix,
   } as SessionUser;
 }
 

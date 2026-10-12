@@ -2906,10 +2906,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               </span>
             )}
             <div className="zgr-toolbar-group flex flex-wrap items-center gap-2">
-              {(user.role === "admin" ||
-                (user.teamRoles || []).some(
-                  (role) => role === "order_admin" || role === "writer",
-                )) && (
+              {user.permissions.ordersRead && (
                 <Button
                   variant="outline"
                   size="sm"

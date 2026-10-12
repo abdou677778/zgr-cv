@@ -73,6 +73,24 @@ const TELEMETRY_NAMES = new Set([
 const TELEMETRY_RATINGS = new Set(["good", "needs-improvement", "poor", "error"]);
 const ACCOUNT_ROLES = new Set(["admin", "editor", "viewer"]);
 const TEAM_ROLES = new Set(["order_admin", "writer"]);
+const ACCESS_SCOPES = new Set([
+  "orders",
+  "archives",
+  "clients",
+  "documents",
+  "opportunities",
+  "publications",
+  "ai",
+  "database",
+  "settings",
+  "api",
+  "team",
+  "users",
+  "backups",
+  "billing",
+  "audit",
+]);
+const ACCESS_LEVELS = new Set(["none", "read", "write", "approve"]);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -173,16 +191,16 @@ function normalizeTeamRoles(value, accountRole = "viewer") {
 }
 
 function canAccessOrders(user) {
-  const teamRoles = normalizeTeamRoles(user?.teamRoles, user?.role);
-  return (
-    normalizeAccountRole(user?.role) === "admin" || teamRoles.some((role) => TEAM_ROLES.has(role))
-  );
+  // Every active team account can consult Commandes and Archives. Editing,
+  // assignment and deletion remain guarded by the dedicated rights below.
+  return user?.active !== false;
 }
 
 function canAdministerOrders(user) {
   return (
     normalizeAccountRole(user?.role) === "admin" ||
-    normalizeTeamRoles(user?.teamRoles, user?.role).includes("order_admin")
+    normalizeTeamRoles(user?.teamRoles, user?.role).includes("order_admin") ||
+    hasAccess(normalizeAccessMatrix(user?.accessMatrix, user?.role, user?.workflowManager === true), "orders", "approve")
   );
 }
 
@@ -190,23 +208,71 @@ function normalizeClientWorkflowStatus(value) {
   return value === "review" || value === "approved" ? value : "draft";
 }
 
-function rolePermissions(role, workflowManager = false) {
+function defaultAccessMatrix(role, workflowManager = false) {
+  const normalized = normalizeAccountRole(role);
+  const matrix = Object.fromEntries([...ACCESS_SCOPES].map((scope) => [scope, "none"]));
+  // Baseline requested for the team: orders and historical archives are
+  // visible to every active account, without granting modification rights.
+  matrix.orders = "read";
+  matrix.archives = "read";
+  if (normalized === "viewer") return matrix;
+  for (const scope of ["clients", "documents", "opportunities", "publications", "ai"]) {
+    matrix[scope] = "write";
+  }
+  matrix.orders = "write";
+  matrix.archives = "write";
+  if (workflowManager) matrix.clients = "approve";
+  if (normalized === "admin") {
+    for (const scope of ACCESS_SCOPES) matrix[scope] = "approve";
+  }
+  return matrix;
+}
+
+function normalizeAccessMatrix(value, role, workflowManager = false) {
+  const normalized = normalizeAccountRole(role);
+  const baseline = defaultAccessMatrix(normalized, workflowManager);
+  if (!value || typeof value !== "object" || Array.isArray(value) || normalized === "admin") {
+    return baseline;
+  }
+  for (const [scope, level] of Object.entries(value)) {
+    if (ACCESS_SCOPES.has(scope) && ACCESS_LEVELS.has(level)) baseline[scope] = level;
+  }
+  // Orders and archives must never be completely hidden from an active team
+  // member; the administrator can still deactivate the account.
+  if (baseline.orders === "none") baseline.orders = "read";
+  if (baseline.archives === "none") baseline.archives = "read";
+  return baseline;
+}
+
+function hasAccess(matrix, scope, minimum = "read") {
+  const ranks = { none: 0, read: 1, write: 2, approve: 3 };
+  return (ranks[matrix?.[scope]] || 0) >= (ranks[minimum] || 1);
+}
+
+function rolePermissions(role, workflowManager = false, accessMatrix) {
+  const matrix = normalizeAccessMatrix(accessMatrix, role, workflowManager);
   const normalized = normalizeAccountRole(role);
   return {
-    clientsRead: true,
-    clientsWrite: normalized === "admin" || normalized === "editor",
-    clientsApprove: normalized === "admin" || (normalized === "editor" && workflowManager === true),
-    clientsDelete: normalized === "admin",
-    clientsRestore: normalized === "admin",
-    clientsDownload: true,
-    aiUse: normalized === "admin" || normalized === "editor",
-    manageUsers: normalized === "admin",
+    clientsRead: hasAccess(matrix, "clients"),
+    clientsWrite: hasAccess(matrix, "clients", "write"),
+    clientsApprove: hasAccess(matrix, "clients", "approve"),
+    clientsDelete: normalized === "admin" || hasAccess(matrix, "archives", "approve"),
+    clientsRestore: normalized === "admin" || hasAccess(matrix, "archives", "approve"),
+    clientsDownload: hasAccess(matrix, "documents"),
+    aiUse: hasAccess(matrix, "ai"),
+    manageUsers: normalized === "admin" || hasAccess(matrix, "users", "approve"),
+    ordersRead: hasAccess(matrix, "orders"),
+    archivesRead: hasAccess(matrix, "archives"),
+    accessMatrix: matrix,
   };
 }
 
 function canManageWorkflow(user) {
-  const role = normalizeAccountRole(user?.role);
-  return role === "admin" || (role === "editor" && user?.workflowManager === true);
+  return hasAccess(
+    normalizeAccessMatrix(user?.accessMatrix, user?.role, user?.workflowManager === true),
+    "clients",
+    "approve",
+  );
 }
 
 function randomBase64Url(size) {
@@ -269,13 +335,15 @@ function publicUser(user) {
   const role = normalizeAccountRole(user.role);
   const workflowManager = role === "admin" || (role === "editor" && user.workflowManager === true);
   const teamRoles = normalizeTeamRoles(user.teamRoles, role);
+  const accessMatrix = normalizeAccessMatrix(user.accessMatrix, role, workflowManager);
   return {
     username: user.username,
     displayName: user.displayName,
     role,
     workflowManager,
     teamRoles,
-    permissions: rolePermissions(role, workflowManager),
+    permissions: rolePermissions(role, workflowManager, accessMatrix),
+    accessMatrix,
     active: user.active !== false,
     createdAt: user.createdAt || null,
     updatedAt: user.updatedAt || null,
@@ -297,6 +365,7 @@ async function saveUser(env, user) {
         role: normalizeAccountRole(user.role),
         workflowManager: user.workflowManager === true ? "true" : "false",
         teamRoles: normalizeTeamRoles(user.teamRoles, user.role).join(","),
+        accessMatrix: JSON.stringify(normalizeAccessMatrix(user.accessMatrix, user.role, user.workflowManager === true)),
         active: user.active === false ? "false" : "true",
         createdAt: String(user.createdAt || "").slice(0, 40),
         updatedAt: String(user.updatedAt || "").slice(0, 40),
@@ -323,6 +392,7 @@ function bootstrapAdmin(env) {
     role: "admin",
     workflowManager: true,
     teamRoles: ["order_admin", "writer"],
+    accessMatrix: defaultAccessMatrix("admin", true),
     active: true,
     password: null,
     sessionVersion: 1,
@@ -981,15 +1051,20 @@ async function listUsers(env, origin) {
     });
     for (const object of page.objects) {
       const metadata = object.customMetadata || {};
-      const role = normalizeAccountRole(metadata.role);
+      const stored = await getStoredUser(env, metadata.username || "");
+      const source = stored || metadata;
+      const role = normalizeAccountRole(source.role);
+      const workflowManager =
+        role === "admin" || (role === "editor" && source.workflowManager === true);
+      const accessMatrix = normalizeAccessMatrix(source.accessMatrix, role, workflowManager);
       users.push({
         username: metadata.username || "",
         displayName: metadata.displayName || metadata.username || "Profil",
         role,
-        teamRoles: normalizeTeamRoles(metadata.teamRoles, role),
-        workflowManager:
-          role === "admin" || (role === "editor" && metadata.workflowManager === "true"),
-        permissions: rolePermissions(role, metadata.workflowManager === "true"),
+        teamRoles: normalizeTeamRoles(source.teamRoles, role),
+        workflowManager,
+        permissions: rolePermissions(role, workflowManager, accessMatrix),
+        accessMatrix,
         active: metadata.active !== "false",
         createdAt: metadata.createdAt || null,
         updatedAt: metadata.updatedAt || null,
@@ -1085,6 +1160,7 @@ async function createUser(request, env, actor, origin, ctx) {
   const workflowManager =
     role === "admin" || (role === "editor" && payload?.workflowManager === true);
   const teamRoles = normalizeTeamRoles(payload?.teamRoles, role);
+  const accessMatrix = normalizeAccessMatrix(payload?.accessMatrix, role, workflowManager);
   if (!USERNAME_PATTERN.test(username))
     return json(
       {
@@ -1112,6 +1188,7 @@ async function createUser(request, env, actor, origin, ctx) {
     role,
     workflowManager,
     teamRoles,
+    accessMatrix,
     active: true,
     password: await hashPassword(password),
     sessionVersion: 1,
@@ -1127,6 +1204,7 @@ async function createUser(request, env, actor, origin, ctx) {
       role,
       workflowManager,
       teamRoles,
+      accessMatrix,
     }),
   );
   return json({ ok: true, user: { ...publicUser(user), isPrimary: false } }, 201, origin);
@@ -1177,27 +1255,36 @@ async function updateUser(request, env, actor, username, origin, ctx) {
     Array.isArray(payload?.teamRoles) ? payload.teamRoles : user.teamRoles,
     role,
   );
+  const accessMatrix = normalizeAccessMatrix(
+    protectedAccount ? user.accessMatrix : payload?.accessMatrix ?? user.accessMatrix,
+    role,
+    workflowManager,
+  );
   if (!displayName) return json({ error: "Le nom affiché est obligatoire." }, 422, origin);
   const changedActivity = user.active !== active;
   const changedRole = user.role !== role;
   const changedWorkflowManager = (user.workflowManager === true) !== workflowManager;
   const changedTeamRoles =
     JSON.stringify(normalizeTeamRoles(user.teamRoles, user.role)) !== JSON.stringify(teamRoles);
+  const changedAccessMatrix =
+    JSON.stringify(normalizeAccessMatrix(user.accessMatrix, user.role, user.workflowManager === true)) !==
+    JSON.stringify(accessMatrix);
   const updated = {
     ...user,
     displayName,
     role,
     workflowManager,
     teamRoles,
+    accessMatrix,
     active,
     updatedAt: new Date().toISOString(),
     sessionVersion:
       (Number(user.sessionVersion) || 1) +
-      (changedActivity || changedRole || changedWorkflowManager || changedTeamRoles ? 1 : 0),
+      (changedActivity || changedRole || changedWorkflowManager || changedTeamRoles || changedAccessMatrix ? 1 : 0),
   };
   await Promise.all([
     saveUser(env, updated),
-    changedActivity || changedRole || changedWorkflowManager || changedTeamRoles
+    changedActivity || changedRole || changedWorkflowManager || changedTeamRoles || changedAccessMatrix
       ? deleteUserSessions(env, username)
       : Promise.resolve(),
   ]);
@@ -1208,6 +1295,7 @@ async function updateUser(request, env, actor, username, origin, ctx) {
       role,
       workflowManager,
       teamRoles,
+      accessMatrix,
     }),
   );
   return json(
@@ -4798,7 +4886,7 @@ async function route(request, env, ctx) {
 
   const actor = await authenticatedUser(request, env, ctx);
   if (!actor) return json({ error: "Session expirée ou accès non autorisé." }, 401, origin);
-  const permissions = rolePermissions(actor.role);
+  const permissions = rolePermissions(actor.role, actor.workflowManager === true, actor.accessMatrix);
   if (url.pathname === "/api/auth/session" && request.method === "GET")
     return json({ ok: true, user: publicUser(actor) }, 200, origin);
   if (url.pathname === "/api/account/sessions" && request.method === "GET")
@@ -4820,6 +4908,16 @@ async function route(request, env, ctx) {
   if (clientOrderPortalPath(url.pathname)) {
     if (!canAccessOrders(actor))
       return json({ error: "Rôle Admin clients ou Rédacteur requis." }, 403, origin);
+    const canWriteOrders =
+      canAdministerOrders(actor) ||
+      normalizeTeamRoles(actor.teamRoles, actor.role).includes("writer") ||
+      hasAccess(
+        normalizeAccessMatrix(actor.accessMatrix, actor.role, actor.workflowManager === true),
+        "orders",
+        "write",
+      );
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !canWriteOrders)
+      return json({ error: "Droit de modification des commandes requis." }, 403, origin);
     const orderAdminOnly =
       request.method === "DELETE" ||
       /\/invitations(?:\/|$)/.test(url.pathname) ||

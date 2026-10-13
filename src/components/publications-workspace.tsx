@@ -96,7 +96,7 @@ function readStoredBatches() {
       Object.entries(parsed).filter(
         ([pageId, batch]) =>
           PUBLICATION_PAGES.some((page) => page.id === pageId) &&
-          batch?.version === 2 &&
+          batch?.version === 3 &&
           Array.isArray(batch.posts) &&
           batch.posts.length === 10 &&
           batch.posts.every((post) => post?.format === "visual" && post?.visual),
@@ -177,8 +177,121 @@ function drawCover(
   );
 }
 
+function campaignServices(post: PublicationDraft) {
+  const context = `${post.visual?.title || ""} ${post.visual?.subtitle || ""} ${
+    post.sourceLabel
+  }`.toLowerCase();
+  if (/italie|italy|flussi/.test(context)) {
+    return [
+      "توجيه نحو المسار الإيطالي الرسمي",
+      "ترتيب وثائق ملف الترشح",
+      "سيرة ذاتية ورسالة تحفيزية مكيّفتان",
+      "مراجعة الملف قبل الإرسال",
+    ];
+  }
+  return [
+    "مرافقة في الاستمارة الرسمية",
+    "سيرة ذاتية مكيّفة مع العرض",
+    "رسالة تحفيزية حسب الاختصاص",
+    "ترتيب ملف الترشح قبل الإرسال",
+  ];
+}
+
+async function renderTunisiaCampaignVisual(
+  post: PublicationDraft,
+  page: PublicationPage,
+  imageUrl?: string,
+) {
+  if (!post.visual) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1350;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas indisponible.");
+  context.fillStyle = "#fffdf8";
+  context.fillRect(0, 0, 1080, 1350);
+  context.fillStyle = "#d80b3b";
+  context.fillRect(0, 0, 1080, 250);
+  context.fillRect(0, 1190, 1080, 160);
+  context.textAlign = "right";
+  context.direction = "rtl";
+  context.fillStyle = "#fde86e";
+  context.font = "900 47px Arial, Tahoma";
+  context.fillText("التسجيلات مفتوحة رسميا", 980, 88);
+  context.fillStyle = "#ffffff";
+  context.font = "900 61px Arial, Tahoma";
+  canvasLines(context, post.visual.title, 900, 2).forEach((line, index) =>
+    context.fillText(line, 980, 158 + index * 76),
+  );
+
+  if (imageUrl) {
+    const image = await loadImage(imageUrl);
+    context.save();
+    context.beginPath();
+    context.roundRect(70, 330, 375, 430, 28);
+    context.clip();
+    drawCover(context, image, 375, 430);
+    context.restore();
+  } else {
+    context.fillStyle = "#f3f4f6";
+    context.beginPath();
+    context.roundRect(70, 330, 375, 430, 28);
+    context.fill();
+    context.font = "900 118px Arial, Tahoma";
+    context.textAlign = "center";
+    context.fillText("🇨🇦", 258, 555);
+    context.font = "800 31px Arial, Tahoma";
+    context.fillStyle = "#b91c1c";
+    context.fillText("فرصة موثوقة", 258, 630);
+  }
+
+  context.textAlign = "right";
+  context.fillStyle = "#111827";
+  context.font = "900 43px Arial, Tahoma";
+  context.fillText("خدماتنا المتاحة", 985, 360);
+  context.fillStyle = "#dc2626";
+  context.font = "800 34px Arial, Tahoma";
+  context.fillText("نرافقك خطوة بخطوة", 985, 410);
+  context.fillStyle = "#1f2937";
+  context.font = "700 31px Arial, Tahoma";
+  campaignServices(post).forEach((service, index) => {
+    const y = 500 + index * 118;
+    context.fillStyle = "#f9d94d";
+    context.beginPath();
+    context.arc(925, y - 10, 16, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#1f2937";
+    canvasLines(context, service, 540, 2).forEach((line, lineIndex) =>
+      context.fillText(line, 875, y + lineIndex * 35),
+    );
+  });
+
+  context.fillStyle = "#fff08a";
+  context.beginPath();
+  context.roundRect(90, 965, 900, 108, 26);
+  context.fill();
+  context.fillStyle = "#111827";
+  context.font = "900 38px Arial, Tahoma";
+  context.fillText(post.visual.subtitle, 950, 1032);
+  context.fillStyle = "#fde86e";
+  context.font = "900 43px Arial, Tahoma";
+  context.fillText("سارعوا قبل غلق التسجيلات", 970, 1260);
+  context.fillStyle = "#ffffff";
+  context.font = "700 25px Arial, Tahoma";
+  context.fillText(page.name, 970, 1310);
+  return new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(
+      (value) => (value ? resolve(value) : reject(new Error("Export PNG impossible."))),
+      "image/png",
+      0.94,
+    ),
+  );
+}
+
 async function renderVisualBlob(post: PublicationDraft, page: PublicationPage, imageUrl?: string) {
   if (!post.visual) return;
+  if (page.id === "emplois-immigration-tunis")
+    return renderTunisiaCampaignVisual(post, page, imageUrl);
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
   canvas.height = 1350;
@@ -350,6 +463,58 @@ function VisualPreview({
   imageUrl?: string;
 }) {
   if (!post.visual) return null;
+  if (page.id === "emplois-immigration-tunis") {
+    const services = campaignServices(post);
+    return (
+      <div
+        className="relative mt-4 aspect-[4/5] w-full overflow-hidden rounded-2xl bg-[#fffdf8] text-right shadow-inner"
+        style={{ fontFamily: "Arial, Tahoma, sans-serif" }}
+        dir="rtl"
+      >
+        <div className="bg-[#d80b3b] px-5 pb-5 pt-4 text-white sm:px-8">
+          <p className="text-base font-black text-yellow-200 sm:text-xl">التسجيلات مفتوحة رسميا</p>
+          <h3 className="mt-2 text-xl font-black leading-[1.5] sm:text-3xl">{post.visual.title}</h3>
+        </div>
+        <div className="grid gap-4 p-5 sm:grid-cols-[.8fr_1.2fr] sm:p-7">
+          <div className="order-2 rounded-2xl bg-slate-100 p-3 sm:order-1">
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt="Visuel associé à l’opportunité"
+                className="h-full w-full rounded-xl object-cover"
+              />
+            ) : (
+              <div className="grid aspect-square place-items-center rounded-xl bg-white text-center shadow-sm">
+                <span className="text-5xl">🇨🇦</span>
+                <span className="text-sm font-black text-red-700">فرصة موثوقة</span>
+              </div>
+            )}
+          </div>
+          <div className="order-1 sm:order-2">
+            <h4 className="text-xl font-black text-slate-950 sm:text-2xl">خدماتنا المتاحة</h4>
+            <p className="mt-1 font-bold text-red-600">نرافقك خطوة بخطوة</p>
+            <ul className="mt-4 space-y-3 text-sm font-bold leading-6 text-slate-800 sm:text-base">
+              {services.map((service) => (
+                <li key={service} className="flex items-start gap-2">
+                  <span className="mt-1.5 size-3 shrink-0 rounded-full bg-yellow-300" />
+                  <span>{service}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="mx-5 rounded-xl bg-yellow-200 px-4 py-3 text-center text-sm font-black text-slate-950 sm:mx-7 sm:text-base">
+          {post.visual.subtitle}
+        </div>
+        <div className="absolute inset-x-0 bottom-0 bg-[#d80b3b] px-5 py-4 text-white sm:px-8">
+          <p className="text-lg font-black text-yellow-200">سارعوا قبل غلق التسجيلات</p>
+          <p className="mt-1 text-xs font-bold text-white/85">
+            {page.name} · راجع المصدر الرسمي قبل التقديم
+          </p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       className="relative isolate mt-4 aspect-[4/5] w-full overflow-hidden rounded-2xl p-6 text-white shadow-inner sm:p-8"
@@ -944,7 +1109,7 @@ export function PublicationsWorkspace({
                 </div>
               </section>
               {currentBatch.posts.map((post, index) => {
-                const copyValue = `${post.headline}\n\n${post.body}\n\nالمصدر الرسمي\n${post.sourceUrl}`;
+                const copyValue = `${post.headline}\n\n${post.body}\n\nالمصدر الرسمي\n${post.sourceUrl}${post.applicationUrl ? `\n\nرابط الترشح\n${post.applicationUrl}` : ""}`;
                 return (
                   <article
                     key={post.id}

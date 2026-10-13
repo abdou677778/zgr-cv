@@ -100,7 +100,7 @@ export type PublicationDraft = {
 };
 
 export type PublicationBatch = {
-  version: 2;
+  version: 3;
   pageId: PublicationPageId;
   generatedAt: string;
   evidenceCheckedAt: string;
@@ -461,6 +461,8 @@ Rédige exactement 10 publications différentes et directement copiables sur Fac
 - Si deadlineAt vaut null, écris en arabe que la date limite n'est pas publiée. N'invente aucune date.
 - Mentionne les documents et conditions uniquement s'ils existent dans la preuve.
 - Termine le corps par une ligne de hashtags arabes adaptée à la page.
+- Lorsqu’une date limite est vérifiée, ouvre la publication par « ⏳ آخر أجل للتسجيل هو » suivi uniquement de cette date, puis « الحاضر يعلم الغائب ». Ne crée jamais une seconde date d’arrêt non publiée.
+- Pour la page Emplois & Immigration, présente les services utiles en puces : accompagnement au formulaire officiel, préparation du CV adapté, lettre de motivation et organisation du dossier. Pour une offre italienne liée au Decreto Flussi, adapte ces puces au parcours italien officiel sans inventer d’ouverture ni de date.
 - Termine aussi par une action claire : consulter la source, préparer le dossier ou demander le service de rédaction.
 - Propose exactement 5 commentaires courts et utiles par publication. Ils doivent compléter la publication : source, documents, vigilance, service ou question d'engagement.
 - Le texte doit rester naturel et ne doit pas ressembler à cinq copies du même modèle.
@@ -591,7 +593,7 @@ export function normalizePublicationBatch(
   if (posts.some((post) => !endsWithArabicHashtags(post.body)))
     throw new Error("Une publication ne se termine pas par des hashtags arabes.");
   return {
-    version: 2,
+    version: 3,
     pageId: page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,
@@ -809,6 +811,24 @@ function linesWith(prefix: string, values: string[]) {
   return values.map((value) => `${prefix} ${value}`).join("\n");
 }
 
+function registrationServices(proof: PublicationEvidence) {
+  const searchable = folded(`${proof.title} ${proof.destination} ${proof.description}`);
+  if (/italie|italy|flussi/.test(searchable)) {
+    return [
+      "توجيه نحو المسار الإيطالي الرسمي المتاح",
+      "ترتيب الوثائق المطلوبة لملف الترشح",
+      "سيرة ذاتية ورسالة تحفيزية مكيّفتان مع العرض",
+      "مراجعة بيانات الملف قبل الإرسال",
+    ];
+  }
+  return [
+    "مرافقة في استعمال الاستمارة الرسمية المنشورة",
+    "إعداد سيرة ذاتية مكيّفة مع العرض",
+    "إعداد رسالة تحفيزية حسب الاختصاص",
+    "ترتيب ملف الترشح قبل الإرسال",
+  ];
+}
+
 const LOCAL_HEADLINES: Record<PublicationPageId, string[]> = {
   "cv-pro-algeria": [
     "فرصة موثوقة للجزائريين وخطوات التقديم واضحة",
@@ -898,6 +918,11 @@ function localBody(
 
   if (page.id === "emplois-immigration-tunis") {
     return [
+      proof.deadlineAt
+        ? `⏳ آخر أجل للتسجيل هو ${deadline}`
+        : `${flag} 📢 فرصة دولية موجهة للتونسيين`,
+      proof.deadlineAt ? "📣 الحاضر يعلم الغائب" : "",
+      proof.deadlineAt ? "⚠️ سارعوا في التقديم قبل غلق التسجيلات الرسمية" : "",
       `${flag} 📢 فرصة دولية موجهة للتونسيين`,
       `🔹 شنوّة الفرصة\n${title}`,
       [
@@ -909,6 +934,7 @@ function localBody(
       ].join("\n"),
       `✅ شنوّة يلزمك\n${linesWith("✅", conditions)}`,
       documents.length ? `📑 حضّر الوثائق هاذي\n${linesWith("▪️", documents)}` : "",
+      `🧾 خدماتنا للترشح\n${linesWith("🟡", registrationServices(proof))}`,
       [
         "📝 كيفاش تترشح",
         "1️⃣ اقرأ البلاغ الرسمي للآخر",
@@ -1059,7 +1085,7 @@ export function buildLocalPublicationBatch(options: {
     };
   });
   return {
-    version: 2,
+    version: 3,
     pageId: options.page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,

@@ -223,6 +223,18 @@ async function renderTunisiaCampaignVisual(
   canvasLines(context, post.visual.title, 900, 2).forEach((line, index) =>
     context.fillText(line, 980, 158 + index * 76),
   );
+  const logo = await loadImage(new URL(page.logoUrl, window.location.origin).toString());
+  context.save();
+  context.beginPath();
+  context.arc(82, 120, 46, 0, Math.PI * 2);
+  context.clip();
+  context.drawImage(logo, 36, 74, 92, 92);
+  context.restore();
+  context.strokeStyle = "rgba(255,255,255,.9)";
+  context.lineWidth = 4;
+  context.beginPath();
+  context.arc(82, 120, 47, 0, Math.PI * 2);
+  context.stroke();
 
   if (imageUrl) {
     const image = await loadImage(imageUrl);
@@ -472,8 +484,17 @@ function VisualPreview({
         dir="rtl"
       >
         <div className="bg-[#d80b3b] px-5 pb-5 pt-4 text-white sm:px-8">
-          <p className="text-base font-black text-yellow-200 sm:text-xl">التسجيلات مفتوحة رسميا</p>
-          <h3 className="mt-2 text-xl font-black leading-[1.5] sm:text-3xl">{post.visual.title}</h3>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-base font-black text-yellow-200 sm:text-xl">
+                التسجيلات مفتوحة رسميا
+              </p>
+              <h3 className="mt-2 text-xl font-black leading-[1.5] sm:text-3xl">
+                {post.visual.title}
+              </h3>
+            </div>
+            <PageLogo page={page} size="sm" />
+          </div>
         </div>
         <div className="grid gap-4 p-5 sm:grid-cols-[.8fr_1.2fr] sm:p-7">
           <div className="order-2 rounded-2xl bg-slate-100 p-3 sm:order-1">

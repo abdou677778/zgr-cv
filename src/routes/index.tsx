@@ -2659,8 +2659,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3">
           <div className="flex w-full items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="zgr-brand-mark flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white">
-                <FileText className="h-5 w-5" />
+              <div className="zgr-brand-mark flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
+                <img
+                  src="/brands/cv-pro-algeria.jpg"
+                  alt="CV PRO Algérie"
+                  className="h-full w-full object-cover"
+                />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">

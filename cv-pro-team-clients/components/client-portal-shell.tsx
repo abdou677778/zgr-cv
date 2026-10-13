@@ -66,8 +66,12 @@ export function ClientPortalShell({
       <div className="mx-auto w-full max-w-4xl">
         <header className="mb-6 flex items-center justify-between gap-3 sm:mb-8">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary text-sm font-black tracking-tight text-primary-foreground shadow-sm">
-              CV
+            <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-primary/15">
+              <img
+                src="https://zgr-cv.pages.dev/brands/cv-pro-algeria.jpg"
+                alt="CV PRO Algérie"
+                className="size-full object-cover"
+              />
             </div>
             <div className="min-w-0">
               <p className="text-lg font-black tracking-tight text-primary">CV PRO TEAM</p>

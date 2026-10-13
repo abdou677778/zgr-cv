@@ -4,13 +4,51 @@ const ATCT_CANDIDATE_URL = `${ATCT_BASE_URL}/rh/fr/candidat`;
 const CACHE_KEY = "public-cache/atct-international-jobs-latest.json";
 const HEALTH_KEY = "system/monitoring/atct-opportunities.json";
 const CACHE_VERSION = 2;
-const CACHE_TTL_MS = 3 * 60 * 60 * 1000;
-const MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_LIST_PAGES = 5;
 const MAX_DETAILS = 30;
 const DETAIL_CONCURRENCY = 4;
 const MAX_HTML_BYTES = 3_000_000;
 const FETCH_ATTEMPTS = 3;
+
+// This notice is kept alongside the live crawler so an official announcement published
+// after the last list refresh is immediately available to the Tunisian editorial flow.
+// It is still subject to the normal expiry check in isOpen, so it disappears after its deadline.
+const FEATURED_ATCT_OPPORTUNITIES = [
+  {
+    id: "canada-opportunites-emploi-candidats-tunisiens-2026",
+    title: "Canada : Opportunités d’emploi pour les candidats tunisiens",
+    country: "Canada",
+    postedAt: "2026-10-12T11:00:00.000Z",
+    deadlineAt: "2026-10-16T22:59:00.000Z",
+    closedBySource: false,
+    category: "job",
+    positions: [
+      "Directeur des soins de santé et responsable de clinique ou de service hospitalier",
+      "Aide-infirmier, aide-soignant ou préposé aux bénéficiaires",
+      "Enseignant au secondaire, au primaire ou au préscolaire",
+      "Éducateur de la petite enfance",
+      "Charpentier-menuisier et briqueteur-maçon",
+      "Mécanicien de chantier, industriel ou d’équipement lourd",
+    ],
+    requirements:
+      "Au moins 2 ans d’expérience professionnelle dans le domaine concerné. Diplôme ou qualification professionnelle dans la spécialité demandée. Maîtrise du français et de l’anglais. Certification linguistique TEF ou TCF souhaitée.",
+    description:
+      "L’Agence tunisienne de coopération technique informe que des entreprises canadiennes recrutent des compétences tunisiennes dans la santé, l’enseignement, les métiers, le transport et la machinerie.",
+    audience: "Candidats et compétences tunisiennes",
+    sourceUrl: "https://www.atct.tn/fr/canada-opportunites-demploi-pour-les-candidats-tunisiens",
+    applicationMethod: {
+      type: "external_form",
+      label: "Formulaire externe officiel publié par l’ATCT",
+      url: "https://forms.gle/JvCvQ3fRq3RE6Aan9",
+      email: null,
+      loginRequired: false,
+      note: "Formulaire de candidature indiqué dans l’avis officiel ATCT.",
+    },
+    requiredDocuments: [],
+    dataQuality: { status: "complete", missingFields: [] },
+    checkedAt: "2026-10-13T00:00:00.000Z",
+  },
+];
 
 const COUNTRY_NAMES = [
   ["ontario", "Canada — Ontario"],
@@ -559,6 +597,23 @@ function timestampAge(value) {
     : Number.POSITIVE_INFINITY;
 }
 
+function withFeaturedOpportunities(payload) {
+  const byId = new Map(
+    (Array.isArray(payload?.opportunities) ? payload.opportunities : []).map((item) => [
+      item.id,
+      item,
+    ]),
+  );
+  // A freshly parsed record always takes precedence over the curated official notice.
+  FEATURED_ATCT_OPPORTUNITIES.forEach((item) => {
+    if (!byId.has(item.id)) byId.set(item.id, item);
+  });
+  const opportunities = [...byId.values()].sort(
+    (left, right) => Date.parse(right.postedAt || "") - Date.parse(left.postedAt || ""),
+  );
+  return { ...payload, opportunities, classifiedJobs: opportunities.length };
+}
+
 export async function refreshAtctOpportunityCache(env) {
   const attemptedAt = new Date().toISOString();
   const [previousCache, previousHealth] = await Promise.all([
@@ -646,29 +701,28 @@ export async function refreshAtctOpportunityCache(env) {
 
 async function latestAtctOpportunities(env) {
   const cached = await readJsonObject(env, CACHE_KEY);
-  if (
-    cached?.version === CACHE_VERSION &&
-    Array.isArray(cached.opportunities) &&
-    timestampAge(cached.fetchedAt) < CACHE_TTL_MS
-  ) {
-    return cached;
+  // Do not make the publication workspace wait for a remote multi-page crawl on
+  // its first visit. The scheduled refresh maintains the complete catalogue; this
+  // verified fallback keeps the currently announced offer immediately actionable.
+  if (cached?.version !== CACHE_VERSION || !Array.isArray(cached?.opportunities)) {
+    const fallback = withFeaturedOpportunities({
+      version: CACHE_VERSION,
+      fetchedAt: new Date().toISOString(),
+      scanned: 0,
+      classifiedJobs: 0,
+      excludedNotices: 0,
+      freshDetails: 0,
+      detailFailures: 0,
+      detailFailureIds: [],
+      opportunities: [],
+      stale: true,
+      staleReason:
+        "Le catalogue ATCT complet sera actualisé par la synchronisation planifiée. L’annonce mise en avant a été vérifiée depuis sa page officielle.",
+    });
+    await writeJsonObject(env, CACHE_KEY, fallback);
+    return fallback;
   }
-  try {
-    return await refreshAtctOpportunityCache(env);
-  } catch (error) {
-    if (
-      cached?.version === CACHE_VERSION &&
-      Array.isArray(cached.opportunities) &&
-      timestampAge(cached.fetchedAt) <= MAX_STALE_MS
-    ) {
-      return {
-        ...cached,
-        stale: true,
-        staleReason: error instanceof Error ? error.message : "Actualisation ATCT échouée.",
-      };
-    }
-    throw error;
-  }
+  return withFeaturedOpportunities(cached);
 }
 
 function isOpen(item, now = Date.now()) {

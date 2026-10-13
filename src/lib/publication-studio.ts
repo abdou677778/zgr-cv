@@ -648,6 +648,7 @@ function folded(value: string) {
 function arabicOpportunityTitle(value: string) {
   const title = folded(value);
   const mappings: Array<[RegExp, string]> = [
+    [/canada.*opportunites.*candidats tunisiens/, "انتدابات كندية للكفاءات التونسية"],
     [/reforestation.*granada|healthy living/, "التشجير ونمط العيش الصحي في جبال غرناطة"],
     [/youth office.*esslingen/, "تطوّع في مكتب الشباب بمدينة إسلينغن"],
     [/youth office/, "تطوّع في مكتب للشباب"],
@@ -731,15 +732,18 @@ function arabicConditions(proof: PublicationEvidence) {
   const haystack = folded(proof.conditions.join(" "));
   const result: string[] = [];
   if (/18.{0,12}30|18-30|18 to 30/.test(haystack)) addUnique(result, "السن بين 18 و30 سنة");
-  if (/experience|expérience/.test(haystack))
+  if (/2.{0,12}(ans|annee)|deux.{0,12}(ans|annee)/.test(haystack))
+    addUnique(result, "خبرة مهنية لا تقل عن سنتين في الاختصاص المطلوب");
+  else if (/experience|expérience/.test(haystack))
     addUnique(result, "خبرة مهنية حسب ما هو مذكور في العرض");
-  if (/english|anglais/.test(haystack)) addUnique(result, "مستوى مناسب في اللغة الإنجليزية");
+  if (/english|anglais/.test(haystack)) addUnique(result, "إتقان اللغة الإنجليزية");
   if (/german|allemand/.test(haystack))
     addUnique(result, "معرفة باللغة الألمانية حسب متطلبات العرض");
   if (/spanish|espagnol/.test(haystack))
     addUnique(result, "معرفة باللغة الإسبانية حسب متطلبات العرض");
-  if (/french|francais|français|linguist/.test(haystack))
-    addUnique(result, "إثبات المستوى المطلوب في اللغة الفرنسية");
+  if (/french|francais|français|linguist/.test(haystack)) addUnique(result, "إتقان اللغة الفرنسية");
+  if (/tef|tcf/.test(haystack))
+    addUnique(result, "شهادة لغة فرنسية من نوع تي إف أو تي سي إف تُعد ميزة");
   if (/driver|driving|permis de conduire/.test(haystack))
     addUnique(result, "رخصة السياقة حسب طبيعة المنصب");
   if (/children|child|enfant|youth|jeune/.test(haystack))
@@ -777,6 +781,17 @@ function arabicDocuments(values: string[]) {
 function opportunityScope(values: string[]) {
   const joined = folded(values.join(" "));
   if (!joined) return null;
+  if (
+    /soins.*sante|aide.infirmier|enseignant|educateur|charpentier|briqueteur|mecanicien/.test(
+      joined,
+    )
+  ) {
+    return {
+      label: "💼 الاختصاصات المطلوبة",
+      value:
+        "الصحة والرعاية، التعليم والطفولة المبكرة، البناء والنجارة، والميكانيك والمعدات الثقيلة",
+    };
+  }
   if (/team/.test(joined)) return { label: "🤝 نوع المشاركة", value: "تطوّع ضمن فريق" };
   if (/individual/.test(joined)) return { label: "🤝 نوع المشاركة", value: "تطوّع فردي" };
   if (/batiment|construction/.test(joined))
@@ -978,6 +993,12 @@ export function buildLocalPublicationBatch(options: {
     throw new Error("Aucune opportunité vérifiée n’est disponible pour la génération locale.");
   const generatedAt = options.generatedAt || new Date().toISOString();
   const ranked = focusedEvidence(options.evidence, options.focus || "");
+  const featuredAtct = ranked.find((item) =>
+    item.id.includes("canada-opportunites-emploi-candidats-tunisiens-2026"),
+  );
+  // This verified announcement is the current editorial priority for both Tunisian pages.
+  // The ten angles remain distinct, while every draft retains the same authoritative source.
+  const selectedEvidence = options.page.market === "TN" && featuredAtct ? [featuredAtct] : ranked;
   const objectives: PublicationDraft["objective"][] = [
     "information",
     "deadline",
@@ -991,7 +1012,7 @@ export function buildLocalPublicationBatch(options: {
     "deadline",
   ];
   const posts = Array.from({ length: 10 }, (_, index): PublicationDraft => {
-    const proof = ranked[index % ranked.length];
+    const proof = selectedEvidence[index % selectedEvidence.length];
     const format: PublicationFormat = "visual";
     const title = arabicOpportunityTitle(proof.title);
     const destination = arabicDestination(proof.destination);

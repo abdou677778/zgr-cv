@@ -96,7 +96,7 @@ function readStoredBatches() {
       Object.entries(parsed).filter(
         ([pageId, batch]) =>
           PUBLICATION_PAGES.some((page) => page.id === pageId) &&
-          batch?.version === 5 &&
+          batch?.version === 6 &&
           Array.isArray(batch.posts) &&
           batch.posts.length === 10 &&
           batch.posts.every((post) => post?.format === "visual" && post?.visual),
@@ -335,7 +335,7 @@ async function downloadVisualArchive(
   const manifest = [
     "ZGR PUBLICATIONS",
     `Page: ${page.name}`,
-    "Format: Facebook vertical 4:5 - 1080x1350 PNG",
+    "Format: affiche Facebook horizontale 4:3 - 1600x1200",
     "Source: brouillons vérifiés dans ZGR CV",
     "",
   ];
@@ -382,15 +382,15 @@ function VisualPreview({
         <img
           src={imageUrl}
           alt={`Image GPT associée à ${post.visual.title}`}
-          className="aspect-[4/5] w-full object-cover"
+          className="aspect-[4/3] w-full object-cover"
         />
       ) : (
-        <div className="flex aspect-[4/5] flex-col items-center justify-center gap-4 px-8 text-center">
+        <div className="flex aspect-[4/3] flex-col items-center justify-center gap-4 px-8 text-center">
           <ImageIcon className="size-12" style={{ color: page.accent }} />
           <div className="font-black text-slate-900">Image GPT à créer et importer</div>
           <p className="max-w-sm text-sm leading-6 text-slate-600">
-            Copiez le prompt GPT Image, générez l’image originale en 4:5 puis importez-la ici. Aucun
-            faux visuel automatique n’est exporté.
+            Copiez le prompt GPT Image, générez l’affiche horizontale 4:3 puis importez-la ici.
+            Aucun faux visuel automatique n’est exporté.
           </p>
         </div>
       )}
@@ -605,7 +605,7 @@ export function PublicationsWorkspace({
       setBatches((current) => ({ ...current, ...generated }));
       setMessage({
         ok: true,
-        text: "30 publications prêtes : 10 pour CV PRO Algérie, 10 pour Emplois & Immigration et 10 pour Bissane Career Expert. Chaque brouillon possède son visuel 4:5. Aucun quota IA utilisé.",
+        text: "30 publications prêtes : 10 pour CV PRO Algérie, 10 pour Emplois & Immigration et 10 pour Bissane Career Expert. Chaque brouillon possède son affiche horizontale 4:3. Aucun quota IA utilisé.",
       });
     } catch (error) {
       setMessage({
@@ -963,7 +963,7 @@ export function PublicationsWorkspace({
                                 : "publication opportunité"}
                           </span>
                           <span>·</span>
-                          <span>Texte + prompt image 4:5</span>
+                          <span>Texte + affiche 4:3</span>
                           <span>·</span>
                           <span
                             className={imageUrls[post.id] ? "text-emerald-700" : "text-amber-700"}
@@ -1139,8 +1139,8 @@ export function PublicationsWorkspace({
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   Choisissez le moteur, puis générez dix publications propres à cette page. Chaque
-                  brouillon comporte un visuel Facebook vertical 4:5. Les brouillons resteront ici
-                  jusqu’à leur remplacement.
+                  brouillon comporte une affiche Facebook horizontale 4:3. Les brouillons resteront
+                  ici jusqu’à leur remplacement.
                 </p>
               </div>
             </section>

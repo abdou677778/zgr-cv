@@ -135,10 +135,10 @@ test("deadline campaigns visibly include the services offered for that opportuni
 test("provides a safe text-free GPT image prompt for every visual draft", () => {
   const batch = buildLocalPublicationBatch({ page, evidence });
   const prompt = publicationImagePrompt(batch.posts[0], page);
-  assert.match(prompt, /4:5/);
-  assert.match(prompt, /1080 × 1350/);
-  assert.match(prompt, /Aucun texte/);
-  assert.match(prompt, /sans collage publicitaire/);
+  assert.match(prompt, /4:3/);
+  assert.match(prompt, /1600 × 1200/);
+  assert.match(prompt, /palette rouge, blanc et jaune/);
+  assert.match(prompt, /Aucune promesse de visa/);
 });
 
 test("the local engine applies distinct Tunisian page voices", () => {

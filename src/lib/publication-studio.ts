@@ -100,7 +100,7 @@ export type PublicationDraft = {
 };
 
 export type PublicationBatch = {
-  version: 5;
+  version: 6;
   pageId: PublicationPageId;
   generatedAt: string;
   evidenceCheckedAt: string;
@@ -509,7 +509,8 @@ Rédige exactement 10 publications différentes et directement copiables sur Fac
 - Présente chaque condition vérifiée sur une ligne commençant par ✅.
 - Les trois pages doivent avoir des structures, accroches, appels à l'action et hashtags réellement distincts.
 - N'utilise aucune parenthèse ronde dans headline, body, comments ou visual.
-- Chaque publication est obligatoirement au format visual et comporte les données d'un visuel Facebook vertical 4:5.
+- Chaque publication est obligatoirement au format visual et comporte les données d'une affiche Facebook horizontale 4:3.
+- L'affiche suit l'identité Emplois & Immigration : rouge, blanc et jaune, informations numérotées, photographie latérale limitée, espace RTL lisible et bannière d’action. Les textes d’affiche ne reprennent que les éléments vérifiés de la preuve.
 - Chaque publication doit s'appuyer sur une seule preuve, citer la source, conserver son lien officiel et son checkedAt.
 - Répartis les dix publications entre les offres avec échéance, les parcours Canada, les services de dossier adaptés, les offres Europe et les messages de vigilance, selon les preuves réellement disponibles. Deux publications ne peuvent pas être des reformulations de la même offre.
 - Si deadlineAt vaut null, écris en arabe que la date limite n'est pas publiée. N'invente aucune date.
@@ -656,7 +657,7 @@ export function normalizePublicationBatch(
   if (posts.some((post) => !endsWithArabicHashtags(post.body)))
     throw new Error("Une publication ne se termine pas par des hashtags arabes.");
   return {
-    version: 5,
+    version: 6,
     pageId: page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,
@@ -1310,7 +1311,7 @@ export function buildLocalPublicationBatch(options: {
     };
   });
   return {
-    version: 5,
+    version: 6,
     pageId: options.page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,
@@ -1327,13 +1328,16 @@ export function publicationImagePrompt(post: PublicationDraft, page: Publication
   const subject = post.visual?.title || post.headline;
   const destination = post.visual?.subtitle || "opportunité internationale vérifiée";
   return [
-    "GPT Image : crée une image éditoriale originale et photoréaliste pour une publication Facebook sur l'emploi international.",
-    `Sujet exact : ${subject}.`,
-    `Contexte : ${destination}. Public ciblé : candidats ${market}s adultes.`,
-    "Montrer une personne réelle ou une petite équipe dans un environnement cohérent avec le métier ou le programme, tenue professionnelle, lumière naturelle, composition crédible et inclusive.",
-    "Format portrait 4:5, 1080 × 1350 px. L’image doit être livrée seule, sans maquette automatique de ZGR.",
-    "Aucun texte, aucune lettre, aucun chiffre, aucun logo, aucun faux document officiel, aucun filigrane, aucune promesse de visa ou d'embauche.",
-    "Style photojournalistique premium, net, humain et sobre, sans collage publicitaire, sans illustration 3D et sans drapeau inventé.",
+    `GPT Image : crée une affiche Facebook professionnelle originale pour la page ${page.name}.`,
+    `Sujet vérifié : ${subject}.`,
+    `Contexte vérifié : ${destination}. Public ciblé : candidats ${market}s adultes.`,
+    "Format horizontal 4:3, 1600 × 1200 px, haute définition et parfaitement lisible sur mobile.",
+    "Direction artistique : palette rouge, blanc et jaune, design publicitaire sobre, grille RTL claire, grand espace central pour informations numérotées, photographie réaliste placée latéralement et occupant au maximum 30 % de l’affiche.",
+    "Utiliser uniquement les drapeaux de la Tunisie et de la destination réellement citée. Ne pas inventer de logos, de partenariats, de quotas, de délais ni de document officiel.",
+    "Inscrire seulement ces éléments factuels en arabe RTL net : le titre, le statut ou la date limite ci-dessous, et une courte bannière d’action. Conserver exactement les noms officiels si nécessaire.",
+    `Contenu autorisé de l’affiche : ${post.visual?.title || post.headline} — ${post.deadlineAt ? `آخر أجل: ${localDeadline(post.deadlineAt, page.market)}` : "التاريخ غير منشور رسميا"}.`,
+    "Bannière : فرصة لا تعوض — سارعوا في التحضير والتسجيل.",
+    "Aucune promesse de visa, de recrutement ou de résultat. Pas de filigrane, pas de faux texte illisible, pas de collage excessif ni illustration 3D.",
   ].join("\n");
 }
 

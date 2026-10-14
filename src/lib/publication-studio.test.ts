@@ -100,6 +100,24 @@ test("the local engine always creates ten safe visual Algerian publications with
   });
 });
 
+test("the local engine distributes a publication calendar across available evidence", () => {
+  const variedEvidence = Array.from({ length: 7 }, (_, index) => ({
+    ...evidence[0],
+    id: `official:${index + 1}`,
+    title: `Offre officielle ${index + 1}`,
+    destination: `Destination ${index + 1}`,
+    source: `Source officielle ${index + 1}`,
+  }));
+  const batch = buildLocalPublicationBatch({
+    page: PUBLICATION_PAGES[1],
+    evidence: variedEvidence,
+  });
+  const usage = new Map<string, number>();
+  batch.posts.forEach((post) => usage.set(post.evidenceId, (usage.get(post.evidenceId) || 0) + 1));
+  assert.ok(usage.size >= 6);
+  assert.ok([...usage.values()].every((count) => count <= 2));
+});
+
 test("provides a safe text-free GPT image prompt for every visual draft", () => {
   const batch = buildLocalPublicationBatch({ page, evidence });
   const prompt = publicationImagePrompt(batch.posts[0], page);

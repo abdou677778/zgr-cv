@@ -96,7 +96,7 @@ function readStoredBatches() {
       Object.entries(parsed).filter(
         ([pageId, batch]) =>
           PUBLICATION_PAGES.some((page) => page.id === pageId) &&
-          batch?.version === 3 &&
+          batch?.version === 4 &&
           Array.isArray(batch.posts) &&
           batch.posts.length === 10 &&
           batch.posts.every((post) => post?.format === "visual" && post?.visual),
@@ -301,112 +301,13 @@ async function renderTunisiaCampaignVisual(
 }
 
 async function renderVisualBlob(post: PublicationDraft, page: PublicationPage, imageUrl?: string) {
-  if (!post.visual) return;
-  if (page.id === "emplois-immigration-tunis")
-    return renderTunisiaCampaignVisual(post, page, imageUrl);
-  const canvas = document.createElement("canvas");
-  canvas.width = 1080;
-  canvas.height = 1350;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Canvas indisponible.");
-  const gradient = context.createLinearGradient(0, 0, 1080, 1350);
-  gradient.addColorStop(0, page.accentDark);
-  gradient.addColorStop(0.58, page.accent);
-  gradient.addColorStop(1, "#0f172a");
-  if (imageUrl) {
-    const image = await loadImage(imageUrl);
-    drawCover(context, image, 1080, 1350);
-    context.globalAlpha = 0.78;
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 1080, 1350);
-    context.globalAlpha = 1;
-  } else {
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 1080, 1350);
-  }
-
-  context.globalAlpha = 0.14;
-  context.fillStyle = "#ffffff";
-  context.beginPath();
-  context.arc(960, 130, 280, 0, Math.PI * 2);
-  context.fill();
-  context.beginPath();
-  context.arc(100, 1280, 360, 0, Math.PI * 2);
-  context.fill();
-  context.globalAlpha = 1;
-
-  const logo = await loadImage(new URL(page.logoUrl, window.location.origin).toString());
-  context.save();
-  context.beginPath();
-  context.arc(930, 115, 58, 0, Math.PI * 2);
-  context.clip();
-  context.drawImage(logo, 872, 57, 116, 116);
-  context.restore();
-  context.strokeStyle = "rgba(255,255,255,.75)";
-  context.lineWidth = 5;
-  context.beginPath();
-  context.arc(930, 115, 60, 0, Math.PI * 2);
-  context.stroke();
-
-  context.textAlign = "right";
-  context.direction = "rtl";
-  context.fillStyle = "rgba(255,255,255,.16)";
-  context.beginPath();
-  context.roundRect(110, 65, 540, 68, 34);
-  context.fill();
-  context.fillStyle = "#fef08a";
-  context.font = "700 28px Arial, Tahoma";
-  context.fillText("معلومة من مصدر رسمي", 610, 109);
-
-  context.fillStyle = "#fef08a";
-  context.font = "700 32px Arial, Tahoma";
-  context.fillText(post.visual.eyebrow, 940, 285);
-
-  context.fillStyle = "#ffffff";
-  context.font = "900 76px Arial, Tahoma";
-  const titleLines = canvasLines(context, post.visual.title, 850, 3);
-  titleLines.forEach((line, index) => context.fillText(line, 940, 395 + index * 104));
-  const subtitleY = 445 + titleLines.length * 104;
-  context.font = "600 36px Arial, Tahoma";
-  context.fillStyle = "rgba(255,255,255,.88)";
-  canvasLines(context, post.visual.subtitle, 850, 3).forEach((line, index) =>
-    context.fillText(line, 940, subtitleY + index * 58),
-  );
-
-  let badgeX = 940;
-  context.font = "700 26px Arial, Tahoma";
-  post.visual.badges.slice(0, 3).forEach((badge) => {
-    const width = context.measureText(badge).width + 50;
-    badgeX -= width;
-    context.fillStyle = "rgba(255,255,255,.16)";
-    context.beginPath();
-    context.roundRect(badgeX, 1025, width - 12, 58, 29);
-    context.fill();
-    context.fillStyle = "#ffffff";
-    context.fillText(badge, badgeX + width - 32, 1064);
-    badgeX -= 14;
-  });
-
-  context.fillStyle = "#facc15";
-  context.beginPath();
-  context.roundRect(310, 1140, 630, 104, 52);
-  context.fill();
-  context.fillStyle = "#172033";
-  context.font = "900 38px Arial, Tahoma";
-  context.fillText(post.visual.cta, 880, 1206);
-  context.fillStyle = "rgba(255,255,255,.72)";
-  context.font = "500 23px Arial, Tahoma";
-  context.textAlign = "center";
-  context.direction = "rtl";
-  context.fillText("راجع المصدر الرسمي قبل إرسال ملفك", 540, 1305);
-
-  return new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob(
-      (value) => (value ? resolve(value) : reject(new Error("Export PNG impossible."))),
-      "image/png",
-      0.94,
-    ),
-  );
+  void post;
+  void page;
+  if (!imageUrl)
+    throw new Error("Importez d’abord l’image créée avec GPT Image avant de l’exporter.");
+  const response = await fetch(imageUrl);
+  if (!response.ok) throw new Error("L’image GPT n’est plus disponible. Importez-la de nouveau.");
+  return response.blob();
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -475,117 +376,24 @@ function VisualPreview({
   imageUrl?: string;
 }) {
   if (!post.visual) return null;
-  if (page.id === "emplois-immigration-tunis") {
-    const services = campaignServices(post);
-    return (
-      <div
-        className="relative mt-4 aspect-[4/5] w-full overflow-hidden rounded-2xl bg-[#fffdf8] text-right shadow-inner"
-        style={{ fontFamily: "Arial, Tahoma, sans-serif" }}
-        dir="rtl"
-      >
-        <div className="bg-[#d80b3b] px-5 pb-5 pt-4 text-white sm:px-8">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-base font-black text-yellow-200 sm:text-xl">
-                التسجيلات مفتوحة رسميا
-              </p>
-              <h3 className="mt-2 text-xl font-black leading-[1.5] sm:text-3xl">
-                {post.visual.title}
-              </h3>
-            </div>
-            <PageLogo page={page} size="sm" />
-          </div>
-        </div>
-        <div className="grid gap-4 p-5 sm:grid-cols-[.8fr_1.2fr] sm:p-7">
-          <div className="order-2 rounded-2xl bg-slate-100 p-3 sm:order-1">
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt="Visuel associé à l’opportunité"
-                className="h-full w-full rounded-xl object-cover"
-              />
-            ) : (
-              <div className="grid aspect-square place-items-center rounded-xl bg-white text-center shadow-sm">
-                <span className="text-5xl">🇨🇦</span>
-                <span className="text-sm font-black text-red-700">فرصة موثوقة</span>
-              </div>
-            )}
-          </div>
-          <div className="order-1 sm:order-2">
-            <h4 className="text-xl font-black text-slate-950 sm:text-2xl">خدماتنا المتاحة</h4>
-            <p className="mt-1 font-bold text-red-600">نرافقك خطوة بخطوة</p>
-            <ul className="mt-4 space-y-3 text-sm font-bold leading-6 text-slate-800 sm:text-base">
-              {services.map((service) => (
-                <li key={service} className="flex items-start gap-2">
-                  <span className="mt-1.5 size-3 shrink-0 rounded-full bg-yellow-300" />
-                  <span>{service}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-        <div className="mx-5 rounded-xl bg-yellow-200 px-4 py-3 text-center text-sm font-black text-slate-950 sm:mx-7 sm:text-base">
-          {post.visual.subtitle}
-        </div>
-        <div className="absolute inset-x-0 bottom-0 bg-[#d80b3b] px-5 py-4 text-white sm:px-8">
-          <p className="text-lg font-black text-yellow-200">سارعوا قبل غلق التسجيلات</p>
-          <p className="mt-1 text-xs font-bold text-white/85">
-            {page.name} · راجع المصدر الرسمي قبل التقديم
-          </p>
-        </div>
-      </div>
-    );
-  }
   return (
-    <div
-      className="relative isolate mt-4 aspect-[4/5] w-full overflow-hidden rounded-2xl p-6 text-white shadow-inner sm:p-8"
-      style={{
-        background: imageUrl
-          ? `linear-gradient(145deg, ${page.accentDark}d9, ${page.accent}c7 58%, #0f172ad9), url("${imageUrl}") center / cover`
-          : `linear-gradient(145deg, ${page.accentDark}, ${page.accent} 58%, #0f172a)`,
-        fontFamily: "Arial, Tahoma, sans-serif",
-      }}
-      dir="rtl"
-    >
-      <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
-      <div className="absolute -bottom-28 -left-16 h-80 w-80 rounded-full bg-white/10" />
-      <div className="relative z-10 flex h-full flex-col">
-        <div className="flex items-center justify-between">
-          <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold">
-            معلومة من مصدر رسمي
-          </span>
-          <div className="flex items-center gap-3">
-            <PageLogo page={page} />
-            <div>
-              <div className="text-right text-xs font-bold text-white/70">منشور موثوق</div>
-            </div>
-          </div>
-        </div>
-        <div className="my-auto">
-          <div className="mb-4 text-sm font-black text-amber-200 sm:text-base">
-            {post.visual.eyebrow}
-          </div>
-          <h3 className="text-2xl font-black leading-[1.65] sm:text-4xl">{post.visual.title}</h3>
-          <p className="mt-5 max-w-[92%] text-sm font-semibold leading-8 text-white/90 sm:text-base">
-            {post.visual.subtitle}
+    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-inner">
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={`Image GPT associée à ${post.visual.title}`}
+          className="aspect-[4/5] w-full object-cover"
+        />
+      ) : (
+        <div className="flex aspect-[4/5] flex-col items-center justify-center gap-4 px-8 text-center">
+          <ImageIcon className="size-12" style={{ color: page.accent }} />
+          <div className="font-black text-slate-900">Image GPT à créer et importer</div>
+          <p className="max-w-sm text-sm leading-6 text-slate-600">
+            Copiez le prompt GPT Image, générez l’image originale en 4:5 puis importez-la ici. Aucun
+            faux visuel automatique n’est exporté.
           </p>
         </div>
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {post.visual.badges.map((badge) => (
-              <span key={badge} className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold">
-                {badge}
-              </span>
-            ))}
-          </div>
-          <span className="block rounded-full bg-amber-300 px-5 py-3 text-center text-sm font-black text-slate-950 sm:text-base">
-            {post.visual.cta}
-          </span>
-          <p className="text-center text-xs font-medium text-white/70">
-            راجع المصدر الرسمي قبل إرسال ملفك
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1046,7 +854,7 @@ export function PublicationsWorkspace({
                   ) : (
                     <Bot className="mr-2 h-4 w-4" />
                   )}
-                  Générer 10 publications avec visuel
+                  Générer 10 brouillons variés + prompts image
                 </Button>
                 <Button
                   variant="outline"
@@ -1059,7 +867,7 @@ export function PublicationsWorkspace({
                   ) : (
                     <Newspaper className="mr-2 h-4 w-4" />
                   )}
-                  Préparer 30 publications pour les 3 pages
+                  Préparer 30 brouillons distincts pour les 3 pages
                 </Button>
               </div>
             ) : (
@@ -1112,9 +920,12 @@ export function PublicationsWorkspace({
               <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="font-black text-emerald-950">Archive des visuels</h3>
+                    <h3 className="font-black text-emerald-950">
+                      Archive des images GPT importées
+                    </h3>
                     <p className="mt-1 text-sm leading-6 text-emerald-900">
-                      Exportez les 10 images en PNG 1080 × 1350 dans une archive organisée sous
+                      Après import, exportez les images réelles en PNG ou WebP dans une archive
+                      organisée sous
                       <span className="mx-1 rounded bg-white px-1.5 py-0.5 font-mono text-xs">
                         PUBLICATIONS/{page.id}
                       </span>
@@ -1124,8 +935,9 @@ export function PublicationsWorkspace({
                   <Button
                     className="shrink-0 bg-emerald-700 hover:bg-emerald-800"
                     onClick={() => void downloadVisualArchive(currentBatch, page, imageUrls)}
+                    disabled={!currentBatch.posts.some((post) => imageUrls[post.id])}
                   >
-                    <Download className="mr-2 h-4 w-4" /> Exporter les 10 visuels ZIP
+                    <Download className="mr-2 h-4 w-4" /> Exporter les images GPT ZIP
                   </Button>
                 </div>
               </section>
@@ -1143,7 +955,7 @@ export function PublicationsWorkspace({
                         <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                           <span>Brouillon {index + 1}/10</span>
                           <span>·</span>
-                          <span>Texte + visuel 4:5</span>
+                          <span>Texte + prompt image 4:5</span>
                           <span>·</span>
                           <span
                             className={imageUrls[post.id] ? "text-emerald-700" : "text-amber-700"}
@@ -1260,7 +1072,7 @@ export function PublicationsWorkspace({
                         ) : (
                           <ImageIcon className="mr-2 h-4 w-4" />
                         )}
-                        Prompt image GPT
+                        Copier prompt GPT Image
                       </Button>
                       <Button variant="outline" asChild>
                         <label className="cursor-pointer">
@@ -1280,8 +1092,9 @@ export function PublicationsWorkspace({
                       <Button
                         variant="outline"
                         onClick={() => void downloadVisual(post, page, imageUrls[post.id])}
+                        disabled={!imageUrls[post.id]}
                       >
-                        <Download className="mr-2 h-4 w-4" /> Télécharger le visuel
+                        <Download className="mr-2 h-4 w-4" /> Télécharger l’image GPT
                       </Button>
                     </div>
                     <details className="border-t border-slate-100 px-4 py-3 sm:px-5">

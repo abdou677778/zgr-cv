@@ -100,7 +100,7 @@ export type PublicationDraft = {
 };
 
 export type PublicationBatch = {
-  version: 3;
+  version: 4;
   pageId: PublicationPageId;
   generatedAt: string;
   evidenceCheckedAt: string;
@@ -113,7 +113,7 @@ export type PublicationEvidenceResult = {
   checkedAt: string;
 };
 
-const BASELINE_CHECKED_AT = "2026-10-06T12:00:00.000Z";
+const BASELINE_CHECKED_AT = "2026-10-14T12:00:00.000Z";
 
 const BASELINE_EVIDENCE: Array<PublicationEvidence & { markets: PublicationMarket[] }> = [
   {
@@ -219,6 +219,57 @@ const BASELINE_EVIDENCE: Array<PublicationEvidence & { markets: PublicationMarke
     applicationUrl: "https://www.aneti-international.tn/",
     sourceUrl:
       "https://ance.it/2026/03/progetto-thamm-plus-towards-a-holistic-approach-to-labour-migration-governance-and-labour-mobility-in-italy-and-north-africa/",
+    checkedAt: BASELINE_CHECKED_AT,
+  },
+  {
+    id: "baseline:destination-canada-2026",
+    markets: ["DZ", "TN"],
+    title: "Forum Destination Canada Mobilité — 22e édition",
+    destination: "Canada hors Québec",
+    source: "Immigration, Réfugiés et Citoyenneté Canada",
+    description:
+      "Événement officiel destiné aux candidats francophones et bilingues qualifiés. L’ouverture des inscriptions est annoncée pour l’automne, sans date précise publiée.",
+    deadlineAt: null,
+    positions: [],
+    conditions: [
+      "Être travailleur qualifié francophone ou bilingue",
+      "Vérifier les instructions officielles lorsque les inscriptions ouvriront",
+      "Préparer un CV adapté au marché canadien",
+    ],
+    requiredDocuments: ["CV canadien", "Preuves d’expérience", "Diplômes", "Preuves linguistiques"],
+    applicationUrl:
+      "https://www.canada.ca/en/immigration-refugees-citizenship/services/work-canada/hire-temporary-foreign/french-speaking-bilingual-workers-outside-quebec/destination-canada/candidates.html",
+    sourceUrl:
+      "https://www.canada.ca/en/immigration-refugees-citizenship/services/work-canada/hire-temporary-foreign/french-speaking-bilingual-workers-outside-quebec/destination-canada/candidates.html",
+    checkedAt: BASELINE_CHECKED_AT,
+  },
+  {
+    id: "baseline:italy-decreto-flussi-2027",
+    markets: ["TN"],
+    title: "Decreto Flussi 2027 — précompilation des demandes",
+    destination: "Italie",
+    source: "Portail officiel italien de l’intégration",
+    description:
+      "La précompilation des demandes 2027 est annoncée du 23 octobre au 7 décembre 2026. Les demandes doivent suivre les procédures du Portale Servizi et les catégories autorisées.",
+    deadlineAt: "2026-12-07T19:00:00.000Z",
+    positions: [
+      "Travail saisonnier agricole",
+      "Tourisme et hôtellerie",
+      "Travail salarié non saisonnier",
+      "Assistance familiale",
+    ],
+    conditions: [
+      "Vérifier que le secteur et la catégorie correspondent au décret",
+      "La demande est liée à la procédure officielle et à l’employeur concerné",
+      "Ne jamais confondre la précompilation avec une promesse d’emploi ou de visa",
+    ],
+    requiredDocuments: [
+      "Données du candidat",
+      "Données de l’employeur",
+      "Documents demandés par la procédure officielle",
+    ],
+    applicationUrl: "https://portaleservizi.dlci.interno.it/AliSportello/ali/home.htm",
+    sourceUrl: "https://www.integrazionemigranti.gov.it/it-it/Ricerca-news/Dettaglio-news/id/4957",
     checkedAt: BASELINE_CHECKED_AT,
   },
 ];
@@ -432,6 +483,8 @@ Chaque publication suit naturellement Problème → Solution → Arguments → A
 Interdictions absolues : promesse d'embauche, garantie de visa, garantie d'acceptation, urgence artificielle, faux chiffre, faux Deadline, parenthèses rondes.
 Le service peut être proposé comme aide à la rédaction du dossier et à la candidature, jamais comme intermédiaire officiel ni comme garantie.
 Tous les textes visibles doivent être écrits uniquement en arabe. Traduis le sens professionnel des intitulés, sources, métiers et conditions au lieu de les translittérer ou de les recopier en français ou en anglais.
+Les dix brouillons doivent former un calendrier éditorial réellement varié : utilise au moins 6 preuves différentes si 6 preuves ou plus sont fournies, et jamais plus de 2 brouillons par preuve. Ne change jamais seulement le titre d'un même texte ou d'une même offre.
+Distingue strictement les programmes, pays et provinces. Ne mélange pas le Nouveau-Brunswick, Terre-Neuve-et-Labrador, Destination Canada, les offres ATCT et Decreto Flussi. Ne propose un service ou un délai que s'il est étayé par la preuve concernée.
 Réponds uniquement avec un objet JSON valide conforme à la structure demandée.
 `.trim();
 
@@ -458,6 +511,7 @@ Rédige exactement 10 publications différentes et directement copiables sur Fac
 - N'utilise aucune parenthèse ronde dans headline, body, comments ou visual.
 - Chaque publication est obligatoirement au format visual et comporte les données d'un visuel Facebook vertical 4:5.
 - Chaque publication doit s'appuyer sur une seule preuve, citer la source, conserver son lien officiel et son checkedAt.
+- Répartis les dix publications entre les offres avec échéance, les parcours Canada, les services de dossier adaptés, les offres Europe et les messages de vigilance, selon les preuves réellement disponibles. Deux publications ne peuvent pas être des reformulations de la même offre.
 - Si deadlineAt vaut null, écris en arabe que la date limite n'est pas publiée. N'invente aucune date.
 - Mentionne les documents et conditions uniquement s'ils existent dans la preuve.
 - Termine le corps par une ligne de hashtags arabes adaptée à la page.
@@ -578,6 +632,14 @@ export function normalizePublicationBatch(
   });
   if (posts.length !== 10)
     throw new Error(`L’IA a produit ${posts.length} publication(s) vérifiables au lieu de 10.`);
+  const evidenceUsage = new Map<string, number>();
+  posts.forEach((post) =>
+    evidenceUsage.set(post.evidenceId, (evidenceUsage.get(post.evidenceId) || 0) + 1),
+  );
+  if (evidence.length >= 6 && evidenceUsage.size < 6)
+    throw new Error("L’IA a répété les mêmes offres au lieu de préparer un calendrier varié.");
+  if (evidence.length >= 6 && [...evidenceUsage.values()].some((count) => count > 2))
+    throw new Error("L’IA a utilisé une même offre plus de deux fois.");
   if (posts.some((post) => /[()]/.test(`${post.headline}${post.body}${post.comments.join("")}`)))
     throw new Error("Une publication contient des parenthèses interdites. Relancez la génération.");
   if (
@@ -593,7 +655,7 @@ export function normalizePublicationBatch(
   if (posts.some((post) => !endsWithArabicHashtags(post.body)))
     throw new Error("Une publication ne se termine pas par des hashtags arabes.");
   return {
-    version: 3,
+    version: 4,
     pageId: page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,
@@ -829,6 +891,105 @@ function registrationServices(proof: PublicationEvidence) {
   ];
 }
 
+function serviceCampaign(proof: PublicationEvidence, index: number) {
+  const searchable = folded(`${proof.id} ${proof.title} ${proof.destination} ${proof.description}`);
+  if (/flussi|italie|italy/.test(searchable)) {
+    return {
+      headline: "التحضير للمسار الإيطالي الرسمي يبدأ بالتثبت",
+      label: "🧾 خدمات التحضير للمسار الإيطالي",
+      items: [
+        "تثبيت الفئة والقطاع قبل إدخال الطلب",
+        "ترتيب معطيات الملف حسب الإجراء الرسمي",
+        "إعداد سيرة ذاتية ورسالة تحفيزية مكيّفتين",
+        "مراجعة الملف قبل الإرسال من المنصة الرسمية",
+      ],
+    };
+  }
+  if (/destination canada/.test(searchable)) {
+    return {
+      headline: "حضّر ملفك قبل فتح التسجيلات الكندية",
+      label: "🧾 خدمات التحضير لمنتدى كندا",
+      items: [
+        "سيرة ذاتية كندية حديثة حسب المهنة",
+        "ترتيب الخبرة والشهادات بطريقة واضحة",
+        "رسالة تحفيزية مكيّفة مع المجال",
+        "مراجعة ملفك قبل فتح التسجيلات الرسمية",
+      ],
+    };
+  }
+  if (/atct|cooperation technique/.test(searchable)) {
+    return {
+      headline: "عروض كندا عبر الجهة التونسية الرسمية",
+      label: "🧾 خدمات الترشح للعروض المنشورة",
+      items: [
+        "قراءة شروط العرض قبل تعبئة الاستمارة",
+        "سيرة ذاتية مكيّفة مع الاختصاص المطلوب",
+        "رسالة تحفيزية توضّح الخبرة المهنية",
+        "ترتيب الملف قبل الإرسال عبر الرابط الرسمي",
+      ],
+    };
+  }
+  if (/canada|canad/.test(searchable)) {
+    return {
+      headline: "التقديم الكندي يبدأ من مهنة مطابقة لخبرتك",
+      label: "🧾 خدمات الملف الكندي",
+      items: [
+        "تحديد رمز التصنيف المهني الكندي المناسب",
+        "البحث في عروض ملائمة للاختصاص والخبرة",
+        "سيرة ذاتية كندية بالصيغة الحديثة المطلوبة",
+        "رسالة تحفيزية مخصّصة لكل عرض",
+      ],
+    };
+  }
+  if (/europe|eures|allemagne|germany/.test(searchable)) {
+    return {
+      headline: "فرص أوروبا تحتاج ملفا حديثا ومكيّفا",
+      label: "🧾 خدمات الترشح للفرص الأوروبية",
+      items: [
+        "سيرة ذاتية أوروبية واضحة ومحدّثة",
+        "رسالة تحفيزية حسب البلد والاختصاص",
+        "مراجعة شروط الإقامة والعمل في العرض",
+        "تنظيم وثائق الترشح قبل الإرسال",
+      ],
+    };
+  }
+  const alternatives = [
+    "ملفك الحديث يفتح لك فرصا أكثر",
+    "التقديم المنظم يبدأ من عرض موثوق",
+    "كل مهنة تستحق ملف ترشح مكيّفا",
+  ];
+  return {
+    headline: alternatives[index % alternatives.length],
+    label: "🧾 خدمات إعداد ملف الترشح",
+    items: registrationServices(proof),
+  };
+}
+
+function diverseEvidence(evidence: PublicationEvidence[], count: number) {
+  const buckets = new Map<string, PublicationEvidence[]>();
+  evidence.forEach((item) => {
+    const key = `${folded(item.destination)}:${folded(item.source)}`;
+    const bucket = buckets.get(key) || [];
+    bucket.push(item);
+    buckets.set(key, bucket);
+  });
+  const result: PublicationEvidence[] = [];
+  const cursors = new Map<string, number>();
+  while (result.length < count) {
+    let added = false;
+    for (const [key, bucket] of buckets) {
+      const cursor = cursors.get(key) || 0;
+      if (cursor >= bucket.length) continue;
+      result.push(bucket[cursor]);
+      cursors.set(key, cursor + 1);
+      added = true;
+      if (result.length === count) break;
+    }
+    if (!added) break;
+  }
+  return result.length ? result : evidence.slice(0, count);
+}
+
 const LOCAL_HEADLINES: Record<PublicationPageId, string[]> = {
   "cv-pro-algeria": [
     "فرصة موثوقة للجزائريين وخطوات التقديم واضحة",
@@ -878,6 +1039,7 @@ function localBody(
   page: PublicationPage,
   proof: PublicationEvidence,
   objective: PublicationDraft["objective"],
+  index: number,
 ) {
   const title = arabicOpportunityTitle(proof.title);
   const destination = arabicDestination(proof.destination);
@@ -887,6 +1049,7 @@ function localBody(
   const conditions = arabicConditions(proof);
   const documents = arabicDocuments(proof.requiredDocuments);
   const deadline = localDeadline(proof.deadlineAt, page.market);
+  const campaign = serviceCampaign(proof, index);
 
   if (page.id === "cv-pro-algeria") {
     const opening =
@@ -908,7 +1071,7 @@ function localBody(
         "2️⃣ حضّر سيرة ذاتية ورسالة تحفيزية مخصصتين",
         "3️⃣ قدّم عبر الرابط الرسمي الموجود أسفل المنشور",
       ].join("\n"),
-      "💼 فريقنا يقدر يعاونك في إعداد الملف والتقديم بطريقة منظمة",
+      `${campaign.label}\n${linesWith("🟩", campaign.items)}`,
       "⚠️ الخدمة ما تعنيش ضمان التوظيف أو التأشيرة والقرار يرجع للجهة الرسمية",
       PAGE_HASHTAGS[page.id],
     ]
@@ -923,7 +1086,7 @@ function localBody(
         : `${flag} 📢 فرصة دولية موجهة للتونسيين`,
       proof.deadlineAt ? "📣 الحاضر يعلم الغائب" : "",
       proof.deadlineAt ? "⚠️ سارعوا في التقديم قبل غلق التسجيلات الرسمية" : "",
-      `${flag} 📢 فرصة دولية موجهة للتونسيين`,
+      `${flag} 📢 ${campaign.headline}`,
       `🔹 شنوّة الفرصة\n${title}`,
       [
         "📋 المعطيات الأساسية",
@@ -934,7 +1097,7 @@ function localBody(
       ].join("\n"),
       `✅ شنوّة يلزمك\n${linesWith("✅", conditions)}`,
       documents.length ? `📑 حضّر الوثائق هاذي\n${linesWith("▪️", documents)}` : "",
-      `🧾 خدماتنا للترشح\n${linesWith("🟡", registrationServices(proof))}`,
+      `${campaign.label}\n${linesWith("🟩", campaign.items)}`,
       [
         "📝 كيفاش تترشح",
         "1️⃣ اقرأ البلاغ الرسمي للآخر",
@@ -968,7 +1131,7 @@ function localBody(
       "2️⃣ حضّر ترشح مخصص يبرز نقاط قوتك",
       "3️⃣ استعمل الرابط الرسمي الموجود مع المنشور",
     ].join("\n"),
-    "❤️ إذا تحب ملف مرتب ومقنع نرافقوك في إعداد السيرة الذاتية ورسالة التحفيز والتقديم",
+    `${campaign.label}\n${linesWith("🟩", campaign.items)}`,
     "🛡️ نرافقوك باحتراف أما القبول والتأشيرة يبقاو من صلاحيات الجهات الرسمية",
     PAGE_HASHTAGS[page.id],
   ]
@@ -1019,12 +1182,9 @@ export function buildLocalPublicationBatch(options: {
     throw new Error("Aucune opportunité vérifiée n’est disponible pour la génération locale.");
   const generatedAt = options.generatedAt || new Date().toISOString();
   const ranked = focusedEvidence(options.evidence, options.focus || "");
-  const featuredAtct = ranked.find((item) =>
-    item.id.includes("canada-opportunites-emploi-candidats-tunisiens-2026"),
-  );
-  // This verified announcement is the current editorial priority for both Tunisian pages.
-  // The ten angles remain distinct, while every draft retains the same authoritative source.
-  const selectedEvidence = options.page.market === "TN" && featuredAtct ? [featuredAtct] : ranked;
+  // A calendar must never be ten cosmetic rewrites of the same notice. Round-robin by
+  // destination and publisher first, then only repeat evidence when the source set is small.
+  const selectedEvidence = diverseEvidence(ranked, 10);
   const objectives: PublicationDraft["objective"][] = [
     "information",
     "deadline",
@@ -1048,8 +1208,13 @@ export function buildLocalPublicationBatch(options: {
       createdAt: generatedAt,
       format,
       objective: objectives[index],
-      headline: LOCAL_HEADLINES[options.page.id][index],
-      body: localBody(options.page, proof, objectives[index]),
+      headline:
+        options.page.id === "emplois-immigration-tunis"
+          ? serviceCampaign(proof, index).headline
+          : options.page.id === "bissane-career"
+            ? `خطوتك العملية تبدأ بملف مرتب — ${serviceCampaign(proof, index).headline}`
+            : LOCAL_HEADLINES[options.page.id][index],
+      body: localBody(options.page, proof, objectives[index], index),
       comments: localComments(options.page, proof),
       highlightedTerms: ["السيرة الذاتية", "رسالة تحفيزية", "آخر أجل", "التقديم"],
       evidenceId: proof.id,
@@ -1085,7 +1250,7 @@ export function buildLocalPublicationBatch(options: {
     };
   });
   return {
-    version: 3,
+    version: 4,
     pageId: options.page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,
@@ -1102,13 +1267,13 @@ export function publicationImagePrompt(post: PublicationDraft, page: Publication
   const subject = post.visual?.title || post.headline;
   const destination = post.visual?.subtitle || "opportunité internationale vérifiée";
   return [
-    "Créer une photographie éditoriale réaliste et professionnelle pour une publication Facebook emploi international.",
+    "GPT Image : crée une image éditoriale originale et photoréaliste pour une publication Facebook sur l'emploi international.",
     `Sujet exact : ${subject}.`,
     `Contexte : ${destination}. Public ciblé : candidats ${market}s adultes.`,
     "Montrer une personne réelle ou une petite équipe dans un environnement cohérent avec le métier ou le programme, tenue professionnelle, lumière naturelle, composition crédible et inclusive.",
-    "Format portrait 4:5, 1080 × 1350 px, zone calme au centre et en bas pour la surimpression du texte arabe RTL.",
-    "Aucun texte, aucune lettre, aucun chiffre, aucun logo, aucun faux drapeau, aucun filigrane, aucune promesse de visa ou d'embauche.",
-    "Style photojournalistique premium, net, humain et sobre, sans collage publicitaire ni illustration 3D.",
+    "Format portrait 4:5, 1080 × 1350 px. L’image doit être livrée seule, sans maquette automatique de ZGR.",
+    "Aucun texte, aucune lettre, aucun chiffre, aucun logo, aucun faux document officiel, aucun filigrane, aucune promesse de visa ou d'embauche.",
+    "Style photojournalistique premium, net, humain et sobre, sans collage publicitaire, sans illustration 3D et sans drapeau inventé.",
   ].join("\n");
 }
 

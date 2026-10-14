@@ -895,7 +895,11 @@ function serviceCampaign(proof: PublicationEvidence, index: number) {
   const searchable = folded(`${proof.id} ${proof.title} ${proof.destination} ${proof.description}`);
   if (/flussi|italie|italy/.test(searchable)) {
     return {
-      headline: "التحضير للمسار الإيطالي الرسمي يبدأ بالتثبت",
+      headline: [
+        "التحضير للمسار الإيطالي الرسمي يبدأ بالتثبت",
+        "لا تخلط بين المسار الإيطالي والعروض غير الموثقة",
+        "ملفك الإيطالي يحتاج إجراءات واضحة قبل الإرسال",
+      ][index % 3],
       label: "🧾 خدمات التحضير للمسار الإيطالي",
       items: [
         "تثبيت الفئة والقطاع قبل إدخال الطلب",
@@ -907,7 +911,11 @@ function serviceCampaign(proof: PublicationEvidence, index: number) {
   }
   if (/destination canada/.test(searchable)) {
     return {
-      headline: "حضّر ملفك قبل فتح التسجيلات الكندية",
+      headline: [
+        "حضّر ملفك قبل فتح التسجيلات الكندية",
+        "منتدى كندا يبدأ بملف مهني مكيّف",
+        "التسجيل الكندي القادم يحتاج وثائق مرتبة",
+      ][index % 3],
       label: "🧾 خدمات التحضير لمنتدى كندا",
       items: [
         "سيرة ذاتية كندية حديثة حسب المهنة",
@@ -919,7 +927,11 @@ function serviceCampaign(proof: PublicationEvidence, index: number) {
   }
   if (/atct|cooperation technique/.test(searchable)) {
     return {
-      headline: "عروض كندا عبر الجهة التونسية الرسمية",
+      headline: [
+        "عروض كندا عبر الجهة التونسية الرسمية",
+        "اقرأ شروط العرض الكندي قبل تعبئة الاستمارة",
+        "ملفك المكيّف يقوّي ترشحك للعروض المنشورة",
+      ][index % 3],
       label: "🧾 خدمات الترشح للعروض المنشورة",
       items: [
         "قراءة شروط العرض قبل تعبئة الاستمارة",
@@ -931,7 +943,11 @@ function serviceCampaign(proof: PublicationEvidence, index: number) {
   }
   if (/canada|canad/.test(searchable)) {
     return {
-      headline: "التقديم الكندي يبدأ من مهنة مطابقة لخبرتك",
+      headline: [
+        "التقديم الكندي يبدأ من مهنة مطابقة لخبرتك",
+        "ابحث عن العرض الكندي حسب اختصاصك وخبرتك",
+        "السيرة الكندية الحديثة جزء أساسي من الترشح",
+      ][index % 3],
       label: "🧾 خدمات الملف الكندي",
       items: [
         "تحديد رمز التصنيف المهني الكندي المناسب",
@@ -943,7 +959,11 @@ function serviceCampaign(proof: PublicationEvidence, index: number) {
   }
   if (/europe|eures|allemagne|germany/.test(searchable)) {
     return {
-      headline: "فرص أوروبا تحتاج ملفا حديثا ومكيّفا",
+      headline: [
+        "فرص أوروبا تحتاج ملفا حديثا ومكيّفا",
+        "لكل فرصة أوروبية شروط وملف مختلف",
+        "تثبّت من العرض الأوروبي قبل إرسال وثائقك",
+      ][index % 3],
       label: "🧾 خدمات الترشح للفرص الأوروبية",
       items: [
         "سيرة ذاتية أوروبية واضحة ومحدّثة",

@@ -118,6 +118,20 @@ test("the local engine distributes a publication calendar across available evide
   assert.ok([...usage.values()].every((count) => count <= 2));
 });
 
+test("deadline campaigns visibly include the services offered for that opportunity", () => {
+  const atct = {
+    ...evidence[0],
+    id: "atct:canada",
+    title: "Canada — offre officielle",
+    source: "Agence tunisienne de coopération technique",
+    deadlineAt: "2026-10-16T22:59:00.000Z",
+  };
+  const batch = buildLocalPublicationBatch({ page: PUBLICATION_PAGES[1], evidence: [atct] });
+  assert.match(batch.posts[0].body, /🟩 خدماتنا لهذه الفرصة/);
+  assert.match(batch.posts[0].body, /سيرة ذاتية كندية/);
+  assert.match(batch.posts[0].body, /آخر أجل للتسجيل هو/);
+});
+
 test("provides a safe text-free GPT image prompt for every visual draft", () => {
   const batch = buildLocalPublicationBatch({ page, evidence });
   const prompt = publicationImagePrompt(batch.posts[0], page);

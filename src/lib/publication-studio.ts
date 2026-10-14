@@ -100,7 +100,7 @@ export type PublicationDraft = {
 };
 
 export type PublicationBatch = {
-  version: 4;
+  version: 5;
   pageId: PublicationPageId;
   generatedAt: string;
   evidenceCheckedAt: string;
@@ -517,6 +517,7 @@ Rédige exactement 10 publications différentes et directement copiables sur Fac
 - Termine le corps par une ligne de hashtags arabes adaptée à la page.
 - Lorsqu’une date limite est vérifiée, ouvre la publication par « ⏳ آخر أجل للتسجيل هو » suivi uniquement de cette date, puis « الحاضر يعلم الغائب ». Ne crée jamais une seconde date d’arrêt non publiée.
 - Pour la page Emplois & Immigration, présente les services utiles en puces : accompagnement au formulaire officiel, préparation du CV adapté, lettre de motivation et organisation du dossier. Pour une offre italienne liée au Decreto Flussi, adapte ces puces au parcours italien officiel sans inventer d’ouverture ni de date.
+- Pour chaque offre avec deadlineAt, inclue obligatoirement un bloc visible « 🟩 خدماتنا لهذه الفرصة » avec 3 ou 4 puces de services adaptés au parcours. Ce bloc n’est jamais une promesse de résultat : il explique seulement la préparation du dossier et l’accompagnement à la candidature.
 - Termine aussi par une action claire : consulter la source, préparer le dossier ou demander le service de rédaction.
 - Propose exactement 5 commentaires courts et utiles par publication. Ils doivent compléter la publication : source, documents, vigilance, service ou question d'engagement.
 - Le texte doit rester naturel et ne doit pas ressembler à cinq copies du même modèle.
@@ -655,7 +656,7 @@ export function normalizePublicationBatch(
   if (posts.some((post) => !endsWithArabicHashtags(post.body)))
     throw new Error("Une publication ne se termine pas par des hashtags arabes.");
   return {
-    version: 4,
+    version: 5,
     pageId: page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,
@@ -985,6 +986,44 @@ function serviceCampaign(proof: PublicationEvidence, index: number) {
   };
 }
 
+function opportunityServiceLines(proof: PublicationEvidence, index: number) {
+  const campaign = serviceCampaign(proof, index);
+  const searchable = folded(`${proof.id} ${proof.title} ${proof.destination} ${proof.description}`);
+  if (/atct|cooperation technique/.test(searchable)) {
+    return [
+      "مرافقة في تعبئة استمارة العرض المنشور",
+      "إعداد سيرة ذاتية كندية حسب المهنة المطلوبة",
+      "رسالة تحفيزية توضّح الخبرة والاختصاص",
+      "ترتيب الملف ومراجعته قبل الإرسال الرسمي",
+    ];
+  }
+  if (/destination canada/.test(searchable)) {
+    return [
+      "تحضير الملف الكامل قبل فتح التسجيلات",
+      "إعداد السيرة الذاتية الكندية الحديثة",
+      "تنظيم الخبرة والشهادات وإثباتات اللغة",
+      "مراجعة استمارة الترشح عند توفرها رسميا",
+    ];
+  }
+  if (/flussi|italie|italy/.test(searchable)) {
+    return [
+      "تثبيت المسار الإيطالي والفئة المناسبة",
+      "تنظيم معطيات الملف حسب الإجراء الرسمي",
+      "سيرة ذاتية ورسالة تحفيزية مكيّفتان",
+      "مراجعة الوثائق قبل الإرسال عبر المنصة الرسمية",
+    ];
+  }
+  if (/europe|eures|allemagne|germany/.test(searchable)) {
+    return [
+      "تحديد العرض الأوروبي المناسب للاختصاص",
+      "إعداد سيرة ذاتية أوروبية حديثة",
+      "رسالة تحفيزية حسب البلد والوظيفة",
+      "مراجعة شروط العمل والإقامة قبل الترشح",
+    ];
+  }
+  return campaign.items;
+}
+
 function diverseEvidence(evidence: PublicationEvidence[], count: number) {
   const buckets = new Map<string, PublicationEvidence[]>();
   evidence.forEach((item) => {
@@ -1070,6 +1109,7 @@ function localBody(
   const documents = arabicDocuments(proof.requiredDocuments);
   const deadline = localDeadline(proof.deadlineAt, page.market);
   const campaign = serviceCampaign(proof, index);
+  const services = opportunityServiceLines(proof, index);
 
   if (page.id === "cv-pro-algeria") {
     const opening =
@@ -1091,7 +1131,7 @@ function localBody(
         "2️⃣ حضّر سيرة ذاتية ورسالة تحفيزية مخصصتين",
         "3️⃣ قدّم عبر الرابط الرسمي الموجود أسفل المنشور",
       ].join("\n"),
-      `${campaign.label}\n${linesWith("🟩", campaign.items)}`,
+      `${campaign.label}\n${linesWith("🟩", services)}`,
       "⚠️ الخدمة ما تعنيش ضمان التوظيف أو التأشيرة والقرار يرجع للجهة الرسمية",
       PAGE_HASHTAGS[page.id],
     ]
@@ -1117,7 +1157,7 @@ function localBody(
       ].join("\n"),
       `✅ شنوّة يلزمك\n${linesWith("✅", conditions)}`,
       documents.length ? `📑 حضّر الوثائق هاذي\n${linesWith("▪️", documents)}` : "",
-      `${campaign.label}\n${linesWith("🟩", campaign.items)}`,
+      `🟩 خدماتنا لهذه الفرصة\n${linesWith("✅", services)}`,
       [
         "📝 كيفاش تترشح",
         "1️⃣ اقرأ البلاغ الرسمي للآخر",
@@ -1151,7 +1191,7 @@ function localBody(
       "2️⃣ حضّر ترشح مخصص يبرز نقاط قوتك",
       "3️⃣ استعمل الرابط الرسمي الموجود مع المنشور",
     ].join("\n"),
-    `${campaign.label}\n${linesWith("🟩", campaign.items)}`,
+    `🟩 كيف نرافقوك في هالفرصة\n${linesWith("✅", services)}`,
     "🛡️ نرافقوك باحتراف أما القبول والتأشيرة يبقاو من صلاحيات الجهات الرسمية",
     PAGE_HASHTAGS[page.id],
   ]
@@ -1270,7 +1310,7 @@ export function buildLocalPublicationBatch(options: {
     };
   });
   return {
-    version: 4,
+    version: 5,
     pageId: options.page.id,
     generatedAt,
     evidenceCheckedAt: generatedAt,

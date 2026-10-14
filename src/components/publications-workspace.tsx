@@ -96,7 +96,7 @@ function readStoredBatches() {
       Object.entries(parsed).filter(
         ([pageId, batch]) =>
           PUBLICATION_PAGES.some((page) => page.id === pageId) &&
-          batch?.version === 4 &&
+          batch?.version === 5 &&
           Array.isArray(batch.posts) &&
           batch.posts.length === 10 &&
           batch.posts.every((post) => post?.format === "visual" && post?.visual),
@@ -954,6 +954,14 @@ export function PublicationsWorkspace({
                         <div className="font-black text-slate-950">{page.name}</div>
                         <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                           <span>Brouillon {index + 1}/10</span>
+                          <span>·</span>
+                          <span>
+                            {post.objective === "service"
+                              ? "publication services"
+                              : post.objective === "deadline"
+                                ? "publication délai"
+                                : "publication opportunité"}
+                          </span>
                           <span>·</span>
                           <span>Texte + prompt image 4:5</span>
                           <span>·</span>

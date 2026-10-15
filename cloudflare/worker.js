@@ -14,6 +14,7 @@ import {
   handleAlgeriaOpportunityApi,
   refreshAlgeriaOpportunityCache,
 } from "./algeria-opportunities.js";
+import { handleEditorialMcp } from "./editorial-mcp.js";
 
 const MAX_JSON_BYTES = 5_000_000;
 const MAX_LOGIN_BYTES = 4_096;
@@ -4860,6 +4861,7 @@ async function route(request, env, ctx) {
   const origin = allowedOrigin(request, env);
 
   if (url.pathname === "/mcp") return handleVolunteerMcp(request, env);
+  if (url.pathname === "/editorial/mcp") return handleEditorialMcp(request, env);
 
   if (request.method === "OPTIONS") {
     if (request.headers.get("Origin") && !origin)

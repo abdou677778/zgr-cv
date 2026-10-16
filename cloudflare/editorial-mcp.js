@@ -13,17 +13,20 @@ const EDITORIAL_PROFILES = {
   "cv-pro-algeria": {
     market: "DZ",
     dialect: "arabe algérien clair, administratif et accessible",
+    responseLanguage: "arabe algérien",
     style:
       "informer avec précision, structurer les conditions et proposer le service sans promesse",
   },
   "emplois-immigration-tunis": {
     market: "TN",
     dialect: "arabe tunisien direct, professionnel et accessible",
+    responseLanguage: "arabe tunisien",
     style: "ouvrir avec le délai vérifié, présenter l’opportunité puis les services en puces",
   },
   "bissane-career": {
     market: "TN",
     dialect: "arabe tunisien chaleureux, pédagogique et professionnel",
+    responseLanguage: "arabe tunisien",
     style: "expliquer le parcours, mettre en valeur la préparation du dossier et rester prudent",
   },
 };
@@ -257,7 +260,7 @@ export async function handleEditorialMcp(request, env) {
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "zgr-editorial", version: "1.0.0" },
         instructions:
-          "Utilisez exclusivement les faits et liens retournés. Ne publiez pas sans validation humaine. Les outils de cette version sont strictement en lecture seule.",
+          "Protocole linguistique ZGR : répondre par défaut en arabe algérien clair, professionnel et accessible. Pour toute demande liée à une publication, appeler d’abord get_editorial_profile avec une page explicitement choisie : cv-pro-algeria impose l’arabe algérien ; emplois-immigration-tunis et bissane-career imposent exclusivement l’arabe tunisien adapté à leur style. Ne jamais déduire une page par défaut ni mélanger les dialectes. Utiliser exclusivement les faits et liens retournés. Ne jamais rédiger une publication finale sans page, offre identifiée et source officielle. Ne jamais inventer une offre, date, condition, lien, quota, visa ou recrutement. Une date ne peut être affichée que si deadline.status vaut confirmed. Ne pas prétendre avoir généré une image, transféré un fichier ou enregistré un brouillon sans outil dédié et résultat visible. Les JSON clients et CV ZGR restent multilingues et intouchables : ne pas traduire, renommer ou modifier leurs clés, valeurs, structure ou langues. Ne publier sans validation humaine. Les outils de cette version sont strictement en lecture seule.",
       },
     });
   if (message?.method === "tools/list")

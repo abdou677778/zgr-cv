@@ -18,6 +18,9 @@ async function call(method, params = {}, id = 1) {
 test("le MCP éditorial expose uniquement les outils de fondation en lecture seule", async () => {
   const initialized = await call("initialize");
   assert.equal(initialized.result.serverInfo.name, "zgr-editorial");
+  assert.match(initialized.result.instructions, /arabe algérien/i);
+  assert.match(initialized.result.instructions, /arabe tunisien/i);
+  assert.match(initialized.result.instructions, /multilingues et intouchables/i);
 
   const list = await call("tools/list", {}, 2);
   const names = list.result.tools.map((tool) => tool.name);
@@ -39,4 +42,5 @@ test("le profil éditorial tunisien retourne le dialecte et le format d’affich
   assert.match(profile.dialect, /tunisien/);
   assert.equal(profile.poster.format, "4:3");
   assert.deepEqual(profile.poster.palette, ["rouge", "blanc", "jaune"]);
+  assert.equal(profile.responseLanguage, "arabe tunisien");
 });

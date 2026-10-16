@@ -28,11 +28,12 @@ test("le MCP éditorial expose les sources en lecture et une réception de broui
     "list_verified_opportunities",
     "get_opportunity_bundle",
     "get_editorial_profile",
+    "get_official_program_watch",
     "save_publication_draft",
   ]);
-  assert.ok(list.result.tools.slice(0, 3).every((tool) => tool.annotations.readOnlyHint === true));
-  assert.equal(list.result.tools[3].annotations.readOnlyHint, false);
-  assert.match(list.result.tools[3].description, /code de réception temporaire/i);
+  assert.ok(list.result.tools.slice(0, 4).every((tool) => tool.annotations.readOnlyHint === true));
+  assert.equal(list.result.tools[4].annotations.readOnlyHint, false);
+  assert.match(list.result.tools[4].description, /code de réception temporaire/i);
 });
 
 test("le profil éditorial tunisien retourne le dialecte et le format d’affiche", async () => {

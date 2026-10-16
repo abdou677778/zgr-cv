@@ -10,6 +10,10 @@ const MARKET_COUNTRIES = { TN: "Tunisie", DZ: "Algérie" };
 const MAX_LIMIT = 24;
 const PUBLICATION_IMPORT_TOKEN_PREFIX = "system/publication-import-tokens/";
 const PUBLICATION_IMPORT_PREFIX = "publications/imports/";
+const DV_INSTRUCTIONS_URL =
+  "https://travel.state.gov/content/travel/en/us-visas/immigrate/diversity-visa-program-entry/diversity-visa-instructions.html";
+const DV_ISSUANCE_NOTICE_URL =
+  "https://travel.state.gov/content/travel/en/News/visas-news/diversity-visa-issuance-updated-guidance.html";
 
 const EDITORIAL_PROFILES = {
   "cv-pro-algeria": {
@@ -86,6 +90,19 @@ const MCP_TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
+  },
+  {
+    name: "get_official_program_watch",
+    title: "Vérifier une veille officielle de programme",
+    description:
+      "Contrôle l’état publié d’un programme qui n’est pas nécessairement ouvert. Actuellement, DV Lottery États-Unis est disponible uniquement en veille : aucune date future ne doit être annoncée sans résultat officiel explicite.",
+    inputSchema: {
+      type: "object",
+      properties: { program: { type: "string", enum: ["us-diversity-visa"] } },
+      required: ["program"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
   },
   {
     name: "save_publication_draft",
@@ -383,6 +400,56 @@ async function bundle(env, args) {
   };
 }
 
+function stripHtml(value) {
+  return String(value || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function officialProgramWatch(args) {
+  if (args.program !== "us-diversity-visa") throw new Error("Programme de veille inconnu.");
+  const checkedAt = new Date().toISOString();
+  let instructions = "";
+  let warning = "";
+  try {
+    const response = await fetch(DV_INSTRUCTIONS_URL, {
+      headers: { Accept: "text/html" },
+      cf: { cacheTtl: 0, cacheEverything: false },
+    });
+    if (!response.ok) throw new Error(`Department of State ${response.status}`);
+    instructions = stripHtml(await response.text()).slice(0, 80_000);
+  } catch (error) {
+    warning = error instanceof Error ? error.message : "Source officielle temporairement indisponible.";
+  }
+  const futurePeriod = instructions.match(
+    /DV-(20(?:27|28|29|30))[^.]{0,260}?registration period[^.]{0,340}?(?:began|beginning|between)[^.]{0,280}/i,
+  );
+  const futureDateMention = futurePeriod ? futurePeriod[0] : "";
+  return {
+    schemaVersion: 1,
+    program: "us-diversity-visa",
+    title: "Diversity Visa Program — États-Unis",
+    sourceUrl: DV_INSTRUCTIONS_URL,
+    additionalOfficialNoticeUrl: DV_ISSUANCE_NOTICE_URL,
+    checkedAt,
+    registration: futureDateMention
+      ? { status: "official_period_detected", officialText: futureDateMention }
+      : {
+          status: "date_not_published",
+          deadlineAt: null,
+          message:
+            "Aucune période future d’inscription n’a été détectée dans les instructions officielles consultées. Ne pas annoncer une date de novembre ni inviter à s’inscrire.",
+        },
+    editorialRule:
+      "Utiliser uniquement une publication de vigilance : suivre travel.state.gov et dvprogram.state.gov. L’inscription officielle est gratuite lorsqu’une période est publiée. Aucun accompagnement ne garantit sélection, visa ou admission.",
+    publicationAllowed: Boolean(futureDateMention),
+    warning: warning || null,
+  };
+}
+
 export async function handleEditorialMcp(request, env) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: headers() });
   if (request.method === "GET")
@@ -446,6 +513,14 @@ export async function handleEditorialMcp(request, env) {
             },
             `Profil éditorial : ${args.page_id}`,
           ),
+        });
+      }
+      if (message?.params?.name === "get_official_program_watch") {
+        const result = await officialProgramWatch(args);
+        return rpc({
+          jsonrpc: "2.0",
+          id,
+          result: textResult(result, `Veille officielle : ${result.title}`),
         });
       }
       if (message?.params?.name === "save_publication_draft") {

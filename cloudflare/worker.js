@@ -36,6 +36,9 @@ const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 const USERS_PREFIX = "system/users/";
 const SESSIONS_PREFIX = "system/sessions/";
 const AUDIT_PREFIX = "system/audit/";
+const PUBLICATION_IMPORT_TOKEN_PREFIX = "system/publication-import-tokens/";
+const PUBLICATION_IMPORT_PREFIX = "publications/imports/";
+const PUBLICATION_IMPORT_TOKEN_TTL_MS = 15 * 60 * 1000;
 const AI_KEYS_OBJECT = "system/secrets/ai-keys.enc.json";
 const AI_PROVIDERS = ["gemini", "mistral", "groq", "workers_ai", "openrouter"];
 const KEYED_AI_PROVIDERS = ["gemini", "mistral", "groq", "openrouter"];
@@ -452,6 +455,73 @@ async function writeAudit(env, request, event, username, outcome = "success", de
       },
     },
   );
+}
+
+async function publicationImportTokenDigest(token) {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(token));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function createPublicationImportToken(request, env, actor, origin, ctx) {
+  const matrix = normalizeAccessMatrix(actor.accessMatrix, actor.role, actor.workflowManager === true);
+  if (!hasAccess(matrix, "publications", "write"))
+    return json({ error: "Droit de création de brouillons Publications requis." }, 403, origin);
+  let payload;
+  try {
+    payload = (await readJson(request, MAX_ACCOUNT_BYTES)).value;
+  } catch {
+    return json({ error: "Requête de réception invalide." }, 400, origin);
+  }
+  const pageId = typeof payload?.pageId === "string" ? payload.pageId.trim() : "";
+  if (!new Set(["cv-pro-algeria", "emplois-immigration-tunis", "bissane-career"]).has(pageId))
+    return json({ error: "Page Publications invalide." }, 400, origin);
+  const token = `zgrpub_${randomBase64Url(24)}`;
+  const expiresAt = new Date(Date.now() + PUBLICATION_IMPORT_TOKEN_TTL_MS).toISOString();
+  await env.CLIENTS_BUCKET.put(
+    `${PUBLICATION_IMPORT_TOKEN_PREFIX}${await publicationImportTokenDigest(token)}.json`,
+    JSON.stringify({ pageId, createdBy: actor.username, createdAt: new Date().toISOString(), expiresAt }),
+    {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: { pageId, createdBy: actor.username, expiresAt },
+    },
+  );
+  ctx.waitUntil(
+    writeAudit(env, request, "publication_import_token_created", actor.username, "success", { pageId }),
+  );
+  return json(
+    {
+      ok: true,
+      token,
+      pageId,
+      expiresAt,
+      instructions:
+        "Copiez ce code une seule fois dans votre demande ChatGPT. Il peut créer un brouillon ZGR mais ne peut ni publier sur Facebook ni accéder aux clients.",
+    },
+    201,
+    origin,
+  );
+}
+
+async function listImportedPublicationDrafts(env, actor, origin, searchParams) {
+  const matrix = normalizeAccessMatrix(actor.accessMatrix, actor.role, actor.workflowManager === true);
+  if (!hasAccess(matrix, "publications", "read"))
+    return json({ error: "Droit de lecture Publications requis." }, 403, origin);
+  const pageId = String(searchParams.get("page_id") || "").trim();
+  const allowedPages = new Set(["cv-pro-algeria", "emplois-immigration-tunis", "bissane-career"]);
+  if (!allowedPages.has(pageId)) return json({ error: "Page Publications invalide." }, 400, origin);
+  const records = [];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({ prefix: PUBLICATION_IMPORT_PREFIX, cursor, limit: 500 });
+    const matches = page.objects.filter((item) => item.customMetadata?.pageId === pageId);
+    const values = await Promise.all(matches.map((item) => readR2Json(env, item.key)));
+    values.forEach((value) => {
+      if (value?.pageId === pageId && value?.status === "pending_review") records.push(value);
+    });
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  records.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+  return json({ ok: true, drafts: records.slice(0, 50) }, 200, origin);
 }
 
 async function issueSession(env, user, sessionId) {
@@ -4889,6 +4959,10 @@ async function route(request, env, ctx) {
   const actor = await authenticatedUser(request, env, ctx);
   if (!actor) return json({ error: "Session expirée ou accès non autorisé." }, 401, origin);
   const permissions = rolePermissions(actor.role, actor.workflowManager === true, actor.accessMatrix);
+  if (url.pathname === "/api/publications/import-token" && request.method === "POST")
+    return createPublicationImportToken(request, env, actor, origin, ctx);
+  if (url.pathname === "/api/publications/imports" && request.method === "GET")
+    return listImportedPublicationDrafts(env, actor, origin, url.searchParams);
   if (url.pathname === "/api/auth/session" && request.method === "GET")
     return json({ ok: true, user: publicUser(actor) }, 200, origin);
   if (url.pathname === "/api/account/sessions" && request.method === "GET")

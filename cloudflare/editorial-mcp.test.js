@@ -15,7 +15,7 @@ async function call(method, params = {}, id = 1) {
   return response.json();
 }
 
-test("le MCP éditorial expose uniquement les outils de fondation en lecture seule", async () => {
+test("le MCP éditorial expose les sources en lecture et une réception de brouillon explicitement sécurisée", async () => {
   const initialized = await call("initialize");
   assert.equal(initialized.result.serverInfo.name, "zgr-editorial");
   assert.match(initialized.result.instructions, /arabe algérien/i);
@@ -28,8 +28,11 @@ test("le MCP éditorial expose uniquement les outils de fondation en lecture seu
     "list_verified_opportunities",
     "get_opportunity_bundle",
     "get_editorial_profile",
+    "save_publication_draft",
   ]);
-  assert.ok(list.result.tools.every((tool) => tool.annotations.readOnlyHint === true));
+  assert.ok(list.result.tools.slice(0, 3).every((tool) => tool.annotations.readOnlyHint === true));
+  assert.equal(list.result.tools[3].annotations.readOnlyHint, false);
+  assert.match(list.result.tools[3].description, /code de réception temporaire/i);
 });
 
 test("le profil éditorial tunisien retourne le dialecte et le format d’affiche", async () => {

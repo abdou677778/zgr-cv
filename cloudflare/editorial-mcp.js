@@ -8,6 +8,8 @@ import {
 
 const MARKET_COUNTRIES = { TN: "Tunisie", DZ: "Algérie" };
 const MAX_LIMIT = 24;
+const PUBLICATION_IMPORT_TOKEN_PREFIX = "system/publication-import-tokens/";
+const PUBLICATION_IMPORT_PREFIX = "publications/imports/";
 
 const EDITORIAL_PROFILES = {
   "cv-pro-algeria": {
@@ -85,7 +87,154 @@ const MCP_TOOLS = [
     },
     annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
   },
+  {
+    name: "save_publication_draft",
+    title: "Transmettre un brouillon finalisé à ZGR",
+    description:
+      "Enregistre un seul brouillon dans Publications ZGR après validation explicite de l’utilisateur au moyen d’un code de réception temporaire créé dans ZGR. Le brouillon reste à valider : cet outil ne publie jamais sur Facebook. Les images générées par ChatGPT ne peuvent pas être transférées automatiquement ; le résultat indique clairement qu’elles doivent être ajoutées manuellement dans ZGR.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        page_id: { type: "string", enum: Object.keys(EDITORIAL_PROFILES) },
+        import_token: {
+          type: "string",
+          description: "Code temporaire à usage unique créé par l’utilisateur dans Publications ZGR.",
+        },
+        publication: {
+          type: "object",
+          description:
+            "Brouillon final : titre, texte, exactement 5 commentaires, source officielle, date contrôlée et prompt image. Ne jamais inclure de données client ou de CV.",
+          properties: {
+            headline: { type: "string" },
+            body: { type: "string" },
+            comments: { type: "array", items: { type: "string" }, minItems: 5, maxItems: 5 },
+            objective: { type: "string", enum: ["information", "deadline", "service", "engagement"] },
+            source_label: { type: "string" },
+            source_url: { type: "string" },
+            application_url: { type: "string" },
+            deadline_at: { type: ["string", "null"] },
+            checked_at: { type: "string" },
+            highlighted_terms: { type: "array", items: { type: "string" }, maxItems: 8 },
+            image_prompt: { type: "string" },
+          },
+          required: [
+            "headline",
+            "body",
+            "comments",
+            "objective",
+            "source_label",
+            "source_url",
+            "checked_at",
+            "image_prompt",
+          ],
+          additionalProperties: false,
+        },
+      },
+      required: ["page_id", "import_token", "publication"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
+  },
 ];
+
+const encoder = new TextEncoder();
+
+function cleanText(value, maximum) {
+  return typeof value === "string" ? value.trim().slice(0, maximum) : "";
+}
+
+function validHttpsUrl(value, optional = false) {
+  if (!value && optional) return "";
+  try {
+    const parsed = new URL(String(value));
+    return parsed.protocol === "https:" ? parsed.href : "";
+  } catch {
+    return "";
+  }
+}
+
+async function tokenDigest(value) {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeIncomingPublication(pageId, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Le brouillon final est absent ou invalide.");
+  const comments = Array.isArray(value.comments)
+    ? value.comments.map((item) => cleanText(item, 1_200)).filter(Boolean)
+    : [];
+  if (comments.length !== 5) throw new Error("Le brouillon doit contenir exactement 5 commentaires utiles.");
+  const headline = cleanText(value.headline, 500);
+  const body = cleanText(value.body, 12_000);
+  const sourceUrl = validHttpsUrl(value.source_url);
+  const applicationUrl = validHttpsUrl(value.application_url, true);
+  const checkedAt = cleanText(value.checked_at, 64);
+  const imagePrompt = cleanText(value.image_prompt, 8_000);
+  if (!headline || !body || !sourceUrl || !checkedAt || !imagePrompt)
+    throw new Error("Titre, texte, source HTTPS, date de contrôle et prompt image sont obligatoires.");
+  const deadlineAt = value.deadline_at == null || value.deadline_at === "" ? null : cleanText(value.deadline_at, 64);
+  if (deadlineAt && Number.isNaN(Date.parse(deadlineAt)))
+    throw new Error("La date limite doit être ISO ou doit être absente lorsqu’elle n’est pas publiée.");
+  const objective = ["information", "deadline", "service", "engagement"].includes(value.objective)
+    ? value.objective
+    : "information";
+  return {
+    id: crypto.randomUUID(),
+    pageId,
+    createdAt: new Date().toISOString(),
+    status: "pending_review",
+    imageStatus: "manual_upload_required",
+    headline,
+    body,
+    comments,
+    objective,
+    sourceLabel: cleanText(value.source_label, 500) || "Source officielle",
+    sourceUrl,
+    applicationUrl,
+    deadlineAt,
+    checkedAt,
+    highlightedTerms: Array.isArray(value.highlighted_terms)
+      ? value.highlighted_terms.map((item) => cleanText(item, 120)).filter(Boolean).slice(0, 8)
+      : [],
+    imagePrompt,
+  };
+}
+
+async function saveDraft(env, args) {
+  const pageId = cleanText(args.page_id, 100);
+  if (!EDITORIAL_PROFILES[pageId]) throw new Error("Page éditoriale inconnue.");
+  const token = cleanText(args.import_token, 300);
+  if (!token.startsWith("zgrpub_") || !env.CLIENTS_BUCKET)
+    throw new Error("Code de réception invalide.");
+  const tokenKey = `${PUBLICATION_IMPORT_TOKEN_PREFIX}${await tokenDigest(token)}.json`;
+  const grant = await env.CLIENTS_BUCKET.get(tokenKey);
+  if (!grant) throw new Error("Ce code de réception est inconnu, expiré ou déjà utilisé.");
+  const grantValue = await grant.json().catch(() => null);
+  if (
+    !grantValue ||
+    grantValue.pageId !== pageId ||
+    !grantValue.expiresAt ||
+    Date.parse(grantValue.expiresAt) <= Date.now()
+  ) {
+    await env.CLIENTS_BUCKET.delete(tokenKey);
+    throw new Error("Ce code de réception a expiré ou ne correspond pas à cette page.");
+  }
+  const draft = normalizeIncomingPublication(pageId, args.publication);
+  await env.CLIENTS_BUCKET.put(`${PUBLICATION_IMPORT_PREFIX}${draft.id}.json`, JSON.stringify(draft), {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: { pageId, status: draft.status, createdAt: draft.createdAt, source: "chatgpt-mcp" },
+  });
+  await env.CLIENTS_BUCKET.delete(tokenKey);
+  return {
+    ok: true,
+    draftId: draft.id,
+    status: draft.status,
+    imageStatus: draft.imageStatus,
+    message:
+      "Brouillon enregistré dans Publications ZGR. Ajoutez maintenant manuellement l’image générée dans ZGR, puis validez le brouillon avant toute publication Facebook.",
+  };
+}
 
 function headers() {
   return {
@@ -260,7 +409,7 @@ export async function handleEditorialMcp(request, env) {
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "zgr-editorial", version: "1.0.0" },
         instructions:
-          "Protocole linguistique ZGR : répondre par défaut en arabe algérien clair, professionnel et accessible. Pour toute demande liée à une publication, appeler d’abord get_editorial_profile avec une page explicitement choisie : cv-pro-algeria impose l’arabe algérien ; emplois-immigration-tunis et bissane-career imposent exclusivement l’arabe tunisien adapté à leur style. Ne jamais déduire une page par défaut ni mélanger les dialectes. Utiliser exclusivement les faits et liens retournés. Ne jamais rédiger une publication finale sans page, offre identifiée et source officielle. Ne jamais inventer une offre, date, condition, lien, quota, visa ou recrutement. Une date ne peut être affichée que si deadline.status vaut confirmed. Ne pas prétendre avoir généré une image, transféré un fichier ou enregistré un brouillon sans outil dédié et résultat visible. Les JSON clients et CV ZGR restent multilingues et intouchables : ne pas traduire, renommer ou modifier leurs clés, valeurs, structure ou langues. Ne publier sans validation humaine. Les outils de cette version sont strictement en lecture seule.",
+          "Protocole linguistique ZGR : répondre par défaut en arabe algérien clair, professionnel et accessible. Pour toute demande liée à une publication, appeler d’abord get_editorial_profile avec une page explicitement choisie : cv-pro-algeria impose l’arabe algérien ; emplois-immigration-tunis et bissane-career imposent exclusivement l’arabe tunisien adapté à leur style. Ne jamais déduire une page par défaut ni mélanger les dialectes. Utiliser exclusivement les faits et liens retournés. Ne jamais rédiger une publication finale sans page, offre identifiée et source officielle. Ne jamais inventer une offre, date, condition, lien, quota, visa ou recrutement. Une date ne peut être affichée que si deadline.status vaut confirmed. Les JSON clients et CV ZGR restent multilingues et intouchables : ne pas traduire, renommer ou modifier leurs clés, valeurs, structure ou langues. Ne publier sur Facebook sous aucun prétexte. Après demande explicite de l’utilisateur et seulement s’il fournit un code de réception temporaire ZGR, appeler save_publication_draft pour transmettre un brouillon à valider. Ne jamais prétendre que l’image GPT a été transférée : elle doit être ajoutée manuellement dans ZGR après la création du brouillon.",
       },
     });
   if (message?.method === "tools/list")
@@ -297,6 +446,14 @@ export async function handleEditorialMcp(request, env) {
             },
             `Profil éditorial : ${args.page_id}`,
           ),
+        });
+      }
+      if (message?.params?.name === "save_publication_draft") {
+        const result = await saveDraft(env, args);
+        return rpc({
+          jsonrpc: "2.0",
+          id,
+          result: textResult(result, result.message),
         });
       }
       return rpcError(id, -32602, `Outil inconnu: ${String(message?.params?.name || "")}`);

@@ -26,6 +26,7 @@ import { FullPageWorkspace } from "@/components/full-page-workspace";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { authenticatedFetch } from "@/lib/auth-client";
 import type { AiSettings } from "@/lib/ai-types";
 import {
   PUBLICATION_PAGES,
@@ -50,6 +51,25 @@ const IMAGE_STORE = "assets";
 const MAX_PUBLICATION_IMAGE_BYTES = 8 * 1024 * 1024;
 
 type GeneratorMode = "zgr_local" | "project_ai" | "codex_local";
+
+type ImportedPublicationDraft = {
+  id: string;
+  pageId: PublicationPageId;
+  createdAt: string;
+  status: "pending_review";
+  imageStatus: "manual_upload_required";
+  headline: string;
+  body: string;
+  comments: string[];
+  objective: PublicationDraft["objective"];
+  sourceLabel: string;
+  sourceUrl: string;
+  applicationUrl: string;
+  deadlineAt: string | null;
+  checkedAt: string;
+  highlightedTerms: string[];
+  imagePrompt: string;
+};
 
 function openPublicationImageDb() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -425,6 +445,9 @@ export function PublicationsWorkspace({
     readStoredBatches(),
   );
   const [codexJson, setCodexJson] = useState("");
+  const [importToken, setImportToken] = useState<{ token: string; expiresAt: string } | null>(null);
+  const [importedDrafts, setImportedDrafts] = useState<ImportedPublicationDraft[]>([]);
+  const [loadingImports, setLoadingImports] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState("");
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
@@ -436,6 +459,26 @@ export function PublicationsWorkspace({
     [pageId],
   );
   const currentBatch = batches[page.id];
+
+  const refreshImportedDrafts = useCallback(async () => {
+    setLoadingImports(true);
+    try {
+      const response = await authenticatedFetch(`/api/publications/imports?page_id=${encodeURIComponent(page.id)}`);
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        drafts?: ImportedPublicationDraft[];
+      };
+      if (!response.ok) throw new Error(payload.error || "Réception des brouillons impossible.");
+      setImportedDrafts(Array.isArray(payload.drafts) ? payload.drafts : []);
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Réception des brouillons impossible.",
+      });
+    } finally {
+      setLoadingImports(false);
+    }
+  }, [page.id]);
 
   useEffect(() => {
     let disposed = false;
@@ -513,9 +556,39 @@ export function PublicationsWorkspace({
     void refreshEvidence();
   }, [open, page.id, refreshEvidence]);
 
+  useEffect(() => {
+    if (open) void refreshImportedDrafts();
+  }, [open, refreshImportedDrafts]);
+
   const markCopied = (id: string) => {
     setCopied(id);
     window.setTimeout(() => setCopied((current) => (current === id ? "" : current)), 1_500);
+  };
+
+  const createImportToken = async () => {
+    try {
+      const response = await authenticatedFetch("/api/publications/import-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId: page.id }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        token?: string;
+        expiresAt?: string;
+      };
+      if (!response.ok || !payload.token || !payload.expiresAt)
+        throw new Error(payload.error || "Code de réception indisponible.");
+      setImportToken({ token: payload.token, expiresAt: payload.expiresAt });
+      await copyText(payload.token);
+      markCopied("import-token");
+      setMessage({
+        ok: true,
+        text: "Code de réception copié : collez-le dans votre demande ChatGPT finale. Il expire dans 15 minutes et ne peut créer qu’un brouillon à valider.",
+      });
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "Création du code impossible." });
+    }
   };
 
   const importPublicationImage = async (post: PublicationDraft, file: File | null) => {
@@ -914,6 +987,73 @@ export function PublicationsWorkspace({
               {message.text}
             </div>
           )}
+
+          <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-black text-violet-950">Réception sécurisée depuis ChatGPT</h3>
+                <p className="mt-1 text-sm leading-6 text-violet-900">
+                  Le code temporaire transmet un brouillon, ses 5 commentaires, ses sources et son prompt image.
+                  Il ne peut ni publier sur Facebook ni accéder aux données clients. L’image GPT reste à importer
+                  manuellement après réception.
+                </p>
+                {importToken && (
+                  <p className="mt-2 font-mono text-xs font-bold text-violet-800">
+                    Code copié · expire {formattedDate(importToken.expiresAt)}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button variant="outline" onClick={() => void refreshImportedDrafts()} disabled={loadingImports}>
+                  {loadingImports ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Actualiser
+                </Button>
+                <Button className="bg-violet-700 hover:bg-violet-800" onClick={() => void createImportToken()}>
+                  {copied === "import-token" ? <Check className="mr-2 h-4 w-4" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                  Créer un code de réception
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          {importedDrafts.map((draft) => (
+            <article key={draft.id} className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+              <header className="flex items-start gap-3 border-b border-violet-100 bg-violet-50 p-4">
+                <PageLogo page={page} />
+                <div className="min-w-0 flex-1">
+                  <div className="font-black text-slate-950">Brouillon reçu de ChatGPT</div>
+                  <p className="mt-1 text-xs text-violet-800">
+                    À valider · image GPT à joindre manuellement · reçu {formattedDate(draft.createdAt)}
+                  </p>
+                </div>
+                <BadgeCheck className="h-5 w-5 text-violet-600" />
+              </header>
+              <div className="p-4 sm:p-5" dir="rtl" style={{ fontFamily: "Tahoma, Arial, sans-serif" }}>
+                <h3 className="text-right text-lg font-black leading-8 text-slate-950">{draft.headline}</h3>
+                <p className="mt-2 whitespace-pre-wrap text-right text-[15px] font-medium leading-8 text-slate-800">{draft.body}</p>
+                <div className="mt-4 rounded-xl border border-dashed border-violet-300 bg-violet-50 p-3 text-right text-sm text-violet-950">
+                  <div className="font-black">Image GPT requise</div>
+                  <p className="mt-1 leading-6">Téléchargez l’image depuis ChatGPT puis associez-la au brouillon dans ZGR. Aucun fichier image n’est prétendu reçu tant qu’il n’a pas été importé.</p>
+                </div>
+              </div>
+              <div className="border-t border-slate-100 p-3 sm:px-5">
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => void copyText(`${draft.headline}\n\n${draft.body}\n\n${draft.sourceUrl}`)}>
+                    <Copy className="mr-2 h-4 w-4" /> Copier le texte
+                  </Button>
+                  <Button variant="outline" onClick={() => void copyText(draft.comments.map((comment, index) => `${index + 1}. ${comment}`).join("\n\n"))}>
+                    <MessageCircleMore className="mr-2 h-4 w-4" /> Copier les commentaires
+                  </Button>
+                  <Button variant="outline" onClick={() => void copyText(draft.imagePrompt)}>
+                    <ImageIcon className="mr-2 h-4 w-4" /> Copier le prompt image
+                  </Button>
+                  <a href={draft.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 text-sm font-semibold text-blue-700 hover:underline">
+                    Source officielle <ExternalLink className="ml-1.5 h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            </article>
+          ))}
 
           {currentBatch?.posts.length ? (
             <>

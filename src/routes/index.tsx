@@ -641,6 +641,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     objective: true,
   });
+  const [newCustomSectionTitle, setNewCustomSectionTitle] = useState("");
   const [editingExperienceId, setEditingExperienceId] = useState<string | null>(null);
   const [editingFormationId, setEditingFormationId] = useState<string | null>(null);
   const [editingEducationId, setEditingEducationId] = useState<string | null>(null);
@@ -1403,7 +1404,83 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     [],
   );
 
-  const set = <K extends keyof CV>(k: K, v: CV[K]) => setCv((c) => ({ ...c, [k]: v }));
+  const set = <K extends keyof CV>(k: K, v: CV[K]) => {
+    // Software names are product names, not translated prose. Keeping the
+    // same list in each language prevents a complete multilingual pack from
+    // silently omitting software entered while another language was selected.
+    if (k === "logiciels") {
+      const logiciels = (v as CV["logiciels"]).map((item) => ({ ...item }));
+      setCvByLanguage(
+        (current) =>
+          Object.fromEntries(
+            DOCUMENT_LANGUAGES.map((item) => [
+              item.id,
+              { ...current[item.id], logiciels: logiciels.map((software) => ({ ...software })) },
+            ]),
+          ) as Record<DocumentLanguage, CV>,
+      );
+      return;
+    }
+    setCv((c) => ({ ...c, [k]: v }));
+  };
+  const addCustomSection = () => {
+    const title = newCustomSectionTitle.trim().slice(0, 120);
+    if (!title) return;
+    const id = newId();
+    setCvByLanguage(
+      (current) =>
+        Object.fromEntries(
+          DOCUMENT_LANGUAGES.map((item) => [
+            item.id,
+            {
+              ...current[item.id],
+              custom_sections: [
+                ...(current[item.id].custom_sections || []),
+                { id, title, items: [] },
+              ],
+            },
+          ]),
+        ) as Record<DocumentLanguage, CV>,
+    );
+    setNewCustomSectionTitle("");
+    setSectionVisible(`custom.${id}`, true);
+    setSectionOpen(`custom.${id}`, true);
+  };
+  const updateCustomSection = (
+    id: string,
+    update: (
+      section: NonNullable<CV["custom_sections"]>[number],
+    ) => NonNullable<CV["custom_sections"]>[number],
+  ) =>
+    setCv((current) => ({
+      ...current,
+      custom_sections: (current.custom_sections || []).map((section) =>
+        section.id === id ? update(section) : section,
+      ),
+    }));
+  const removeCustomSection = (id: string) => {
+    setCvByLanguage(
+      (current) =>
+        Object.fromEntries(
+          DOCUMENT_LANGUAGES.map((item) => [
+            item.id,
+            {
+              ...current[item.id],
+              custom_sections: (current[item.id].custom_sections || []).filter(
+                (section) => section.id !== id,
+              ),
+            },
+          ]),
+        ) as Record<DocumentLanguage, CV>,
+    );
+    setHiddenElements((current) => {
+      const next = { ...current };
+      Object.keys(next).forEach((key) => {
+        if (key === `section.custom.${id}` || key.startsWith(`custom.${id}.`)) delete next[key];
+      });
+      return next;
+    });
+  };
   const setObjectiveText = (value: string, html = "") =>
     setCv((current) => ({
       ...current,
@@ -2363,6 +2440,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       visible: sectionIsVisible("skills"),
     },
     {
+      id: "software",
+      title: form.software,
+      count: cv.logiciels.filter((item) => item.label.trim()).length,
+      visible: sectionIsVisible("software"),
+    },
+    {
       id: "languages",
       title: form.languages,
       count: Object.values(cv.langues).filter((value) => value.trim()).length,
@@ -2404,6 +2487,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       count: cv.plan_developpement.length,
       visible: sectionIsVisible("development"),
     },
+    ...(cv.custom_sections || []).map((section) => ({
+      id: `custom.${section.id}`,
+      title: section.title.trim() || "Section personnalisée",
+      count: section.items.filter((item) => item.trim()).length,
+      visible: sectionIsVisible(`custom.${section.id}`),
+    })),
   ];
   const previewSectionIds = previewSections.map((section) => section.id);
   const navigateToEditorSection = (sectionId: string) => {
@@ -4337,6 +4426,104 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             </p>
           </CvSectionPanel>
 
+          {(cv.custom_sections || []).map((section) => {
+            const sectionId = `custom.${section.id}`;
+            return (
+              <CvSectionPanel
+                key={section.id}
+                id={sectionId}
+                fallbackTitle={section.title || "Section personnalisée"}
+                appearance={appearanceFor(sectionId)}
+                onAppearanceChange={(appearance) => setAppearanceFor(sectionId, appearance)}
+                open={sectionIsOpen(sectionId)}
+                onOpenChange={(open) => setSectionOpen(sectionId, open)}
+                visible={sectionIsVisible(sectionId)}
+                onVisibleChange={(visible) => setSectionVisible(sectionId, visible)}
+                count={section.items.filter((item) => item.trim()).length}
+              >
+                <div className="space-y-3">
+                  <Field label="Titre de la section" {...visibilityProps(`${sectionId}.title`)}>
+                    <Input
+                      value={section.title}
+                      placeholder="Volontariat"
+                      onChange={(event) =>
+                        updateCustomSection(section.id, (current) => ({
+                          ...current,
+                          title: event.target.value.slice(0, 120),
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Informations">
+                    <Textarea
+                      rows={6}
+                      value={section.items.join("\n")}
+                      placeholder={
+                        "Association Exemple — 2025\nOrganisation d’événements\nAccompagnement des bénéficiaires"
+                      }
+                      onChange={(event) =>
+                        updateCustomSection(section.id, (current) => ({
+                          ...current,
+                          items: richListItemsFromText(event.target.value, 40, 300),
+                        }))
+                      }
+                    />
+                  </Field>
+                  {section.items.length > 0 && (
+                    <div className="flex flex-wrap gap-2 rounded-xl bg-slate-50 p-2">
+                      {section.items.map((item, index) => (
+                        <VisibilityButton
+                          key={`${section.id}-${index}`}
+                          label={`Puce ${index + 1} : ${item.slice(0, 48)}`}
+                          visible={isVisible(`${sectionId}.${index}`)}
+                          onToggle={() => toggleVisibility(`${sectionId}.${index}`)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] leading-relaxed text-slate-400">
+                    Une ligne correspond à une puce dans tous les modèles PDF. Chaque élément peut
+                    aussi être masqué sans être supprimé.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                    onClick={() => removeCustomSection(section.id)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Supprimer cette section
+                  </Button>
+                </div>
+              </CvSectionPanel>
+            );
+          })}
+
+          <section className="rounded-2xl border border-dashed border-primary/35 bg-primary/[0.03] p-4">
+            <h3 className="text-sm font-bold text-slate-800">Ajouter une section personnalisée</h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              Exemple : Volontariat, Projets, Publications, Réalisations ou Activités associatives.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={newCustomSectionTitle}
+                placeholder="Volontariat"
+                maxLength={120}
+                onChange={(event) => setNewCustomSectionTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addCustomSection();
+                  }
+                }}
+              />
+              <Button type="button" onClick={addCustomSection} className="shrink-0">
+                <Plus className="mr-2 h-4 w-4" />
+                Ajouter la section
+              </Button>
+            </div>
+          </section>
+
           <HiddenSectionTray
             sections={[
               ["personal", ui.personal],
@@ -4345,6 +4532,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               ["training", form.training],
               ["education", form.education],
               ["skills", form.skills],
+              ["software", form.software],
               ["languages", form.languages],
               ["volunteering", form.volunteering],
               ["certifications", form.certifications],
@@ -4352,6 +4540,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               ["references", form.references],
               ["letter", ui.letterTitle],
               ["development", ui.planTitle],
+              ...(cv.custom_sections || []).map(
+                (section) =>
+                  [`custom.${section.id}`, section.title || "Section personnalisée"] as const,
+              ),
             ]
               .filter(([id]) => !sectionIsVisible(id))
               .map(([id, title]) => ({

@@ -80,6 +80,63 @@ const fontFilePromises = new Map<string, Promise<void>>();
 export { CV_TEMPLATES };
 export type { CvTemplateId };
 
+function appendSupplementalSections(
+  document: TDocumentDefinitions,
+  cv: CV,
+  language: DocumentLanguage,
+  templateId: CvTemplateId,
+): TDocumentDefinitions {
+  const customSections = (cv.custom_sections || [])
+    .map((section) => ({
+      title: section.title.trim(),
+      items: section.items.map((item) => item.trim()).filter(Boolean),
+    }))
+    .filter((section) => section.title && section.items.length);
+  // CV PRO already has its own software panel. The other PDF models did not
+  // render this editor field at all, so append it as a portable ATS list.
+  const softwareTitles: Record<DocumentLanguage, string> = {
+    fr: "LOGICIELS",
+    en: "SOFTWARE",
+    es: "PROGRAMAS",
+    de: "SOFTWARE",
+    it: "SOFTWARE",
+    zh: "软件",
+    ar: "البرامج",
+  };
+  const softwareItems = cv.logiciels.map((item) => item.label.trim()).filter(Boolean);
+  const sections = [
+    ...(templateId !== "cv-pro" && softwareItems.length
+      ? [{ title: softwareTitles[language], items: softwareItems }]
+      : []),
+    ...customSections,
+  ];
+  if (!sections.length) return document;
+  const rtl = language === "ar";
+  const additions: Content[] = sections.flatMap((section) => [
+    {
+      text: rtl ? toPdfRtlVisualText(section.title, 70) : section.title,
+      bold: true,
+      fontSize: 12,
+      color: ACCENT,
+      alignment: rtl ? "right" : "left",
+      margin: [0, 12, 0, 4],
+    },
+    {
+      ul: section.items.map((item) => (rtl ? toPdfRtlVisualText(item, 82) : item)),
+      fontSize: 10,
+      lineHeight: 1.25,
+      alignment: rtl ? "right" : "left",
+      margin: [0, 0, 0, 4],
+    },
+  ]);
+  const content = Array.isArray(document.content)
+    ? document.content
+    : document.content
+      ? [document.content]
+      : [];
+  return { ...document, content: [...content, ...additions] };
+}
+
 const FONT_FILES = {
   "CalibriLatin-Regular.ttf": calibriRegularUrl,
   "CalibriLatin-Italic.ttf": calibriItalicUrl,
@@ -4719,10 +4776,16 @@ export async function createCvPdfBlob(
                 : normalizedTemplateId === "canadian-v2"
                   ? buildCvPdfV2(pdfCv, language)
                   : buildCvPdfV1(pdfCv, language);
+  const documentWithSupplementalSections = appendSupplementalSections(
+    document,
+    pdfCv,
+    language,
+    normalizedTemplateId,
+  );
   return pdfMake
     .createPdf(
       applyTemplateDesigner(
-        applyPdfTheme(document, normalizedTemplateId, accentColor),
+        applyPdfTheme(documentWithSupplementalSections, normalizedTemplateId, accentColor),
         effectiveDesign,
         normalizedTemplateId,
       ),

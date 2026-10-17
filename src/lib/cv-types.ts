@@ -185,6 +185,13 @@ export type CanadianNocSelection = {
   sourceUrl: string;
 };
 
+/** A user-defined bullet section appended to every PDF CV template. */
+export type CustomCvSection = {
+  id: string;
+  title: string;
+  items: string[];
+};
+
 export type CV = {
   photo?: ProfilePhoto;
   nom_complet: string;
@@ -206,6 +213,7 @@ export type CV = {
   competences: string[];
   competences_format?: ObjectiveFormat;
   logiciels: SoftwareSkill[];
+  custom_sections: CustomCvSection[];
   langues: Langues;
   experiences: Experience[];
   formations: Formation[];
@@ -243,6 +251,7 @@ export const emptyCV: CV = {
   competences: ["", "", "", "", "", "", ""],
   competences_format: { html: "", alignment: "", fontSize: 15, color: "" },
   logiciels: [],
+  custom_sections: [],
   langues: { fr: "", en: "", ar: "", de: "", es: "", kab: "" },
   experiences: [],
   formations: [],

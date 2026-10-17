@@ -249,6 +249,16 @@ function directCv(source: JsonRecord): CV {
   const formations = Array.isArray(source.formations) ? source.formations.map(record) : [];
   const educations = Array.isArray(source.educations) ? source.educations.map(record) : [];
   const lettre = record(source.lettre_motivation);
+  const customSections = Array.isArray(source.custom_sections)
+    ? source.custom_sections
+        .map(record)
+        .map((item) => ({
+          id: text(item.id) || newId(),
+          title: text(item.title).slice(0, 120),
+          items: stringList(item.items).slice(0, 40),
+        }))
+        .filter((item) => item.title || item.items.length)
+    : [];
 
   return {
     ...emptyCV,
@@ -272,6 +282,7 @@ function directCv(source: JsonRecord): CV {
     competences: stringList(source.competences),
     competences_format: normalizeObjectiveFormat(source.competences_format),
     logiciels: softwareList(source.logiciels ?? source.software),
+    custom_sections: customSections,
     langues: {
       fr: text(langues.fr),
       en: text(langues.en),

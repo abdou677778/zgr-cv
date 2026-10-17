@@ -159,6 +159,14 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
     logiciels: sectionVisible("software")
       ? cv.logiciels.filter((_, index) => visible(`software.${index}`))
       : [],
+    custom_sections: (cv.custom_sections || [])
+      .filter((section) => sectionVisible(`custom.${section.id}`))
+      .map((section) => ({
+        ...section,
+        title: visible(`custom.${section.id}.title`) ? section.title : "",
+        items: section.items.filter((_, index) => visible(`custom.${section.id}.${index}`)),
+      }))
+      .filter((section) => section.title.trim() && section.items.some((item) => item.trim())),
     langues,
     experiences,
     formations,

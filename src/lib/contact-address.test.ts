@@ -3,14 +3,14 @@ import test from "node:test";
 
 import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
 
-test("keeps only the useful CV address components from imported data", () => {
+test("keeps only the useful CV address components from imported data, postal code first", () => {
   assert.equal(
     formatImportedCvAddress("Cité 5 Juillet 62, bloc 66, n° 494, Annaba, 23000, Algérie", "", ""),
-    "Annaba, 23000, Algérie",
+    "23000, Annaba, Algérie",
   );
   assert.equal(
     formatImportedCvAddress("99 King Street, Toronto M5H 2N2", "Toronto", "Canada"),
-    "Toronto, M5H 2N2, Canada",
+    "M5H 2N2, Toronto, Canada",
   );
 });
 

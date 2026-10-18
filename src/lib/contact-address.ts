@@ -45,7 +45,7 @@ function isStreetDetail(value: string) {
   );
 }
 
-/** Returns `Wilaya/Province, Code postal, Pays` when those facts are known. */
+/** Returns `Code postal, Wilaya/Province, Pays` when those facts are known. */
 export function formatImportedCvAddress(
   address: string | undefined,
   region: string | undefined,
@@ -71,7 +71,7 @@ export function formatImportedCvAddress(
       .reverse()
       .find((part) => !isStreetDetail(part) && !countryIn(part) && !/^\d+[\d\s-]*$/.test(part)) ||
     "";
-  const concise = [city, postal, detectedCountry]
+  const concise = [postal, city, detectedCountry]
     .filter((part, index, all) => part && all.findIndex((candidate) => same(candidate, part)) === index)
     .join(", ");
 

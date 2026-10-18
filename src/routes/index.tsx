@@ -3720,7 +3720,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               >
                 <Input
                   value={cv.adresse}
-                  placeholder="Wilaya/Province, Code postal, Pays"
+                  placeholder="Code postal, Wilaya/Province, Pays"
                   onChange={(e) => set("adresse", e.target.value.slice(0, 160))}
                 />
               </Field>

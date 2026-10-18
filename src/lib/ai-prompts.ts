@@ -34,6 +34,12 @@ export function fieldAiPrompt(
   instruction: string,
   cv: CV,
 ) {
+  const normalizedLabel = label.toLocaleLowerCase("fr");
+  const formatRule = /téléphone|telephone|phone/.test(normalizedLabel)
+    ? "Règle de format impérative : retourner « (indicatif pays) numéro national », par exemple « (213) 772604280 ». Conserver tous les chiffres source et ne jamais inventer ou supprimer un chiffre."
+    : /adresse|address|dirección|indirizzo|anschrift|地址|العنوان/.test(normalizedLabel)
+      ? "Règle de format impérative : retourner uniquement « Wilaya/Province, Code postal, Pays » avec les éléments attestés. Exclure rue, cité, bloc, numéro, bâtiment et appartement ; ne jamais inventer un élément absent."
+      : "";
   const context = {
     nom_complet: cv.nom_complet,
     titre_poste: cv.titre_poste,
@@ -49,13 +55,13 @@ export function fieldAiPrompt(
       descriptions: descriptions.filter(Boolean),
     })),
   };
-  return `Langue de sortie : ${languageInfo(language).name} (${languageInfo(language).locale}).\nChamp : ${label}.\nValeur actuelle : ${JSON.stringify(currentValue)}.\nInstruction utilisateur : ${instruction || "Reformuler avec clarté, naturel et concision professionnelle."}\nContexte factuel autorisé : ${JSON.stringify(context)}\nRetourne uniquement {"value":"texte final"}.`;
+  return `Langue de sortie : ${languageInfo(language).name} (${languageInfo(language).locale}).\nChamp : ${label}.\nValeur actuelle : ${JSON.stringify(currentValue)}.\nInstruction utilisateur : ${instruction || "Reformuler avec clarté, naturel et concision professionnelle."}\n${formatRule}\nContexte factuel autorisé : ${JSON.stringify(context)}\nRetourne uniquement {"value":"texte final"}.`;
 }
 
-export const IMPORT_AI_SYSTEM = `Tu es un moteur strict de mapping de données de CV. Transforme le JSON source, même si ses clés ou sa hiérarchie sont inconnues, vers le schéma ZGR fourni. Utilise uniquement les faits présents. N'invente rien. Une chaîne absente vaut "" et une collection absente vaut []. Trie les expériences, formations et études de la plus récente à la plus ancienne. Conserve les noms propres, coordonnées, dates et nombres. Pour adresse, ne produis jamais rue, cité, bloc, numéro, bâtiment ou appartement : utilise strictement « Wilaya/Province, Code postal, Pays » avec les éléments réellement connus. Réponds exclusivement avec un objet JSON strict directement compatible, sans Markdown.`;
+export const IMPORT_AI_SYSTEM = `Tu es un moteur strict de mapping de données de CV. Transforme le JSON source, même si ses clés ou sa hiérarchie sont inconnues, vers le schéma ZGR fourni. Utilise uniquement les faits présents. N'invente rien. Une chaîne absente vaut "" et une collection absente vaut []. Trie les expériences, formations et études de la plus récente à la plus ancienne. Conserve les noms propres, coordonnées, dates et nombres. Pour adresse, ne produis jamais rue, cité, bloc, numéro, bâtiment ou appartement : utilise strictement « Wilaya/Province, Code postal, Pays » avec les éléments réellement connus. Pour telephone, utilise « (indicatif pays) numéro national », par exemple « (213) 772604280 », sans inventer ni supprimer de chiffre. Réponds exclusivement avec un objet JSON strict directement compatible, sans Markdown.`;
 
 export function importAiPrompt(language: DocumentLanguage, source: unknown) {
-  return `Langue du document produit : ${languageInfo(language).name}.\nJSON source :\n${JSON.stringify(source)}\n\nRègle impérative d’adresse : le champ adresse contient uniquement « Wilaya/Province, Code postal, Pays ». Exclure rue, cité, bloc, numéro, bâtiment et appartement. N’invente jamais un code postal ou un pays absent.\n\nSchéma exact obligatoire :\n${JSON.stringify(
+  return `Langue du document produit : ${languageInfo(language).name}.\nJSON source :\n${JSON.stringify(source)}\n\nRègle impérative d’adresse : le champ adresse contient uniquement « Wilaya/Province, Code postal, Pays ». Exclure rue, cité, bloc, numéro, bâtiment et appartement. N’invente jamais un code postal ou un pays absent.\nRègle impérative de téléphone : utiliser « (indicatif pays) numéro national », par exemple « (213) 772604280 ». Ne jamais inventer, supprimer ou modifier un chiffre.\n\nSchéma exact obligatoire :\n${JSON.stringify(
     {
       nom_complet: "",
       titre_poste: "",

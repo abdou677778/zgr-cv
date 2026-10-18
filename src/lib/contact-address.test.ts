@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatImportedCvAddress } from "./contact-address";
+import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
 
 test("keeps only the useful CV address components from imported data", () => {
   assert.equal(
@@ -20,4 +20,10 @@ test("uses verified structured components without inventing missing data", () =>
     "Annaba, Algérie",
   );
   assert.equal(formatImportedCvAddress("Cité 5 Juillet, bloc 66", "", ""), "Cité 5 Juillet, bloc 66");
+});
+
+test("formats automatic phone values with the verified country calling code", () => {
+  assert.equal(formatImportedCvPhone("0772604280", "Algérie"), "(213) 772604280");
+  assert.equal(formatImportedCvPhone("+1 514 555 0100", "Canada"), "(1) 5145550100");
+  assert.equal(formatImportedCvPhone("0772604280", ""), "0772604280");
 });

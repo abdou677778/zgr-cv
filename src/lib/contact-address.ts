@@ -13,6 +13,24 @@ const COUNTRY_NAMES = [
   "émirats arabes unis", "emirats arabes unis", "arabie saoudite", "saudi arabia",
 ];
 
+const COUNTRY_DIALING: Array<[string, string]> = [
+  ["213", "algérie|algerie|algeria|الجزائر|dz"],
+  ["216", "tunisie|tunis|tunesia|تونس|tn"],
+  ["1", "canada|united states|usa|us|ca"],
+  ["33", "france|fr"],
+  ["49", "allemagne|germany|deutschland|de"],
+  ["39", "italie|italy|italia|it"],
+  ["34", "espagne|spain|es"],
+  ["32", "belgique|belgium|be"],
+  ["212", "maroc|morocco|ma"],
+  ["971", "émirats|emirats|uae|ae"],
+  ["966", "arabie saoudite|saudi arabia|sa"],
+  ["44", "royaume-uni|united kingdom| uk|gb"],
+];
+const KNOWN_DIALING_CODES = COUNTRY_DIALING.map(([code]) => code).sort(
+  (left, right) => right.length - left.length,
+);
+
 const compact = (value: string) => value.replace(/\s+/g, " ").trim();
 const same = (left: string, right: string) => left.localeCompare(right, undefined, { sensitivity: "base" }) === 0;
 
@@ -60,4 +78,33 @@ export function formatImportedCvAddress(
   // Never throw away a source address when we cannot safely identify at least
   // one of its useful contact components.
   return concise || raw;
+}
+
+function dialingFromCountry(country: string) {
+  const normalized = ` ${country.toLocaleLowerCase("fr")} `;
+  return COUNTRY_DIALING.find(([, aliases]) => aliases.split("|").some((alias) => normalized.includes(alias)))?.[0] || "";
+}
+
+/**
+ * Formats a verified telephone number for CV display. No country prefix is
+ * guessed: unknown values are left untouched so a real number is never lost.
+ */
+export function formatImportedCvPhone(phone: string | undefined, country: string | undefined) {
+  const source = compact(phone || "");
+  if (!source) return "";
+  const digits = source.replace(/\D/g, "");
+  const international = /^\s*(?:\+|00|\()/.test(source);
+  const explicitDigits = source.replace(/^\s*(?:\+|00|\()\s*/, "").replace(/\D/g, "");
+  const detectedCode = international
+    ? KNOWN_DIALING_CODES.find((code) => explicitDigits.startsWith(code)) || ""
+    : "";
+  const code = detectedCode || dialingFromCountry(country || "");
+  if (!code || digits.length <= code.length) return source;
+
+  let national = digits;
+  if (detectedCode) national = explicitDigits.slice(detectedCode.length);
+  // A local number becomes international through the explicit country context.
+  if (!detectedCode && code !== "1" && national.startsWith("0")) national = national.slice(1);
+  if (!national || national.length < 5) return source;
+  return `(${code}) ${national}`;
 }

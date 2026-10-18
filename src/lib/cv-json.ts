@@ -12,7 +12,7 @@ import {
   type SoftwareIcon,
   type SoftwareSkill,
 } from "./cv-types";
-import { formatImportedCvAddress } from "./contact-address";
+import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { normalizeProfilePhoto } from "./profile-photo";
@@ -268,7 +268,7 @@ function directCv(source: JsonRecord): CV {
     nom_complet: text(source.nom_complet),
     titre_poste: text(source.titre_poste),
     cnp: canadianNoc(source.cnp ?? source.equivalence_cnp),
-    telephone: text(source.telephone),
+    telephone: formatImportedCvPhone(text(source.telephone), text(source.pays)),
     email: text(source.email),
     adresse: formatImportedCvAddress(
       text(source.adresse),
@@ -435,7 +435,10 @@ function structuredCv(root: JsonRecord, language: "fr" | "en"): CV {
     ...emptyCV,
     nom_complet: firstText(personal, french ? "Nom complet" : "Full name"),
     titre_poste: firstText(personal, french ? "Poste" : "Position"),
-    telephone: firstText(personal, french ? "Téléphone" : "Phone"),
+    telephone: formatImportedCvPhone(
+      firstText(personal, french ? "Téléphone" : "Phone"),
+      firstText(personal, french ? "Pays" : "Country"),
+    ),
     email: firstText(personal, "Email"),
     adresse: formatImportedCvAddress(
       firstText(personal, french ? "Adresse" : "Address"),

@@ -11,7 +11,7 @@ import type {
 import { type DocumentLanguage } from "./document-language";
 import { emptyCV, emptyEuropassProfile, newId } from "./cv-types";
 import { processProfilePhoto, profilePhotoDataUrlForPdf } from "./profile-photo";
-import { formatImportedCvAddress } from "./contact-address";
+import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
 
 const ISO_639_2: Record<string, string> = {
   fr: "fre",
@@ -218,7 +218,7 @@ function deterministicId(seed: string): string {
 function telephoneParts(phone: string, explicitCountryCode: string) {
   const explicit = explicitCountryCode.replace(/\D/g, "");
   const source = (phone || "").trim();
-  const detected = source.match(/^\s*\+(\d{1,3})/)?.[1] || "";
+  const detected = source.match(/^\s*(?:\+|00|\()\s*(\d{1,3})/)?.[1] || "";
   const countryDialing = explicit || detected;
   let dialNumber = source.replace(/\D/g, "");
   if (countryDialing && dialNumber.startsWith(countryDialing)) {
@@ -910,7 +910,7 @@ function parseCandidateEuropassXml(doc: Document): CV {
   return {
     ...emptyCV,
     nom_complet: [givenName, familyName].filter(Boolean).join(" "),
-    telephone: phone,
+    telephone: formatImportedCvPhone(phone, countryCode),
     email,
     adresse: formatImportedCvAddress(
       addressLines.join(", "),
@@ -1187,7 +1187,7 @@ export async function parseEuropassXml(xmlString: string): Promise<CV> {
     nom_complet: fullName,
     titre_poste: jobTitle,
     email,
-    telephone: phone,
+    telephone: formatImportedCvPhone(phone, country),
     adresse: formatImportedCvAddress(address, city, country),
     wilaya: city,
     pays: country,

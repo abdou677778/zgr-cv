@@ -172,7 +172,7 @@ import { activatePwaUpdate, promptPwaInstall, usePwaStatus } from "@/lib/pwa-cli
 import { reportSyncFailure } from "@/lib/observability";
 import { emptyOpportunityPlan, type OpportunityPlan } from "@/lib/profile-opportunities";
 import { RELOCATION_STATUS_MAX_CHARS } from "@/lib/relocation-status";
-import { formatImportedCvAddress } from "@/lib/contact-address";
+import { formatImportedCvAddress, formatImportedCvPhone } from "@/lib/contact-address";
 import { NOC_AI_SYSTEM, nocAiPrompt } from "@/lib/ai-prompts";
 
 const AiSettingsDialog = lazy(async () => {
@@ -1612,8 +1612,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       },
     }));
   };
-  const openAiField = (label: string, value: string, onApply: (next: string) => void) =>
-    setAiFieldRequest({ label, value, onApply });
+  const openAiField = (label: string, value: string, onApply: (next: string) => void) => {
+    const field = label.toLocaleLowerCase("fr");
+    const initialInstruction = /téléphone|telephone|phone/.test(field)
+      ? "Suivre strictement la structure « (indicatif pays) numéro national », par exemple « (213) 772604280 »."
+      : /adresse|address|dirección|indirizzo|anschrift|地址|العنوان/.test(field)
+        ? "Suivre la structure « Code postal, Province/Wilaya, Pays » avec les seules informations attestées."
+        : undefined;
+    setAiFieldRequest({ label, value, onApply, initialInstruction });
+  };
   const aiFieldProps = (label: string, value: string, onApply: (next: string) => void) => ({
     onAi: () => openAiField(label, value, onApply),
   });
@@ -3677,13 +3684,16 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 label={form.phone}
                 {...visibilityProps("personal.telephone")}
                 {...aiFieldProps(form.phone, cv.telephone, (value) =>
-                  set("telephone", value.slice(0, 40)),
+                  set("telephone", formatImportedCvPhone(value, cv.pays).slice(0, 40)),
                 )}
               >
                 <Input
                   value={cv.telephone}
-                  placeholder="+1 514 000 0000"
+                  placeholder="(213) 772604280"
                   onChange={(e) => set("telephone", e.target.value.slice(0, 40))}
+                  onBlur={(e) =>
+                    set("telephone", formatImportedCvPhone(e.target.value, cv.pays).slice(0, 40))
+                  }
                 />
               </Field>
               <Field

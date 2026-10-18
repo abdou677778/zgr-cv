@@ -226,6 +226,24 @@ export function resolveCvSectionOrder(
   return resolved;
 }
 
+/**
+ * An empty order means "use the native sequence of the selected template".
+ * Older drafts contained DEFAULT_CV_SECTION_ORDER even when nobody had moved
+ * a section; that value is deliberately treated as non-custom too.
+ */
+export function hasCustomCvSectionOrder(
+  order: string[] | undefined,
+  customSections: CustomCvSection[],
+) {
+  if (!order?.length) return false;
+  const nativeFallback = resolveCvSectionOrder(
+    Array.from(DEFAULT_CV_SECTION_ORDER),
+    customSections,
+  );
+  const normalized = resolveCvSectionOrder(order, customSections);
+  return normalized.some((id, index) => id !== nativeFallback[index]);
+}
+
 export type CV = {
   photo?: ProfilePhoto;
   nom_complet: string;
@@ -287,7 +305,8 @@ export const emptyCV: CV = {
   competences_format: { html: "", alignment: "", fontSize: 15, color: "" },
   logiciels: [],
   custom_sections: [],
-  section_order: [...DEFAULT_CV_SECTION_ORDER],
+  // Leave the choice to the PDF model until the user explicitly moves a section.
+  section_order: [],
   langues: { fr: "", en: "", ar: "", de: "", es: "", kab: "" },
   experiences: [],
   formations: [],

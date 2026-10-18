@@ -1,5 +1,6 @@
 import type { Content, TDocumentDefinitions } from "pdfmake/interfaces";
 import {
+  hasCustomCvSectionOrder,
   resolveCvSectionOrder,
   type CV,
   type Education,
@@ -1015,12 +1016,17 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefi
       ),
     );
 
-  const sectionOrder = resolveCvSectionOrder(cv.section_order, cv.custom_sections || []);
+  const sectionOrder = hasCustomCvSectionOrder(cv.section_order, cv.custom_sections || [])
+    ? resolveCvSectionOrder(cv.section_order, cv.custom_sections || [])
+    : null;
   const sidebarColumn = {
     width: SIDEBAR_W,
-    stack: orderColumnSections(sidebar, sectionOrder),
+    stack: sectionOrder ? orderColumnSections(sidebar, sectionOrder) : sidebar,
   } as Content;
-  const mainColumn = { width: "*", stack: orderColumnSections(main, sectionOrder) } as Content;
+  const mainColumn = {
+    width: "*",
+    stack: sectionOrder ? orderColumnSections(main, sectionOrder) : main,
+  } as Content;
 
   return {
     info: {

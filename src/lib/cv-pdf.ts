@@ -7,6 +7,7 @@ import type {
   TVirtualFileSystem,
 } from "pdfmake/interfaces";
 import {
+  hasCustomCvSectionOrder,
   resolveCvSectionOrder,
   type CV,
   type Experience,
@@ -332,6 +333,11 @@ function applyPdfSectionOrder(
   cv: CV,
   language: DocumentLanguage,
 ): TDocumentDefinitions {
+  // Until an editor explicitly uses an arrow, preserve the exact sequence
+  // authored by the active PDF template.
+  if (!hasCustomCvSectionOrder(cv.section_order, cv.custom_sections || [])) {
+    return document;
+  }
   const source = Array.isArray(document.content)
     ? document.content
     : document.content

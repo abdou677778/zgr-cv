@@ -2,7 +2,7 @@ import {
   emptyCV,
   emptyEuropassProfile,
   newId,
-  resolveCvSectionOrder,
+  hasCustomCvSectionOrder,
   type CV,
   type Education,
   type EuropassCefrLevel,
@@ -284,7 +284,12 @@ function directCv(source: JsonRecord): CV {
     competences_format: normalizeObjectiveFormat(source.competences_format),
     logiciels: softwareList(source.logiciels ?? source.software),
     custom_sections: customSections,
-    section_order: resolveCvSectionOrder(stringList(source.section_order), customSections),
+    // Do not turn legacy / absent values into a global order: each template
+    // owns its native default order. Only retain an actual user rearrangement.
+    section_order: (() => {
+      const order = stringList(source.section_order);
+      return hasCustomCvSectionOrder(order, customSections) ? order : [];
+    })(),
     langues: {
       fr: text(langues.fr),
       en: text(langues.en),

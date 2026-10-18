@@ -65,7 +65,9 @@ import {
   type ProfilePhoto,
   type ObjectiveFormat,
   type SoftwareIcon,
+  DEFAULT_CV_SECTION_ORDER,
   emptyCV,
+  hasCustomCvSectionOrder,
   newId,
   resolveCvSectionOrder,
 } from "@/lib/cv-types";
@@ -333,6 +335,60 @@ const EUROPASS_EDITOR_LANGUAGE: Record<DocumentLanguage, string> = {
 };
 
 const COLOR_MODE_STORAGE_KEY = "zgr-cv-color-mode";
+
+/**
+ * This is used only by the arrows before a user has made their first move.
+ * PDF generation itself keeps the native builder sequence unchanged unless a
+ * custom order is saved. Keeping this map here makes the editor controls
+ * describe the sequence that the selected model actually starts with.
+ */
+const nativePdfSectionOrder = (
+  templateId: PdfTemplateId,
+  customSections: CV["custom_sections"],
+) => {
+  const standard: Partial<Record<PdfTemplateId, string[]>> = {
+    "canadian-v1": [
+      "objective", "experience", "training", "education", "skills", "languages",
+      "volunteering", "certifications", "interests", "references", "additional", "software",
+    ],
+    "canadian-v2": [
+      "objective", "experience", "training", "education", "skills", "languages",
+      "volunteering", "certifications", "interests", "references", "additional", "software",
+    ],
+    "canadian-v3": [
+      "objective", "experience", "training", "education", "skills", "volunteering",
+      "certifications", "interests", "references", "additional", "languages", "software",
+    ],
+    "canadian-v4": [
+      "objective", "experience", "training", "education", "skills", "languages",
+      "volunteering", "certifications", "interests", "references", "additional", "software",
+    ],
+    "ats-a4": [
+      "objective", "experience", "training", "education", "skills", "languages",
+      "volunteering", "certifications", "interests", "references", "additional", "software",
+    ],
+    "arabic-pro-v1": [
+      "objective", "experience", "education", "skills", "volunteering", "certifications",
+      "interests", "references", "additional", "languages", "training", "software",
+    ],
+    "arabic-pro-v2": [
+      "objective", "experience", "training", "education", "skills", "languages",
+      "volunteering", "certifications", "interests", "references", "additional", "software",
+    ],
+    "cv-pro": [
+      "objective", "experience", "training", "education", "skills", "software", "languages",
+      "volunteering", "certifications", "references", "interests", "additional",
+    ],
+  };
+  const native = standard[templateId] || Array.from(DEFAULT_CV_SECTION_ORDER);
+  return Array.from(
+    new Set([
+      ...native,
+      ...customSections.map((section) => `custom.${section.id}`),
+      ...DEFAULT_CV_SECTION_ORDER,
+    ]),
+  );
+};
 type ColorMode = "light" | "dark";
 
 function LanguageMenu({
@@ -1424,7 +1480,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     }
     setCv((c) => ({ ...c, [k]: v }));
   };
-  const printableSectionOrder = resolveCvSectionOrder(cv.section_order, cv.custom_sections || []);
+  const printableSectionOrder = hasCustomCvSectionOrder(
+    cv.section_order,
+    cv.custom_sections || [],
+  )
+    ? resolveCvSectionOrder(cv.section_order, cv.custom_sections || [])
+    : nativePdfSectionOrder(templateId, cv.custom_sections || []);
   const movePrintableSection = (id: string, direction: -1 | 1) => {
     const index = printableSectionOrder.indexOf(id);
     const target = index + direction;

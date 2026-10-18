@@ -904,6 +904,18 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefi
     );
   }
 
+  // User-defined sections belong to the main reading column and use the same
+  // capsule heading and bullet rhythm as CV PRO's native sections.
+  (cv.custom_sections || [])
+    .map((section) => ({
+      title: section.title.trim(),
+      items: section.items.map(clean).filter(Boolean),
+    }))
+    .filter((section) => section.title && section.items.length)
+    .forEach((section) => {
+      main.push(mainSection(section.title, [bulletList(section.items, language)], language));
+    });
+
   const skills = cv.competences.filter(clean);
   if (skills.length)
     sidebar.push(sidebarSection(labels.skills, [bulletList(skills, language, true)], language));

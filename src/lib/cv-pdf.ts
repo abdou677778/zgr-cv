@@ -135,6 +135,137 @@ function appendSupplementalSections(
     return { ...document, content: [...content, ...additions] };
   }
 
+  if (templateId === "canadian-v1") {
+    const additions = sections.flatMap((entry) =>
+      section(entry.title, richListUl(entry.items, undefined, 12)),
+    );
+    const content = Array.isArray(document.content)
+      ? document.content
+      : document.content
+        ? [document.content]
+        : [];
+    return { ...document, content: [...content, ...additions] };
+  }
+
+  if (templateId === "canadian-v3") {
+    const additions: Content[] = sections.flatMap((section) => {
+      const [first, ...rest] = section.items;
+      return v3Section(
+        section.title,
+        v3List([first!], V3_ACCENT),
+        rest.length ? [v3List(rest, V3_ACCENT)] : [],
+      );
+    });
+    const content = Array.isArray(document.content)
+      ? document.content
+      : document.content
+        ? [document.content]
+        : [];
+    return { ...document, content: [...content, ...additions] };
+  }
+
+  if (templateId === "canadian-v4") {
+    const additions: Content[] = sections.flatMap((section) => {
+      const [first, ...rest] = section.items;
+      return [
+        {
+          unbreakable: true,
+          stack: [v4SectionTitle(section.title, 10, 6, language), v4List([first!], V4_BODY_SIZE)],
+        } as Content,
+        ...(rest.length ? [v4List(rest, V4_BODY_SIZE)] : []),
+      ];
+    });
+    const content = Array.isArray(document.content)
+      ? document.content
+      : document.content
+        ? [document.content]
+        : [];
+    return { ...document, content: [...content, ...additions] };
+  }
+
+  if (templateId === "ats-a4") {
+    const additions: Content[] = sections.flatMap((section) => [
+      v5SectionHeading(section.title, 12),
+      v5List(section.items, 18),
+    ]);
+    const content = Array.isArray(document.content)
+      ? document.content
+      : document.content
+        ? [document.content]
+        : [];
+    return { ...document, content: [...content, ...additions] };
+  }
+
+  if (templateId === "arabic-pro-v1") {
+    const additions: Content[] = sections.flatMap((section) => [
+      {
+        stack: [
+          {
+            text: arabicProPdfText(section.title, true, 44),
+            font: "ArialOfficial",
+            bold: true,
+            fontSize: 12,
+            color: ARABIC_PRO_ACCENT,
+            alignment: "right",
+            margin: [0, 5, 4, 2.8],
+          },
+          {
+            canvas: [
+              {
+                type: "line",
+                x1: 0,
+                y1: 0,
+                x2: 539.28,
+                y2: 0,
+                lineWidth: 0.55,
+                lineColor: "#111111",
+              },
+            ],
+            margin: [0, 0, 0, 7],
+          },
+          {
+            stack: section.items.map(
+              (item) =>
+                ({
+                  columns: [
+                    {
+                      width: "*",
+                      text: arabicProPdfText(item, true, 140),
+                      font: "ArialOfficial",
+                      alignment: "right",
+                      fontSize: 6.8,
+                      lineHeight: 1.28,
+                    },
+                    {
+                      width: 9,
+                      text: "•",
+                      font: "ArialOfficial",
+                      bold: true,
+                      fontSize: 8,
+                      color: ARABIC_PRO_ACCENT,
+                      alignment: "center",
+                    },
+                  ],
+                  columnGap: 4,
+                  margin: [0, 0.2, 0, 1.25],
+                }) as Content,
+            ),
+          },
+        ],
+        margin: [0, 0, 0, 2.5],
+      } as Content,
+    ]);
+    const content = Array.isArray(document.content)
+      ? document.content
+      : document.content
+        ? [document.content]
+        : [];
+    return { ...document, content: [...content, ...additions] };
+  }
+
+  // CV PRO renders custom sections inside its native two-column layout.
+  if (templateId === "cv-pro") return document;
+
   const rtl = language === "ar";
   const additions: Content[] = sections.flatMap((section) => [
     {

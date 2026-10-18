@@ -111,6 +111,30 @@ function appendSupplementalSections(
     ...customSections,
   ];
   if (!sections.length) return document;
+
+  // CV Canadien V2 has a recognisable burgundy heading and rule. Appending a
+  // generic black list was visually inconsistent with the rest of that model,
+  // so supplemental sections reuse the exact V2 section and bullet primitives.
+  if (templateId === "canadian-v2" || templateId === "arabic-pro-v2") {
+    const rtl = language === "ar";
+    const additions: Content[] = sections.flatMap((section) => {
+      const [first, ...rest] = section.items;
+      return v2Section(
+        section.title,
+        v2List([first!], "diamond", undefined, rtl),
+        rest.length ? [v2List(rest, "diamond", undefined, rtl)] : [],
+        false,
+        rtl,
+      );
+    });
+    const content = Array.isArray(document.content)
+      ? document.content
+      : document.content
+        ? [document.content]
+        : [];
+    return { ...document, content: [...content, ...additions] };
+  }
+
   const rtl = language === "ar";
   const additions: Content[] = sections.flatMap((section) => [
     {

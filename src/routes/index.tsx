@@ -64,7 +64,6 @@ import {
   type CompanyLogo,
   type ProfilePhoto,
   type ObjectiveFormat,
-  type SoftwareIcon,
   DEFAULT_CV_SECTION_ORDER,
   emptyCV,
   hasCustomCvSectionOrder,
@@ -72,6 +71,8 @@ import {
   resolveCvSectionOrder,
 } from "@/lib/cv-types";
 import { importCvJson, importCvJsonSet } from "@/lib/cv-json";
+import { formatDrivingLicence, formatNationalService } from "@/lib/cv-concise-status";
+import { normalizeSoftwareIcon, SOFTWARE_ICON_CATALOG, softwareIconUrl } from "@/lib/software-icons";
 import { sampleCVByLanguage } from "@/lib/sample-cv";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "@/lib/document-language";
 import { FORM_COPY, INTERFACE_COPY } from "@/lib/interface-copy";
@@ -621,6 +622,45 @@ const UI_COPY = {
     exactPreview: "Real PDF preview — the download uses this exact same document.",
   },
 } as const;
+
+const SOFTWARE_CUSTOM_ICON_MAX_BYTES = 150 * 1024;
+
+function asDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Lecture de l’icône impossible."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function readSoftwareCustomIcon(file: File) {
+  if (file.size > SOFTWARE_CUSTOM_ICON_MAX_BYTES) {
+    throw new Error("Icône trop volumineuse : 150 Ko maximum.");
+  }
+  if (file.type === "image/svg+xml") {
+    const documentNode = new DOMParser().parseFromString(await file.text(), "image/svg+xml");
+    const root = documentNode.documentElement;
+    if (root.tagName.toLowerCase() !== "svg" || documentNode.querySelector("parsererror")) {
+      throw new Error("Le fichier SVG est invalide.");
+    }
+    documentNode.querySelectorAll("script, foreignObject, iframe, object, embed, image, style").forEach((node) => node.remove());
+    documentNode.querySelectorAll("*").forEach((element) => {
+      for (const attribute of [...element.attributes]) {
+        const name = attribute.name.toLowerCase();
+        if (name.startsWith("on") || name === "style") element.removeAttribute(attribute.name);
+        if ((name === "href" || name === "xlink:href") && !attribute.value.startsWith("#")) {
+          element.removeAttribute(attribute.name);
+        }
+      }
+    });
+    return asDataUrl(new Blob([new XMLSerializer().serializeToString(root)], { type: "image/svg+xml" }));
+  }
+  if (file.type !== "image/png" && file.type !== "image/webp") {
+    throw new Error("Formats acceptés : SVG, PNG ou WebP.");
+  }
+  return asDataUrl(file);
+}
 
 function Index() {
   const [authUser, setAuthUser] = useState<SessionUser | null>(() => getCurrentUser());
@@ -3771,26 +3811,28 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 label={form.drivingLicence}
                 {...visibilityProps("personal.permis_conduire")}
                 {...aiFieldProps(form.drivingLicence, cv.permis_conduire, (value) =>
-                  set("permis_conduire", value.slice(0, 80)),
+                  set("permis_conduire", formatDrivingLicence(value).slice(0, 80)),
                 )}
               >
                 <Input
                   value={cv.permis_conduire}
-                  placeholder={form.drivingLicence}
+                  placeholder="Catégories B et A"
                   onChange={(e) => set("permis_conduire", e.target.value.slice(0, 80))}
+                  onBlur={(e) => set("permis_conduire", formatDrivingLicence(e.target.value))}
                 />
               </Field>
               <Field
                 label={form.nationalService}
                 {...visibilityProps("personal.service_national")}
                 {...aiFieldProps(form.nationalService, cv.service_national, (value) =>
-                  set("service_national", value.slice(0, 80)),
+                  set("service_national", formatNationalService(value).slice(0, 80)),
                 )}
               >
                 <Input
                   value={cv.service_national}
-                  placeholder={form.nationalService}
+                  placeholder="Dégagé"
                   onChange={(e) => set("service_national", e.target.value.slice(0, 80))}
+                  onBlur={(e) => set("service_national", formatNationalService(e.target.value))}
                 />
               </Field>
               <Field
@@ -3922,7 +3964,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               {cv.logiciels.map((logiciel, index) => (
                 <div
                   key={logiciel.id}
-                  className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_150px_auto]"
+                  className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_210px_auto]"
                 >
                   <Field
                     label={`${form.softwareItem} ${index + 1}`}
@@ -3951,28 +3993,68 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                       }
                     />
                   </Field>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Icône</span>
-                    <select
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      value={logiciel.icon}
-                      onChange={(event) =>
-                        set(
-                          "logiciels",
-                          cv.logiciels.map((item) =>
-                            item.id === logiciel.id
-                              ? { ...item, icon: event.target.value as SoftwareIcon }
-                              : item,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="generic">Générique</option>
-                      <option value="word">Word</option>
-                      <option value="excel">Excel</option>
-                      <option value="powerpoint">PowerPoint</option>
-                    </select>
-                  </label>
+                  <div className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Logo</span>
+                    <div className="flex items-center gap-2">
+                      {(logiciel.customIconDataUrl || softwareIconUrl(logiciel.icon)) ? (
+                        <img
+                          src={logiciel.customIconDataUrl || softwareIconUrl(logiciel.icon)}
+                          alt=""
+                          className="h-10 w-10 shrink-0 rounded-md border border-slate-200 bg-white p-1 object-contain"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-xs text-slate-400">—</div>
+                      )}
+                      <Input
+                        list="zgr-software-icon-catalog"
+                        value={logiciel.icon === "generic" ? "" : logiciel.icon}
+                        placeholder="Canva, ChatGPT…"
+                        onChange={(event) => {
+                          const icon = normalizeSoftwareIcon(event.target.value);
+                          set(
+                            "logiciels",
+                            cv.logiciels.map((item) =>
+                              item.id === logiciel.id
+                                ? { ...item, icon, customIconDataUrl: undefined }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900">
+                      <Upload className="h-3.5 w-3.5" /> Parcourir une icône locale
+                      <input
+                        type="file"
+                        accept="image/svg+xml,image/png,image/webp"
+                        className="sr-only"
+                        onChange={async (event) => {
+                          const file = event.target.files?.[0];
+                          event.currentTarget.value = "";
+                          if (!file) return;
+                          try {
+                            const customIconDataUrl = await readSoftwareCustomIcon(file);
+                            set(
+                              "logiciels",
+                              cv.logiciels.map((item) =>
+                                item.id === logiciel.id
+                                  ? { ...item, icon: "generic", customIconDataUrl }
+                                  : item,
+                              ),
+                            );
+                          } catch (error) {
+                            window.alert(error instanceof Error ? error.message : "Import de l’icône impossible.");
+                          }
+                        }}
+                      />
+                    </label>
+                    <datalist id="zgr-software-icon-catalog">
+                      {SOFTWARE_ICON_CATALOG.map((icon) => (
+                        <option key={icon.slug} value={icon.slug} label={icon.title} />
+                      ))}
+                    </datalist>
+                    <p className="text-[10px] font-normal leading-snug text-slate-400">320 logos locaux, ou ajoutez un logiciel et son icône manuellement.</p>
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"

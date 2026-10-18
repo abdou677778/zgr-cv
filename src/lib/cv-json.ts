@@ -13,6 +13,8 @@ import {
   type SoftwareSkill,
 } from "./cv-types";
 import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
+import { formatDrivingLicence, formatNationalService } from "./cv-concise-status";
+import { normalizeSoftwareIcon } from "./software-icons";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { normalizeProfilePhoto } from "./profile-photo";
@@ -46,13 +48,11 @@ const stringList = (value: unknown): string[] => {
   return Object.values(record(value)).map(text).filter(Boolean);
 };
 
-const SOFTWARE_ICONS = new Set<SoftwareIcon>(["word", "excel", "powerpoint", "generic"]);
-
 const inferSoftwareIcon = (label: string): SoftwareIcon => {
   const normalized = label.toLowerCase();
-  if (/\bword\b/.test(normalized)) return "word";
-  if (/\bexcel\b/.test(normalized)) return "excel";
-  if (/power\s*point|powerpoint/.test(normalized)) return "powerpoint";
+  if (/\bword\b/.test(normalized)) return "microsoftword";
+  if (/\bexcel\b/.test(normalized)) return "microsoftexcel";
+  if (/power\s*point|powerpoint/.test(normalized)) return "microsoftpowerpoint";
   return "generic";
 };
 
@@ -67,11 +67,11 @@ const softwareList = (value: unknown): SoftwareSkill[] => {
       const item = record(entry);
       const label = firstText(item, "label", "nom", "name", "logiciel", "software");
       if (!label) return null;
-      const requestedIcon = text(item.icon).toLowerCase() as SoftwareIcon;
+      const requestedIcon = normalizeSoftwareIcon(text(item.icon));
       return {
         id: text(item.id) || newId(),
         label,
-        icon: SOFTWARE_ICONS.has(requestedIcon) ? requestedIcon : inferSoftwareIcon(label),
+        icon: requestedIcon === "generic" ? inferSoftwareIcon(label) : requestedIcon,
       };
     })
     .filter((item): item is SoftwareSkill => Boolean(item));
@@ -278,8 +278,8 @@ function directCv(source: JsonRecord): CV {
     statut_relocation: text(source.statut_relocation),
     date_naissance: text(source.date_naissance),
     situation_familiale: text(source.situation_familiale),
-    permis_conduire: text(source.permis_conduire),
-    service_national: text(source.service_national),
+    permis_conduire: formatDrivingLicence(text(source.permis_conduire)),
+    service_national: formatNationalService(text(source.service_national)),
     wilaya: text(source.wilaya),
     pays: text(source.pays),
     candidature: text(source.candidature),
@@ -448,8 +448,8 @@ function structuredCv(root: JsonRecord, language: "fr" | "en"): CV {
     statut_relocation: firstText(personal, french ? "Statut de relocation" : "Relocation Status"),
     date_naissance: firstText(personal, french ? "Date de naissance" : "Birthday"),
     situation_familiale: firstText(personal, french ? "Situation Familialle" : "Marital status"),
-    permis_conduire: firstText(personal, french ? "Permis de conduire" : "driving licence"),
-    service_national: firstText(personal, french ? "Service National" : "Military Service Status"),
+    permis_conduire: formatDrivingLicence(firstText(personal, french ? "Permis de conduire" : "driving licence")),
+    service_national: formatNationalService(firstText(personal, french ? "Service National" : "Military Service Status")),
     wilaya: firstText(personal, "Wilaya"),
     pays: firstText(personal, french ? "Pays" : "Country"),
     candidature: french

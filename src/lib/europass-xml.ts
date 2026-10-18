@@ -12,6 +12,7 @@ import { type DocumentLanguage } from "./document-language";
 import { emptyCV, emptyEuropassProfile, newId } from "./cv-types";
 import { processProfilePhoto, profilePhotoDataUrlForPdf } from "./profile-photo";
 import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
+import { formatDrivingLicence } from "./cv-concise-status";
 
 const ISO_639_2: Record<string, string> = {
   fr: "fre",
@@ -929,7 +930,7 @@ function parseCandidateEuropassXml(doc: Document): CV {
     participations,
     certifications,
     interets: interests,
-    permis_conduire: drivingLicences.join(", "),
+    permis_conduire: formatDrivingLicence(drivingLicences.join(", ")),
     langues: {
       fr: languageValue("fre"),
       en: languageValue("eng"),

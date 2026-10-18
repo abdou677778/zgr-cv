@@ -57,12 +57,14 @@ export type Langues = {
   kab: string;
 };
 
-export type SoftwareIcon = "word" | "excel" | "powerpoint" | "generic";
+export type SoftwareIcon = string;
 
 export type SoftwareSkill = {
   id: string;
   label: string;
   icon: SoftwareIcon;
+  /** Optional locally selected icon, stored with the client profile after sync. */
+  customIconDataUrl?: string;
 };
 
 export type EuropassCefrLevel = "" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2";

@@ -23,11 +23,11 @@ test("normalizes string and structured software values with stable icons", () =>
   );
 
   assert.equal(result.cv.logiciels.length, 3);
-  assert.equal(result.cv.logiciels[0]?.icon, "word");
+  assert.equal(result.cv.logiciels[0]?.icon, "microsoftword");
   assert.deepEqual(result.cv.logiciels[1], {
     id: "excel-1",
     label: "Microsoft Excel",
-    icon: "excel",
+    icon: "microsoftexcel",
   });
   assert.equal(result.cv.logiciels[2]?.icon, "generic");
 });

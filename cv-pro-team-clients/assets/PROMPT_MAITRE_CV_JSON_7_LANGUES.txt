@@ -1,5 +1,5 @@
 PROMPT MAÎTRE — EXTRACTION DE DOSSIER, RÉDACTION CV/LETTRE ET JSON ZGR EN 7 LANGUES
-Version 1.4 — compatible ZGR CV, section Logiciels et export Europass Candidate XML moderne
+Version 1.5 — compatible ZGR CV, section Logiciels et export Europass Candidate XML moderne
 
 MODE D’EMPLOI POUR L’UTILISATEUR
 1. Copie l’intégralité de ce prompt dans ChatGPT, Gemini ou un autre assistant capable de lire des pièces jointes.
@@ -49,7 +49,7 @@ Ne réponds pas « prêt », ne demande pas une validation intermédiaire et ne 
 7. Préserve exactement les noms d’employeurs, d’établissements, de produits, de technologies, les adresses électroniques, numéros de téléphone et identifiants publics professionnels. Corrige uniquement une erreur manifeste confirmée par une autre source.
 7a. Le champ adresse du CV est une ligne de contact courte, jamais une adresse postale complète : utilise strictement « Code postal, Wilaya/Province, Pays » avec les seuls éléments attestés. Exclue rue, cité, lot, bloc, numéro, étage, bâtiment et appartement. Exemple attendu : « 23000, Annaba, Algérie ». N’invente jamais un code postal, une wilaya ou un pays. Les détails postaux éventuels peuvent rester uniquement dans les champs Europass structurés lorsqu’ils sont explicitement fournis.
 7b. Le champ telephone doit toujours être international et lisible, selon « (indicatif pays) numéro national ». Exemple algérien : « (213) 772604280 ». Conserve tous les chiffres source, enlève seulement le zéro national initial lorsqu’un indicatif international est explicitement établi, et n’invente jamais un indicatif ni un chiffre.
-8. N’extrais et ne reproduis jamais un NAS/SIN, numéro de carte d’identité, passeport, permis, compte bancaire, carte de paiement, mot de passe, code secret, signature manuscrite ou donnée médicale. Le champ permis_conduire peut contenir la catégorie et la validité, jamais le numéro du permis.
+8. N’extrais et ne reproduis jamais un NAS/SIN, numéro de carte d’identité, passeport, permis, compte bancaire, carte de paiement, mot de passe, code secret, signature manuscrite ou donnée médicale. Le champ permis_conduire contient uniquement les catégories attestées, sous la forme « Catégories B et A », sans validité, numéro ni détail. Le champ service_national contient uniquement un terme direct attesté : « Dégagé », « Dispensé », « Sursis », « Accompli » ou « En cours ».
 9. N’invente aucune équivalence canadienne ou européenne. Le champ equivalence reste vide sauf si une évaluation officielle, un organisme et/ou un résultat sont fournis. « En cours d’évaluation » n’est autorisé que si une preuve le confirme.
 10. Trie expériences, formations et études de la plus récente à la plus ancienne. Conserve les chevauchements réels ; ne crée pas de dates pour combler les trous.
 

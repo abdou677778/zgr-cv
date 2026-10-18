@@ -190,7 +190,7 @@ const CONTACT_LABELS: Record<DocumentLanguage, { driving: string; service: strin
   ar: { driving: "رخصة القيادة", service: "الخدمة الوطنية" },
 };
 
-const SOFTWARE: Record<SoftwareIcon, { color: string; letter: string }> = {
+const SOFTWARE: Record<string, { color: string; letter: string }> = {
   word: { color: "#2b579a", letter: "W" },
   excel: { color: "#217346", letter: "X" },
   powerpoint: { color: "#d24726", letter: "P" },

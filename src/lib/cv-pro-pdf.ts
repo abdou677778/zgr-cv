@@ -1,5 +1,12 @@
 import type { Content, TDocumentDefinitions } from "pdfmake/interfaces";
-import type { CV, Education, Experience, Formation, SoftwareIcon } from "./cv-types";
+import {
+  resolveCvSectionOrder,
+  type CV,
+  type Education,
+  type Experience,
+  type Formation,
+  type SoftwareIcon,
+} from "./cv-types";
 import { documentFont, type DocumentLanguage } from "./document-language";
 
 const PAGE_W = 595.28;
@@ -16,6 +23,28 @@ const PAGE_TOP = 90;
 const FIRST_PAGE_BODY_OFFSET = 76;
 const BODY_LINE_HEIGHT = 1.3;
 const META_LINE_HEIGHT = 1.18;
+
+type OrderedContent = Content & { zgrSectionId?: string };
+
+function tagSection(content: Content, id: string): OrderedContent {
+  return { ...(content as unknown as Record<string, unknown>), zgrSectionId: id } as OrderedContent;
+}
+
+function orderColumnSections(sections: OrderedContent[], order: string[]) {
+  const rank = new Map(order.map((id, index) => [id, index]));
+  const fixed = sections.filter((section) => !section.zgrSectionId);
+  const sortable = sections
+    .filter((section) => section.zgrSectionId)
+    .map((section, index) => ({ section, index }))
+    .sort(
+      (left, right) =>
+        (rank.get(left.section.zgrSectionId!) ?? Number.MAX_SAFE_INTEGER) -
+          (rank.get(right.section.zgrSectionId!) ?? Number.MAX_SAFE_INTEGER) ||
+        left.index - right.index,
+    )
+    .map(({ section }) => section);
+  return [...fixed, ...sortable] as Content[];
+}
 
 const LABELS: Record<
   DocumentLanguage,
@@ -848,23 +877,26 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
 export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
   const rtl = language === "ar";
   const labels = LABELS[language];
-  const main: Content[] = [];
-  const sidebar: Content[] = [{ text: "", margin: [0, 0, 0, 185] } as Content];
+  const main: OrderedContent[] = [];
+  const sidebar: OrderedContent[] = [{ text: "", margin: [0, 0, 0, 185] } as OrderedContent];
 
   if (cv.objectif.trim()) {
     main.push(
-      mainSection(
-        labels.objective,
-        [
-          {
-            text: displayText(withTerminalPeriod(cv.objectif), language, 64),
-            fontSize: 9,
-            lineHeight: BODY_LINE_HEIGHT,
-            alignment: rtl ? "right" : "left",
-            margin: rtl ? [0, 0, 10, 0] : [10, 0, 2, 0],
-          } as Content,
-        ],
-        language,
+      tagSection(
+        mainSection(
+          labels.objective,
+          [
+            {
+              text: displayText(withTerminalPeriod(cv.objectif), language, 64),
+              fontSize: 9,
+              lineHeight: BODY_LINE_HEIGHT,
+              alignment: rtl ? "right" : "left",
+              margin: rtl ? [0, 0, 10, 0] : [10, 0, 2, 0],
+            } as Content,
+          ],
+          language,
+        ),
+        "objective",
       ),
     );
   }
@@ -874,10 +906,13 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefi
   );
   if (experiences.length) {
     main.push(
-      mainSection(
-        labels.experience,
-        experiences.map((item) => experienceBlock(item, language)),
-        language,
+      tagSection(
+        mainSection(
+          labels.experience,
+          experiences.map((item) => experienceBlock(item, language)),
+          language,
+        ),
+        "experience",
       ),
     );
   }
@@ -885,10 +920,13 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefi
   const formations = cv.formations.filter((item) => item.titre || item.institution || item.date);
   if (formations.length) {
     main.push(
-      mainSection(
-        labels.training,
-        formations.map((item) => learningBlock(item, language)),
-        language,
+      tagSection(
+        mainSection(
+          labels.training,
+          formations.map((item) => learningBlock(item, language)),
+          language,
+        ),
+        "training",
       ),
     );
   }
@@ -896,10 +934,13 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefi
   const educations = cv.educations.filter((item) => item.titre || item.institution || item.date);
   if (educations.length) {
     main.push(
-      mainSection(
-        labels.education,
-        educations.map((item) => learningBlock(item, language)),
-        language,
+      tagSection(
+        mainSection(
+          labels.education,
+          educations.map((item) => learningBlock(item, language)),
+          language,
+        ),
+        "education",
       ),
     );
   }
@@ -908,44 +949,78 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefi
   // capsule heading and bullet rhythm as CV PRO's native sections.
   (cv.custom_sections || [])
     .map((section) => ({
+      id: section.id,
       title: section.title.trim(),
       items: section.items.map(clean).filter(Boolean),
     }))
     .filter((section) => section.title && section.items.length)
     .forEach((section) => {
-      main.push(mainSection(section.title, [bulletList(section.items, language)], language));
+      main.push(
+        tagSection(
+          mainSection(section.title, [bulletList(section.items, language)], language),
+          `custom.${section.id}`,
+        ),
+      );
     });
 
   const skills = cv.competences.filter(clean);
   if (skills.length)
-    sidebar.push(sidebarSection(labels.skills, [bulletList(skills, language, true)], language));
+    sidebar.push(
+      tagSection(
+        sidebarSection(labels.skills, [bulletList(skills, language, true)], language),
+        "skills",
+      ),
+    );
 
   if (cv.logiciels.some((item) => item.label.trim()))
-    sidebar.push(sidebarSection(labels.software, [softwareGrid(cv, language)], language));
+    sidebar.push(
+      tagSection(
+        sidebarSection(labels.software, [softwareGrid(cv, language)], language),
+        "software",
+      ),
+    );
 
   const languages = languageRows(cv, language);
-  if (languages.length) sidebar.push(sidebarSection(labels.languages, languages, language));
+  if (languages.length)
+    sidebar.push(tagSection(sidebarSection(labels.languages, languages, language), "languages"));
 
   const participation = cv.participations.filter(clean);
   if (participation.length)
     sidebar.push(
-      sidebarSection(labels.participation, [bulletList(participation, language, true)], language),
+      tagSection(
+        sidebarSection(labels.participation, [bulletList(participation, language, true)], language),
+        "volunteering",
+      ),
     );
 
   const certifications = cv.certifications.filter(clean);
   if (certifications.length)
     sidebar.push(
-      sidebarSection(labels.certifications, [bulletList(certifications, language, true)], language),
+      tagSection(
+        sidebarSection(
+          labels.certifications,
+          [bulletList(certifications, language, true)],
+          language,
+        ),
+        "certifications",
+      ),
     );
 
   const references = cv.references.filter(clean);
   if (references.length)
     sidebar.push(
-      sidebarSection(labels.references, [bulletList(references, language, true)], language),
+      tagSection(
+        sidebarSection(labels.references, [bulletList(references, language, true)], language),
+        "references",
+      ),
     );
 
-  const sidebarColumn = { width: SIDEBAR_W, stack: sidebar } as Content;
-  const mainColumn = { width: "*", stack: main } as Content;
+  const sectionOrder = resolveCvSectionOrder(cv.section_order, cv.custom_sections || []);
+  const sidebarColumn = {
+    width: SIDEBAR_W,
+    stack: orderColumnSections(sidebar, sectionOrder),
+  } as Content;
+  const mainColumn = { width: "*", stack: orderColumnSections(main, sectionOrder) } as Content;
 
   return {
     info: {

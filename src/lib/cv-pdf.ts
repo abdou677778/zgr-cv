@@ -6,7 +6,14 @@ import type {
   TFontDictionary,
   TVirtualFileSystem,
 } from "pdfmake/interfaces";
-import type { CV, Experience, Formation, Education, ObjectiveFormat } from "./cv-types";
+import {
+  resolveCvSectionOrder,
+  type CV,
+  type Experience,
+  type Formation,
+  type Education,
+  type ObjectiveFormat,
+} from "./cv-types";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
@@ -290,6 +297,109 @@ function appendSupplementalSections(
       ? [document.content]
       : [];
   return { ...document, content: [...content, ...additions] };
+}
+
+function normalizeSectionLabel(value: string) {
+  return value
+    .normalize("NFC")
+    .replace(/\u00a0/gu, " ")
+    .replace(/[\s\p{P}\p{S}]/gu, "")
+    .toLocaleUpperCase();
+}
+
+function firstTextInPdfNode(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = firstTextInPdfNode(item);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (!value || typeof value !== "object") return "";
+  const node = value as Record<string, unknown>;
+  if (node.text !== undefined) return firstTextInPdfNode(node.text);
+  for (const key of ["stack", "columns"] as const) {
+    const found = firstTextInPdfNode(node[key]);
+    if (found) return found;
+  }
+  return "";
+}
+
+/** Reorders complete native PDF section blocks after they have been built. */
+function applyPdfSectionOrder(
+  document: TDocumentDefinitions,
+  cv: CV,
+  language: DocumentLanguage,
+): TDocumentDefinitions {
+  const source = Array.isArray(document.content)
+    ? document.content
+    : document.content
+      ? [document.content]
+      : [];
+  if (source.length < 2) return document;
+
+  const labels = cvCopy(language);
+  const softwareTitles: Record<DocumentLanguage, string> = {
+    fr: "LOGICIELS",
+    en: "SOFTWARE",
+    es: "PROGRAMAS",
+    de: "SOFTWARE",
+    it: "SOFTWARE",
+    zh: "软件",
+    ar: "البرامج",
+  };
+  const known = new Map<string, string>(
+    [
+      [labels.objective, "objective"],
+      [labels.experience, "experience"],
+      [labels.training, "training"],
+      [labels.education, "education"],
+      [labels.skills, "skills"],
+      [labels.languages, "languages"],
+      [labels.participation, "volunteering"],
+      [labels.certifications, "certifications"],
+      [labels.interests, "interests"],
+      [labels.references, "references"],
+      [labels.additional, "additional"],
+      [softwareTitles[language], "software"],
+      ...(cv.custom_sections || []).map(
+        (section) => [section.title, `custom.${section.id}`] as const,
+      ),
+    ].map(([label, id]) => [normalizeSectionLabel(label), id]),
+  );
+
+  const preamble: Content[] = [];
+  const groups: Array<{ id: string; nodes: Content[] }> = [];
+  let active: { id: string; nodes: Content[] } | null = null;
+  for (const node of source) {
+    const id = known.get(normalizeSectionLabel(firstTextInPdfNode(node)));
+    if (id) {
+      active = { id, nodes: [node] };
+      groups.push(active);
+    } else if (active) {
+      active.nodes.push(node);
+    } else {
+      preamble.push(node);
+    }
+  }
+  if (groups.length < 2) return document;
+
+  const requested = resolveCvSectionOrder(cv.section_order, cv.custom_sections || []);
+  const used = new Set<number>();
+  const ordered: Content[] = [];
+  for (const id of requested) {
+    groups.forEach((group, index) => {
+      if (group.id === id && !used.has(index)) {
+        ordered.push(...group.nodes);
+        used.add(index);
+      }
+    });
+  }
+  groups.forEach((group, index) => {
+    if (!used.has(index)) ordered.push(...group.nodes);
+  });
+  return { ...document, content: [...preamble, ...ordered] };
 }
 
 const FONT_FILES = {
@@ -4937,10 +5047,15 @@ export async function createCvPdfBlob(
     language,
     normalizedTemplateId,
   );
+  const documentWithSectionOrder = applyPdfSectionOrder(
+    documentWithSupplementalSections,
+    pdfCv,
+    language,
+  );
   return pdfMake
     .createPdf(
       applyTemplateDesigner(
-        applyPdfTheme(documentWithSupplementalSections, normalizedTemplateId, accentColor),
+        applyPdfTheme(documentWithSectionOrder, normalizedTemplateId, accentColor),
         effectiveDesign,
         normalizedTemplateId,
       ),

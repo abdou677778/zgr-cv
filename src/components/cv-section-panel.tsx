@@ -11,6 +11,7 @@ import {
   ChartNoAxesCombined,
   Check,
   ChevronDown,
+  ChevronUp,
   CircleUserRound,
   Code2,
   Crown,
@@ -509,6 +510,10 @@ export function CvSectionPanel({
   count,
   complete,
   onAdd,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
   children,
 }: {
   id: string;
@@ -522,6 +527,10 @@ export function CvSectionPanel({
   count?: number;
   complete?: boolean;
   onAdd?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   children: ReactNode;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -575,6 +584,34 @@ export function CvSectionPanel({
         </button>
 
         <div className="flex shrink-0 items-center gap-1">
+          {(onMoveUp || onMoveDown) && (
+            <div className="mr-1 flex items-center rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                disabled={!canMoveUp}
+                className="h-8 w-8 rounded-lg text-slate-500 hover:bg-white hover:text-blue-700 disabled:opacity-35"
+                aria-label={`Monter la section ${title}`}
+                title="Monter dans l’ordre du PDF"
+                onClick={onMoveUp}
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                disabled={!canMoveDown}
+                className="h-8 w-8 rounded-lg text-slate-500 hover:bg-white hover:text-blue-700 disabled:opacity-35"
+                aria-label={`Descendre la section ${title}`}
+                title="Descendre dans l’ordre du PDF"
+                onClick={onMoveDown}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
           <Button
             type="button"
             size="icon"

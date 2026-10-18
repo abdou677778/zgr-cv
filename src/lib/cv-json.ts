@@ -2,6 +2,7 @@ import {
   emptyCV,
   emptyEuropassProfile,
   newId,
+  resolveCvSectionOrder,
   type CV,
   type Education,
   type EuropassCefrLevel,
@@ -283,6 +284,7 @@ function directCv(source: JsonRecord): CV {
     competences_format: normalizeObjectiveFormat(source.competences_format),
     logiciels: softwareList(source.logiciels ?? source.software),
     custom_sections: customSections,
+    section_order: resolveCvSectionOrder(stringList(source.section_order), customSections),
     langues: {
       fr: text(langues.fr),
       en: text(langues.en),

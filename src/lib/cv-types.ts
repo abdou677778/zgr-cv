@@ -192,6 +192,40 @@ export type CustomCvSection = {
   items: string[];
 };
 
+/** Printable section order. `custom.<id>` entries refer to CustomCvSection IDs. */
+export const DEFAULT_CV_SECTION_ORDER = [
+  "objective",
+  "experience",
+  "training",
+  "education",
+  "skills",
+  "software",
+  "languages",
+  "volunteering",
+  "certifications",
+  "interests",
+  "references",
+  "additional",
+] as const;
+
+export function resolveCvSectionOrder(
+  order: string[] | undefined,
+  customSections: CustomCvSection[],
+) {
+  const allowed = new Set([
+    ...DEFAULT_CV_SECTION_ORDER,
+    ...customSections.map((section) => `custom.${section.id}`),
+  ]);
+  const resolved: string[] = [];
+  for (const id of order || []) {
+    if (allowed.has(id) && !resolved.includes(id)) resolved.push(id);
+  }
+  for (const id of allowed) {
+    if (!resolved.includes(id)) resolved.push(id);
+  }
+  return resolved;
+}
+
 export type CV = {
   photo?: ProfilePhoto;
   nom_complet: string;
@@ -214,6 +248,7 @@ export type CV = {
   competences_format?: ObjectiveFormat;
   logiciels: SoftwareSkill[];
   custom_sections: CustomCvSection[];
+  section_order: string[];
   langues: Langues;
   experiences: Experience[];
   formations: Formation[];
@@ -252,6 +287,7 @@ export const emptyCV: CV = {
   competences_format: { html: "", alignment: "", fontSize: 15, color: "" },
   logiciels: [],
   custom_sections: [],
+  section_order: [...DEFAULT_CV_SECTION_ORDER],
   langues: { fr: "", en: "", ar: "", de: "", es: "", kab: "" },
   experiences: [],
   formations: [],

@@ -67,6 +67,7 @@ import {
   type SoftwareIcon,
   emptyCV,
   newId,
+  resolveCvSectionOrder,
 } from "@/lib/cv-types";
 import { importCvJson, importCvJsonSet } from "@/lib/cv-json";
 import { sampleCVByLanguage } from "@/lib/sample-cv";
@@ -1422,6 +1423,42 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       return;
     }
     setCv((c) => ({ ...c, [k]: v }));
+  };
+  const printableSectionOrder = resolveCvSectionOrder(cv.section_order, cv.custom_sections || []);
+  const movePrintableSection = (id: string, direction: -1 | 1) => {
+    const index = printableSectionOrder.indexOf(id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= printableSectionOrder.length) return;
+    const nextOrder = [...printableSectionOrder];
+    [nextOrder[index], nextOrder[target]] = [nextOrder[target], nextOrder[index]];
+    // The content order is structural rather than a translation. Keep the
+    // multilingual package aligned while retaining each language's text.
+    setCvByLanguage(
+      (current) =>
+        Object.fromEntries(
+          DOCUMENT_LANGUAGES.map((item) => [
+            item.id,
+            {
+              ...current[item.id],
+              section_order: resolveCvSectionOrder(
+                nextOrder,
+                current[item.id].custom_sections || [],
+              ),
+            },
+          ]),
+        ) as Record<DocumentLanguage, CV>,
+    );
+  };
+  const orderControls = (id: string) => {
+    if (documentKind !== "cv") return {};
+    const index = printableSectionOrder.indexOf(id);
+    if (index < 0) return {};
+    return {
+      onMoveUp: () => movePrintableSection(id, -1 as const),
+      onMoveDown: () => movePrintableSection(id, 1 as const),
+      canMoveUp: index > 0,
+      canMoveDown: index < printableSectionOrder.length - 1,
+    };
   };
   const addCustomSection = () => {
     const title = newCustomSectionTitle.trim().slice(0, 120);
@@ -3734,6 +3771,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("objective")}
             onVisibleChange={(visible) => setSectionVisible("objective", visible)}
             complete={Boolean(cv.objectif.trim())}
+            {...orderControls("objective")}
           >
             <CvRichTextEditor
               value={cv.objectif}
@@ -3757,6 +3795,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("skills")}
             onVisibleChange={(visible) => setSectionVisible("skills", visible)}
             count={cv.competences.length}
+            {...orderControls("skills")}
           >
             <CvRichTextEditor
               value={cv.competences.join("\n")}
@@ -3799,6 +3838,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("software")}
             onVisibleChange={(visible) => setSectionVisible("software", visible)}
             count={cv.logiciels.length}
+            {...orderControls("software")}
             onAdd={() =>
               set("logiciels", [...cv.logiciels, { id: newId(), label: "", icon: "generic" }])
             }
@@ -3890,6 +3930,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("languages")}
             onVisibleChange={(visible) => setSectionVisible("languages", visible)}
             count={Object.values(cv.langues).filter((value) => value.trim()).length}
+            {...orderControls("languages")}
           >
             <div className="grid gap-3 sm:grid-cols-2">
               {(
@@ -3935,6 +3976,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("experience")}
             onVisibleChange={(visible) => setSectionVisible("experience", visible)}
             count={cv.experiences.length}
+            {...orderControls("experience")}
             onAdd={addExp}
           >
             <Suspense fallback={<DeferredEditorFallback />}>
@@ -3975,6 +4017,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("training")}
             onVisibleChange={(visible) => setSectionVisible("training", visible)}
             count={cv.formations.length}
+            {...orderControls("training")}
             onAdd={addForm}
           >
             <Suspense fallback={<DeferredEditorFallback />}>
@@ -4012,6 +4055,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("education")}
             onVisibleChange={(visible) => setSectionVisible("education", visible)}
             count={cv.educations.length}
+            {...orderControls("education")}
             onAdd={addEdu}
           >
             <Suspense fallback={<DeferredEditorFallback />}>
@@ -4047,6 +4091,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("volunteering")}
             onVisibleChange={(visible) => setSectionVisible("volunteering", visible)}
             count={cv.participations.length}
+            {...orderControls("volunteering")}
           >
             <CvRichTextEditor
               value={cv.participations.join("\n")}
@@ -4093,6 +4138,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("certifications")}
             onVisibleChange={(visible) => setSectionVisible("certifications", visible)}
             count={cv.certifications.length}
+            {...orderControls("certifications")}
           >
             <CvRichTextEditor
               value={cv.certifications.join("\n")}
@@ -4139,6 +4185,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("interests")}
             onVisibleChange={(visible) => setSectionVisible("interests", visible)}
             count={cv.interets.length}
+            {...orderControls("interests")}
           >
             <CvRichTextEditor
               value={cv.interets.join("\n")}
@@ -4179,6 +4226,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             visible={sectionIsVisible("references")}
             onVisibleChange={(visible) => setSectionVisible("references", visible)}
             count={cv.references.length}
+            {...orderControls("references")}
             onAdd={() => set("references", [...cv.references, ""])}
           >
             <ListCard
@@ -4440,6 +4488,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 visible={sectionIsVisible(sectionId)}
                 onVisibleChange={(visible) => setSectionVisible(sectionId, visible)}
                 count={section.items.filter((item) => item.trim()).length}
+                {...orderControls(sectionId)}
               >
                 <div className="space-y-3">
                   <Field label="Titre de la section" {...visibilityProps(`${sectionId}.title`)}>

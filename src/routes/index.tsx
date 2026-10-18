@@ -172,6 +172,7 @@ import { activatePwaUpdate, promptPwaInstall, usePwaStatus } from "@/lib/pwa-cli
 import { reportSyncFailure } from "@/lib/observability";
 import { emptyOpportunityPlan, type OpportunityPlan } from "@/lib/profile-opportunities";
 import { RELOCATION_STATUS_MAX_CHARS } from "@/lib/relocation-status";
+import { formatImportedCvAddress } from "@/lib/contact-address";
 import { NOC_AI_SYSTEM, nocAiPrompt } from "@/lib/ai-prompts";
 
 const AiSettingsDialog = lazy(async () => {
@@ -3701,12 +3702,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 label={form.address}
                 {...visibilityProps("personal.adresse")}
                 {...aiFieldProps(form.address, cv.adresse, (value) =>
-                  set("adresse", value.slice(0, 160)),
+                  set(
+                    "adresse",
+                    formatImportedCvAddress(value, cv.wilaya, cv.pays).slice(0, 160),
+                  ),
                 )}
               >
                 <Input
                   value={cv.adresse}
-                  placeholder={form.address}
+                  placeholder="Wilaya/Province, Code postal, Pays"
                   onChange={(e) => set("adresse", e.target.value.slice(0, 160))}
                 />
               </Field>

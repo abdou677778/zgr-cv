@@ -1,5 +1,5 @@
 PROMPT MAÎTRE — EXTRACTION DE DOSSIER, RÉDACTION CV/LETTRE ET JSON ZGR EN 7 LANGUES
-Version 1.2 — compatible ZGR CV, section Logiciels et export Europass Candidate XML moderne
+Version 1.3 — compatible ZGR CV, section Logiciels et export Europass Candidate XML moderne
 
 MODE D’EMPLOI POUR L’UTILISATEUR
 1. Copie l’intégralité de ce prompt dans ChatGPT, Gemini ou un autre assistant capable de lire des pièces jointes.
@@ -47,6 +47,7 @@ Ne réponds pas « prêt », ne demande pas une validation intermédiaire et ne 
 5. Une offre d’emploi sert à identifier le poste cible et les mots-clés pertinents. Elle n’est jamais une preuve que le candidat possède une compétence ou a accompli une tâche.
 6. Un chiffre ou un résultat quantifié ne peut être utilisé que s’il apparaît dans les sources ou a été fourni explicitement par l’utilisateur. Sinon, rédige une réalisation précise mais non chiffrée.
 7. Préserve exactement les noms d’employeurs, d’établissements, de produits, de technologies, les adresses électroniques, numéros de téléphone et identifiants publics professionnels. Corrige uniquement une erreur manifeste confirmée par une autre source.
+7a. Le champ adresse du CV est une ligne de contact courte, jamais une adresse postale complète : utilise strictement « Wilaya/Province, Code postal, Pays » avec les seuls éléments attestés. Exclue rue, cité, lot, bloc, numéro, étage, bâtiment et appartement. Exemple attendu : « Annaba, 23000, Algérie ». N’invente jamais un code postal, une wilaya ou un pays. Les détails postaux éventuels peuvent rester uniquement dans les champs Europass structurés lorsqu’ils sont explicitement fournis.
 8. N’extrais et ne reproduis jamais un NAS/SIN, numéro de carte d’identité, passeport, permis, compte bancaire, carte de paiement, mot de passe, code secret, signature manuscrite ou donnée médicale. Le champ permis_conduire peut contenir la catégorie et la validité, jamais le numéro du permis.
 9. N’invente aucune équivalence canadienne ou européenne. Le champ equivalence reste vide sauf si une évaluation officielle, un organisme et/ou un résultat sont fournis. « En cours d’évaluation » n’est autorisé que si une preuve le confirme.
 10. Trie expériences, formations et études de la plus récente à la plus ancienne. Conserve les chevauchements réels ; ne crée pas de dates pour combler les trous.
@@ -335,6 +336,7 @@ RÈGLES DE STRUCTURE ET DE VALEURS
 3. Pour une valeur scalaire absente : utilise "". Pour une collection absente : utilise []. N’ajoute jamais un objet vide artificiel dans experiences, formations ou educations. Si aucune entrée réelle n’existe, le tableau correspondant vaut [].
 4. Les tableaux sont dynamiques : conserve toutes les entrées réelles, pas seulement quatre. Ne crée aucun élément vide pour atteindre un nombre fixe. Les tableaux europass.social_profiles, europass.languages, europass.experience_details et europass.education_details valent [] si aucune entrée factuelle n’est disponible.
 5. Attribue des id stables et uniques : experience-01, experience-02… ; formation-01… ; education-01… Le même fait conserve le même id dans les sept langues.
+5a. Pour adresse dans chaque document, utilise uniquement « Wilaya/Province, Code postal, Pays ». Ne reproduis aucun détail de rue, cité, bloc, numéro, bâtiment ou appartement. Cette valeur est localisée, mais les faits doivent rester identiques dans les sept langues.
 6. certifications existe dans les sept langues. Ne la limite jamais à l’anglais.
 7. Ne mets pas un point final après nom_complet, titre_poste, telephone, email, adresse courte, date, lieu, employeur, institution, nom de diplôme, niveau linguistique ou intitulé. Dans les phrases longues, utilise une ponctuation naturelle ; ne force pas un point après chaque valeur.
 8. Ne mets jamais de placeholder, moustache {{...}}, « N/A », « inconnu », « non fourni », « TBD », « lorem ipsum », commentaire JSON ou virgule terminale.

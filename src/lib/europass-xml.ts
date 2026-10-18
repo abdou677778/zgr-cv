@@ -11,6 +11,7 @@ import type {
 import { type DocumentLanguage } from "./document-language";
 import { emptyCV, emptyEuropassProfile, newId } from "./cv-types";
 import { processProfilePhoto, profilePhotoDataUrlForPdf } from "./profile-photo";
+import { formatImportedCvAddress } from "./contact-address";
 
 const ISO_639_2: Record<string, string> = {
   fr: "fre",
@@ -911,7 +912,12 @@ function parseCandidateEuropassXml(doc: Document): CV {
     nom_complet: [givenName, familyName].filter(Boolean).join(" "),
     telephone: phone,
     email,
-    adresse: addressLines.join(", "),
+    adresse: formatImportedCvAddress(
+      addressLines.join(", "),
+      city,
+      countryCode.toUpperCase(),
+      postalCode,
+    ),
     date_naissance: value("BirthDate", person),
     wilaya: city,
     pays: countryCode.toUpperCase(),
@@ -1182,7 +1188,7 @@ export async function parseEuropassXml(xmlString: string): Promise<CV> {
     titre_poste: jobTitle,
     email,
     telephone: phone,
-    adresse: address,
+    adresse: formatImportedCvAddress(address, city, country),
     wilaya: city,
     pays: country,
     date_naissance: birthDate,

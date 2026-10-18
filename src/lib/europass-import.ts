@@ -10,6 +10,7 @@ import { type DocumentLanguage } from "./document-language";
 import { analyzeEuropassCoverage } from "./europass-coverage";
 import { parseEuropassXml } from "./europass-xml";
 import { processProfilePhoto } from "./profile-photo";
+import { formatImportedCvAddress } from "./contact-address";
 
 const SUPPORTED_LANGUAGES = ["fr", "en", "es", "de", "it", "zh", "ar"] as const;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -467,7 +468,7 @@ function parsePdfTextFallback(text: string, urls: string[]): CV {
     nom_complet: nameCandidate || "",
     email,
     telephone: phone,
-    adresse: address,
+    adresse: formatImportedCvAddress(address, city, ""),
     wilaya: city,
     date_naissance: birthDate,
     objectif: about.join(" "),

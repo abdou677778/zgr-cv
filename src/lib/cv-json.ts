@@ -12,6 +12,7 @@ import {
   type SoftwareIcon,
   type SoftwareSkill,
 } from "./cv-types";
+import { formatImportedCvAddress } from "./contact-address";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { normalizeProfilePhoto } from "./profile-photo";
@@ -269,7 +270,11 @@ function directCv(source: JsonRecord): CV {
     cnp: canadianNoc(source.cnp ?? source.equivalence_cnp),
     telephone: text(source.telephone),
     email: text(source.email),
-    adresse: text(source.adresse),
+    adresse: formatImportedCvAddress(
+      text(source.adresse),
+      text(source.wilaya),
+      text(source.pays),
+    ),
     statut_relocation: text(source.statut_relocation),
     date_naissance: text(source.date_naissance),
     situation_familiale: text(source.situation_familiale),
@@ -432,7 +437,11 @@ function structuredCv(root: JsonRecord, language: "fr" | "en"): CV {
     titre_poste: firstText(personal, french ? "Poste" : "Position"),
     telephone: firstText(personal, french ? "Téléphone" : "Phone"),
     email: firstText(personal, "Email"),
-    adresse: firstText(personal, french ? "Adresse" : "Address"),
+    adresse: formatImportedCvAddress(
+      firstText(personal, french ? "Adresse" : "Address"),
+      firstText(personal, "Wilaya"),
+      firstText(personal, french ? "Pays" : "Country"),
+    ),
     statut_relocation: firstText(personal, french ? "Statut de relocation" : "Relocation Status"),
     date_naissance: firstText(personal, french ? "Date de naissance" : "Birthday"),
     situation_familiale: firstText(personal, french ? "Situation Familialle" : "Marital status"),

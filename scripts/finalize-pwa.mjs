@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 
 const crcTable = Array.from({ length: 256 }, (_, index) => {
@@ -71,7 +72,15 @@ function createIcon(size) {
 const outputDirectory = resolve("dist-spa");
 const indexHtml = await readFile(resolve(outputDirectory, "index.html"), "utf8");
 const template = await readFile(resolve("scripts", "sw-template.js"), "utf8");
-const buildId = (process.env.VITE_ZGR_BUILD_ID || "local").replace(/[^a-zA-Z0-9_-]/g, "-");
+// A static "local" cache name made successive production deployments share the
+// same service-worker cache.  Derive a stable identifier from the generated
+// application shell when CI has not supplied one, so each changed bundle gets
+// a new cache and browsers can discover the new worker immediately.
+const suppliedBuildId = process.env.VITE_ZGR_BUILD_ID?.trim();
+const buildId = (suppliedBuildId || createHash("sha256").update(indexHtml).digest("hex").slice(0, 12)).replace(
+  /[^a-zA-Z0-9_-]/g,
+  "-",
+);
 const assetUrls = [...indexHtml.matchAll(/(?:src|href)="(\.\/assets\/[^"]+)"/g)].map(
   (match) => match[1],
 );

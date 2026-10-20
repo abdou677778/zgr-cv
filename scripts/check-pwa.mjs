@@ -31,6 +31,9 @@ if (!indexHtml.includes('rel="manifest"') || !indexHtml.includes('name="theme-co
 if (!serviceWorker.includes('event.data?.type === "SKIP_WAITING"')) {
   throw new Error("La mise à jour contrôlée du service worker est absente.");
 }
+if (serviceWorker.includes('const CACHE_NAME = `${CACHE_PREFIX}local`;')) {
+  throw new Error("Le cache PWA doit être versionné à chaque application générée.");
+}
 if (!serviceWorker.includes('url.pathname.includes("/api/")')) {
   throw new Error("Le service worker ne protège pas explicitement les données API du cache.");
 }

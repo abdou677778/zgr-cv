@@ -650,7 +650,24 @@ function languageRows(cv: CV, language: DocumentLanguage): Content[] {
 function contactLine(icon: keyof typeof ICONS, value: string, language: DocumentLanguage): Content {
   const rtl = language === "ar";
   const length = Array.from(value.trim()).length;
-  const fontSize = length > 48 ? 7.2 : length > 40 ? 7.8 : length > 32 ? 8.5 : 9.4;
+  // The Arabic profile card is intentionally compact. Its contact values use
+  // a stepped type scale so long mail and address values stay inside the card
+  // rather than leaking into the main CV column.
+  const fontSize = rtl
+    ? length > 42
+      ? 6.9
+      : length > 32
+        ? 7.4
+        : length > 24
+          ? 8.1
+          : 8.8
+    : length > 48
+      ? 7.2
+      : length > 40
+        ? 7.8
+        : length > 32
+          ? 8.5
+          : 9.4;
   const iconNode = {
     svg: ICONS[icon],
     fit: [11, 11],
@@ -665,9 +682,9 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     noWrap: true,
     verticalAlignment: "middle",
     // The surrounding spacer columns centre the complete icon + value group.
-    // Centring the text as well avoids the visible Arabic drift caused by the
-    // bidi renderer when a line has a phone number or e-mail address.
-    alignment: "center",
+    // Arabic needs centred glyphs as well to avoid bidi drift for numbers and
+    // e-mail addresses; keep the established left alignment in LTR templates.
+    alignment: rtl ? "center" : "left",
   } as Content;
   const line = {
     width: "auto",
@@ -709,11 +726,12 @@ function labeledContact(value: string, label: string) {
 
 function firstPageOverlay(cv: CV, language: DocumentLanguage): Content[] {
   const rtl = language === "ar";
-  const capsuleX = rtl ? 376 : 16;
+  const profileCardX = rtl ? 393 : 16;
+  const profileCardWidth = rtl ? 186 : 204;
   const identityX = rtl ? 25 : 237;
-  const contactWidth = rtl ? 164 : 184;
-  const contactX = capsuleX + (204 - contactWidth) / 2;
-  const contactY = rtl ? 213 : 220;
+  const contactWidth = rtl ? 160 : 184;
+  const contactX = profileCardX + (profileCardWidth - contactWidth) / 2;
+  const contactY = rtl ? 191 : 220;
   const contactLabels = CONTACT_LABELS[language];
   const birthAndFamily = [cv.date_naissance, cv.situation_familiale]
     .map(clean)
@@ -819,17 +837,18 @@ function headerContent(cv: CV, language: DocumentLanguage, currentPage: number):
 
 function background(cv: CV, language: DocumentLanguage, currentPage: number): Content {
   const rtl = language === "ar";
-  const capsuleX = rtl ? 376 : 16;
-  // Arabic glyphs are visually wider than Latin glyphs at the same point size.
-  // Keep the Arabic portrait and fallback initials within equal side margins;
-  // non-Arabic geometry deliberately remains unchanged.
-  const portraitSize = rtl ? 122 : 140;
-  const portraitX = rtl ? capsuleX + (204 - portraitSize) / 2 : capsuleX + 32;
-  const portraitY = rtl ? 74 : 67;
-  const fallbackSize = rtl ? 122 : 148;
+  const profileCardX = rtl ? 393 : 16;
+  const profileCardWidth = rtl ? 186 : 204;
+  // Arabic uses a compact card rather than the legacy oval. It creates a
+  // centred zone for the avatar and contact rows without competing with the
+  // RTL name block. LTR geometry deliberately remains unchanged.
+  const portraitSize = rtl ? 106 : 140;
+  const portraitX = rtl ? profileCardX + (profileCardWidth - portraitSize) / 2 : profileCardX + 32;
+  const portraitY = rtl ? 57 : 67;
+  const fallbackSize = rtl ? 106 : 148;
   const fallbackRadius = fallbackSize / 2;
-  const fallbackX = rtl ? portraitX : capsuleX + 28;
-  const fallbackY = rtl ? 76 : 63;
+  const fallbackX = rtl ? portraitX : profileCardX + 28;
+  const fallbackY = rtl ? 57 : 63;
   const fallbackLabelY = rtl ? fallbackY + fallbackRadius - 18 : 111;
   const headerHeight = currentPage === 1 ? 163.5 : 82;
   const content: Content[] = [
@@ -842,10 +861,12 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   ];
   if (currentPage === 1) {
     content.push({
-      svg: '<svg width="204" height="313" viewBox="0 0 204 313" xmlns="http://www.w3.org/2000/svg"><path d="M102 1C46 1 2 45 2 101V208C2 266 47 311 102 311C157 311 202 266 202 208V101C202 45 158 1 102 1Z" fill="#ffffff" stroke="#5c0632" stroke-width="2"/></svg>',
-      width: 204,
-      height: 313,
-      absolutePosition: { x: capsuleX, y: 37 },
+      svg: rtl
+        ? '<svg width="186" height="330" viewBox="0 0 186 330" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="184" height="328" rx="24" fill="#ffffff" stroke="#5c0632" stroke-width="2"/></svg>'
+        : '<svg width="204" height="313" viewBox="0 0 204 313" xmlns="http://www.w3.org/2000/svg"><path d="M102 1C46 1 2 45 2 101V208C2 266 47 311 102 311C157 311 202 266 202 208V101C202 45 158 1 102 1Z" fill="#ffffff" stroke="#5c0632" stroke-width="2"/></svg>',
+      width: profileCardWidth,
+      height: rtl ? 330 : 313,
+      absolutePosition: { x: profileCardX, y: rtl ? 35 : 37 },
     } as Content);
     if (cv.photo?.dataUrl) {
       content.push({

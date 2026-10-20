@@ -29,16 +29,16 @@ function firstPageGeometry(language: "ar" | "fr") {
   return { background, overlay };
 }
 
-test("centres the Arabic CV PRO circle and contact block inside its capsule", () => {
+test("centres the Arabic CV PRO circle and contact block inside its compact card", () => {
   const { background, overlay } = firstPageGeometry("ar");
   const circle = background.stack.find((item) => item.canvas?.[0]?.type === "ellipse");
-  assert.deepEqual(circle?.absolutePosition, { x: 417, y: 76 });
-  assert.equal(circle?.canvas?.[0]?.r1, 61);
-  // Capsule occupies x=376..580; the circle occupies x=417..539.
-  assert.ok((circle?.absolutePosition?.x || 0) >= 376);
-  assert.ok((circle?.absolutePosition?.x || 0) + 122 <= 580);
-  assert.deepEqual(overlay?.table?.widths, [164]);
-  assert.deepEqual(overlay?.absolutePosition, { x: 396, y: 213 });
+  assert.deepEqual(circle?.absolutePosition, { x: 433, y: 57 });
+  assert.equal(circle?.canvas?.[0]?.r1, 53);
+  // Card occupies x=393..579; the circle occupies x=433..539.
+  assert.ok((circle?.absolutePosition?.x || 0) >= 393);
+  assert.ok((circle?.absolutePosition?.x || 0) + 106 <= 579);
+  assert.deepEqual(overlay?.table?.widths, [160]);
+  assert.deepEqual(overlay?.absolutePosition, { x: 406, y: 191 });
 });
 
 test("keeps the original CV PRO geometry for non-Arabic exports", () => {

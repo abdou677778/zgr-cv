@@ -664,7 +664,10 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     color: INK,
     noWrap: true,
     verticalAlignment: "middle",
-    alignment: rtl ? "right" : "left",
+    // The surrounding spacer columns centre the complete icon + value group.
+    // Centring the text as well avoids the visible Arabic drift caused by the
+    // bidi renderer when a line has a phone number or e-mail address.
+    alignment: "center",
   } as Content;
   const line = {
     width: "auto",
@@ -708,6 +711,9 @@ function firstPageOverlay(cv: CV, language: DocumentLanguage): Content[] {
   const rtl = language === "ar";
   const capsuleX = rtl ? 376 : 16;
   const identityX = rtl ? 25 : 237;
+  const contactWidth = rtl ? 164 : 184;
+  const contactX = capsuleX + (204 - contactWidth) / 2;
+  const contactY = rtl ? 213 : 220;
   const contactLabels = CONTACT_LABELS[language];
   const birthAndFamily = [cv.date_naissance, cv.situation_familiale]
     .map(clean)
@@ -773,11 +779,11 @@ function firstPageOverlay(cv: CV, language: DocumentLanguage): Content[] {
     } as Content,
     {
       table: {
-        widths: [184],
+        widths: [contactWidth],
         body: [[{ stack: contacts }]],
       },
       layout: noBorders,
-      absolutePosition: { x: capsuleX + 10, y: 220 },
+      absolutePosition: { x: contactX, y: contactY },
     } as Content,
   ];
 }
@@ -814,6 +820,17 @@ function headerContent(cv: CV, language: DocumentLanguage, currentPage: number):
 function background(cv: CV, language: DocumentLanguage, currentPage: number): Content {
   const rtl = language === "ar";
   const capsuleX = rtl ? 376 : 16;
+  // Arabic glyphs are visually wider than Latin glyphs at the same point size.
+  // Keep the Arabic portrait and fallback initials within equal side margins;
+  // non-Arabic geometry deliberately remains unchanged.
+  const portraitSize = rtl ? 122 : 140;
+  const portraitX = rtl ? capsuleX + (204 - portraitSize) / 2 : capsuleX + 32;
+  const portraitY = rtl ? 74 : 67;
+  const fallbackSize = rtl ? 122 : 148;
+  const fallbackRadius = fallbackSize / 2;
+  const fallbackX = rtl ? portraitX : capsuleX + 28;
+  const fallbackY = rtl ? 76 : 63;
+  const fallbackLabelY = rtl ? fallbackY + fallbackRadius - 18 : 111;
   const headerHeight = currentPage === 1 ? 163.5 : 82;
   const content: Content[] = [
     {
@@ -833,9 +850,9 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
     if (cv.photo?.dataUrl) {
       content.push({
         image: cv.photo.dataUrl,
-        width: 140,
-        height: 140,
-        absolutePosition: { x: capsuleX + 32, y: 67 },
+        width: portraitSize,
+        height: portraitSize,
+        absolutePosition: { x: portraitX, y: portraitY },
       } as Content);
     } else {
       content.push(
@@ -843,20 +860,20 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
           canvas: [
             {
               type: "ellipse",
-              x: 74,
-              y: 74,
-              r1: 74,
-              r2: 74,
+              x: fallbackRadius,
+              y: fallbackRadius,
+              r1: fallbackRadius,
+              r2: fallbackRadius,
               color: "#ffffff",
               lineColor: "#d6d6d6",
               lineWidth: 1,
             },
           ],
-          absolutePosition: { x: capsuleX + 28, y: 63 },
+          absolutePosition: { x: fallbackX, y: fallbackY },
         } as Content,
         {
           table: {
-            widths: [148],
+            widths: [fallbackSize],
             body: [[{ text: "CV", color: ACCENT, bold: true, fontSize: 36, alignment: "center" }]],
           },
           layout: {
@@ -867,7 +884,7 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
             paddingLeft: () => 0,
             paddingRight: () => 0,
           },
-          absolutePosition: { x: capsuleX + 28, y: 111 },
+          absolutePosition: { x: fallbackX, y: fallbackLabelY },
         } as Content,
       );
     }

@@ -163,6 +163,18 @@ test("the built-in verified catalog can prepare all pages without waiting for AP
   assert.ok(tn.some((item) => item.id === "baseline:thamm-plus"));
 });
 
+test("DV-2027 is a watch item, never an announced registration deadline", () => {
+  const watch = getBaselinePublicationEvidence("DZ").find(
+    (item) => item.id === "baseline:us-diversity-visa-2027-watch",
+  );
+  assert.ok(watch);
+  assert.equal(watch.deadlineAt, null);
+  assert.match(watch.description, /n’est pas publiée/i);
+  const batch = buildLocalPublicationBatch({ page, evidence: [watch] });
+  assert.match(batch.posts[0].body, /ما تسجلش/);
+  assert.doesNotMatch(batch.posts[0].body, /آخر أجل للتسجيل هو/);
+});
+
 test("the local engine translates source meaning without leaking foreign-language text", () => {
   const longEvidence = [
     {

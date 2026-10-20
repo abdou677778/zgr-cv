@@ -10,10 +10,11 @@ const MARKET_COUNTRIES = { TN: "Tunisie", DZ: "Algérie" };
 const MAX_LIMIT = 24;
 const PUBLICATION_IMPORT_TOKEN_PREFIX = "system/publication-import-tokens/";
 const PUBLICATION_IMPORT_PREFIX = "publications/imports/";
-const DV_INSTRUCTIONS_URL =
-  "https://travel.state.gov/content/travel/en/us-visas/immigrate/diversity-visa-program-entry/diversity-visa-instructions.html";
-const DV_ISSUANCE_NOTICE_URL =
-  "https://travel.state.gov/content/travel/en/News/visas-news/diversity-visa-issuance-updated-guidance.html";
+const DV_2027_ENTRY_PERIOD_URL =
+  "https://travel.state.gov/content/travel/en/News/visas-news/changes-to-2027-dv-program-entry-period.html";
+const DV_PROGRAM_URL = "https://dvprogram.state.gov/";
+const DV_FEES_URL =
+  "https://travel.state.gov/content/travel/en/us-visas/visa-information-resources/fees/fees-visa-services.html";
 
 const EDITORIAL_PROFILES = {
   "cv-pro-algeria": {
@@ -95,7 +96,7 @@ const MCP_TOOLS = [
     name: "get_official_program_watch",
     title: "Vérifier une veille officielle de programme",
     description:
-      "Contrôle l’état publié d’un programme qui n’est pas nécessairement ouvert. Actuellement, DV Lottery États-Unis est disponible uniquement en veille : aucune date future ne doit être annoncée sans résultat officiel explicite.",
+      "Contrôle l’état publié d’un programme qui n’est pas nécessairement ouvert. Pour DV-2027, retourne une veille officielle avec la période non publiée tant qu’une annonce du Département d’État ne donne pas de date explicite.",
     inputSchema: {
       type: "object",
       properties: { program: { type: "string", enum: ["us-diversity-visa"] } },
@@ -412,40 +413,56 @@ function stripHtml(value) {
 async function officialProgramWatch(args) {
   if (args.program !== "us-diversity-visa") throw new Error("Programme de veille inconnu.");
   const checkedAt = new Date().toISOString();
-  let instructions = "";
+  let notice = "";
+  let sourceAccess = "official_notice_cached";
   let warning = "";
   try {
-    const response = await fetch(DV_INSTRUCTIONS_URL, {
-      headers: { Accept: "text/html" },
+    const response = await fetch(DV_2027_ENTRY_PERIOD_URL, {
+      headers: {
+        Accept: "text/html",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": "ZGR-CV-Official-Program-Watch/1.0",
+      },
       cf: { cacheTtl: 0, cacheEverything: false },
     });
     if (!response.ok) throw new Error(`Department of State ${response.status}`);
-    instructions = stripHtml(await response.text()).slice(0, 80_000);
+    notice = stripHtml(await response.text()).slice(0, 80_000);
+    sourceAccess = "live_official_notice";
   } catch (error) {
-    warning = error instanceof Error ? error.message : "Source officielle temporairement indisponible.";
+    // travel.state.gov can reject Worker traffic. The pinned official notice remains
+    // the conservative fallback: a rejection must never turn into a presumed opening.
+    const message = error instanceof Error ? error.message : "Source officielle temporairement indisponible.";
+    if (!/\b403\b/.test(message)) warning = message;
   }
-  const futurePeriod = instructions.match(
-    /DV-(20(?:27|28|29|30))[^.]{0,260}?registration period[^.]{0,340}?(?:began|beginning|between)[^.]{0,280}/i,
+  const announcedPeriod = notice.match(
+    /(?:registration period|entry period)[^.]{0,400}?(?:from|between|beginning|begins)[^.]{0,260}/i,
   );
-  const futureDateMention = futurePeriod ? futurePeriod[0] : "";
+  const officialText = announcedPeriod ? announcedPeriod[0] : "";
   return {
     schemaVersion: 1,
     program: "us-diversity-visa",
     title: "Diversity Visa Program — États-Unis",
-    sourceUrl: DV_INSTRUCTIONS_URL,
-    additionalOfficialNoticeUrl: DV_ISSUANCE_NOTICE_URL,
+    sourceUrl: DV_2027_ENTRY_PERIOD_URL,
+    officialEntryUrl: DV_PROGRAM_URL,
+    feesUrl: DV_FEES_URL,
     checkedAt,
-    registration: futureDateMention
-      ? { status: "official_period_detected", officialText: futureDateMention }
+    sourceAccess,
+    registration: officialText
+      ? { status: "official_period_detected", officialText }
       : {
           status: "date_not_published",
           deadlineAt: null,
           message:
-            "Aucune période future d’inscription n’a été détectée dans les instructions officielles consultées. Ne pas annoncer une date de novembre ni inviter à s’inscrire.",
+            "Aucune période d’inscription DV-2027 n’est publiée dans l’avis officiel de référence. Ne pas annoncer une date de novembre ni inviter à s’inscrire.",
         },
+    fees: {
+      registration: "$1 pour le demandeur principal, uniquement lors de l’inscription officielle",
+      visaApplication: "$330 par demandeur de visa sélectionné",
+      rule: "Ne demander aucun paiement avant une période officielle et ne jamais confondre frais gouvernementaux et service privé.",
+    },
     editorialRule:
-      "Utiliser uniquement une publication de vigilance : suivre travel.state.gov et dvprogram.state.gov. L’inscription officielle est gratuite lorsqu’une période est publiée. Aucun accompagnement ne garantit sélection, visa ou admission.",
-    publicationAllowed: Boolean(futureDateMention),
+      "Utiliser uniquement une publication de vigilance : suivre travel.state.gov et dvprogram.state.gov. La période DV-2027 n’est pas à annoncer tant que l’annonce officielle ne donne pas de date. Aucun accompagnement ne garantit sélection, visa ou admission.",
+    publicationAllowed: Boolean(officialText),
     warning: warning || null,
   };
 }

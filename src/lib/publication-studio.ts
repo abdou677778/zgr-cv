@@ -117,6 +117,31 @@ const BASELINE_CHECKED_AT = "2026-10-14T12:00:00.000Z";
 
 const BASELINE_EVIDENCE: Array<PublicationEvidence & { markets: PublicationMarket[] }> = [
   {
+    id: "baseline:us-diversity-visa-2027-watch",
+    markets: ["DZ", "TN"],
+    title: "Diversity Visa DV-2027 — veille officielle, période non publiée",
+    destination: "États-Unis",
+    source: "U.S. Department of State",
+    description:
+      "Au 20 octobre 2026, le Département d’État annonce que la date de début des inscriptions DV-2027 sera communiquée dès que possible. La période n’est pas publiée : il ne faut pas annoncer novembre, inviter à s’inscrire, ni utiliser un intermédiaire.",
+    deadlineAt: null,
+    positions: [],
+    conditions: [
+      "La période d’inscription DV-2027 n’est pas encore publiée officiellement",
+      "Vérifier les critères, la photo et les documents uniquement dans les instructions officielles de la période annoncée",
+      "Une sélection ne garantit ni visa ni admission aux États-Unis",
+    ],
+    requiredDocuments: [
+      "Informations d’état civil exactes",
+      "Photo conforme uniquement aux instructions de la période publiée",
+      "Numéro de confirmation à conserver après une inscription officielle",
+    ],
+    applicationUrl: "https://dvprogram.state.gov/",
+    sourceUrl:
+      "https://travel.state.gov/content/travel/en/News/visas-news/changes-to-2027-dv-program-entry-period.html",
+    checkedAt: "2026-10-20T00:00:00.000Z",
+  },
+  {
     id: "baseline:canada-francophone-mobility",
     markets: ["DZ", "TN"],
     title: "Mobilité francophone — permis de travail hors Québec",
@@ -714,6 +739,7 @@ function folded(value: string) {
 function arabicOpportunityTitle(value: string) {
   const title = folded(value);
   const mappings: Array<[RegExp, string]> = [
+    [/diversity visa|dv.2027|green card lottery/, "القرعة الأمريكية دي في 2027 والمتابعة الرسمية"],
     [/canada.*opportunites.*candidats tunisiens/, "انتدابات كندية للكفاءات التونسية"],
     [/reforestation.*granada|healthy living/, "التشجير ونمط العيش الصحي في جبال غرناطة"],
     [/youth office.*esslingen/, "تطوّع في مكتب الشباب بمدينة إسلينغن"],
@@ -748,6 +774,7 @@ function arabicOpportunityTitle(value: string) {
 function arabicDestination(value: string) {
   const destination = folded(value);
   if (/canada|quebec|ontario|prince.edouard|atlanti/.test(destination)) return "كندا";
+  if (/etats.unis|united states|usa/.test(destination)) return "الولايات المتحدة الأمريكية";
   if (/orgiva|granada|spain|espagne/.test(destination)) return "إسبانيا";
   if (/esslingen|black forest|st georgen|karlsruhe|germany|allemagne/.test(destination))
     return "ألمانيا";
@@ -765,6 +792,7 @@ function arabicDestination(value: string) {
 function destinationFlag(value: string) {
   const destination = folded(value);
   if (/canada|quebec|ontario|prince.edouard|atlanti/.test(destination)) return "🇨🇦";
+  if (/etats.unis|united states|usa/.test(destination)) return "🇺🇸";
   if (/morocco|maroc|tetouan|martil/.test(destination)) return "🇲🇦";
   if (/alger|dz/.test(destination)) return "🇩🇿";
   if (/tunis|tn/.test(destination)) return "🇹🇳";
@@ -787,6 +815,8 @@ function arabicSource(value: string) {
   if (/aneti/.test(source)) return "الوكالة الوطنية للتشغيل والعمل المستقل في تونس";
   if (/atct/.test(source)) return "الوكالة التونسية للتعاون الفني";
   if (/offres.*algerie/.test(source)) return "منصة عروض العمل في الجزائر";
+  if (/department of state|departement d.etat|u\.s\. department/.test(source))
+    return "وزارة الخارجية الأمريكية";
   return "الجهة الرسمية الناشرة للعرض";
 }
 
@@ -840,6 +870,10 @@ function arabicDocuments(values: string[]) {
     else if (/experience|travail/.test(document)) addUnique(result, "شهادات الخبرة والعمل");
     else if (/offre d.emploi|job offer/.test(document))
       addUnique(result, "عرض العمل عند طلبه في المسار");
+    else if (/photo/.test(document)) addUnique(result, "صورة مطابقة لتعليمات الدورة الرسمية");
+    else if (/etat civil|civil status/.test(document))
+      addUnique(result, "معلومات الحالة المدنية مطابقة للوثائق");
+    else if (/confirmation/.test(document)) addUnique(result, "رقم التأكيد بعد التسجيل الرسمي");
   });
   return result.slice(0, 4);
 }
@@ -895,6 +929,22 @@ function registrationServices(proof: PublicationEvidence) {
 
 function serviceCampaign(proof: PublicationEvidence, index: number) {
   const searchable = folded(`${proof.id} ${proof.title} ${proof.destination} ${proof.description}`);
+  if (/diversity visa|dv.2027|green card lottery/.test(searchable)) {
+    return {
+      headline: [
+        "القرعة الأمريكية تحتاج معلومة رسمية قبل أي خطوة",
+        "ما تعلنش على موعد القرعة قبل بلاغ وزارة الخارجية الأمريكية",
+        "حضّر معطياتك للقرعة الأمريكية وانتظر الإعلان الرسمي",
+      ][index % 3],
+      label: "🧾 خدمات التحضير للقرعة الأمريكية",
+      items: [
+        "شرح الإعلان الرسمي عند صدوره",
+        "مراجعة المعطيات الشخصية والعائلية قبل التسجيل الرسمي",
+        "التثبت من الصورة وفق تعليمات الدورة المنشورة",
+        "التذكير بحفظ رقم التأكيد بعد التسجيل الرسمي",
+      ],
+    };
+  }
   if (/flussi|italie|italy/.test(searchable)) {
     return {
       headline: [
@@ -990,6 +1040,7 @@ function serviceCampaign(proof: PublicationEvidence, index: number) {
 function opportunityServiceLines(proof: PublicationEvidence, index: number) {
   const campaign = serviceCampaign(proof, index);
   const searchable = folded(`${proof.id} ${proof.title} ${proof.destination} ${proof.description}`);
+  if (/diversity visa|dv.2027|green card lottery/.test(searchable)) return campaign.items;
   if (/atct|cooperation technique/.test(searchable)) {
     return [
       "مرافقة في تعبئة استمارة العرض المنشور",
@@ -1111,6 +1162,35 @@ function localBody(
   const deadline = localDeadline(proof.deadlineAt, page.market);
   const campaign = serviceCampaign(proof, index);
   const services = opportunityServiceLines(proof, index);
+  const isDiversityVisa = /diversity visa|dv.2027|green card lottery/.test(
+    folded(`${proof.id} ${proof.title} ${proof.description}`),
+  );
+  const algeriaSteps = isDiversityVisa
+    ? [
+        "🧭 كيفاش تتثبت",
+        "1️⃣ تابع إعلان وزارة الخارجية الأمريكية فقط",
+        "2️⃣ ما تسجلش وما تبعثش معلوماتك قبل فتح الفترة رسميا",
+        "3️⃣ استعمل موقع دي في الرسمي فقط عند نشر الموعد",
+      ].join("\n")
+    : [
+        "🧭 خطوات التقديم",
+        "1️⃣ قارن الشروط مع خبرتك ومؤهلاتك",
+        "2️⃣ حضّر سيرة ذاتية ورسالة تحفيزية مخصصتين",
+        "3️⃣ قدّم عبر الرابط الرسمي الموجود أسفل المنشور",
+      ].join("\n");
+  const tunisianSteps = isDiversityVisa
+    ? [
+        "📝 كيفاش تتثبت",
+        "1️⃣ تابع بلاغ وزارة الخارجية الأمريكية",
+        "2️⃣ ما تسجّلش قبل ما تخرج الفترة الرسمية",
+        "3️⃣ وقتها استعمل كان موقع دي في الرسمي",
+      ].join("\n")
+    : [
+        "📝 كيفاش تترشح",
+        "1️⃣ اقرأ البلاغ الرسمي للآخر",
+        "2️⃣ كيّف سيرتك الذاتية ورسالة التحفيز مع العرض",
+        "3️⃣ ابعث الترشح من الرابط الرسمي فقط",
+      ].join("\n");
 
   if (page.id === "cv-pro-algeria") {
     const opening =
@@ -1126,12 +1206,7 @@ function localBody(
       `✅ الشروط الأساسية\n${linesWith("✅", conditions)}`,
       documents.length ? `📄 الوثائق المطلوبة\n${linesWith("▪️", documents)}` : "",
       scope ? `${scope.label}\n${scope.value}` : "",
-      [
-        "🧭 خطوات التقديم",
-        "1️⃣ قارن الشروط مع خبرتك ومؤهلاتك",
-        "2️⃣ حضّر سيرة ذاتية ورسالة تحفيزية مخصصتين",
-        "3️⃣ قدّم عبر الرابط الرسمي الموجود أسفل المنشور",
-      ].join("\n"),
+      algeriaSteps,
       `${campaign.label}\n${linesWith("🟩", services)}`,
       "⚠️ الخدمة ما تعنيش ضمان التوظيف أو التأشيرة والقرار يرجع للجهة الرسمية",
       PAGE_HASHTAGS[page.id],
@@ -1159,12 +1234,7 @@ function localBody(
       `✅ شنوّة يلزمك\n${linesWith("✅", conditions)}`,
       documents.length ? `📑 حضّر الوثائق هاذي\n${linesWith("▪️", documents)}` : "",
       `🟩 خدماتنا لهذه الفرصة\n${linesWith("✅", services)}`,
-      [
-        "📝 كيفاش تترشح",
-        "1️⃣ اقرأ البلاغ الرسمي للآخر",
-        "2️⃣ كيّف سيرتك الذاتية ورسالة التحفيز مع العرض",
-        "3️⃣ ابعث الترشح من الرابط الرسمي فقط",
-      ].join("\n"),
+      tunisianSteps,
       "🤝 ننجمو نعاونوك في إعداد ملف ترشح واضح ومنظم",
       "⚠️ ما فماش ضمان تشغيل أو تأشيرة والقرار النهائي للجهة المنتدبة",
       PAGE_HASHTAGS[page.id],
@@ -1186,12 +1256,19 @@ function localBody(
       .join("\n"),
     `🎯 شكون ينجم يترشح\n${linesWith("✅", conditions)}`,
     documents.length ? `🧰 حضّر ملفك\n${linesWith("✨", documents)}` : "",
-    [
-      "🚀 خطوتك توا",
-      "1️⃣ تأكد إن الشروط تناسب خبرتك ومؤهلاتك",
-      "2️⃣ حضّر ترشح مخصص يبرز نقاط قوتك",
-      "3️⃣ استعمل الرابط الرسمي الموجود مع المنشور",
-    ].join("\n"),
+    isDiversityVisa
+      ? [
+          "🚀 الخطوة الصحيحة توا",
+          "1️⃣ تابع البلاغ الرسمي متاع وزارة الخارجية الأمريكية",
+          "2️⃣ ما تسجّلش وما تخلّص حتى يتم الإعلان عن الفترة",
+          "3️⃣ استعمل كان موقع دي في الرسمي وقت الفتح",
+        ].join("\n")
+      : [
+          "🚀 خطوتك توا",
+          "1️⃣ تأكد إن الشروط تناسب خبرتك ومؤهلاتك",
+          "2️⃣ حضّر ترشح مخصص يبرز نقاط قوتك",
+          "3️⃣ استعمل الرابط الرسمي الموجود مع المنشور",
+        ].join("\n"),
     `🟩 كيف نرافقوك في هالفرصة\n${linesWith("✅", services)}`,
     "🛡️ نرافقوك باحتراف أما القبول والتأشيرة يبقاو من صلاحيات الجهات الرسمية",
     PAGE_HASHTAGS[page.id],
@@ -1204,6 +1281,19 @@ function localComments(page: PublicationPage, proof: PublicationEvidence) {
   const source = arabicSource(proof.source);
   const documents = arabicDocuments(proof.requiredDocuments).join("، ");
   const deadline = localDeadline(proof.deadlineAt, page.market);
+  const isDiversityVisa = /diversity visa|dv.2027|green card lottery/.test(
+    folded(`${proof.id} ${proof.title} ${proof.description}`),
+  );
+  if (isDiversityVisa) {
+    const common = [
+      `🔗 المصدر الرسمي هو ${source} والرابط تلقاه مع المنشور`,
+      "📅 تاريخ فتح تسجيل دي في 2027 مازال ما تعلنش رسميا",
+      "🔐 ما تعطيش معطياتك ولا تخلّص لجهة غير رسمية",
+      "📸 الصورة والوثائق تتراجع فقط حسب تعليمات الدورة وقت تنشر",
+      "⚠️ التسجيل أو الاختيار ما يضمنش التأشيرة ولا القبول",
+    ];
+    return common.map(withoutParentheses);
+  }
   if (page.id === "cv-pro-algeria") {
     return [
       `🔗 المصدر الرسمي هو ${source} والرابط تلقاه مع المنشور`,

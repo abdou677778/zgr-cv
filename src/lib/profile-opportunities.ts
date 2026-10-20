@@ -130,6 +130,39 @@ const OFFICIAL_PROGRAMS: Array<Omit<OpportunityMatch, "score" | "status" | "reas
     sourceUrl: "https://eures.europa.eu/jobseekers_fr",
     checkedAt: new Date().toISOString(),
   },
+  {
+    id: "program:us-diversity-visa-2027-watch",
+    kind: "program",
+    source: "U.S. Department of State",
+    title: "Diversity Visa DV-2027 — veille officielle, période non publiée",
+    employer: "Gouvernement des États-Unis",
+    countryCode: "US",
+    countryName: "États-Unis",
+    location: "États-Unis",
+    description:
+      "Au contrôle du 20 octobre 2026, le Département d’État n’a pas annoncé la période d’inscription DV-2027. Il faut préparer les informations et attendre uniquement l’annonce officielle avant toute inscription.",
+    deadlineAt: null,
+    conditions: [
+      "Aucune date d’inscription DV-2027 n’est publiée officiellement",
+      "Consulter uniquement les instructions de travel.state.gov et le site E-DV officiel au moment annoncé",
+      "Les critères d’éligibilité, les documents et les règles de photo doivent être vérifiés dans les instructions de la période concernée",
+      "Une sélection ne garantit ni visa ni admission aux États-Unis",
+    ],
+    requiredDocuments: [
+      "Informations d’état civil exactes",
+      "Photo conforme uniquement aux instructions de la période publiée",
+      "Numéro de confirmation à conserver après une inscription officielle",
+    ],
+    application: {
+      type: "official_watch",
+      label: "Suivre l’annonce officielle DV-2027",
+      url: "https://travel.state.gov/content/travel/en/News/visas-news/changes-to-2027-dv-program-entry-period.html",
+      loginRequired: false,
+    },
+    sourceUrl:
+      "https://travel.state.gov/content/travel/en/News/visas-news/changes-to-2027-dv-program-entry-period.html",
+    checkedAt: "2026-10-20T00:00:00.000Z",
+  },
 ];
 
 const clean = (value: string | null | undefined) => (value || "").replace(/\s+/g, " ").trim();

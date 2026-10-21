@@ -13,6 +13,7 @@ import {
   PROFILE_PHOTO_AI_MODEL,
   PROFILE_PHOTO_BACKGROUND,
   processProfilePhoto,
+  profilePhotoBlob,
 } from "@/lib/profile-photo";
 import { professionalizeProfilePhoto } from "@/lib/profile-photo-ai";
 import {
@@ -180,7 +181,7 @@ export function ProfilePhotoField({
     try {
       let sourceId = sourceAssetId;
       if (!sourceId) {
-        const sourceBlob = await (await fetch(photo.dataUrl)).blob();
+        const sourceBlob = await profilePhotoBlob(photo);
         const source = localAsset(sourceBlob, photo, "original");
         sourceId = source.id;
         if (profileId) {
@@ -196,7 +197,7 @@ export function ProfilePhotoField({
         setSourceAssetId(sourceId);
       }
       const generated = await professionalizeProfilePhoto(photo);
-      const generatedBlob = await (await fetch(generated.dataUrl || "")).blob();
+      const generatedBlob = await profilePhotoBlob(generated);
       const generatedAsset = localAsset(
         generatedBlob,
         generated,

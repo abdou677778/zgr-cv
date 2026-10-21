@@ -22,3 +22,11 @@ test("fills an empty status and replaces overlong imported values with a complet
   assert.equal(normalizeRelocationStatus("", "fr", { fillEmpty: true }), "Mobile géographiquement");
   assert.equal(normalizeRelocationStatus("x".repeat(80), "en"), "Open to relocate");
 });
+
+test("translates recognized legacy relocation defaults into the active document language", () => {
+  assert.equal(normalizeRelocationStatus("Mobile géographiquement", "ar"), "مستعد للانتقال");
+  assert.equal(
+    normalizeRelocationStatus("Mobile partout au Canada", "ar"),
+    "مستعد للانتقال إلى كندا",
+  );
+});

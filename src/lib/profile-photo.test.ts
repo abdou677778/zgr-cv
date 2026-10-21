@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeProfilePhoto, PROFILE_PHOTO_MAX_BYTES } from "./profile-photo";
+import { normalizeProfilePhoto, PROFILE_PHOTO_MAX_BYTES, profilePhotoBlob } from "./profile-photo";
 
 test("accepts compact WebP profile-photo metadata and rejects oversized or foreign images", () => {
   const valid = normalizeProfilePhoto({
@@ -39,4 +39,18 @@ test("accepts R2-only metadata without embedding the photo bytes in profile JSON
 
   assert.equal(value?.r2Key, "clients/ZGR-20260831-ABC/photo.webp");
   assert.equal(value?.dataUrl, undefined);
+});
+
+test("decodes the embedded WebP locally without a data-URL network request", async () => {
+  const blob = await profilePhotoBlob({
+    dataUrl: "data:image/webp;base64,UklGRg==",
+    name: "portrait.webp",
+    width: 160,
+    height: 160,
+    sizeBytes: 4,
+    mimeType: "image/webp",
+    updatedAt: "2026-08-31T00:00:00.000Z",
+  });
+  assert.equal(blob.type, "image/webp");
+  assert.equal(blob.size, 4);
 });

@@ -31,6 +31,33 @@ export function defaultRelocationStatus(
     : GENERIC_RELOCATION_STATUS[language];
 }
 
+function normalizedStatus(value: string) {
+  return value.trim().toLocaleLowerCase("fr").replace(/\s+/g, " ");
+}
+
+/**
+ * A persisted multilingual profile can contain one of the old stock values in
+ * the wrong language. These labels are UI defaults rather than personal prose,
+ * so translating only exact known values is safe and never rewrites a custom
+ * statement entered by a candidate.
+ */
+function knownStatusTarget(value: string): "generic" | "canada" | null {
+  const candidate = normalizedStatus(value);
+  if (
+    Object.values(CANADA_RELOCATION_STATUS).some(
+      (label) => normalizedStatus(label) === candidate,
+    )
+  )
+    return "canada";
+  if (
+    Object.values(GENERIC_RELOCATION_STATUS).some(
+      (label) => normalizedStatus(label) === candidate,
+    )
+  )
+    return "generic";
+  return null;
+}
+
 export function normalizeRelocationStatus(
   value: unknown,
   language: DocumentLanguage,
@@ -39,6 +66,8 @@ export function normalizeRelocationStatus(
   const text = typeof value === "string" ? value.trim() : "";
   if (!text && options.fillEmpty)
     return defaultRelocationStatus(language, options.target ?? "generic");
+  const knownTarget = knownStatusTarget(text);
+  if (knownTarget) return defaultRelocationStatus(language, knownTarget);
   if (Array.from(text).length > RELOCATION_STATUS_MAX_CHARS)
     return defaultRelocationStatus(language, options.target ?? "generic");
   return text;

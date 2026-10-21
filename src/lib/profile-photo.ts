@@ -200,8 +200,22 @@ export async function profilePhotoBlob(photo: ProfilePhoto) {
   if (!photo.dataUrl?.startsWith("data:image/webp;base64,")) {
     throw new Error("Les données WebP de la photo sont absentes.");
   }
-  const response = await fetch(photo.dataUrl);
-  const blob = await response.blob();
+  // Do not fetch a data URL. Some privacy extensions and embedded browsers
+  // reject data: fetches even though <img> can display the same photo, which
+  // previously broke the PDF preview immediately after a local photo import.
+  const encoded = photo.dataUrl.slice("data:image/webp;base64,".length);
+  let bytes: Uint8Array;
+  try {
+    const binary = atob(encoded);
+    bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    throw new Error("Les données WebP de la photo sont invalides.");
+  }
+  // Copy into a regular ArrayBuffer: TypeScript also permits SharedArrayBuffer
+  // views, while Blob deliberately accepts only a transferable buffer here.
+  const transferable = new Uint8Array(bytes.length);
+  transferable.set(bytes);
+  const blob = new Blob([transferable.buffer], { type: "image/webp" });
   if (blob.type !== "image/webp" || blob.size > PROFILE_PHOTO_MAX_BYTES) {
     throw new Error("La photo WebP dépasse 150 Ko ou son format est invalide.");
   }

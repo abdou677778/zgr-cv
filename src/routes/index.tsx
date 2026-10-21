@@ -172,7 +172,7 @@ import type { EuropassBatchImport } from "@/lib/europass-import";
 import { activatePwaUpdate, promptPwaInstall, usePwaStatus } from "@/lib/pwa-client";
 import { reportSyncFailure } from "@/lib/observability";
 import { emptyOpportunityPlan, type OpportunityPlan } from "@/lib/profile-opportunities";
-import { RELOCATION_STATUS_MAX_CHARS } from "@/lib/relocation-status";
+import { normalizeRelocationStatus, RELOCATION_STATUS_MAX_CHARS } from "@/lib/relocation-status";
 import { formatImportedCvAddress, formatImportedCvPhone } from "@/lib/contact-address";
 import { NOC_AI_SYSTEM, nocAiPrompt } from "@/lib/ai-prompts";
 
@@ -1283,6 +1283,18 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       console.warn("Le CV n’a pas pu être sauvegardé localement.", error);
     }
   }, [cvByLanguage, language, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    // Repair only recognized old default labels. A candidate's own custom
+    // mobility sentence remains untouched, while the Arabic document can no
+    // longer show the French default "Mobile géographiquement".
+    setCvByLanguage((current) => {
+      const normalized = normalizeRelocationStatus(current.ar.statut_relocation, "ar");
+      if (normalized === current.ar.statut_relocation) return current;
+      return { ...current, ar: { ...current.ar, statut_relocation: normalized } };
+    });
+  }, [loaded]);
 
   useEffect(() => {
     if (!loaded) return;

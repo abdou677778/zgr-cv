@@ -875,6 +875,9 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
         image: cv.photo.dataUrl,
         width: portraitSize,
         height: portraitSize,
+        // Absolute image coordinates still receive pdfmake's inherited text
+        // alignment offset. Neutralize Arabic defaultStyle.alignment here.
+        alignment: "left",
         absolutePosition: { x: portraitX, y: portraitY },
       } as Content);
     } else {

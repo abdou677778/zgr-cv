@@ -826,7 +826,10 @@ function headerContent(cv: CV, language: DocumentLanguage, currentPage: number):
 
 function background(cv: CV, language: DocumentLanguage, currentPage: number): Content {
   const rtl = language === "ar";
-  const capsuleX = rtl ? 376 : 16;
+  // Preserve the original visible SVG position in the full-page background,
+  // previously imposed by inherited right alignment. Use this same origin for
+  // the photo, now with explicit left alignment on both absolute elements.
+  const capsuleX = rtl ? PAGE_W - 204 : 16;
   // Arabic glyphs are visually wider than Latin glyphs at the same point size.
   // Keep the Arabic portrait and fallback initials within equal side margins;
   // non-Arabic geometry deliberately remains unchanged.
@@ -868,6 +871,7 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
       }</svg>`,
       width: 204,
       height: 313,
+      alignment: "left",
       absolutePosition: { x: capsuleX, y: 37 },
     } as Content);
     if (cv.photo?.dataUrl) {

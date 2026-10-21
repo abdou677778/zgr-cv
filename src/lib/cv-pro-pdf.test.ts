@@ -35,7 +35,7 @@ function firstPageGeometry(language: "ar" | "fr") {
 test("centres the Arabic CV PRO circle and contact block inside its capsule", () => {
   const { background, overlay } = firstPageGeometry("ar");
   const circle = background.stack.find((item) => item.svg?.includes("<circle"));
-  assert.deepEqual(circle?.absolutePosition, { x: 376, y: 37 });
+  assert.deepEqual(circle?.absolutePosition, { x: 391.28, y: 37 });
   assert.match(circle?.svg || "", /cx="102" cy="92" r="60\.5"/);
   assert.deepEqual(overlay?.table?.widths, [164]);
   assert.deepEqual(overlay?.absolutePosition, { x: 396, y: 213 });
@@ -82,7 +82,7 @@ test("keeps an Arabic portrait on the same circle axis as the fallback avatar", 
     alignment: string;
   };
   assert.match(capsule.svg, /cx="102" cy="92" r="60\.5" fill="#E7E7E7"/);
-  assert.deepEqual(portrait.absolutePosition, { x: 417.5, y: 68.5 });
+  assert.deepEqual(portrait.absolutePosition, { x: 432.78, y: 68.5 });
   assert.equal(portrait.width, 121);
   assert.equal(portrait.height, 121);
   assert.equal(portrait.alignment, "left");

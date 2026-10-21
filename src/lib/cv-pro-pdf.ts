@@ -156,6 +156,8 @@ const ICONS = {
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="#5c0632" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="2.5"/><path d="M7.5 18c.8-3 2.3-4.5 4.5-4.5s3.7 1.5 4.5 4.5"/></svg>',
   car: '<svg viewBox="0 0 24 24" fill="none" stroke="#5c0632" stroke-width="1.9"><path d="m5 11 2-5h10l2 5 2 2v6h-2v2h-3v-2H8v2H5v-2H3v-6Z"/><circle cx="7" cy="15" r="1"/><circle cx="17" cy="15" r="1"/></svg>',
   star: '<svg viewBox="0 0 24 24" fill="none" stroke="#5c0632" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><path d="m12 6 1.8 3.7 4.1.6-3 2.9.7 4.1-3.6-1.9-3.6 1.9.7-4.1-3-2.9 4.1-.6Z"/></svg>',
+  globe:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="#5c0632" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.7 5.5 3.7 9S14.5 18.5 12 21c-2.5-2.5-3.7-5.5-3.7-9S9.5 5.5 12 3"/></svg>',
 } as const;
 
 const PRO_ICONS = {
@@ -687,7 +689,11 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
   return {
     columns: [{ width: "*", text: "" }, line, { width: "*", text: "" }],
     columnGap: 0,
-    margin: [0, 0, 0, 7],
+    // Every row uses the same two equal spacer columns. The centre of the
+    // icon + text group therefore remains the exact centre of the oval,
+    // regardless of the language or the length of the value.
+    alignment: "center",
+    margin: [0, 0, 0, rtl ? 5 : 7],
   } as Content;
 }
 
@@ -720,6 +726,7 @@ function firstPageOverlay(cv: CV, language: DocumentLanguage): Content[] {
     .filter(Boolean)
     .join(", ");
   const location = cv.adresse.trim() || [cv.wilaya, cv.pays].map(clean).filter(Boolean).join(", ");
+  const relocation = cv.statut_relocation.trim();
   const contacts = [
     cv.telephone ? contactLine("phone", cv.telephone, language) : null,
     cv.email ? contactLine("mail", cv.email, language) : null,
@@ -731,6 +738,10 @@ function firstPageOverlay(cv: CV, language: DocumentLanguage): Content[] {
       ? contactLine("star", labeledContact(cv.service_national, contactLabels.service), language)
       : null,
     location ? contactLine("pin", location, language) : null,
+    // The address and mobility preference are distinct facts. Keeping them
+    // on separate rows prevents a Canadian mobility statement from being
+    // mistaken for part of the postal address or being wrapped mid-sentence.
+    relocation ? contactLine("globe", relocation, language) : null,
   ].filter((item): item is Content => Boolean(item));
   const noBorders = {
     hLineWidth: () => 0,

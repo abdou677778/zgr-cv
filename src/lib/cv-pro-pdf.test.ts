@@ -13,6 +13,8 @@ function firstPageGeometry(language: "ar" | "fr") {
       telephone: "0555123456",
       email: "amine@example.com",
       adresse: language === "ar" ? "23000، عنابة، الجزائر" : "23000, Annaba, Algérie",
+      statut_relocation:
+        language === "ar" ? "متاح للتنقل في جميع أنحاء كندا" : "Mobilité partout au Canada",
     },
     language,
   );
@@ -24,7 +26,7 @@ function firstPageGeometry(language: "ar" | "fr") {
     }>;
   };
   const overlay = (document.content as unknown as unknown[])?.[1] as {
-    table?: { widths?: number[] };
+    table?: { widths?: number[]; body?: unknown[][] };
     absolutePosition?: { x: number; y: number };
   };
   return { background, overlay };
@@ -37,6 +39,10 @@ test("centres the Arabic CV PRO circle and contact block inside its capsule", ()
   assert.match(circle?.svg || "", /cx="102" cy="92" r="60\.5"/);
   assert.deepEqual(overlay?.table?.widths, [164]);
   assert.deepEqual(overlay?.absolutePosition, { x: 396, y: 213 });
+  const contactRows = JSON.stringify(overlay?.table?.body);
+  assert.match(contactRows, /23000/);
+  assert.match(contactRows, /"text":"كندا"/);
+  assert.match(contactRows, /stroke-linecap/);
 });
 
 test("keeps the original CV PRO geometry for non-Arabic exports", () => {

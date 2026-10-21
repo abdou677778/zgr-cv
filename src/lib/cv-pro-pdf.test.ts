@@ -34,7 +34,7 @@ test("centres the Arabic CV PRO circle and contact block inside its capsule", ()
   const { background, overlay } = firstPageGeometry("ar");
   const circle = background.stack.find((item) => item.svg?.includes("<circle"));
   assert.deepEqual(circle?.absolutePosition, { x: 376, y: 37 });
-  assert.match(circle?.svg || "", /cx="102" cy="75" r="60\.5"/);
+  assert.match(circle?.svg || "", /cx="102" cy="92" r="60\.5"/);
   assert.deepEqual(overlay?.table?.widths, [164]);
   assert.deepEqual(overlay?.absolutePosition, { x: 396, y: 213 });
 });

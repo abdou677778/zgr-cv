@@ -830,7 +830,10 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   const fallbackRadius = fallbackSize / 2;
   const fallbackX = rtl ? portraitX : capsuleX + 28;
   const fallbackY = rtl ? 76 : 63;
-  const fallbackLabelY = rtl ? fallbackY + fallbackRadius - 18 : 111;
+  // In Arabic, lower the fallback circle by 17 pt so its top curve has a
+  // deliberate white margin below the top curve of the original oval.
+  const fallbackCircleCenterY = rtl ? 92 : fallbackRadius;
+  const fallbackLabelY = rtl ? fallbackY + fallbackRadius - 2 : 111;
   const fallbackLabelX = rtl ? fallbackX + 16 : fallbackX;
   const headerHeight = currentPage === 1 ? 163.5 : 82;
   const content: Content[] = [
@@ -847,7 +850,7 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
     content.push({
       svg: `<svg width="204" height="313" viewBox="0 0 204 313" xmlns="http://www.w3.org/2000/svg"><path d="M102 1C46 1 2 45 2 101V208C2 266 47 311 102 311C157 311 202 266 202 208V101C202 45 158 1 102 1Z" fill="#ffffff" stroke="#5c0632" stroke-width="2"/>${
         embedsFallbackCircle
-          ? `<circle cx="102" cy="75" r="${fallbackRadius - 0.5}" fill="#ffffff" stroke="#d6d6d6" stroke-width="1"/>`
+          ? `<circle cx="102" cy="${fallbackCircleCenterY}" r="${fallbackRadius - 0.5}" fill="#ffffff" stroke="#d6d6d6" stroke-width="1"/>`
           : ""
       }</svg>`,
       width: 204,

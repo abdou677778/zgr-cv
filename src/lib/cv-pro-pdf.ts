@@ -672,12 +672,14 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     alignment: "center",
   } as Content;
   return {
-    // Equal icon and spacer columns make the middle text cell share the
-    // exact vertical axis of the portrait circle. The icon never shifts the
-    // readable value off-centre, including for RTL lines.
+    // In Arabic, size the text cell to its measured content. Equal flexible
+    // spaces and a 13 pt balancing spacer preserve the existing text centre,
+    // while the icon follows each individual value instead of a fixed rail.
     table: {
-      widths: [13, "*", 13],
-      body: [rtl ? [{ text: "" }, textNode, iconNode] : [iconNode, textNode, { text: "" }]],
+      widths: rtl ? [13, "*", "auto", 13, "*"] : [13, "*", 13],
+      body: [rtl
+        ? [{ text: "" }, { text: "" }, textNode, iconNode, { text: "" }]
+        : [iconNode, textNode, { text: "" }]],
     },
     layout: {
       hLineWidth: () => 0,

@@ -81,7 +81,7 @@ test("keeps an Arabic portrait on the same circle axis as the fallback avatar", 
     height: number;
   };
   assert.match(capsule.svg, /cx="102" cy="92" r="60\.5" fill="#E7E7E7"/);
-  assert.deepEqual(portrait.absolutePosition, { x: 417, y: 68 });
+  assert.deepEqual(portrait.absolutePosition, { x: 399, y: 68 });
   assert.equal(portrait.width, 122);
   assert.equal(portrait.height, 122);
 });

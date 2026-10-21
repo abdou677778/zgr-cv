@@ -831,6 +831,7 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   const fallbackX = rtl ? portraitX : capsuleX + 28;
   const fallbackY = rtl ? 76 : 63;
   const fallbackLabelY = rtl ? fallbackY + fallbackRadius - 18 : 111;
+  const fallbackLabelX = rtl ? fallbackX + 16 : fallbackX;
   const headerHeight = currentPage === 1 ? 163.5 : 82;
   const content: Content[] = [
     {
@@ -841,8 +842,14 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
     } as Content,
   ];
   if (currentPage === 1) {
+    const isFallbackAvatar = !cv.photo?.dataUrl;
+    const embedsFallbackCircle = rtl && isFallbackAvatar;
     content.push({
-      svg: '<svg width="204" height="313" viewBox="0 0 204 313" xmlns="http://www.w3.org/2000/svg"><path d="M102 1C46 1 2 45 2 101V208C2 266 47 311 102 311C157 311 202 266 202 208V101C202 45 158 1 102 1Z" fill="#ffffff" stroke="#5c0632" stroke-width="2"/></svg>',
+      svg: `<svg width="204" height="313" viewBox="0 0 204 313" xmlns="http://www.w3.org/2000/svg"><path d="M102 1C46 1 2 45 2 101V208C2 266 47 311 102 311C157 311 202 266 202 208V101C202 45 158 1 102 1Z" fill="#ffffff" stroke="#5c0632" stroke-width="2"/>${
+        embedsFallbackCircle
+          ? `<circle cx="102" cy="75" r="${fallbackRadius - 0.5}" fill="#ffffff" stroke="#d6d6d6" stroke-width="1"/>`
+          : ""
+      }</svg>`,
       width: 204,
       height: 313,
       absolutePosition: { x: capsuleX, y: 37 },
@@ -856,21 +863,16 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
       } as Content);
     } else {
       content.push(
-        {
-          canvas: [
-            {
-              type: "ellipse",
-              x: fallbackRadius,
-              y: fallbackRadius,
-              r1: fallbackRadius,
-              r2: fallbackRadius,
-              color: "#ffffff",
-              lineColor: "#d6d6d6",
-              lineWidth: 1,
-            },
-          ],
-          absolutePosition: { x: fallbackX, y: fallbackY },
-        } as Content,
+        ...(!rtl
+          ? [
+              {
+                svg: `<svg width="${fallbackSize}" height="${fallbackSize}" viewBox="0 0 ${fallbackSize} ${fallbackSize}" xmlns="http://www.w3.org/2000/svg"><circle cx="${fallbackRadius}" cy="${fallbackRadius}" r="${fallbackRadius - 0.5}" fill="#ffffff" stroke="#d6d6d6" stroke-width="1"/></svg>`,
+                width: fallbackSize,
+                height: fallbackSize,
+                absolutePosition: { x: fallbackX, y: fallbackY },
+              } as Content,
+            ]
+          : []),
         {
           table: {
             widths: [fallbackSize],
@@ -884,7 +886,7 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
             paddingLeft: () => 0,
             paddingRight: () => 0,
           },
-          absolutePosition: { x: fallbackX, y: fallbackLabelY },
+          absolutePosition: { x: fallbackLabelX, y: fallbackLabelY },
         } as Content,
       );
     }

@@ -54,3 +54,34 @@ test("keeps the original CV PRO geometry for non-Arabic exports", () => {
   assert.deepEqual(overlay?.table?.widths, [184]);
   assert.deepEqual(overlay?.absolutePosition, { x: 26, y: 220 });
 });
+
+test("keeps an Arabic portrait on the same circle axis as the fallback avatar", () => {
+  const document = buildCvProPdf(
+    {
+      ...emptyCV,
+      photo: {
+        dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+        name: "portrait.png",
+        width: 900,
+        height: 900,
+        sizeBytes: 8,
+        mimeType: "image/webp",
+        updatedAt: "2026-10-21T00:00:00.000Z",
+      },
+    },
+    "ar",
+  );
+  const background = (
+    document.background as unknown as (page: number) => { stack: Array<Record<string, unknown>> }
+  )(1);
+  const capsule = background.stack.find((item) => typeof item.svg === "string") as { svg: string };
+  const portrait = background.stack.find((item) => "image" in item) as {
+    absolutePosition: { x: number; y: number };
+    width: number;
+    height: number;
+  };
+  assert.match(capsule.svg, /cx="102" cy="92" r="60\.5" fill="#E7E7E7"/);
+  assert.deepEqual(portrait.absolutePosition, { x: 417, y: 68 });
+  assert.equal(portrait.width, 122);
+  assert.equal(portrait.height, 122);
+});

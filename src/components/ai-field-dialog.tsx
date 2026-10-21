@@ -215,7 +215,7 @@ export function AiFieldDialog({
               }
             }}
           >
-            Appliquer
+            Appliquer au formulaire
           </Button>
         </DialogFooter>
       </DialogContent>

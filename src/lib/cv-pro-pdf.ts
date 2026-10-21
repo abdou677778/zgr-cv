@@ -832,7 +832,9 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   // non-Arabic geometry deliberately remains unchanged.
   const portraitSize = rtl ? 122 : 140;
   const portraitX = rtl ? capsuleX + (204 - portraitSize) / 2 : capsuleX + 32;
-  const portraitY = rtl ? 74 : 67;
+  // The portrait centre must share the exact vertical axis of the original
+  // Arabic fallback circle (capsule top 37 + circle centre 92 = 129).
+  const portraitY = rtl ? 68 : 67;
   const fallbackSize = rtl ? 122 : 148;
   const fallbackRadius = fallbackSize / 2;
   const fallbackX = rtl ? portraitX : capsuleX + 28;
@@ -853,11 +855,15 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   ];
   if (currentPage === 1) {
     const isFallbackAvatar = !cv.photo?.dataUrl;
-    const embedsFallbackCircle = rtl && isFallbackAvatar;
+    // Keep one fixed circular reference for initials and a real portrait. This
+    // changes neither the original oval nor the contact zone below it.
+    const embedsPortraitCircle = rtl;
     content.push({
       svg: `<svg width="204" height="313" viewBox="0 0 204 313" xmlns="http://www.w3.org/2000/svg"><path d="M102 1C46 1 2 45 2 101V208C2 266 47 311 102 311C157 311 202 266 202 208V101C202 45 158 1 102 1Z" fill="#ffffff" stroke="#5c0632" stroke-width="2"/>${
-        embedsFallbackCircle
-          ? `<circle cx="102" cy="${fallbackCircleCenterY}" r="${fallbackRadius - 0.5}" fill="#ffffff" stroke="#d6d6d6" stroke-width="1"/>`
+        embedsPortraitCircle
+          ? `<circle cx="102" cy="${fallbackCircleCenterY}" r="${fallbackRadius - 0.5}" fill="${
+              isFallbackAvatar ? "#ffffff" : "#E7E7E7"
+            }" stroke="#d6d6d6" stroke-width="1"/>`
           : ""
       }</svg>`,
       width: 204,

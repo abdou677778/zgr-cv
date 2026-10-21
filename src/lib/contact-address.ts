@@ -7,7 +7,7 @@
 const POSTAL_CODE = /\b(?:\d{4,10}(?:[- ]\d{3,4})?|[A-Z]\d[A-Z][ -]?\d[A-Z]\d)\b/i;
 
 const COUNTRY_NAMES = [
-  "algérie", "algerie", "algeria", "الجزائر", "canada", "tunisie", "tunis", "tunesia", "تونس",
+  "algérie", "algerie", "algeria", "الجزائر", "canada", "كندا", "tunisie", "tunis", "tunesia", "تونس",
   "france", "allemagne", "germany", "deutschland", "italie", "italy", "italia", "espagne", "spain",
   "maroc", "morocco", "belgique", "belgium", "royaume-uni", "united kingdom", "uk", "uae",
   "émirats arabes unis", "emirats arabes unis", "arabie saoudite", "saudi arabia",
@@ -61,17 +61,21 @@ export function formatImportedCvAddress(
     .map((part) => compact(part.replace(POSTAL_CODE, "")))
     .filter(Boolean);
   const countryPart = parts.find((part) => countryIn(part));
-  const detectedCountry = explicitCountry || countryPart || "";
+  // AI proposals describe a replacement value. Their own structured facts must
+  // therefore win over the former province/country held by the CV; otherwise
+  // applying a new address could silently restore the old one.
+  const detectedCountry = countryPart || explicitCountry || "";
   // If no useful component is available, preserving the original is safer
   // than guessing which part is a city and silently dropping the rest.
   if (!explicitRegion && !detectedCountry && !postal) return raw;
-  const city =
-    explicitRegion ||
-    [...parts]
-      .reverse()
-      .find((part) => !isStreetDetail(part) && !countryIn(part) && !/^\d+[\d\s-]*$/.test(part)) ||
-    "";
+  const sourceCity = [...parts]
+    .reverse()
+    .find((part) => !isStreetDetail(part) && !countryIn(part) && !/^\d+[\d\s-]*$/.test(part));
+  // When the replacement itself contains a country or postal code, missing
+  // parts are genuinely unknown; do not splice in a former province.
+  const city = sourceCity || (!countryPart && !postal ? explicitRegion : "");
   const concise = [postal, city, detectedCountry]
+    .map((part) => compact(part.replace(/\s*\([^)]*\)\s*/g, " ")))
     .filter((part, index, all) => part && all.findIndex((candidate) => same(candidate, part)) === index)
     .join(", ");
 

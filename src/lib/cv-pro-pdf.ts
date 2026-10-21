@@ -830,16 +830,11 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   // Arabic glyphs are visually wider than Latin glyphs at the same point size.
   // Keep the Arabic portrait and fallback initials within equal side margins;
   // non-Arabic geometry deliberately remains unchanged.
-  const portraitSize = rtl ? 122 : 140;
-  // The circular PNG has a transparent edge which pdfmake renders with a
-  // visible rightward optical shift in this Arabic capsule. Offset its canvas
-  // left by 18 pt so the *visible* portrait circle sits on the oval centre.
-  // This is intentionally limited to CV PRO Arabic; the original French and
-  // other-language layout remains byte-for-byte geometrically unchanged.
-  const portraitX = rtl ? capsuleX + (204 - portraitSize) / 2 - 18 : capsuleX + 32;
-  // The portrait centre must share the exact vertical axis of the original
-  // Arabic fallback circle (capsule top 37 + circle centre 92 = 129).
-  const portraitY = rtl ? 68 : 67;
+  // The real portrait replaces the Arabic reference circle exactly: same
+  // centre (102, 92), same radius (60.5) and therefore the same bounds.
+  const portraitSize = rtl ? 121 : 140;
+  const portraitX = rtl ? capsuleX + 41.5 : capsuleX + 32;
+  const portraitY = rtl ? 68.5 : 67;
   const fallbackSize = rtl ? 122 : 148;
   const fallbackRadius = fallbackSize / 2;
   const fallbackX = rtl ? portraitX : capsuleX + 28;

@@ -11,8 +11,6 @@ const PROFILE_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const pdfPhotoCache = new Map<string, string>();
 const pdfCircularPhotoCache = new Map<string, string>();
 
-type SubjectBounds = { centerX: number };
-
 function blobAsDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -62,52 +60,6 @@ function imageDimensions(image: ImageBitmap | HTMLImageElement) {
 
 function closeBitmap(image: ImageBitmap | HTMLImageElement) {
   if ("close" in image && typeof image.close === "function") image.close();
-}
-
-/**
- * Professionalized ZGR portraits are flattened on a uniform light-grey
- * background. Detecting that background lets the circular renderer centre the
- * actual person, rather than merely centring an image canvas whose subject may
- * be off to one side. Ordinary photos intentionally keep their original crop.
- */
-function greyBackgroundSubjectBounds(
-  image: ImageBitmap | HTMLImageElement,
-  width: number,
-  height: number,
-): SubjectBounds | undefined {
-  const probeEdge = Math.min(420, Math.max(width, height));
-  const scale = probeEdge / Math.max(width, height);
-  const probeWidth = Math.max(1, Math.round(width * scale));
-  const probeHeight = Math.max(1, Math.round(height * scale));
-  const probe = document.createElement("canvas");
-  probe.width = probeWidth;
-  probe.height = probeHeight;
-  const context = probe.getContext("2d", { willReadFrequently: true });
-  if (!context) return undefined;
-  context.drawImage(image, 0, 0, probeWidth, probeHeight);
-  const pixels = context.getImageData(0, 0, probeWidth, probeHeight).data;
-  let backgroundPixels = 0;
-  let subjectPixels = 0;
-  let minX = probeWidth;
-  let maxX = -1;
-  for (let y = 0; y < probeHeight; y += 2) {
-    for (let x = 0; x < probeWidth; x += 2) {
-      const index = (y * probeWidth + x) * 4;
-      const distance = Math.hypot(pixels[index] - 231, pixels[index + 1] - 231, pixels[index + 2] - 231);
-      if (distance < 28) {
-        backgroundPixels += 1;
-      } else if (pixels[index + 3] > 180) {
-        subjectPixels += 1;
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-      }
-    }
-  }
-  const sampled = Math.ceil(probeWidth / 2) * Math.ceil(probeHeight / 2);
-  if (backgroundPixels / sampled < 0.35 || subjectPixels / sampled < 0.03 || maxX < minX) {
-    return undefined;
-  }
-  return { centerX: ((minX + maxX) / 2 / probeWidth) * width };
 }
 
 function renderImage(
@@ -309,13 +261,7 @@ export async function circularProfilePhotoDataUrlForPdf(photo: ProfilePhoto) {
     const scale = Math.max(edge / dimensions.width, edge / dimensions.height);
     const renderedWidth = dimensions.width * scale;
     const renderedHeight = dimensions.height * scale;
-    const subject = greyBackgroundSubjectBounds(image, dimensions.width, dimensions.height);
-    // The bounded correction only applies to the known neutral background. A
-    // solid background fills any exposed edge, while faces remain centred.
-    const subjectOffset = subject
-      ? Math.max(-edge * 0.18, Math.min(edge * 0.18, (dimensions.width / 2 - subject.centerX) * scale))
-      : 0;
-    const offsetX = (edge - renderedWidth) / 2 + subjectOffset;
+    const offsetX = (edge - renderedWidth) / 2;
     const offsetY = (edge - renderedHeight) / 2;
     const canvas = document.createElement("canvas");
     canvas.width = edge;

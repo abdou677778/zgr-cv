@@ -671,28 +671,24 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     // bidi renderer when a line has a phone number or e-mail address.
     alignment: "center",
   } as Content;
-  const line = {
-    width: "auto",
+  return {
+    // Equal icon and spacer columns make the middle text cell share the
+    // exact vertical axis of the portrait circle. The icon never shifts the
+    // readable value off-centre, including for RTL lines.
     table: {
-      widths: rtl ? ["auto", 13] : [13, "auto"],
-      body: [rtl ? [textNode, iconNode] : [iconNode, textNode]],
+      widths: [13, "*", 13],
+      body: [rtl ? [{ text: "" }, textNode, iconNode] : [iconNode, textNode, { text: "" }]],
     },
     layout: {
       hLineWidth: () => 0,
       vLineWidth: () => 0,
       paddingTop: () => 0,
       paddingBottom: () => 0,
-      paddingLeft: (column: number) => (rtl ? (column === 1 ? 4 : 0) : 0),
-      paddingRight: (column: number) => (rtl ? 0 : column === 0 ? 4 : 0),
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
     },
-  } as Content;
-  return {
-    columns: [{ width: "*", text: "" }, line, { width: "*", text: "" }],
-    columnGap: 0,
-    // Every row uses the same two equal spacer columns. The centre of the
-    // icon + text group therefore remains the exact centre of the oval,
-    // regardless of the language or the length of the value.
-    alignment: "center",
+    // The table spans the fixed contact zone; its centre equals the circle's
+    // centre. The middle text cell is therefore perfectly aligned to it.
     margin: [0, 0, 0, rtl ? 5 : 7],
   } as Content;
 }

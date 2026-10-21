@@ -673,12 +673,12 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
   } as Content;
   return {
     // In Arabic, size the text cell to its measured content. Equal flexible
-    // spaces and a 13 pt balancing spacer preserve the existing text centre,
+    // spaces and an equal balancing spacer preserve the existing text centre,
     // while the icon follows each individual value instead of a fixed rail.
     table: {
-      widths: rtl ? [13, "*", "auto", 13, "*"] : [13, "*", 13],
+      widths: rtl ? [18, "*", "auto", 5, 13, "*"] : [13, "*", 13],
       body: [rtl
-        ? [{ text: "" }, { text: "" }, textNode, iconNode, { text: "" }]
+        ? [{ text: "" }, { text: "" }, textNode, { text: "" }, iconNode, { text: "" }]
         : [iconNode, textNode, { text: "" }]],
     },
     layout: {

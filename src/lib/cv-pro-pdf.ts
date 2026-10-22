@@ -524,6 +524,7 @@ function learningBlock(item: Formation | Education, language: DocumentLanguage):
 }
 
 function softwareGrid(cv: CV, language: DocumentLanguage): Content {
+  const rtl = language === "ar";
   const items = cv.logiciels.filter((item) => item.label.trim());
   const rows: Content[][] = [];
   for (let index = 0; index < items.length; index += 3) {
@@ -535,7 +536,7 @@ function softwareGrid(cv: CV, language: DocumentLanguage): Content {
         return {
           width: "*",
           stack: [
-            { svg, fit: [24, 24], alignment: "center" },
+            { svg, fit: rtl ? [14, 14] : [24, 24], alignment: "center" },
             {
               text: displayText(item.label, language, 15),
               fontSize: 7.4,
@@ -549,15 +550,18 @@ function softwareGrid(cv: CV, language: DocumentLanguage): Content {
     );
   }
   return {
+    // Section bar already contributes 7 pt; add 3 pt to match the 10 pt
+    // section-to-section gap. Do not add another trailing row gap in Arabic.
+    margin: rtl ? [0, 3, 0, 0] : [0, 0, 0, 0],
     stack: rows.map(
-      (row) =>
+      (row, rowIndex) =>
         ({
           columns: [
             ...row,
             ...Array.from({ length: 3 - row.length }, () => ({ width: "*", text: "" })),
           ],
           columnGap: 5,
-          margin: [0, 0, 0, 5],
+          margin: [0, 0, 0, rtl && rowIndex === rows.length - 1 ? 0 : 5],
         }) as Content,
     ),
   } as Content;

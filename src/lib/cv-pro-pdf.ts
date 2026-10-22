@@ -672,13 +672,12 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     alignment: "center",
   } as Content;
   return {
-    // In Arabic, size the text cell to its measured content. Equal flexible
-    // spaces and an equal balancing spacer preserve the existing text centre,
-    // while the icon follows each individual value instead of a fixed rail.
+    // Equal outside spaces centre the complete value + gap + icon group.
+    // The text is measured by pdfmake, including mixed Arabic/Latin values.
     table: {
-      widths: rtl ? [18, "*", "auto", 5, 13, "*"] : [13, "*", 13],
+      widths: rtl ? ["*", "auto", 5, 11, "*"] : [13, "*", 13],
       body: [rtl
-        ? [{ text: "" }, { text: "" }, textNode, { text: "" }, iconNode, { text: "" }]
+        ? [{ text: "" }, textNode, { text: "" }, iconNode, { text: "" }]
         : [iconNode, textNode, { text: "" }]],
     },
     layout: {
@@ -713,7 +712,7 @@ function labeledContact(value: string, label: string) {
 
 function firstPageOverlay(cv: CV, language: DocumentLanguage): Content[] {
   const rtl = language === "ar";
-  const capsuleX = rtl ? 376 : 16;
+  const capsuleX = rtl ? PAGE_W - 204 : 16;
   const identityX = rtl ? 25 : 237;
   const contactWidth = rtl ? 164 : 184;
   const contactX = capsuleX + (204 - contactWidth) / 2;

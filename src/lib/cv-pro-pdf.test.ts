@@ -38,9 +38,9 @@ test("centres the Arabic CV PRO circle and contact block inside its capsule", ()
   assert.deepEqual(circle?.absolutePosition, { x: 391.28, y: 37 });
   assert.match(circle?.svg || "", /cx="102" cy="92" r="60\.5"/);
   assert.deepEqual(overlay?.table?.widths, [164]);
-  assert.deepEqual(overlay?.absolutePosition, { x: 396, y: 213 });
+  assert.deepEqual(overlay?.absolutePosition, { x: 411.28, y: 213 });
   const contactRows = JSON.stringify(overlay?.table?.body);
-  assert.match(contactRows, /"widths":\[18,"\*","auto",5,13,"\*"\]/);
+  assert.match(contactRows, /"widths":\["\*","auto",5,11,"\*"\]/);
   assert.match(contactRows, /23000/);
   assert.match(contactRows, /"text":"كندا"/);
   assert.match(contactRows, /stroke-linecap/);

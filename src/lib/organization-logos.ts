@@ -1,15 +1,23 @@
 import { CLIENTS_API_ENDPOINT } from "./auth-client";
 import type { CompanyLogo, CV } from "./cv-types";
-import { ORGANIZATIONS } from "../data/organization-catalog";
+import { ORGANIZATIONS, type Organization } from "../data/organization-catalog";
 import { replaceSharedSoftwareLogo } from "./shared-software-logos";
 export { ORGANIZATIONS };
 const endpoint=CLIENTS_API_ENDPOINT.replace(/\/clients$/, "/organization-logos");
 let overrides: Record<string,string>={};
+let customOrganizations: Organization[]=[];
+export function organizationCatalog(): readonly Organization[] {
+  const entries = new Map(ORGANIZATIONS.map(item=>[item.id,item]));
+  customOrganizations.forEach(item=>entries.set(item.id,item));
+  return [...entries.values()];
+}
 let loading: Promise<void>|undefined;
 export function loadOrganizationLogos(force=false) {
   if(!loading||force)loading=fetch(endpoint,{cache:"no-store"}).then(async r=>{
     if(!r.ok)throw new Error("Bibliothèque indisponible");
-    overrides=(await r.json()).logos||{};
+    const body=await r.json();
+    overrides=body.logos||{};
+    customOrganizations=Array.isArray(body.organizations)?body.organizations:[];
     window.dispatchEvent(new Event("zgr-organization-logos"));
   }).catch(()=>{loading=undefined;});
   return loading;
@@ -31,6 +39,18 @@ export async function organizationLogo(id:string):Promise<CompanyLogo|undefined>
 export async function saveOrganizationLogo(id:string,file:File){
   await replaceSharedSoftwareLogo(id,file,endpoint);await loadOrganizationLogos(true);
   return organizationLogo(id);
+}
+export async function createOrganization(name:string,category:string,file:File) {
+  const trimmed=name.trim();
+  if (!trimmed || trimmed.length>180) throw new Error("Indiquez un nom de 1 à 180 caractères.");
+  const existing=organizationCatalog().find(item=>item.name.normalize("NFKC").toLowerCase()===trimmed.normalize("NFKC").toLowerCase());
+  if(existing) throw new Error("Ce nom existe déjà : sélectionnez-le pour modifier son logo.");
+  const id=`custom-${crypto.randomUUID()}`;
+  await replaceSharedSoftwareLogo(id,file,endpoint,{name:trimmed,category});
+  await loadOrganizationLogos(true);
+  const logo=await organizationLogo(id);
+  if(!logo)throw new Error("Logo enregistré, rechargez la bibliothèque.");
+  return logo;
 }
 export async function prepareOrganizationLogos(cv:CV):Promise<CV>{
   await loadOrganizationLogos();

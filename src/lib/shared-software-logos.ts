@@ -13,7 +13,7 @@ export function loadSharedSoftwareLogos(force = false) {
   return loading;
 }
 
-export async function replaceSharedSoftwareLogo(slug: string, file: File, target = endpoint) {
+export async function replaceSharedSoftwareLogo(slug: string, file: File, target = endpoint, metadata?: { name: string; category: string }) {
   if (!/^(image\/(png|webp|jpeg|svg\+xml))$/.test(file.type) || file.size > 4 * 1024 * 1024)
     throw new Error("Choisissez un SVG, PNG, WebP ou JPG de 4 Mo maximum.");
   const url = URL.createObjectURL(file);
@@ -30,7 +30,7 @@ export async function replaceSharedSoftwareLogo(slug: string, file: File, target
   } finally { URL.revokeObjectURL(url); }
   const response = await fetch(`${target}/${encodeURIComponent(slug)}`, {
     method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminSession() || ""}` },
-    body: JSON.stringify({ dataUrl }),
+    body: JSON.stringify({ dataUrl, ...metadata }),
   });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Enregistrement du logo impossible.");

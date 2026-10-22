@@ -225,6 +225,19 @@ test("shared software logos require admin authentication and preserve replaced v
   }))).status, 200);
   assert.equal((await (await call(env, "/api/organization-logos")).json()).logos["dz-1"], dataUrl);
   assert.equal((await (await call(env, "/api/software-logos")).json()).logos["dz-1"], undefined);
+  const createOrganization = (body) => call(env, "/api/organization-logos/custom-test-university", authorized(admin.token, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }));
+  assert.equal((await createOrganization({dataUrl})).status,400);
+  assert.equal((await createOrganization({dataUrl,name:"Université de test",category:"invalid"})).status,400);
+  assert.equal((await createOrganization({dataUrl,name:" جامعة الاختبار ",category:"university"})).status,200);
+  // A logo replacement must preserve the searchable name and category.
+  assert.equal((await createOrganization({dataUrl})).status,200);
+  const library = await (await call(env,"/api/organization-logos")).json();
+  assert.equal(library.logos["custom-test-university"],dataUrl);
+  assert.deepEqual(library.organizations.find(item=>item.id==="custom-test-university"),{
+    id:"custom-test-university",name:"جامعة الاختبار",category:"university",asset:"",domain:"",
+  });
 });
 
 test("les sessions par appareil peuvent être consultées et révoquées séparément", async () => {

@@ -4956,16 +4956,19 @@ async function route(request, env, ctx) {
   if (["/api/software-logos", "/api/organization-logos"].includes(url.pathname) && request.method === "GET") {
     const namespace = url.pathname === "/api/organization-logos" ? "organization-logos" : "software-logos";
     const logos = {};
+    const organizations = [];
     let cursor;
     do {
       const page = await env.CLIENTS_BUCKET.list({ prefix: `${namespace}/current/`, cursor, limit: 500 });
       await Promise.all(page.objects.map(async (object) => {
         const entry = await readR2Json(env, object.key);
         if (entry?.slug && entry?.dataUrl) logos[entry.slug] = entry.dataUrl;
+        if (namespace === "organization-logos" && entry?.slug && entry?.name)
+          organizations.push({id:entry.slug,name:entry.name,category:entry.category || "company",asset:"",domain:""});
       }));
       cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);
-    return json({ logos }, 200, origin);
+    return json({ logos, ...(namespace === "organization-logos" ? { organizations } : {}) }, 200, origin);
   }
   if (url.pathname === "/api/auth/login" && request.method === "POST")
     return login(request, env, origin, ctx);
@@ -4994,6 +4997,19 @@ async function route(request, env, ctx) {
     const entry = { slug, dataUrl, updatedAt: new Date().toISOString(), updatedBy: actor.username };
     const key = `${namespace}/current/${slug}.json`;
     const previous = await readR2Json(env, key);
+    if (namespace === "organization-logos") {
+      const name = body.name ?? previous?.name;
+      const category = body.category ?? previous?.category;
+      if (name !== undefined) {
+        if (typeof name !== "string" || !name.trim() || name.trim().length > 180 ||
+            !["company", "university", "school", "training", "institute"].includes(category))
+          return json({error:"Nom et catégorie d’établissement valides requis."},400,origin);
+        entry.name = name.trim();
+        entry.category = category;
+      }
+      if (slug.startsWith("custom-") && !entry.name)
+        return json({error:"Nom requis pour une nouvelle organisation."},400,origin);
+    }
     if (previous) await env.CLIENTS_BUCKET.put(`${namespace}/history/${slug}/${crypto.randomUUID()}.json`, JSON.stringify(previous));
     await env.CLIENTS_BUCKET.put(key, JSON.stringify(entry), { httpMetadata: { contentType: "application/json" } });
     return json({ ok: true, slug, updatedAt: entry.updatedAt }, 200, origin);

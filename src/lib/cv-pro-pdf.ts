@@ -364,7 +364,7 @@ function bulletList(items: string[], language: DocumentLanguage, compact = false
       } as Content;
       const body = {
         width: "*",
-        text: displayText(withTerminalPeriod(item), language, compact ? 30 : 58),
+        text: displayText(withTerminalPeriod(item), language, compact ? 30 : rtl ? 100 : 58),
         alignment: rtl ? "right" : "left",
         fontSize: compact ? 8.2 : 9,
         lineHeight: BODY_LINE_HEIGHT,
@@ -459,7 +459,7 @@ function entryLocationLine(
   const value = [primary, location].map(clean).filter(Boolean).join(", ");
   if (!value) return null;
   return {
-    text: displayText(withTerminalPeriod(value), language, 58),
+    text: displayText(withTerminalPeriod(value), language, language === "ar" ? 100 : 58),
     color: INK,
     fontSize: 8.8,
     lineHeight: META_LINE_HEIGHT,
@@ -494,7 +494,7 @@ function learningBlock(item: Formation | Education, language: DocumentLanguage):
       ...(secondary
         ? [
             {
-              text: displayText(withTerminalPeriod(secondary), language, 58),
+              text: displayText(withTerminalPeriod(secondary), language, rtl ? 100 : 58),
               color: DARK,
               fontSize: 8.8,
               lineHeight: BODY_LINE_HEIGHT,
@@ -506,7 +506,7 @@ function learningBlock(item: Formation | Education, language: DocumentLanguage):
       ...(isEducation && item.equivalence
         ? [
             {
-              text: displayText(withTerminalPeriod(item.equivalence), language, 58),
+              text: displayText(withTerminalPeriod(item.equivalence), language, rtl ? 100 : 58),
               italics: true,
               fontSize: 8.4,
               lineHeight: BODY_LINE_HEIGHT,

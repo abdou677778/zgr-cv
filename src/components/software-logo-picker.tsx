@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
-import { SOFTWARE_ICON_CATALOG, softwareIconUrl } from "@/lib/software-icons";
+import { SOFTWARE_ICON_CATALOG, softwareIconUrl, normalizeSoftwareIcon } from "@/lib/software-icons";
 
 export function SoftwareLogoPicker({ value, onSelect }: {
   value: string;
@@ -20,7 +20,8 @@ export function SoftwareLogoPicker({ value, onSelect }: {
   }, [value]);
   const search = query.toLocaleLowerCase().replace(/\s+/g, "");
   const matches = SOFTWARE_ICON_CATALOG.filter((item) =>
-    `${item.title}${item.slug}`.toLocaleLowerCase().replace(/\s+/g, "").includes(search),
+    `${item.title}${item.slug}`.toLocaleLowerCase().replace(/\s+/g, "").includes(search) ||
+    (search.length > 1 && item.slug === normalizeSoftwareIcon(query)),
   ).slice(0, 12);
   return <Popover open={open} onOpenChange={setOpen}><PopoverAnchor asChild><div className="relative min-w-0 flex-1">
     <Input value={query} placeholder="Canva, ChatGPT…" role="combobox"
@@ -46,7 +47,9 @@ export function SoftwareLogoPicker({ value, onSelect }: {
         className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs hover:bg-slate-100"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => { onSelect(item.slug, item.title); setQuery(item.title); setOpen(false); }}>
-        <img src={softwareIconUrl(item.slug)} alt="" className="h-5 w-5 object-contain" />
+        {softwareIconUrl(item.slug)
+          ? <img src={softwareIconUrl(item.slug)} alt="" className="h-5 w-5 shrink-0 object-contain" />
+          : <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border text-slate-400" title="Logo à personnaliser dans la bibliothèque cloud">—</span>}
         {item.title}
       </button>)}
       {!matches.length && <p className="p-2 text-xs text-slate-500">Aucun logo trouvé. Importez votre icône locale.</p>}

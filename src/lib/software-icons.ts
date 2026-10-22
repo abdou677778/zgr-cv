@@ -4,6 +4,9 @@ const LEGACY_ICON_SLUGS: Record<string, string> = {
   word: "microsoftword",
   excel: "microsoftexcel",
   powerpoint: "microsoftpowerpoint",
+  "leonardo ai": "leonardoai", "hey gen": "heygen", "gamma ai": "gamma",
+  "cursor ai": "cursor", "eleven labs": "elevenlabs", "genspark ai": "genspark",
+  "manus ai": "manus", "n8n.io": "n8n", grammrly: "grammarly",
 };
 
 const catalogSlugs = new Set(SOFTWARE_ICON_CATALOG.map((item) => item.slug));
@@ -27,7 +30,9 @@ export function normalizeSoftwareIcon(value: string | undefined) {
 
 export function softwareIconUrl(icon: string | undefined) {
   const slug = normalizeSoftwareIcon(icon);
-  return slug === "generic" ? "" : sharedLogos[slug] || `/software-icons/${slug}.svg`;
+  const entry = SOFTWARE_ICON_CATALOG.find((item) => item.slug === slug);
+  return slug === "generic" ? "" : sharedLogos[slug] ||
+    (entry?.asset === "" ? "" : `/software-icons/${entry?.asset || `${slug}.svg`}`);
 }
 
 export { SOFTWARE_ICON_CATALOG };

@@ -1598,5 +1598,463 @@
     "title": "Apache ECharts",
     "slug": "apacheecharts",
     "hex": "AA344D"
+  },
+  {
+    "title": "Adobe XD",
+    "slug": "adobexd",
+    "hex": "555555",
+    "asset": "adobexd.ico",
+    "source": "https://www.adobe.com/favicon.ico"
+  },
+  {
+    "title": "ArcGIS",
+    "slug": "arcgis",
+    "hex": "2C7AC3",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Autodesk Revit",
+    "slug": "revit",
+    "hex": "555555",
+    "asset": "revit.svg",
+    "source": "https://damassets.autodesk.net/content/dam/autodesk/dotcom-next/favicon.svg"
+  },
+  {
+    "title": "Beautiful.ai",
+    "slug": "beautifulai",
+    "hex": "555555",
+    "asset": "beautifulai.png",
+    "source": "https://cdn.prod.website-files.com/59deb588800ae30001ec19c9/691b4ac8c1ffe0a062a23de7_BAI%20Favicon.png"
+  },
+  {
+    "title": "Camtasia",
+    "slug": "camtasia",
+    "hex": "555555",
+    "asset": "camtasia.png",
+    "source": "https://www.techsmith.com/wp-content/uploads/2021/08/cropped-favicon-1-32x32.png"
+  },
+  {
+    "title": "CapCut",
+    "slug": "capcut",
+    "hex": "555555",
+    "asset": "capcut.ico",
+    "source": "https://sf16-web-tos-buz.capcutstatic.com/obj/capcut-web-buz-sg/common/images/lv_web-2.ico"
+  },
+  {
+    "title": "CATIA",
+    "slug": "catia",
+    "hex": "555555",
+    "asset": "catia.png",
+    "source": "https://www.3ds.com/asset/img/favicon/default/favicon_corp.ico"
+  },
+  {
+    "title": "CorelDRAW",
+    "slug": "coreldraw",
+    "hex": "000000",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Cursor AI",
+    "slug": "cursor",
+    "hex": "555555",
+    "asset": "cursor.ico",
+    "source": "https://cursor.com/marketing-static/favicon-light.ico"
+  },
+  {
+    "title": "D-ID",
+    "slug": "did",
+    "hex": "555555",
+    "asset": "did.png",
+    "source": "https://www.d-id.com/wp-content/uploads/2024/10/D-ID-logo-350x350-1-150x150.png"
+  },
+  {
+    "title": "Descript",
+    "slug": "descript",
+    "hex": "555555",
+    "asset": "descript.png",
+    "source": "https://static-cdn.descript.com/web/icons/favicon-96x96.png"
+  },
+  {
+    "title": "Dolibarr",
+    "slug": "dolibarr",
+    "hex": "263C5C",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "EBP",
+    "slug": "ebp",
+    "hex": "555555",
+    "asset": "ebp.png",
+    "source": "https://www.ebp.com/wp-content/uploads/2026/08/ebp-by_Shine-favicon-bleu-120x120.png"
+  },
+  {
+    "title": "ElevenLabs",
+    "slug": "elevenlabs",
+    "hex": "000000",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Enscape",
+    "slug": "enscape",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://enscape3d.com"
+  },
+  {
+    "title": "ETABS",
+    "slug": "etabs",
+    "hex": "555555",
+    "asset": "etabs.png",
+    "source": "https://www.csiamerica.com/csi/favicon/csi-apple-icon-57x57.png"
+  },
+  {
+    "title": "FlutterFlow",
+    "slug": "flutterflow",
+    "hex": "555555",
+    "asset": "flutterflow.png",
+    "source": "https://flutterflow.io/favicon-32.png"
+  },
+  {
+    "title": "Freepik",
+    "slug": "freepik",
+    "hex": "1273EB",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Gamma AI",
+    "slug": "gamma",
+    "hex": "555555",
+    "asset": "gamma.svg",
+    "source": "https://static.gamma.app/favicons/favicon_dark.svg"
+  },
+  {
+    "title": "Genspark AI",
+    "slug": "genspark",
+    "hex": "555555",
+    "asset": "genspark.png",
+    "source": "https://www.genspark.ai/favicon.ico"
+  },
+  {
+    "title": "GIMP",
+    "slug": "gimp",
+    "hex": "8C8073",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Grok",
+    "slug": "grok",
+    "hex": "555555",
+    "asset": "grok.svg",
+    "source": "https://grok.com/images/favicon.svg"
+  },
+  {
+    "title": "HeyGen",
+    "slug": "heygen",
+    "hex": "555555",
+    "asset": "heygen.ico",
+    "source": "https://www.heygen.com/favicon.ico?favicon.2m321y0geyyfh.ico"
+  },
+  {
+    "title": "Hostinger",
+    "slug": "hostinger",
+    "hex": "673DE6",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "IBM SPSS Statistics",
+    "slug": "spss",
+    "hex": "555555",
+    "asset": "spss.ico",
+    "source": "https://www.ibm.com/favicon.ico"
+  },
+  {
+    "title": "Ideogram",
+    "slug": "ideogram",
+    "hex": "555555",
+    "asset": "ideogram.ico",
+    "source": "https://ideogram.ai/favicon.ico"
+  },
+  {
+    "title": "Inkscape",
+    "slug": "inkscape",
+    "hex": "000000",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Kimi",
+    "slug": "kimi",
+    "hex": "555555",
+    "asset": "kimi.ico",
+    "source": "https://www.kimi.com/favicon.ico"
+  },
+  {
+    "title": "Kling AI",
+    "slug": "klingai",
+    "hex": "555555",
+    "asset": "klingai.ico",
+    "source": "https://s16-kling.klingai.com/kos/s101/nlav112918/kling-homepage-aio/favicon.ico"
+  },
+  {
+    "title": "KNIME",
+    "slug": "knime",
+    "hex": "FDD800",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Krea AI",
+    "slug": "krea",
+    "hex": "555555",
+    "asset": "krea.png",
+    "source": "https://www.krea.ai/favicon/favicon-32.png"
+  },
+  {
+    "title": "Leonardo AI",
+    "slug": "leonardoai",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://leonardo.ai"
+  },
+  {
+    "title": "Luma AI",
+    "slug": "lumaai",
+    "hex": "555555",
+    "asset": "lumaai.ico",
+    "source": "https://lumalabs.ai/favicons/favicon-black.ico"
+  },
+  {
+    "title": "Lumion",
+    "slug": "lumion",
+    "hex": "555555",
+    "asset": "lumion.ico",
+    "source": "https://lumion.com/favicon/favicon.ico"
+  },
+  {
+    "title": "Manus AI",
+    "slug": "manus",
+    "hex": "555555",
+    "asset": "manus.ico",
+    "source": "https://manus.im/favicon.ico?favicon.0xxlzaf8ul9ey.ico"
+  },
+  {
+    "title": "MATLAB",
+    "slug": "matlab",
+    "hex": "555555",
+    "asset": "matlab.ico",
+    "source": "https://www.mathworks.com/etc.clientlibs/mathworks/clientlibs/customer-ui/templates/common/resources/images/favicon.20261010011201637.ico"
+  },
+  {
+    "title": "Microsoft Power Apps",
+    "slug": "powerapps",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://www.microsoft.com"
+  },
+  {
+    "title": "Microsoft Power Automate",
+    "slug": "powerautomate",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://www.microsoft.com"
+  },
+  {
+    "title": "Microsoft Power Query",
+    "slug": "powerquery",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://powerquery.microsoft.com"
+  },
+  {
+    "title": "Microsoft Project",
+    "slug": "microsoftproject",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://www.microsoft.com"
+  },
+  {
+    "title": "Microsoft Visio",
+    "slug": "microsoftvisio",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://www.microsoft.com"
+  },
+  {
+    "title": "Midjourney",
+    "slug": "midjourney",
+    "hex": "555555",
+    "asset": "midjourney.svg",
+    "source": "https://raw.githubusercontent.com/lobehub/lobe-icons/master/packages/static-svg/icons/midjourney.svg"
+  },
+  {
+    "title": "Minitab",
+    "slug": "minitab",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://www.minitab.com"
+  },
+  {
+    "title": "Miro",
+    "slug": "miro",
+    "hex": "050038",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Mural",
+    "slug": "mural",
+    "hex": "FF4B4B",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Napkin AI",
+    "slug": "napkin",
+    "hex": "555555",
+    "asset": "napkin.ico",
+    "source": "https://www.napkin.ai/favicon.ico"
+  },
+  {
+    "title": "Odoo",
+    "slug": "odoo",
+    "hex": "714B67",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Oracle Primavera",
+    "slug": "primavera",
+    "hex": "555555",
+    "asset": "primavera.ico",
+    "source": "https://www.oracle.com/favicon.ico"
+  },
+  {
+    "title": "Pika",
+    "slug": "pika",
+    "hex": "555555",
+    "asset": "pika.ico",
+    "source": "https://pika.art/favicon.ico?favicon.03qzqgaru0by8.ico"
+  },
+  {
+    "title": "Pitch",
+    "slug": "pitch",
+    "hex": "555555",
+    "asset": "pitch.png",
+    "source": "https://framerusercontent.com/images/Jyqd3kJvvwuIl3dRRCbEZ84o.png"
+  },
+  {
+    "title": "Prezi",
+    "slug": "prezi",
+    "hex": "3181FF",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Procreate",
+    "slug": "procreate",
+    "hex": "555555",
+    "asset": "procreate.png",
+    "source": "https://procreate-assets-cdn.procreate.com/_nuxt/apple-icon.DmK-mlNX.png"
+  },
+  {
+    "title": "QGIS",
+    "slug": "qgis",
+    "hex": "589632",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "RStudio",
+    "slug": "rstudio",
+    "hex": "555555",
+    "asset": "rstudio.ico",
+    "source": "https://posit.co/themes/custom/kinetic/favicon.ico"
+  },
+  {
+    "title": "Runway",
+    "slug": "runway",
+    "hex": "555555",
+    "asset": "runway.png",
+    "source": "https://runway.com/icon.png?icon.35ps9bmugbe1e.png"
+  },
+  {
+    "title": "Sage",
+    "slug": "sage",
+    "hex": "00D639",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "SAP Business One",
+    "slug": "sapbusinessone",
+    "hex": "555555",
+    "asset": "sapbusinessone.png",
+    "source": "https://www.sap.com/etc.clientlibs/sapdx/clientlibs/clientlib-generic-legacy/resources/images/apple-touch-icons/touch-icon-60x60.png"
+  },
+  {
+    "title": "Snagit",
+    "slug": "snagit",
+    "hex": "555555",
+    "asset": "snagit.png",
+    "source": "https://www.techsmith.com/wp-content/uploads/2021/08/cropped-favicon-1-32x32.png"
+  },
+  {
+    "title": "SOLIDWORKS",
+    "slug": "solidworks",
+    "hex": "555555",
+    "asset": "solidworks.png",
+    "source": "https://www.solidworks.com/themes/custom/sw-digital/favicon.ico"
+  },
+  {
+    "title": "Stata",
+    "slug": "stata",
+    "hex": "555555",
+    "asset": "stata.ico",
+    "source": "https://www.stata.com/favicon.ico"
+  },
+  {
+    "title": "Suno",
+    "slug": "suno",
+    "hex": "000000",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Synthesia",
+    "slug": "synthesia",
+    "hex": "555555",
+    "asset": "synthesia.png",
+    "source": "https://cdn.prod.website-files.com/65e89895c5a4b8d764c0d710/664f0f482fa5a4d527d892bc_Favicon-Web-Security%201.png"
+  },
+  {
+    "title": "Talend",
+    "slug": "talend",
+    "hex": "FF6D70",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Twinmotion",
+    "slug": "twinmotion",
+    "hex": "000000",
+    "source": "Simple Icons"
+  },
+  {
+    "title": "Udio",
+    "slug": "udio",
+    "hex": "555555",
+    "asset": "udio.ico",
+    "source": "https://www.udio.com/favicon.ico?favicon.0wbc3vz33genq.ico"
+  },
+  {
+    "title": "Visme",
+    "slug": "visme",
+    "hex": "555555",
+    "asset": "",
+    "source": "https://www.visme.co"
+  },
+  {
+    "title": "Wondershare Filmora",
+    "slug": "filmora",
+    "hex": "555555",
+    "asset": "filmora.png",
+    "source": "https://filmora.wondershare.com/favicon.ico"
+  },
+  {
+    "title": "Zoho CRM",
+    "slug": "zohocrm",
+    "hex": "555555",
+    "asset": "zohocrm.ico",
+    "source": "https://www.zohowebstatic.com/sites/zweb/images/favicon.ico"
   }
 ]

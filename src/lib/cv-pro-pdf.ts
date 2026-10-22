@@ -433,9 +433,9 @@ function entryHeading(
   } as Content;
   const iconNode = logo?.dataUrl
     ? ({
-        width: 13,
+        width: 20,
         image: logo.dataUrl,
-        fit: [9, 9],
+        fit: [18, 18],
         alignment: "center",
         margin: [0, 0, 0, 0],
       } as Content)

@@ -365,7 +365,9 @@ function bulletList(items: string[], language: DocumentLanguage, compact = false
       } as Content;
       const body = {
         width: "*",
-        text: displayText(withTerminalPeriod(item), language, compact ? 30 : rtl ? 100 : 58),
+        // Arabic sidebar text can use the full width beneath its section bar;
+        // the former 30-character cap broke short skills prematurely.
+        text: displayText(withTerminalPeriod(item), language, compact ? (rtl ? 44 : 30) : rtl ? 100 : 58),
         alignment: rtl ? "right" : "left",
         fontSize: compact ? 8.2 : 9,
         lineHeight: BODY_LINE_HEIGHT,

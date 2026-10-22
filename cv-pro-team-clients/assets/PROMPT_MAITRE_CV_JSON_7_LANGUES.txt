@@ -14,6 +14,8 @@ RÔLE ET OBJECTIF UNIQUE
 
 STRUCTURE EMPLOYEUR ET LOCALISATION — CONTRAT CV PRO, NOTAMMENT EN ARABE
 - experiences[].titre : poste uniquement ; experiences[].employeur : nom officiel de la société uniquement, sans poste, adresse ni répétition du lieu.
+- Aucun champ employeur, institution ou lieu ne commence ni ne termine par une virgule, un point ou un séparateur. Le moteur CV ajoute les séparateurs entre ces champs ; en arabe, utiliser « ، » uniquement entre les composantes internes du lieu.
+- En arabe, produire du texte Unicode arabe standard (NFC), sans caractères de présentation, carrés de remplacement, emoji décoratif ni balises de style. Les champs option et competences décrivent uniquement les spécialités attestées ; equivalence reste vide sans justificatif officiel. Ne jamais inventer une équivalence pour remplir la section التعليم.
 - experiences[].lieu : ville, province/région si utile, pays, chacun une seule fois. Pas de rue ni d'adresse complète dans cette ligne professionnelle.
 - En arabe, traduire les noms géographiques attestés ; conserver la raison sociale officielle. Exemple : employeur="TechNova Solutions", lieu="مونتريال، كيبيك، كندا". Ne jamais remettre TechNova Solutions dans lieu ou مونتريال dans employeur.
 - Ne pas confondre ville et province distinctes portant le même nom : préciser leur nature si nécessaire et attestée. Ne pas inventer une localisation ni utiliser l'adresse du candidat pour compléter celle de l'employeur.

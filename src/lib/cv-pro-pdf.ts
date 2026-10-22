@@ -482,7 +482,14 @@ function entryLocationLine(
   const value = cvEntryLocation(primary, location, language === "ar");
   if (!value) return null;
   return {
-    text: displayText(value, language, language === "ar" ? 100 : 58),
+    // Keep separators outside Latin runs: a trailing comma inside an LTR
+    // company name otherwise moves to the visual beginning in an RTL line.
+    text: language === "ar"
+      ? value.split("، ").reverse().flatMap((part, index) => [
+          ...(index ? [{ text: "، " }] : []),
+          ...withRunStyle(displayText(part, language, 100), {}),
+        ])
+      : displayText(value, language, 58),
     color: INK,
     fontSize: 8.8,
     lineHeight: META_LINE_HEIGHT,
@@ -530,7 +537,7 @@ function learningBlock(item: Formation | Education, language: DocumentLanguage):
         ? [
             {
               text: displayText(withTerminalPeriod(item.equivalence), language, rtl ? 100 : 58),
-              italics: true,
+              italics: !rtl,
               fontSize: 8.4,
               lineHeight: BODY_LINE_HEIGHT,
               alignment: rtl ? "right" : "left",

@@ -104,6 +104,19 @@ export function normalizeCandidateJson(value: unknown) {
     if (!document || typeof document !== 'object' || Array.isArray(document))
       continue;
     const profile = document as Record<string, unknown>;
+    // Shared by manual imports and MCP saves; punctuation belongs between
+    // structured fields, never at their boundaries.
+    for (const section of ['experiences', 'formations', 'educations']) {
+      if (!Array.isArray(profile[section])) continue;
+      for (const item of profile[section] as Record<string, unknown>[]) {
+        if (!item || typeof item !== 'object') continue;
+        for (const field of ['employeur', 'institution', 'lieu']) {
+          if (typeof item[field] === 'string')
+            item[field] = (item[field] as string).normalize('NFC')
+              .replace(/^[\s,،;؛.]+|[\s,،;؛.]+$/gu, '');
+        }
+      }
+    }
     if (
       typeof profile.statut_relocation !== 'string' ||
       !profile.statut_relocation.trim()

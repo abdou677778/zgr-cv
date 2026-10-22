@@ -13,6 +13,7 @@ import {
   type SoftwareSkill,
 } from "./cv-types";
 import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
+import { cleanEntryField } from "./cv-entry-location";
 import { formatDrivingLicence, formatNationalService } from "./cv-concise-status";
 import { normalizeSoftwareIcon } from "./software-icons";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
@@ -314,9 +315,9 @@ function directCv(source: JsonRecord): CV {
       (item): Experience => ({
         id: text(item.id) || newId(),
         dates: text(item.dates),
-        lieu: text(item.lieu),
+        lieu: cleanEntryField(text(item.lieu)),
         titre: text(item.titre),
-        employeur: text(item.employeur),
+        employeur: cleanEntryField(text(item.employeur)),
         descriptions: stringList(item.descriptions),
         descriptions_format: normalizeObjectiveFormat(item.descriptions_format),
         logo: normalizeCompanyLogo(item.logo),
@@ -326,9 +327,9 @@ function directCv(source: JsonRecord): CV {
       (item): Formation => ({
         id: text(item.id) || newId(),
         date: text(item.date),
-        lieu: text(item.lieu),
+        lieu: cleanEntryField(text(item.lieu)),
         titre: text(item.titre),
-        institution: text(item.institution),
+        institution: cleanEntryField(text(item.institution)),
         competences: text(item.competences),
         logo: normalizeCompanyLogo(item.logo),
       }),
@@ -337,9 +338,9 @@ function directCv(source: JsonRecord): CV {
       (item): Education => ({
         id: text(item.id) || newId(),
         date: text(item.date),
-        lieu: text(item.lieu),
+        lieu: cleanEntryField(text(item.lieu)),
         titre: text(item.titre),
-        institution: text(item.institution),
+        institution: cleanEntryField(text(item.institution)),
         option: text(item.option),
         logo: normalizeCompanyLogo(item.logo),
         equivalence: text(item.equivalence),

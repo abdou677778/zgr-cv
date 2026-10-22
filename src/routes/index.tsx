@@ -72,7 +72,8 @@ import {
 } from "@/lib/cv-types";
 import { importCvJson, importCvJsonSet } from "@/lib/cv-json";
 import { formatDrivingLicence, formatNationalService } from "@/lib/cv-concise-status";
-import { normalizeSoftwareIcon, SOFTWARE_ICON_CATALOG, softwareIconUrl } from "@/lib/software-icons";
+import { softwareIconUrl } from "@/lib/software-icons";
+import { SoftwareLogoPicker } from "@/components/software-logo-picker";
 import { sampleCVByLanguage } from "@/lib/sample-cv";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "@/lib/document-language";
 import { FORM_COPY, INTERFACE_COPY } from "@/lib/interface-copy";
@@ -4017,17 +4018,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                       ) : (
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-xs text-slate-400">—</div>
                       )}
-                      <Input
-                        list="zgr-software-icon-catalog"
-                        value={logiciel.icon === "generic" ? "" : logiciel.icon}
-                        placeholder="Canva, ChatGPT…"
-                        onChange={(event) => {
-                          const icon = normalizeSoftwareIcon(event.target.value);
+                      <SoftwareLogoPicker
+                        value={logiciel.icon}
+                        onSelect={(icon, title) => {
                           set(
                             "logiciels",
                             cv.logiciels.map((item) =>
                               item.id === logiciel.id
-                                ? { ...item, icon, customIconDataUrl: undefined }
+                                ? { ...item, label: item.label || title, icon, customIconDataUrl: undefined }
                                 : item,
                             ),
                           );
@@ -4050,7 +4048,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                               "logiciels",
                               cv.logiciels.map((item) =>
                                 item.id === logiciel.id
-                                  ? { ...item, icon: "generic", customIconDataUrl }
+                                  ? { ...item, customIconDataUrl }
                                   : item,
                               ),
                             );
@@ -4060,12 +4058,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                         }}
                       />
                     </label>
-                    <datalist id="zgr-software-icon-catalog">
-                      {SOFTWARE_ICON_CATALOG.map((icon) => (
-                        <option key={icon.slug} value={icon.slug} label={icon.title} />
-                      ))}
-                    </datalist>
-                    <p className="text-[10px] font-normal leading-snug text-slate-400">320 logos locaux, ou ajoutez un logiciel et son icône manuellement.</p>
+                    {logiciel.customIconDataUrl && <button type="button"
+                      className="text-xs text-sky-700 underline"
+                      onClick={() => set("logiciels", cv.logiciels.map((item) => item.id === logiciel.id
+                        ? { ...item, customIconDataUrl: undefined } : item))}>
+                      Rétablir le logo du catalogue
+                    </button>}
+                    <p className="text-[10px] font-normal leading-snug text-slate-400">Recherchez un logo ou remplacez-le par un fichier local. Le remplacement est conservé avec le profil client lors de sa sauvegarde.</p>
                   </div>
                   <Button
                     type="button"

@@ -536,7 +536,9 @@ function softwareGrid(cv: CV, language: DocumentLanguage): Content {
         return {
           width: "*",
           stack: [
-            { svg, fit: rtl ? [14, 14] : [24, 24], alignment: "center" },
+            item.customIconDataUrl?.startsWith("data:image/png")
+              ? { image: item.customIconDataUrl, fit: rtl ? [14, 14] : [24, 24], alignment: "center" }
+              : { svg, fit: rtl ? [14, 14] : [24, 24], alignment: "center" },
             {
               text: displayText(item.label, language, 15),
               fontSize: 7.4,

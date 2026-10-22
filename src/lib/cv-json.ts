@@ -49,6 +49,8 @@ const stringList = (value: unknown): string[] => {
 };
 
 const inferSoftwareIcon = (label: string): SoftwareIcon => {
+  const catalogIcon = normalizeSoftwareIcon(label);
+  if (catalogIcon !== "generic") return catalogIcon;
   const normalized = label.toLowerCase();
   if (/\bword\b/.test(normalized)) return "microsoftword";
   if (/\bexcel\b/.test(normalized)) return "microsoftexcel";
@@ -68,10 +70,15 @@ const softwareList = (value: unknown): SoftwareSkill[] => {
       const label = firstText(item, "label", "nom", "name", "logiciel", "software");
       if (!label) return null;
       const requestedIcon = normalizeSoftwareIcon(text(item.icon));
+      const customIcon = text(item.customIconDataUrl);
+      const customIconDataUrl = customIcon.length <= 210_000 &&
+        /^data:image\/(?:png|webp|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/.test(customIcon)
+        ? customIcon : undefined;
       return {
         id: text(item.id) || newId(),
         label,
         icon: requestedIcon === "generic" ? inferSoftwareIcon(label) : requestedIcon,
+        ...(customIconDataUrl ? { customIconDataUrl } : {}),
       };
     })
     .filter((item): item is SoftwareSkill => Boolean(item));

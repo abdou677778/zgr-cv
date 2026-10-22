@@ -29,7 +29,20 @@ test("normalizes string and structured software values with stable icons", () =>
     label: "Microsoft Excel",
     icon: "microsoftexcel",
   });
-  assert.equal(result.cv.logiciels[2]?.icon, "generic");
+  assert.equal(result.cv.logiciels[2]?.icon, "figma");
+});
+
+test("preserves a local software logo across JSON reload and infers catalog names", () => {
+  const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+  const result = importCvJson({ nom_complet: "Software Profile", experiences: [], logiciels: [
+    { label: "Canva", icon: "canva", customIconDataUrl: dataUrl },
+    "Zoom",
+    { label: "Canva", icon: "generic" },
+  ] }, "auto");
+  assert.equal(result.cv.logiciels[0]?.customIconDataUrl, dataUrl);
+  assert.equal(result.cv.logiciels[0]?.icon, "canva");
+  assert.equal(result.cv.logiciels[1]?.icon, "zoom");
+  assert.equal(result.cv.logiciels[2]?.icon, "canva");
 });
 
 test("normalizes and preserves the official Canadian NOC equivalence", () => {

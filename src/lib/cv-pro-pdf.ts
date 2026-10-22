@@ -931,7 +931,9 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefi
           labels.objective,
           [
             {
-              text: displayText(withTerminalPeriod(cv.objectif), language, 64),
+              // The objective spans the full main column. The old 64-character
+              // RTL wrapping left almost half of that width unused.
+              text: displayText(withTerminalPeriod(cv.objectif), language, rtl ? 100 : 64),
               fontSize: 9,
               lineHeight: BODY_LINE_HEIGHT,
               alignment: rtl ? "right" : "left",

@@ -437,9 +437,7 @@ function entryHeading(
         image: logo.dataUrl,
         fit: [18, 18],
         alignment: "center",
-        // The title line is ~12 pt high; centre the 18 pt image on it while
-        // retaining its total layout height and the title's original baseline.
-        margin: [0, -3, 0, 3],
+        margin: [0, 0, 0, 0],
       } as Content)
     : ({
         width: 13,
@@ -449,6 +447,26 @@ function entryHeading(
         margin: [0, 0, 0, 0],
       } as Content);
 
+  if (logo?.dataUrl) {
+    // pdfmake measures the actual font and image height before centring both
+    // cells. This also handles a title wrapping over more than one line.
+    const titleCell = { ...(heading as object), verticalAlignment: "middle" } as unknown as Content;
+    const logoCell = { ...(iconNode as object), verticalAlignment: "middle" } as unknown as Content;
+    return {
+      table: {
+        widths: rtl ? ["*", 20] : [20, "*"],
+        body: [rtl ? [titleCell, logoCell] : [logoCell, titleCell]],
+        dontBreakRows: true,
+      },
+      layout: {
+        hLineWidth: () => 0, vLineWidth: () => 0,
+        paddingLeft: () => 0,
+        paddingRight: (column: number) => column === 0 ? 3 : 0,
+        paddingTop: () => 0, paddingBottom: () => 0,
+      },
+      margin: [0, 0, 0, 2],
+    } as Content;
+  }
   return {
     columns: rtl ? [heading, iconNode] : [iconNode, heading],
     columnGap: 3,

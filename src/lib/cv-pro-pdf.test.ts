@@ -4,6 +4,24 @@ import test from "node:test";
 import { buildCvProPdf } from "./cv-pro-pdf";
 import { emptyCV } from "./cv-types";
 
+test("does not insert an artificial line break into an Arabic education heading", () => {
+  const document = buildCvProPdf({...emptyCV,educations:[{
+    id:"heading-test",titre:"ماجستير في علوم الحاسوب، تخصص نظم المعلومات",
+    date:"2015 – 2017",institution:"",lieu:"",option:"",equivalence:"",
+  }]},"ar");
+  const headings: Array<{text: unknown}> = [];
+  const visit=(value:unknown)=>{
+    if(!value||typeof value!=="object")return;
+    const node=value as Record<string,unknown>;
+    if(node.fontSize===10.2&&Array.isArray(node.text))headings.push(node as {text:unknown});
+    Object.values(node).forEach(child=>{if(Array.isArray(child))child.forEach(visit);else if(child&&typeof child==="object")visit(child);});
+  };
+  visit(document.content);
+  assert.equal(headings.length,1);
+  assert.ok(!JSON.stringify(headings[0].text).includes('\\n'));
+  assert.match(JSON.stringify(headings[0].text),/المعلومات/);
+});
+
 function firstPageGeometry(language: "ar" | "fr") {
   const document = buildCvProPdf(
     {

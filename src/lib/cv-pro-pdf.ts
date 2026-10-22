@@ -405,7 +405,9 @@ function entryHeading(
   const rtl = language === "ar";
   const normalizedTitle = title.trim().toLocaleUpperCase(language);
   const normalizedDate = abbreviateDateMonths(date.trim(), language).toLocaleUpperCase(language);
-  const titleRuns = withRunStyle(displayText(normalizedTitle, language, 42), {
+  // Do not force Arabic headings onto a second line after 42 characters.
+  // Let the measured PDF column width determine wrapping instead.
+  const titleRuns = withRunStyle(displayText(normalizedTitle, language, rtl ? 1000 : 42), {
     bold: true,
     color: INK,
   });

@@ -82,6 +82,7 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
         lieu: visible(`${prefix}.lieu`) ? item.lieu : "",
         titre: visible(`${prefix}.titre`) ? item.titre : "",
         institution: visible(`${prefix}.institution`) ? item.institution : "",
+        logo: visible(`${prefix}.institution`) ? item.logo : undefined,
         competences: visible(`${prefix}.competences`) ? item.competences : "",
       };
       return next;
@@ -99,6 +100,7 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
         lieu: visible(`${prefix}.lieu`) ? item.lieu : "",
         titre: visible(`${prefix}.titre`) ? item.titre : "",
         institution: visible(`${prefix}.institution`) ? item.institution : "",
+        logo: visible(`${prefix}.institution`) ? item.logo : undefined,
         option: visible(`${prefix}.option`) ? item.option : "",
         equivalence: visible(`${prefix}.equivalence`) ? item.equivalence : "",
       };

@@ -25,6 +25,7 @@ export function normalizeCompanyLogo(value: unknown): CompanyLogo | undefined {
     return undefined;
   }
   return {
+    ...(typeof source.catalogId === "string" && /^[a-z0-9-]{1,80}$/.test(source.catalogId) ? { catalogId: source.catalogId } : {}),
     dataUrl,
     width,
     height,

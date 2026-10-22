@@ -4953,11 +4953,12 @@ async function route(request, env, ctx) {
     return handleAtctOpportunityApi(request, env, origin);
   if (url.pathname.startsWith("/api/algeria-opportunities/"))
     return handleAlgeriaOpportunityApi(request, env, origin);
-  if (url.pathname === "/api/software-logos" && request.method === "GET") {
+  if (["/api/software-logos", "/api/organization-logos"].includes(url.pathname) && request.method === "GET") {
+    const namespace = url.pathname === "/api/organization-logos" ? "organization-logos" : "software-logos";
     const logos = {};
     let cursor;
     do {
-      const page = await env.CLIENTS_BUCKET.list({ prefix: "software-logos/current/", cursor, limit: 500 });
+      const page = await env.CLIENTS_BUCKET.list({ prefix: `${namespace}/current/`, cursor, limit: 500 });
       await Promise.all(page.objects.map(async (object) => {
         const entry = await readR2Json(env, object.key);
         if (entry?.slug && entry?.dataUrl) logos[entry.slug] = entry.dataUrl;
@@ -4972,9 +4973,10 @@ async function route(request, env, ctx) {
   const actor = await authenticatedUser(request, env, ctx);
   if (!actor) return json({ error: "Session expirée ou accès non autorisé." }, 401, origin);
   const permissions = rolePermissions(actor.role, actor.workflowManager === true, actor.accessMatrix);
-  if (url.pathname.startsWith("/api/software-logos/") && request.method === "PUT") {
+  if (/^\/api\/(?:software|organization)-logos\//.test(url.pathname) && request.method === "PUT") {
+    const namespace = url.pathname.startsWith("/api/organization-logos/") ? "organization-logos" : "software-logos";
     if (actor.role !== "admin") return json({ error: "Droits administrateur requis pour modifier la bibliothèque partagée." }, 403, origin);
-    const slug = url.pathname.slice("/api/software-logos/".length);
+    const slug = url.pathname.slice(`/api/${namespace}/`.length);
     if (!/^[a-z0-9-]{1,80}$/.test(slug) || slug === "generic")
       return json({ error: "Choisissez un logiciel du catalogue." }, 400, origin);
     if (Number(request.headers.get("content-length") || 0) > 220000)
@@ -4990,9 +4992,9 @@ async function route(request, env, ctx) {
         new DataView(binary.buffer).getUint32(16) !== 256 || new DataView(binary.buffer).getUint32(20) !== 256)
       return json({ error: "Dimensions requises : 256 × 256 pixels." }, 400, origin);
     const entry = { slug, dataUrl, updatedAt: new Date().toISOString(), updatedBy: actor.username };
-    const key = `software-logos/current/${slug}.json`;
+    const key = `${namespace}/current/${slug}.json`;
     const previous = await readR2Json(env, key);
-    if (previous) await env.CLIENTS_BUCKET.put(`software-logos/history/${slug}/${crypto.randomUUID()}.json`, JSON.stringify(previous));
+    if (previous) await env.CLIENTS_BUCKET.put(`${namespace}/history/${slug}/${crypto.randomUUID()}.json`, JSON.stringify(previous));
     await env.CLIENTS_BUCKET.put(key, JSON.stringify(entry), { httpMetadata: { contentType: "application/json" } });
     return json({ ok: true, slug, updatedAt: entry.updatedAt }, 200, origin);
   }

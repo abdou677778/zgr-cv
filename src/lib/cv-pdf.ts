@@ -33,6 +33,7 @@ import { toPdfRtlVisualText } from "./arabic-pdf-text";
 import { circularProfilePhotoDataUrlForPdf, profilePhotoDataUrlForPdf } from "./profile-photo";
 import { buildCvProPdf } from "./cv-pro-pdf";
 import { prepareSoftwareIconsForPdf } from "./software-icons-pdf";
+import { prepareOrganizationLogos } from "./organization-logos";
 import pdfMake from "pdfmake/build/pdfmake";
 import calibriRegularUrl from "@/assets/fonts/CalibriLatin-Regular.ttf?url";
 import calibriItalicUrl from "@/assets/fonts/CalibriLatin-Italic.ttf?url";
@@ -5035,6 +5036,7 @@ export async function createCvPdfBlob(
   if (normalizedTemplateId === "cv-pro") {
     pdfCv = { ...pdfCv, logiciels: await prepareSoftwareIconsForPdf(pdfCv.logiciels) };
   }
+  pdfCv = await prepareOrganizationLogos(pdfCv);
   const document =
     normalizedTemplateId === "arabic-pro-v1"
       ? buildCvPdfArabicProV5(pdfCv, language)

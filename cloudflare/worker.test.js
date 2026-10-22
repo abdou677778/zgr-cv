@@ -220,6 +220,11 @@ test("shared software logos require admin authentication and preserve replaced v
   assert.equal((await response.json()).logos.canva, dataUrl);
   assert.equal((await write()).status, 200);
   assert.ok([...env.CLIENTS_BUCKET.objects.keys()].some((key) => key.startsWith("software-logos/history/canva/")));
+  assert.equal((await call(env, "/api/organization-logos/dz-1", authorized(admin.token, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }),
+  }))).status, 200);
+  assert.equal((await (await call(env, "/api/organization-logos")).json()).logos["dz-1"], dataUrl);
+  assert.equal((await (await call(env, "/api/software-logos")).json()).logos["dz-1"], undefined);
 });
 
 test("les sessions par appareil peuvent être consultées et révoquées séparément", async () => {

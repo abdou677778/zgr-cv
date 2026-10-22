@@ -13,7 +13,7 @@ export function loadSharedSoftwareLogos(force = false) {
   return loading;
 }
 
-export async function replaceSharedSoftwareLogo(slug: string, file: File) {
+export async function replaceSharedSoftwareLogo(slug: string, file: File, target = endpoint) {
   if (!/^(image\/(png|webp|jpeg|svg\+xml))$/.test(file.type) || file.size > 4 * 1024 * 1024)
     throw new Error("Choisissez un SVG, PNG, WebP ou JPG de 4 Mo maximum.");
   const url = URL.createObjectURL(file);
@@ -28,11 +28,12 @@ export async function replaceSharedSoftwareLogo(slug: string, file: File) {
     context.drawImage(image, (256 - width) / 2, (256 - height) / 2, width, height);
     dataUrl = canvas.toDataURL("image/png");
   } finally { URL.revokeObjectURL(url); }
-  const response = await fetch(`${endpoint}/${encodeURIComponent(slug)}`, {
+  const response = await fetch(`${target}/${encodeURIComponent(slug)}`, {
     method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminSession() || ""}` },
     body: JSON.stringify({ dataUrl }),
   });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Enregistrement du logo impossible.");
-  await loadSharedSoftwareLogos(true);
+  if (target === endpoint) await loadSharedSoftwareLogos(true);
+  return dataUrl;
 }

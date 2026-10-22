@@ -8,6 +8,13 @@ test("keeps legacy JSON compatible when the software section is absent", () => {
   assert.deepEqual(result.cv.logiciels, []);
 });
 
+test("preserves shared institution logos in training and education JSON", () => {
+  const logo={catalogId:"dz-61",dataUrl:"data:image/png;base64,iVBORw0KGgo=",name:"school.png",width:256,height:256};
+  const result=importCvJson({nom_complet:"Test",formations:[{titre:"Formation",institution:"École",logo}],educations:[{titre:"Diplôme",institution:"Université",logo}]},"auto");
+  assert.equal(result.cv.formations[0]?.logo?.catalogId,"dz-61");
+  assert.equal(result.cv.educations[0]?.logo?.dataUrl,logo.dataUrl);
+});
+
 test("normalizes string and structured software values with stable icons", () => {
   const result = importCvJson(
     {

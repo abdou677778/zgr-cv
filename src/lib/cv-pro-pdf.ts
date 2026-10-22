@@ -492,7 +492,7 @@ function learningBlock(item: Formation | Education, language: DocumentLanguage):
   return {
     unbreakable: true,
     stack: [
-      entryHeading(item.titre, item.date, language, isEducation ? "education" : "training"),
+      entryHeading(item.titre, item.date, language, isEducation ? "education" : "training", item.logo),
       ...(locationLine ? [locationLine] : []),
       ...(secondary
         ? [

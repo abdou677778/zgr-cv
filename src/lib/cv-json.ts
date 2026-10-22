@@ -330,6 +330,7 @@ function directCv(source: JsonRecord): CV {
         titre: text(item.titre),
         institution: text(item.institution),
         competences: text(item.competences),
+        logo: normalizeCompanyLogo(item.logo),
       }),
     ),
     educations: educations.map(
@@ -340,6 +341,7 @@ function directCv(source: JsonRecord): CV {
         titre: text(item.titre),
         institution: text(item.institution),
         option: text(item.option),
+        logo: normalizeCompanyLogo(item.logo),
         equivalence: text(item.equivalence),
       }),
     ),

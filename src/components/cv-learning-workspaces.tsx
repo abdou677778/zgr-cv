@@ -20,10 +20,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Education, Formation } from "@/lib/cv-types";
+import type { Education, Formation, CompanyLogo } from "@/lib/cv-types";
+import { OrganizationLogoPicker } from "./organization-logo-picker";
 import { cn } from "@/lib/utils";
 
 type LearningBase = {
+  logo?: CompanyLogo;
   id: string;
   date: string;
   lieu: string;
@@ -315,6 +317,8 @@ function LearningWorkspace<T extends LearningBase>({
           })}
         </div>
 
+        <OrganizationLogoPicker name={item.institution} logo={item.logo}
+          onSelect={(institution, logo) => onUpdate(item.id, { institution, logo } as Partial<T>)} />
         {extraFields.map((field) => {
           const Icon = field.icon;
           const value = String(item[field.key] || "");

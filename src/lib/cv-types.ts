@@ -10,6 +10,7 @@ export type Experience = {
 };
 
 export type CompanyLogo = {
+  catalogId?: string;
   /** Safe, compact raster image embedded in JSON and every generated PDF. */
   dataUrl: string;
   name: string;
@@ -30,6 +31,7 @@ export type ProfilePhoto = {
 };
 
 export type Formation = {
+  logo?: CompanyLogo;
   id: string;
   date: string;
   lieu: string;
@@ -39,6 +41,7 @@ export type Formation = {
 };
 
 export type Education = {
+  logo?: CompanyLogo;
   id: string;
   date: string;
   lieu: string;

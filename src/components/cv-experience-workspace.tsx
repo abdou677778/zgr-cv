@@ -22,6 +22,7 @@ import { CvRichTextEditor } from "@/components/cv-rich-text-editor";
 import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
 import type { CompanyLogo, Experience } from "@/lib/cv-types";
 import { cn } from "@/lib/utils";
+import { OrganizationLogoPicker } from "./organization-logo-picker";
 
 type ExperienceWorkspaceLabels = {
   dates: string;
@@ -478,6 +479,8 @@ export function ExperienceWorkspace({
                   : "PNG, JPG ou WebP · 64 à 4096 px · 2 Mo max · ajusté automatiquement en 128 × 128 px."}
               </p>
               {logoError && <p className="text-xs font-medium text-rose-600">{logoError}</p>}
+              <OrganizationLogoPicker name={experience.employeur} logo={experience.logo}
+                onSelect={(employeur, logo) => { onUpdate(experience.id, { employeur }); onLogoChange(experienceIndex, logo); }} />
             </div>
           </ExperienceField>
           <ExperienceField

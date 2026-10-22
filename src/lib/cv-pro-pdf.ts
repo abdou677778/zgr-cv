@@ -437,7 +437,9 @@ function entryHeading(
         image: logo.dataUrl,
         fit: [18, 18],
         alignment: "center",
-        margin: [0, 0, 0, 0],
+        // The title line is ~12 pt high; centre the 18 pt image on it while
+        // retaining its total layout height and the title's original baseline.
+        margin: [0, -3, 0, 3],
       } as Content)
     : ({
         width: 13,

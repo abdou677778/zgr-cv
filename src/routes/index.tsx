@@ -197,6 +197,10 @@ const ClientOrdersDialog = lazy(async () => {
   const module = await import("@/components/client-orders-dialog");
   return { default: module.ClientOrdersDialog };
 });
+const DestinationCanadaPreparation = lazy(async () => {
+  const module = await import("@/components/destination-canada-preparation");
+  return {default:module.DestinationCanadaPreparation};
+});
 const CanadaOpportunitiesDialog = lazy(async () => {
   const module = await import("@/components/canada-opportunities-dialog");
   return { default: module.CanadaOpportunitiesDialog };
@@ -5099,6 +5103,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             open={canadaOpportunitiesOpen}
             onOpenChange={setCanadaOpportunitiesOpen}
             isAdmin={user.role === "admin"}
+            preparation={<Suspense fallback={<p>Chargement de la préparation…</p>}><DestinationCanadaPreparation key={`${activeClientOrder?.id||"profile"}:${cv.nom_complet}`} cv={cv} aiSettings={aiSettings} onAiSettingsChange={setAiSettings} onSave={draft=>setCv(current=>({...current,destination_canada_tunis:draft}))}/></Suspense>}
           />
         ) : null}
         {profileOpportunitiesOpen ? (

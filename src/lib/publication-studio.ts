@@ -253,12 +253,12 @@ const BASELINE_EVIDENCE: Array<PublicationEvidence & { markets: PublicationMarke
     destination: "Canada hors Québec",
     source: "Immigration, Réfugiés et Citoyenneté Canada",
     description:
-      "Événement officiel destiné aux candidats francophones et bilingues qualifiés. L’ouverture des inscriptions est annoncée pour l’automne, sans date précise publiée.",
+      "Événement officiel destiné aux candidats francophones et bilingues qualifiés. Les inscriptions aux événements Bruxelles, Marseille et Tunis sont ouvertes selon Canada.ca, vérifié le 22 octobre 2026. Vérifier l’état actuel avant publication ; une demande ne garantit pas une invitation.",
     deadlineAt: null,
     positions: [],
     conditions: [
       "Être travailleur qualifié francophone ou bilingue",
-      "Vérifier les instructions officielles lorsque les inscriptions ouvriront",
+      "Vérifier l’ouverture actuelle, les secteurs ciblés et les instructions du formulaire officiel",
       "Préparer un CV adapté au marché canadien",
     ],
     requiredDocuments: ["CV canadien", "Preuves d’expérience", "Diplômes", "Preuves linguistiques"],
@@ -266,7 +266,7 @@ const BASELINE_EVIDENCE: Array<PublicationEvidence & { markets: PublicationMarke
       "https://www.canada.ca/en/immigration-refugees-citizenship/services/work-canada/hire-temporary-foreign/french-speaking-bilingual-workers-outside-quebec/destination-canada/candidates.html",
     sourceUrl:
       "https://www.canada.ca/en/immigration-refugees-citizenship/services/work-canada/hire-temporary-foreign/french-speaking-bilingual-workers-outside-quebec/destination-canada/candidates.html",
-    checkedAt: BASELINE_CHECKED_AT,
+    checkedAt: "2026-10-22T21:18:41.153Z",
   },
   {
     id: "baseline:italy-decreto-flussi-2027",

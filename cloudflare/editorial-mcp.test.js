@@ -25,15 +25,16 @@ test("le MCP éditorial expose les sources en lecture et une réception de broui
   const list = await call("tools/list", {}, 2);
   const names = list.result.tools.map((tool) => tool.name);
   assert.deepEqual(names, [
+    "get_destination_canada_tunis",
     "list_verified_opportunities",
     "get_opportunity_bundle",
     "get_editorial_profile",
     "get_official_program_watch",
     "save_publication_draft",
   ]);
-  assert.ok(list.result.tools.slice(0, 4).every((tool) => tool.annotations.readOnlyHint === true));
-  assert.equal(list.result.tools[4].annotations.readOnlyHint, false);
-  assert.match(list.result.tools[4].description, /code de réception temporaire/i);
+  assert.ok(list.result.tools.slice(0, 5).every((tool) => tool.annotations.readOnlyHint === true));
+  assert.equal(list.result.tools[5].annotations.readOnlyHint, false);
+  assert.match(list.result.tools[5].description, /code de réception temporaire/i);
 });
 
 test("le profil éditorial tunisien retourne le dialecte et le format d’affiche", async () => {

@@ -1,0 +1,56 @@
+import schema from "../data/destination-canada-tunis.json";
+import type { CV } from "./cv-types";
+export { schema as destinationCanadaSchema };
+export type DestinationDraft = { formId: string; schemaVersion: number; answers: Record<string,string>; reviewed: boolean };
+export const DESTINATION_RULES = "Préparation uniquement, jamais inscription confirmée. Ne jamais inventer une identité de passeport, citoyenneté, niveau linguistique par compétence, année d’expérience, statut IRCC, présélection, date souhaitée ou consentement. Ne jamais réutiliser les réponses d’un autre candidat. CNP uniquement si confirmé et présent dans les choix officiels. Motivation: 250 caractères; expérience récente: 350 caractères; dernier établissement: 50 caractères. Ne pas tronquer un nom officiel silencieusement. Consentements à lire et valider par le candidat sur le site officiel. Aucun envoi automatique.";
+export function normalizeDestinationDraft(value: unknown): DestinationDraft | undefined {
+  if(!value||typeof value!=="object")return;
+  const source=value as Record<string,unknown>;
+  if(source.formId!==schema.formId||source.schemaVersion!==schema.version||!source.answers||typeof source.answers!=="object")return;
+  const answers:Record<string,string>={};
+  for(const field of schema.fields){const value=(source.answers as Record<string,unknown>)[field.id];if(typeof value==="string"&&value.length<=5000)answers[field.id]=value;}
+  return {formId:schema.formId,schemaVersion:schema.version,answers,reviewed:false};
+}
+export function initialDestinationDraft(cv:CV): DestinationDraft {
+  const saved=normalizeDestinationDraft(cv.destination_canada_tunis);if(saved)return saved;
+  const answers:Record<string,string>={"91":cv.email||"","87":cv.email||""};
+  // Full CV names and general language levels are not passport or skill-level evidence.
+  if(cv.educations.length)answers["120"]=cv.educations[0].institution||"";
+  if(cv.cnp?.code){
+    const field=schema.fields.find(f=>f.conditions.some(c=>c.choiceId.startsWith("35."))&&f.choices.some(c=>c.startsWith(`${cv.cnp!.code} -`)));
+    if(field){answers[field.id]=field.choices.find(c=>c.startsWith(`${cv.cnp!.code} -`))!;const index=Number(field.conditions[0].choiceId.split(".")[1]);answers["35"]=schema.fields.find(f=>f.id==="35")!.choices[index];}
+  }
+  return {formId:schema.formId,schemaVersion:schema.version,answers,reviewed:false};
+}
+export function activeDestinationFields(answers:Record<string,string>){
+  const partner=new Set(["96","99","101"]); // Not in the current Tunis registration route.
+  return schema.layout.map(id=>schema.fields.find(f=>f.id===String(id))).filter((f): f is typeof schema.fields[number]=>!!f&&!partner.has(f.id)).filter(f=>!f.conditions.length||f.conditions.some(c=>{
+    const [id,index]=c.choiceId.split(".");return answers[id]===schema.fields.find(p=>p.id===id)?.choices[Number(index)];
+  }));
+}
+export function destinationIssues(answers:Record<string,string>){
+  const issues=activeDestinationFields(answers).flatMap(f=>{
+    const value=answers[f.id]?.trim()||"";
+    if(f.required&&!value)return [`${f.label.trim()} : réponse manquante`];
+    if(f.maxLength&&value.length>f.maxLength)return [`${f.label.trim()} : maximum ${f.maxLength} caractères`];
+    if(value&&f.choices.length&&!f.choices.some(choice=>choice===value))return [`${f.label.trim()} : choix non officiel`];
+    return [];
+  });
+  if(answers["91"]!==answers["87"])issues.push("Les adresses courriel diffèrent");
+  if(answers["91"]&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answers["91"]))issues.push("Adresse courriel invalide");
+  if(answers["84"]){const d=new Date(`${answers["84"]}T00:00:00Z`);if(!/^\d{4}-\d{2}-\d{2}$/.test(answers["84"])||!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==answers["84"]||d.getTime()>Date.now())issues.push("Date de naissance invalide (AAAA-MM-JJ)");}
+  for(const id of ["108","110"])if(answers[id]&&answers[id]!=="Je suis d'accord")issues.push("Consentement non accordé : ne pas poursuivre l’inscription");
+  return issues;
+}
+export function destinationHtml(draft:DestinationDraft){
+  const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
+  const issues=destinationIssues(draft.answers);
+  return `<!doctype html><html lang="fr"><meta charset="utf-8"><title>Brouillon ZGR — Destination Canada Tunis</title><style>body{font:16px system-ui;max-width:900px;margin:40px auto;padding:20px}dt{font-weight:bold;margin-top:20px}dd{white-space:pre-wrap;margin:8px 0}aside{background:#fff3cd;padding:20px}</style><h1>Préparation ZGR — Destination Canada Tunis</h1><aside>BROUILLON NON SOUMIS — aucune inscription ni invitation confirmée. Ce fichier n’est pas une sauvegarde officielle GC Forms et ne doit pas y être importé. Vérifiez les réponses sur le formulaire officiel. Données personnelles : conserver confidentiellement.</aside><p>Source vérifiée : ${escape(schema.checkedAt)} — version ${schema.version}</p><a href="${schema.officialUrl}">Formulaire officiel</a><h2>Points à vérifier (${issues.length})</h2><ul>${issues.map(i=>`<li>${escape(i)}</li>`).join("")}</ul><dl>${activeDestinationFields(draft.answers).map(f=>`<dt>${escape(destinationFieldLabel(f.id,f.label))}</dt><dd>${escape(draft.answers[f.id]||"À compléter avec le candidat")}</dd>`).join("")}</dl></html>`;
+}
+export function destinationFieldLabel(id:string,label:string){
+  if(["67","68","69"].includes(id))return `Français — ${label}`;
+  if(["70","71","72"].includes(id))return `Anglais — ${label}`;
+  if(id==="108")return "Consentement aux conditions de participation (à lire sur le site officiel)";
+  if(id==="110")return "Consentement à l’utilisation et au partage du courriel par IRCC";
+  return label;
+}

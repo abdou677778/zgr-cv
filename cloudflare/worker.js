@@ -1,3 +1,4 @@
+import { destinationCanadaContract } from "./destination-canada.js";
 import {
   getVolunteerOpportunityHealth,
   handleVolunteerApi,
@@ -4953,6 +4954,8 @@ async function route(request, env, ctx) {
     return handleAtctOpportunityApi(request, env, origin);
   if (url.pathname.startsWith("/api/algeria-opportunities/"))
     return handleAlgeriaOpportunityApi(request, env, origin);
+  if (url.pathname === "/api/destination-canada/tunis" && request.method === "GET")
+    return json(await destinationCanadaContract(),200,origin);
   if (["/api/software-logos", "/api/organization-logos"].includes(url.pathname) && request.method === "GET") {
     const namespace = url.pathname === "/api/organization-logos" ? "organization-logos" : "software-logos";
     const logos = {};

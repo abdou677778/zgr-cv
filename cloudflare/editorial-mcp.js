@@ -1,4 +1,5 @@
 import { inspectAnetiOpportunity, searchAnetiOpportunities } from "./aneti-opportunities.js";
+import { destinationCanadaContract } from "./destination-canada.js";
 import { inspectAtctOpportunity, searchAtctOpportunities } from "./atct-opportunities.js";
 import { inspectCanadaOpportunity, searchCanadaOpportunities } from "./canada-opportunities.js";
 import {
@@ -39,6 +40,12 @@ const EDITORIAL_PROFILES = {
 };
 
 const MCP_TOOLS = [
+  {
+    name:"get_destination_canada_tunis",title:"Vérifier Destination Canada Tunis et son formulaire officiel",
+    description:"Vérifie l’ouverture actuelle et la version du formulaire Tunis ; retourne le contrat public, les limites et garde-fous. Aucune donnée client. Ne signifie ni invitation ni admissibilité, ne remplit et ne soumet aucun formulaire.",
+    inputSchema:{type:"object",properties:{},additionalProperties:false},
+    annotations:{readOnlyHint:true,openWorldHint:true,destructiveHint:false},
+  },
   {
     name: "list_verified_opportunities",
     title: "Lister les opportunités vérifiées ZGR",
@@ -491,8 +498,9 @@ export async function handleEditorialMcp(request, env) {
       result: {
         protocolVersion: "2025-03-26",
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "zgr-editorial", version: "1.0.0" },
+        serverInfo: { name: "zgr-editorial", version: "1.1.0" },
         instructions:
+          "Pour Destination Canada Tunis, appeler get_destination_canada_tunis avant toute rédaction. Si status n’est pas open, indiquer la vérification nécessaire, sans annoncer une inscription ouverte. Ne jamais traiter de données client dans ce plugin éditorial ; utiliser le plugin zgr-cv pour la préparation d’une commande. " +
           "Protocole linguistique ZGR : répondre par défaut en arabe algérien clair, professionnel et accessible. Pour toute demande liée à une publication, appeler d’abord get_editorial_profile avec une page explicitement choisie : cv-pro-algeria impose l’arabe algérien ; emplois-immigration-tunis et bissane-career imposent exclusivement l’arabe tunisien adapté à leur style. Ne jamais déduire une page par défaut ni mélanger les dialectes. Utiliser exclusivement les faits et liens retournés. Ne jamais rédiger une publication finale sans page, offre identifiée et source officielle. Ne jamais inventer une offre, date, condition, lien, quota, visa ou recrutement. Une date ne peut être affichée que si deadline.status vaut confirmed. Les JSON clients et CV ZGR restent multilingues et intouchables : ne pas traduire, renommer ou modifier leurs clés, valeurs, structure ou langues. Ne publier sur Facebook sous aucun prétexte. Après demande explicite de l’utilisateur et seulement s’il fournit un code de réception temporaire ZGR, appeler save_publication_draft pour transmettre un brouillon à valider. Ne jamais prétendre que l’image GPT a été transférée : elle doit être ajoutée manuellement dans ZGR après la création du brouillon.",
       },
     });
@@ -501,6 +509,10 @@ export async function handleEditorialMcp(request, env) {
   if (message?.method === "tools/call") {
     try {
       const args = message?.params?.arguments || {};
+      if(message?.params?.name === "get_destination_canada_tunis") {
+        const result=await destinationCanadaContract();
+        return rpc({jsonrpc:"2.0",id,result:textResult(result,result.reason)});
+      }
       if (message?.params?.name === "list_verified_opportunities") {
         const result = await listVerified(env, args);
         return rpc({

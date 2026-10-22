@@ -250,6 +250,7 @@ export function hasCustomCvSectionOrder(
 }
 
 export type CV = {
+  destination_canada_tunis?: {formId:string;schemaVersion:number;answers:Record<string,string>;reviewed:boolean};
   photo?: ProfilePhoto;
   nom_complet: string;
   titre_poste: string;

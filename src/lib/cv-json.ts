@@ -14,6 +14,7 @@ import {
 } from "./cv-types";
 import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
 import { cleanEntryField } from "./cv-entry-location";
+import { normalizeDestinationDraft } from "./destination-canada";
 import { formatDrivingLicence, formatNationalService } from "./cv-concise-status";
 import { normalizeSoftwareIcon } from "./software-icons";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
@@ -273,6 +274,7 @@ function directCv(source: JsonRecord): CV {
   return {
     ...emptyCV,
     photo: normalizeProfilePhoto(source.photo),
+    destination_canada_tunis: normalizeDestinationDraft(source.destination_canada_tunis),
     nom_complet: text(source.nom_complet),
     titre_poste: text(source.titre_poste),
     cnp: canadianNoc(source.cnp ?? source.equivalence_cnp),

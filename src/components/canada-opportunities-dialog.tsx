@@ -2956,10 +2956,12 @@ export function CanadaOpportunitiesDialog({
   open,
   onOpenChange,
   isAdmin,
+  preparation,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isAdmin: boolean;
+  preparation?: React.ReactNode;
 }) {
   const [interfaceLanguage, setInterfaceLanguage] = useState<OpportunitiesLanguage>(() => {
     if (typeof window === "undefined") return "fr";
@@ -3396,9 +3398,9 @@ export function CanadaOpportunitiesDialog({
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                 <p className="font-black">Inscription des candidats</p>
                 <p className="mt-1 leading-relaxed">
-                  La page officielle annonce une ouverture des inscriptions à l’automne. Le bouton
-                  ci-dessous mène toujours vers la page gouvernementale à jour et vers le formulaire
-                  officiel lorsqu’il sera publié. Les places sont limitées.
+                  Les inscriptions sont ouvertes selon Canada.ca (vérification du 22 octobre 2026).
+                  La participation est gratuite, les places sont limitées et une demande ne garantit
+                  pas une invitation. Vérifiez l’état actuel sur le site officiel avant de poursuivre.
                 </p>
               </div>
 
@@ -3408,6 +3410,7 @@ export function CanadaOpportunitiesDialog({
                     Vérifier l’inscription candidat <ExternalLink className="ml-2 h-4 w-4" />
                   </a>
                 </Button>
+                <Button asChild variant="outline"><a href="https://forms-formulaires.alpha.canada.ca/fr/id/cmumrik1f00v201yp4kzni4ua" target="_blank" rel="noreferrer">Formulaire officiel — Tunis <ExternalLink className="ml-2 h-4 w-4"/></a></Button>
                 <Button asChild variant="outline">
                   <a href={DESTINATION_CANADA_EVENTS_URL} target="_blank" rel="noreferrer">
                     Dates et informations officielles <ExternalLink className="ml-2 h-4 w-4" />
@@ -3416,9 +3419,9 @@ export function CanadaOpportunitiesDialog({
               </div>
 
               <p className="text-xs leading-relaxed text-slate-500">
-                ZGR n’invente aucun formulaire et ne collecte aucune inscription : la demande est
-                toujours effectuée sur Canada.ca.
+                ZGR prépare un brouillon à contrôler ; l’inscription et la soumission restent sur le formulaire officiel du gouvernement du Canada.
               </p>
+              {preparation}
             </div>
           </div>
         ) : provider === "algeria" ? (

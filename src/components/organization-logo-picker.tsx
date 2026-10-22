@@ -17,9 +17,18 @@ export function OrganizationLogoPicker({name,logo,onSelect}:{name:string;logo?:C
   return <div className="space-y-2 rounded-lg border bg-white p-2">
     <p className="text-xs font-medium">Bibliothèque entreprises et établissements</p>
     <div className="flex items-center gap-2">
-      <label title="Admin : remplacer ce logo dans le cloud partagé" className="cursor-pointer">
+      <label title={selected&&!creating?"Remplacer ce logo dans le cloud partagé":"Importer un logo depuis votre ordinateur"} className="cursor-pointer">
         {source?<img src={source} alt="Logo organisation" className="h-9 w-9 object-contain"/>:<span className="flex h-9 w-9 items-center justify-center rounded border">＋</span>}
-        {getCurrentUser()?.role==="admin"&&selected&&<input type="file" className="sr-only" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async e=>{const file=e.target.files?.[0];e.currentTarget.value="";if(!file)return;setMessage("Enregistrement cloud…");try{const result=await saveOrganizationLogo(selected,file);onSelect(name,result);setMessage("Logo cloud enregistré");}catch(error){setMessage(String(error));}}}/>}
+        {admin&&<input aria-label="Importer un logo depuis votre ordinateur" type="file" disabled={saving} className="sr-only" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async e=>{
+          const chosen=e.target.files?.[0];e.currentTarget.value="";if(!chosen)return;
+          if(!selected||creating){
+            setFile(chosen);if(!creating)setNewName(query.trim()||name);
+            setCreating(true);setOpen(false);setMessage("Logo sélectionné : vérifiez le nom et la catégorie, puis enregistrez.");return;
+          }
+          setSaving(true);setMessage("Enregistrement cloud…");
+          try{const result=await saveOrganizationLogo(selected,chosen);onSelect(name,result);setMessage("Logo cloud enregistré");}
+          catch(error){setMessage(String(error));}finally{setSaving(false);}
+        }}/>}
       </label>
       <Popover open={open} onOpenChange={setOpen}><PopoverAnchor asChild><Input placeholder="Sonatrach, ADE, université…" value={query} onFocus={()=>setOpen(true)} onChange={e=>{setQuery(e.target.value);setOpen(true);}}/></PopoverAnchor>
         <PopoverContent align="start" className="z-[100] w-80 max-w-[calc(100vw-24px)] overflow-auto p-1" style={{maxHeight:"min(300px,var(--radix-popover-content-available-height))"}} onOpenAutoFocus={e=>e.preventDefault()} onCloseAutoFocus={e=>e.preventDefault()}>
@@ -42,6 +51,7 @@ export function OrganizationLogoPicker({name,logo,onSelect}:{name:string;logo?:C
       <label className="block text-xs">Logo (SVG, PNG, JPG ou WebP, 4 Mo maximum)
         <input aria-label="Logo de la nouvelle organisation" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" disabled={saving} className="mt-1 block w-full text-xs" onChange={e=>setFile(e.target.files?.[0])}/>
       </label>
+      {file&&<p className="break-all text-xs text-slate-600">Fichier sélectionné : {file.name}</p>}
       <p className="text-[10px] text-slate-500">Ajusté automatiquement en 256 × 256 px sans déformation. Disponible dans toutes les sections après enregistrement.</p>
       <div className="flex gap-3"><button type="button" disabled={saving||!newName.trim()||!file} className="rounded bg-blue-700 px-3 py-2 text-xs text-white disabled:opacity-50" onClick={async()=>{
         if(!file)return;setSaving(true);setMessage("Enregistrement dans le cloud…");

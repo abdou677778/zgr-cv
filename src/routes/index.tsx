@@ -72,8 +72,8 @@ import {
 } from "@/lib/cv-types";
 import { importCvJson, importCvJsonSet } from "@/lib/cv-json";
 import { formatDrivingLicence, formatNationalService } from "@/lib/cv-concise-status";
-import { softwareIconUrl } from "@/lib/software-icons";
 import { SoftwareLogoPicker } from "@/components/software-logo-picker";
+import { SharedSoftwareLogo } from "@/components/shared-software-logo";
 import { sampleCVByLanguage } from "@/lib/sample-cv";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "@/lib/document-language";
 import { FORM_COPY, INTERFACE_COPY } from "@/lib/interface-copy";
@@ -4009,15 +4009,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   <div className="space-y-2 text-sm font-medium text-slate-700">
                     <span>Logo</span>
                     <div className="flex items-center gap-2">
-                      {(logiciel.customIconDataUrl || softwareIconUrl(logiciel.icon)) ? (
-                        <img
-                          src={logiciel.customIconDataUrl || softwareIconUrl(logiciel.icon)}
-                          alt=""
-                          className="h-10 w-10 shrink-0 rounded-md border border-slate-200 bg-white p-1 object-contain"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-xs text-slate-400">—</div>
-                      )}
+                      <SharedSoftwareLogo slug={logiciel.icon} custom={logiciel.customIconDataUrl}
+                        onSaved={() => set("logiciels", cv.logiciels.map((item) => item.id === logiciel.id
+                          ? { ...item, customIconDataUrl: undefined } : item))} />
                       <SoftwareLogoPicker
                         value={logiciel.icon}
                         onSelect={(icon, title) => {
@@ -4064,7 +4058,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                         ? { ...item, customIconDataUrl: undefined } : item))}>
                       Rétablir le logo du catalogue
                     </button>}
-                    <p className="text-[10px] font-normal leading-snug text-slate-400">Recherchez un logo ou remplacez-le par un fichier local. Le remplacement est conservé avec le profil client lors de sa sauvegarde.</p>
+                    <p className="text-[10px] font-normal leading-snug text-slate-400">Admin : cliquez sur le logo pour le remplacer dans la bibliothèque cloud partagée. Format automatique 256 × 256, proportions conservées. « Parcourir une icône locale » remplace seulement le logo de ce profil.</p>
                   </div>
                   <Button
                     type="button"

@@ -7,6 +7,11 @@ const LEGACY_ICON_SLUGS: Record<string, string> = {
 };
 
 const catalogSlugs = new Set(SOFTWARE_ICON_CATALOG.map((item) => item.slug));
+let sharedLogos: Record<string, string> = {};
+export function setSharedSoftwareLogos(logos: Record<string, string>) {
+  sharedLogos = logos;
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("zgr-software-logos"));
+}
 
 export function normalizeSoftwareIcon(value: string | undefined) {
   const icon = (value || "").trim().toLowerCase();
@@ -22,7 +27,7 @@ export function normalizeSoftwareIcon(value: string | undefined) {
 
 export function softwareIconUrl(icon: string | undefined) {
   const slug = normalizeSoftwareIcon(icon);
-  return slug === "generic" ? "" : `/software-icons/${slug}.svg`;
+  return slug === "generic" ? "" : sharedLogos[slug] || `/software-icons/${slug}.svg`;
 }
 
 export { SOFTWARE_ICON_CATALOG };

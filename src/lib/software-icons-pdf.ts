@@ -1,5 +1,6 @@
 import type { SoftwareSkill } from "./cv-types";
 import { softwareIconUrl } from "./software-icons";
+import { loadSharedSoftwareLogos } from "./shared-software-logos";
 
 const cache = new Map<string, Promise<string>>();
 
@@ -29,6 +30,7 @@ function pdfLogo(source: string): Promise<string> {
 }
 
 export async function prepareSoftwareIconsForPdf(items: SoftwareSkill[]) {
+  await loadSharedSoftwareLogos();
   return Promise.all(items.map(async (item) => {
     const source = item.customIconDataUrl || softwareIconUrl(item.icon);
     if (!source) return item;

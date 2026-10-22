@@ -199,6 +199,29 @@ const authorized = (token, init = {}) => ({
   headers: { Authorization: `Bearer ${token}`, ...init.headers },
 });
 
+test("shared software logos require admin authentication and preserve replaced versions", async () => {
+  const env = {
+    CLIENTS_BUCKET: new MemoryR2Bucket(), ADMIN_USERNAME: "admin",
+    ADMIN_PASSWORD: "test-shared-logo-password",
+    SESSION_SECRET: "shared-logo-test-session-secret-at-least-forty-characters",
+    ALLOWED_ORIGINS: "http://127.0.0.1:8080",
+  };
+  assert.equal((await call(env, "/api/software-logos/canva", { method: "PUT" })).status, 401);
+  const admin = await login(env, "admin", env.ADMIN_PASSWORD);
+  const header = Buffer.alloc(24);
+  Buffer.from("89504e470d0a1a0a0000000d49484452", "hex").copy(header);
+  header.writeUInt32BE(256, 16); header.writeUInt32BE(256, 20);
+  const dataUrl = `data:image/png;base64,${header.toString("base64")}`;
+  const write = () => call(env, "/api/software-logos/canva", authorized(admin.token, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }),
+  }));
+  assert.equal((await write()).status, 200);
+  const response = await call(env, "/api/software-logos");
+  assert.equal((await response.json()).logos.canva, dataUrl);
+  assert.equal((await write()).status, 200);
+  assert.ok([...env.CLIENTS_BUCKET.objects.keys()].some((key) => key.startsWith("software-logos/history/canva/")));
+});
+
 test("les sessions par appareil peuvent être consultées et révoquées séparément", async () => {
   const env = {
     CLIENTS_BUCKET: new MemoryR2Bucket(),

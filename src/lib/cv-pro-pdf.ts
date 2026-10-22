@@ -9,6 +9,7 @@ import {
   type SoftwareIcon,
 } from "./cv-types";
 import { documentFont, type DocumentLanguage } from "./document-language";
+import { cvEntryLocation } from "./cv-entry-location";
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
@@ -456,10 +457,10 @@ function entryLocationLine(
   location: string,
   language: DocumentLanguage,
 ): Content | null {
-  const value = [primary, location].map(clean).filter(Boolean).join(", ");
+  const value = cvEntryLocation(primary, location, language === "ar");
   if (!value) return null;
   return {
-    text: displayText(withTerminalPeriod(value), language, language === "ar" ? 100 : 58),
+    text: displayText(value, language, language === "ar" ? 100 : 58),
     color: INK,
     fontSize: 8.8,
     lineHeight: META_LINE_HEIGHT,

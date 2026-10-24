@@ -103,6 +103,11 @@ export async function proxyClientPortal({ request, env, path, asset = false }) {
   let response = asset
     ? await fetch(outbound)
     : await env.CLIENT_PORTAL.fetch(outbound);
+  if (asset && response.headers.get("Content-Type")?.includes("text/html")) {
+    return proxyResponse(new Response("Fichier du portail introuvable.",{
+      status:404,headers:{"Content-Type":"text/plain; charset=utf-8","Cache-Control":"no-store"},
+    }),true);
+  }
   if (!asset && response.headers.get("Content-Type")?.includes("text/html")) {
     // Separate the portal's assets from historical SPA fallback responses that
     // browsers may already have cached as immutable under /_next/.

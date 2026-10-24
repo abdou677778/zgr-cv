@@ -28,6 +28,16 @@ function service(handler) {
   return { fetch: handler };
 }
 
+test("un asset manquant ne peut pas mettre en cache une page HTML comme script",async()=>{
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async()=>new Response('<html>fallback</html>',{headers:{'Content-Type':'text/html','Cache-Control':'public, max-age=31536000, immutable'}});
+  try{
+    const result=await portalAssetRequest({request:new Request('https://zgr-cv.pages.dev/_next/missing.js'),env:{CLIENT_PORTAL:service(async()=>new Response())},params:{path:'missing.js'}});
+    assert.equal(result.status,404);assert.equal(result.headers.get('Cache-Control'),'no-store');
+    assert.match(result.headers.get('Content-Type'),/text\/plain/);
+  }finally{globalThis.fetch=originalFetch;}
+});
+
 test("le portail isole ses assets du cache historique de la SPA",async()=>{
   const result=await proxyClientPortal({request:new Request("https://zgr-cv.pages.dev/c/0123456789abcdef01234567"),env:{CLIENT_PORTAL:service(async()=>new Response('<link href="/_next/static/a.css"><script>const chunk="/_next/static/b.js"</script>',{headers:{"Content-Type":"text/html","Link":"</_next/static/a.css>; rel=preload"}}))}});
   const html=await result.text();

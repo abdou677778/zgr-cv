@@ -2,10 +2,39 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { proxyApiRequest } from "../functions/_shared/api-proxy.js";
 import { proxyClientPortal } from "../functions/_shared/client-portal-proxy.js";
+import { onRequest as portalAssetRequest } from "../functions/_next/[[path]].js";
+
+test("les nouveaux assets du portail sont servis par la route publique _next", async () => {
+  const originalFetch = globalThis.fetch;
+  const forwarded = [];
+  globalThis.fetch = async request => {
+    forwarded.push(request.url);
+    return new Response("/* portal asset */", {headers:{"Content-Type":"text/css"}});
+  };
+  try {
+    const result = await portalAssetRequest({
+      request:new Request("https://zgr-cv.pages.dev/_next/static/css/new-version.css"),
+      params:{path:"static/css/new-version.css"},
+      env:{CLIENT_PORTAL:service(async()=>{throw new Error("Static assets must use the canonical asset dispatcher");})},
+    });
+    assert.equal(result.status,200);
+    assert.equal(result.headers.get("Content-Type"),"text/css");
+    assert.equal(result.headers.get("X-ZGR-Portal-Gateway"),"cloudflare-pages");
+    assert.deepEqual(forwarded,["https://cv-pro-team-clients.zgrcv-wizi.workers.dev/_next/static/css/new-version.css"]);
+  } finally {globalThis.fetch=originalFetch;}
+});
 
 function service(handler) {
   return { fetch: handler };
 }
+
+test("le portail isole ses assets du cache historique de la SPA",async()=>{
+  const result=await proxyClientPortal({request:new Request("https://zgr-cv.pages.dev/c/0123456789abcdef01234567"),env:{CLIENT_PORTAL:service(async()=>new Response('<link href="/_next/static/a.css"><script>const chunk="/_next/static/b.js"</script>',{headers:{"Content-Type":"text/html","Link":"</_next/static/a.css>; rel=preload"}}))}});
+  const html=await result.text();
+  assert.ok(html.includes('/c/_next/static/a.css'));
+  assert.ok(html.includes('/c/_next/static/b.js'));
+  assert.ok(result.headers.get('Link').includes('/c/_next/'));
+});
 
 test("la passerelle Pages transmet l'API au Worker sans exposer workers.dev", async () => {
   let forwarded;

@@ -44,8 +44,11 @@ function publicRouteParts(url, asset, fallback) {
   const candidates = [...urlParts, ...fallbackParts];
 
   if (asset) {
-    const marker = candidates.lastIndexOf("_next");
-    return marker >= 0 ? candidates.slice(marker + 1) : fallbackParts;
+    // URL and route params describe the same asset, not two path segments.
+    const marker = urlParts.lastIndexOf("_next");
+    if (marker >= 0) return urlParts.slice(marker + 1);
+    const fallbackMarker = fallbackParts.lastIndexOf("_next");
+    return fallbackMarker >= 0 ? fallbackParts.slice(fallbackMarker + 1) : fallbackParts;
   }
 
   const apiMarker = candidates.lastIndexOf("api");
@@ -97,8 +100,18 @@ export async function proxyClientPortal({ request, env, path, asset = false }) {
   // its fetch handler. A service binding enters after that dispatcher, so use a
   // server-side Cloudflare fetch only for immutable /_next files. The browser
   // still sees and contacts zgr-cv.pages.dev exclusively.
-  const response = asset
+  let response = asset
     ? await fetch(outbound)
     : await env.CLIENT_PORTAL.fetch(outbound);
+  if (!asset && response.headers.get("Content-Type")?.includes("text/html")) {
+    // Separate the portal's assets from historical SPA fallback responses that
+    // browsers may already have cached as immutable under /_next/.
+    const body = (await response.text()).replaceAll("/_next/", "/c/_next/");
+    const headers = new Headers(response.headers);
+    headers.delete("Content-Length");
+    const link = headers.get("Link");
+    if (link) headers.set("Link", link.replaceAll("/_next/", "/c/_next/"));
+    response = new Response(body,{status:response.status,statusText:response.statusText,headers});
+  }
   return proxyResponse(response, asset);
 }

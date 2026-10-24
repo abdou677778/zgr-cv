@@ -116,6 +116,7 @@ export function runtimeEnv() {
     MCP_ALLOWED_SUBJECTS?: string;
     MCP_ADMIN_SUBJECTS?: string;
     ZGR_PUBLIC_API_URL?: string;
+    ZGR_PUBLIC_API?: { fetch(request: Request): Promise<Response> };
     PUBLIC_INVITE_BASE_URL?: string;
   };
 }

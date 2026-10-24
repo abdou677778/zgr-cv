@@ -1,4 +1,6 @@
 import masterPrompt from '@/assets/PROMPT_MAITRE_CV_JSON_7_LANGUES.txt?raw';
+import { fetchOpportunityJson } from '@/lib/public-opportunity-api';
+import { prepareDestinationCanadaContext } from '@/lib/destination-canada-preparation';
 import { inspectDriveFolder } from '@/lib/google-drive';
 import { recordEvent, runtimeEnv } from '@/db/runtime';
 import { extractSourceText } from '@/lib/source-file-extractor';
@@ -26,7 +28,7 @@ type RpcRequest = {
   params?: unknown;
 };
 
-const SERVER_VERSION = '0.9.0';
+const SERVER_VERSION = '0.9.1';
 const MAX_SEARCH_RESULTS = 20;
 const READ_SCOPE = 'zgr:orders:read';
 const JSON_WRITE_SCOPE = 'zgr:json:write';
@@ -603,36 +605,10 @@ async function fetchPublicOpportunityApi(
   pathname: string,
   params: Record<string, string | number | undefined>,
 ) {
-  const base = (
-    runtimeEnv().ZGR_PUBLIC_API_URL || DEFAULT_PUBLIC_API_URL
-  ).replace(/\/+$/, '');
-  const url = new URL(`${base}${pathname}`);
-  for (const [name, value] of Object.entries(params)) {
-    if (value !== undefined && String(value).trim())
-      url.searchParams.set(name, String(value));
-  }
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'ZGR-CV-MCP/0.5 (+https://abdou677778.github.io/zgr-cv/)',
-    },
-    signal: AbortSignal.timeout(45_000),
+  return fetchOpportunityJson(pathname, params, {
+    baseUrl: runtimeEnv().ZGR_PUBLIC_API_URL || DEFAULT_PUBLIC_API_URL,
+    binding: runtimeEnv().ZGR_PUBLIC_API,
   });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const errorValue =
-      payload && typeof payload === 'object' && 'error' in payload
-        ? (payload as { error?: unknown }).error
-        : undefined;
-    const message = typeof errorValue === 'string' ? errorValue : '';
-    throw new Error(
-      message || `Source d’opportunités indisponible (${response.status}).`,
-    );
-  }
-  if (!payload || typeof payload !== 'object') {
-    throw new Error('Réponse invalide de la source d’opportunités.');
-  }
-  return payload as Record<string, unknown>;
 }
 
 function opportunityToolResult(payload: Record<string, unknown>) {
@@ -905,14 +881,16 @@ async function callTool(
   const args = objectParams(rawArguments);
   if(name==='prepare_destination_canada_tunis'){
     const orderId=requiredString(args,'order_id');
-    if(!(await getOrder(orderId)))return textResult({error:'Commande introuvable.'},true);
-    const contract=await fetchPublicOpportunityApi('/api/destination-canada/tunis',{});
-    const versions=await getJsonVersions(orderId);const active=versions[0];
-    const object=active?await runtimeEnv().FILES.get(active.storageKey):null;
-    const json=object?JSON.parse(await object.text()):null;
-    return textResult({orderId,contract,activeVersion:active?.versionNumber??null,
-      profile:json?.documents?.fr??json,
-      instruction:'Préparer un brouillon séparé destination_canada_tunis (formId, schemaVersion, answers par identifiant officiel, reviewed=false). Ne pas remplacer le CV. Ne pas déduire les champs personnels absents. Lire les documents et get_master_prompt avant génération ; get_json_version puis sauvegarde versionnée seulement après validation explicite. Si contract.status != open, suspendre la préparation finale et vérifier la source. Aucune soumission automatique.'});
+    const result=await prepareDestinationCanadaContext(orderId,{
+      getOrder,getVersions:getJsonVersions,
+      getContract:()=>fetchPublicOpportunityApi('/api/destination-canada/tunis',{}),
+      readJson:async key=>{
+        const object=await runtimeEnv().FILES.get(key);
+        if(!object)throw new Error('JSON absent');
+        return JSON.parse(await object.text());
+      },
+    });
+    return textResult(result,'error' in result);
   }
   if (name === 'search_volunteer_opportunities') {
     const country = requiredString(args, 'participant_country');

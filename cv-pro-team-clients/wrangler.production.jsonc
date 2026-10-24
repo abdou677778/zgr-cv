@@ -7,6 +7,7 @@
   "no_bundle": true,
   "rules": [{ "type": "ESModule", "globs": ["**/*.js", "**/*.mjs"] }],
   "assets": { "directory": "dist/client" },
+  "services": [{ "binding": "ZGR_PUBLIC_API", "service": "zgr-cv-storage-api" }],
   "d1_databases": [
     {
       "binding": "DB",

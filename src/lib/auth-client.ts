@@ -234,6 +234,8 @@ function normalizeSessionUser(value: unknown): SessionUser | null {
         : value,
     ]),
   ) as AccountPermissions;
+  // A cached session predating the baseline team access must not hide Commandes.
+  permissions.ordersRead = user.active === true;
   return {
     ...user,
     role,

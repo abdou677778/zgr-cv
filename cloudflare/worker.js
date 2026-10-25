@@ -4278,6 +4278,7 @@ async function proxyClientOrders(request, env, origin, pathname, actor) {
     method: request.method,
     headers,
     body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
+    duplex: "half",
     redirect: "manual",
   });
   const response = env.CLIENT_PORTAL_SERVICE?.fetch
@@ -5044,7 +5045,11 @@ async function route(request, env, ctx) {
 
   if (clientOrderPortalPath(url.pathname)) {
     if (!canAccessOrders(actor))
-      return json({ error: "Rôle Admin clients ou Rédacteur requis." }, 403, origin);
+      return json({ error: "Compte actif requis pour accéder aux commandes." }, 403, origin);
+    // Creating an empty five-day upload invitation is a baseline team action,
+    // not permission to edit, assign, archive or delete an existing order.
+    const createsClientInvitation =
+      request.method === "POST" && url.pathname === "/api/admin/client-orders/invitations";
     const canWriteOrders =
       canAdministerOrders(actor) ||
       normalizeTeamRoles(actor.teamRoles, actor.role).includes("writer") ||
@@ -5053,11 +5058,11 @@ async function route(request, env, ctx) {
         "orders",
         "write",
       );
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !canWriteOrders)
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !canWriteOrders && !createsClientInvitation)
       return json({ error: "Droit de modification des commandes requis." }, 403, origin);
     const orderAdminOnly =
       request.method === "DELETE" ||
-      /\/invitations(?:\/|$)/.test(url.pathname) ||
+      (/\/invitations(?:\/|$)/.test(url.pathname) && !createsClientInvitation) ||
       /\/archive-create$/.test(url.pathname) ||
       /\/archive-import$/.test(url.pathname);
     if (orderAdminOnly && !canAdministerOrders(actor))

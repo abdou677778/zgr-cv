@@ -247,9 +247,10 @@ export function ClientOrdersDialog({
     try {
       const invitation = await createClientInvitation(5);
       setInviteUrl(invitation.inviteUrl);
-      await navigator.clipboard.writeText(invitation.inviteUrl);
+      let copied=false;
+      try {await navigator.clipboard.writeText(invitation.inviteUrl);copied=true;} catch { /* The link is still created and can be copied manually. */ }
       setMessage(
-        `Lien client créé et copié · valable jusqu’au ${new Date(
+        `Lien client créé${copied?' et copié':' — copie manuelle disponible ci-dessous'} · valable jusqu’au ${new Date(
           invitation.expiresAt,
         ).toLocaleString("fr-DZ")}.`,
       );
@@ -833,7 +834,7 @@ export function ClientOrdersDialog({
       }
       iconClassName={archiveMode ? "bg-amber-100 text-amber-800" : "bg-cyan-100 text-cyan-800"}
       actions={
-        canAdminOrders ? (
+        (!archiveMode || canAdminOrders) ? (
           <Button
             type="button"
             size="sm"

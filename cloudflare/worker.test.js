@@ -199,6 +199,38 @@ const authorized = (token, init = {}) => ({
   headers: { Authorization: `Bearer ${token}`, ...init.headers },
 });
 
+test("every active account can consult orders and create invitations without gaining admin writes", async () => {
+  const forwarded=[];
+  const env={
+    CLIENTS_BUCKET:new MemoryR2Bucket(),ADMIN_USERNAME:'admin',
+    ADMIN_PASSWORD:'test-order-access-password',
+    SESSION_SECRET:'orders-access-test-session-secret-at-least-forty-characters',
+    ALLOWED_ORIGINS:'http://127.0.0.1:8080',
+    CLIENT_PORTAL_API_URL:'https://portal.example.test',CLIENT_PORTAL_ADMIN_TOKEN:'fixture-internal-only',
+    CLIENT_PORTAL_SERVICE:{fetch:async request=>{
+      forwarded.push({path:new URL(request.url).pathname,method:request.method,actor:request.headers.get('X-ZGR-Actor')});
+      return Response.json({ok:true},{status:request.method==='POST'?201:200});
+    }},
+  };
+  assert.equal((await call(env,'/api/admin/client-orders/invitations',{method:'POST'})).status,401);
+  const admin=await login(env,'admin',env.ADMIN_PASSWORD);
+  for(const role of ['viewer','editor']){
+    const username=`orders-${role}`;
+    const create=await call(env,'/api/admin/users',authorized(admin.token,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,displayName:username,password:'test-orders-user-password',role,teamRoles:[],accessMatrix:{orders:'none'}})}));
+    assert.equal(create.status,201);
+    const session=await login(env,username,'test-orders-user-password');
+    assert.equal(session.user.permissions.ordersRead,true);
+    assert.equal((await call(env,'/api/admin/client-orders',authorized(session.token))).status,200);
+    assert.equal((await call(env,'/api/admin/client-orders/invitations',authorized(session.token,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"validDays":5}'}))).status,201);
+    assert.equal(forwarded.at(-1).actor,username);
+    for(const [path,method] of [['/api/admin/client-orders/fixture','DELETE'],['/api/admin/client-orders/archive-create','POST'],['/api/admin/client-orders/archive-import','POST'],['/api/admin/client-orders/invitations/fixture','POST'],['/api/admin/client-orders/fixture','PATCH']]){
+      assert.equal((await call(env,path,authorized(session.token,{method}))).status,403,`${role} ${method} ${path}`);
+    }
+  }
+  assert.equal((await call(env,'/api/admin/client-orders/invitations',authorized(admin.token,{method:'POST'}))).status,201);
+  assert.deepEqual(forwarded.filter(entry=>entry.method==='POST').map(entry=>entry.path),Array(3).fill('/api/admin/orders/invitations'));
+});
+
 test("shared software logos require admin authentication and preserve replaced versions", async () => {
   const env = {
     CLIENTS_BUCKET: new MemoryR2Bucket(), ADMIN_USERNAME: "admin",

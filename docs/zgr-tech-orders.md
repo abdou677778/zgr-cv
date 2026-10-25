@@ -13,8 +13,15 @@ aucun paiement et ne produit pas de fausse facture fournisseur.
    officiel. Zéro est accepté explicitement pour les montants ; le taux doit être positif.
 2. Choisir un logo du catalogue existant ou importer SVG/PNG/JPG/WebP (4 Mo max),
    normalisé sans déformation en PNG transparent 256 × 256. L’image et le service
-   sont enregistrés ensemble dans le cloud Tech Orders. Aucun logo CV n’est modifié.
+   sont enregistrés dans le cloud Tech Orders. Un clic sur le logo ouvre le choix
+   local : le logo est sauvegardé immédiatement, indépendamment des tarifs, y
+   compris avant la première sauvegarde du nouveau service. Le service lui-même
+   doit toujours être enregistré avec son nom et ses prix. Aucun logo CV n’est modifié.
+   Sans remplacement Tech Orders, la version cloud déjà corrigée dans Logiciels
+   est utilisée avant l’icône intégrée au catalogue.
 3. Créer une vente : client, lien Facebook HTTPS optionnel, un ou plusieurs services.
+   Dès la sélection, un aperçu affiche le logo, le prix catalogue et un prix de vente
+   modifiable avant « Ajouter à la vente ». Ce prix privé ne change pas le catalogue.
    Chaque ligne conserve une copie du nom, du coût USD, du taux, du prix de vente,
    du début et de la fin. Tous les montants couvrent la période saisie. Modifier le
    catalogue ne change jamais les transactions passées.
@@ -55,6 +62,9 @@ Les objets utilisent uniquement `tech-orders/v1/current/{services|orders}/` dans
 le binding R2 existant `CLIENTS_BUCKET`. L’historique est séparé dans
 `tech-orders/v1/history/`. Aucun accès aux objets CV, dossiers portail, D1 clients
 ou outils MCP n’est ajouté. Aucune suppression n’est implémentée.
+Les logos privés sont versionnés dans `current/logos/:serviceId.json`, via
+`PUT /api/tech-orders/logos/:serviceId`. Ils sont renvoyés séparément des ventes
+par le GET ; ils ne changent pas les prix ou versions des fiches services.
 
 Chaque modification vérifie `revision` puis l’ETag R2 (`onlyIf`) pour éviter de
 perdre une saisie concurrente. Un conflit retourne 409 et demande un rechargement.

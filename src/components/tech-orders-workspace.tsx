@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Plus, RefreshCw, Settings2, ShoppingCart } from "lucide-react";
 import { FullPageWorkspace } from "./full-page-workspace";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { authenticatedFetch } from "@/lib/auth-client";
 import { SOFTWARE_ICON_CATALOG } from "@/data/software-icon-catalog";
+import { loadSharedSoftwareLogos } from "@/lib/shared-software-logos";
+import { techLogoSource, type TechLogo } from "@/lib/tech-order-logos";
 import {
   addTechMonths,
   lineTotals,
@@ -53,15 +55,8 @@ const presets = [
   { name: "Canva Pro", icon: "canva" },
   { name: "Perplexity Pro", icon: "perplexity" },
 ];
-function logoSource(service?: TechService) {
-  const entry = SOFTWARE_ICON_CATALOG.find((item) => item.slug === service?.icon);
-  return (
-    service?.logo ||
-    (entry && entry.asset !== "" ? `/software-icons/${entry.asset || `${entry.slug}.svg`}` : "")
-  );
-}
-function Logo({ service }: { service?: TechService }) {
-  const src = logoSource(service);
+function Logo({ service, override }: { service?: TechService; override?: TechLogo }) {
+  const src = techLogoSource(service, override);
   return src ? (
     <img src={src} alt="" className="h-8 w-8 shrink-0 rounded border bg-white p-1 object-contain" />
   ) : (
@@ -139,6 +134,9 @@ export function TechOrdersWorkspace({
 }) {
   const [services, setServices] = useState<TechService[]>([]),
     [orders, setOrders] = useState<TechOrder[]>([]);
+  const [logos, setLogos] = useState<Record<string, TechLogo>>({});
+  const [, refreshLogos] = useState(0);
+  const logoInput = useRef<HTMLInputElement>(null);
   const [loaded, setLoaded] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
@@ -148,6 +146,7 @@ export function TechOrdersWorkspace({
     [selected, setSelected] = useState(""),
     [query, setQuery] = useState(""),
     [renewMonths, setRenewMonths] = useState(1);
+  const [pendingLine, setPendingLine] = useState<TechLine>();
   const load = useCallback(async () => {
     setBusy(true);
     setMessage("");
@@ -155,6 +154,7 @@ export function TechOrdersWorkspace({
       const data = await cloudJson("/api/tech-orders");
       setServices(data.services);
       setOrders(data.orders);
+      setLogos(data.logos || {});
       setLoaded(true);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -163,8 +163,41 @@ export function TechOrdersWorkspace({
     }
   }, []);
   useEffect(() => {
-    if (open) void load();
+    if (open) {
+      void load();
+      void loadSharedSoftwareLogos(true);
+    }
+    const update = () => refreshLogos((value) => value + 1);
+    window.addEventListener("zgr-software-logos", update);
+    return () => window.removeEventListener("zgr-software-logos", update);
   }, [open, load]);
+  const uploadLogo = async (file: File) => {
+    if (!service) return;
+    const target = { id: service.id, icon: service.icon };
+    setBusy(true);
+    setMessage("");
+    try {
+      const dataUrl = await normalizedLogo(file);
+      const data = await cloudJson(`/api/tech-orders/logos/${target.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...target, revision: logos[target.id]?.revision ?? 0, dataUrl }),
+      });
+      setLogos((current) => ({ ...current, [target.id]: data.record }));
+      setService((current) =>
+        current?.id === target.id && current.icon === target.icon
+          ? { ...current, logo: data.record.dataUrl }
+          : current,
+      );
+      setMessage(
+        "Logo enregistré dans le cloud Tech Orders. Les prix et les logos des CV ne sont pas modifiés.",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
   const filtered = useMemo(
     () =>
       orders
@@ -305,6 +338,8 @@ export function TechOrdersWorkspace({
             disabled={!loaded || busy || !!order}
             onClick={() => {
               setOrder(blankOrder());
+              setSelected("");
+              setPendingLine(undefined);
               setCatalog(false);
               setMessage("");
             }}
@@ -347,7 +382,7 @@ export function TechOrdersWorkspace({
                   className="flex items-center gap-2 rounded-lg border p-2 text-sm"
                   onClick={() => setService({ ...s })}
                 >
-                  <Logo service={s} />
+                  <Logo service={s} override={logos[s.id]} />
                   <span>
                     {s.name}
                     <small className="block text-slate-500">
@@ -372,7 +407,9 @@ export function TechOrdersWorkspace({
                       key={p.name}
                       className="rounded border bg-white px-2 py-1 text-xs"
                       onClick={() =>
-                        setService((current) => (current ? { ...current, ...p } : current))
+                        setService((current) =>
+                          current ? { ...current, ...p, logo: "" } : current,
+                        )
                       }
                     >
                       {p.name}
@@ -429,9 +466,19 @@ export function TechOrdersWorkspace({
                   </Field>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <Logo service={service} />
-                  <Field label="Importer / remplacer le logo cloud (4 Mo max)">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded-lg p-1 ring-indigo-300 hover:ring-2 focus-visible:ring-2"
+                    aria-label={`Remplacer le logo cloud de ${service.name || "ce service"}`}
+                    title="Cliquer pour choisir un logo local et l’enregistrer dans le cloud"
+                    onClick={() => logoInput.current?.click()}
+                  >
+                    <Logo service={service} override={logos[service.id]} />
+                  </button>
+                  <Field label="Cliquer sur le logo ou choisir un fichier — sauvegarde cloud immédiate">
                     <input
+                      ref={logoInput}
                       type="file"
                       disabled={busy}
                       accept="image/png,image/jpeg,image/webp,image/svg+xml"
@@ -439,15 +486,7 @@ export function TechOrdersWorkspace({
                         const file = e.target.files?.[0];
                         e.currentTarget.value = "";
                         if (!file) return;
-                        setBusy(true);
-                        try {
-                          const logo = await normalizedLogo(file);
-                          setService((current) => (current ? { ...current, logo } : current));
-                        } catch (error) {
-                          setMessage(error instanceof Error ? error.message : String(error));
-                        } finally {
-                          setBusy(false);
-                        }
+                        await uploadLogo(file);
                       }}
                     />
                   </Field>
@@ -506,22 +545,36 @@ export function TechOrdersWorkspace({
                 aria-label="Service à ajouter à la vente"
                 className="h-9 min-w-48 rounded border bg-white px-2"
                 value={selected}
-                onChange={(e) => setSelected(e.target.value)}
+                onChange={(e) => {
+                  setSelected(e.target.value);
+                  const service = services.find((s) => s.id === e.target.value);
+                  setPendingLine(service ? newTechLine(service) : undefined);
+                }}
               >
                 <option value="">Choisir un service…</option>
                 {services.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {s.name} — {money(s.saleDzd)}
                   </option>
                 ))}
               </select>
               <Button
                 type="button"
                 variant="outline"
-                disabled={!selected || busy || order.lines.length >= 30}
+                disabled={
+                  !pendingLine ||
+                  !Number.isFinite(pendingLine.saleDzd) ||
+                  pendingLine.saleDzd < 0 ||
+                  pendingLine.saleDzd > 100000000 ||
+                  busy ||
+                  order.lines.length >= 30
+                }
                 onClick={() => {
-                  const s = services.find((s) => s.id === selected);
-                  if (s) setOrder({ ...order, lines: [...order.lines, newTechLine(s)] });
+                  if (pendingLine)
+                    setOrder({
+                      ...order,
+                      lines: [...order.lines, { ...pendingLine, id: crypto.randomUUID() }],
+                    });
                 }}
               >
                 Ajouter à la vente
@@ -539,9 +592,47 @@ export function TechOrdersWorkspace({
                 </Button>
               )}
             </div>
+            {pendingLine && (
+              <div
+                className="flex flex-wrap items-center gap-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3"
+                aria-label="Aperçu du service sélectionné"
+              >
+                <Logo
+                  service={services.find((s) => s.id === pendingLine.serviceId)}
+                  override={logos[pendingLine.serviceId]}
+                />
+                <div className="min-w-36 text-sm">
+                  <strong>{pendingLine.name}</strong>
+                  <small className="block text-slate-500">
+                    Prix du catalogue :{" "}
+                    {money(services.find((s) => s.id === pendingLine.serviceId)?.saleDzd ?? NaN)}
+                  </small>
+                </div>
+                <Amount
+                  label="Prix de vente de ce service (DA) — modifiable"
+                  value={pendingLine.saleDzd}
+                  onChange={(value) => setPendingLine({ ...pendingLine, saleDzd: value })}
+                />
+                <p className="text-sm">
+                  Coût : {money(lineTotals(pendingLine).cost)} · Marge :{" "}
+                  <strong>{money(lineTotals(pendingLine).margin)}</strong>
+                  <small className="block text-slate-500">
+                    Ce prix s’applique uniquement à cette vente après « Ajouter à la vente ».
+                  </small>
+                </p>
+              </div>
+            )}
             {order.lines.map((line) => (
               <fieldset key={line.id} className="space-y-3 rounded-lg border bg-slate-50 p-3">
-                <legend className="px-2 text-sm font-bold">{line.name}</legend>
+                <legend className="px-2 text-sm font-bold">
+                  <span className="inline-flex items-center gap-2">
+                    <Logo
+                      service={services.find((s) => s.id === line.serviceId)}
+                      override={logos[line.serviceId]}
+                    />
+                    {line.name}
+                  </span>
+                </legend>
                 <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                   <Field label="Début inclus">
                     <Input
@@ -741,7 +832,10 @@ export function TechOrdersWorkspace({
                     <td className="space-y-2 px-4 py-4">
                       {item.lines.map((line) => (
                         <div key={line.id} className="flex gap-2">
-                          <Logo service={services.find((s) => s.id === line.serviceId)} />
+                          <Logo
+                            service={services.find((s) => s.id === line.serviceId)}
+                            override={logos[line.serviceId]}
+                          />
                           <div>
                             {line.name}
                             <small className="block text-slate-500">

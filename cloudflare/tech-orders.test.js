@@ -137,3 +137,42 @@ test("Tech Orders enforces actual body size even without a Content-Length header
     413,
   );
 });
+
+test("Tech logos persist separately even before prices are entered, with version checks and no CV writes", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  // Structural PNG header fixture for the existing dimension validator.
+  const bytes = new Uint8Array(24);
+  bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  new DataView(bytes.buffer).setUint32(16, 256);
+  new DataView(bytes.buffer).setUint32(20, 256);
+  const dataUrl = `data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`;
+  const body = { id: "new-service", revision: 0, icon: "googlegemini", dataUrl };
+  let result = await handleTechOrders(request("/logos/new-service", body), env, actor, respond);
+  assert.equal(result.status, 200);
+  assert.equal((await result.json()).record.revision, 1);
+  const reloaded = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.equal(reloaded.logos["new-service"].dataUrl, dataUrl);
+  assert.deepEqual(reloaded.orders, []);
+  assert.deepEqual(reloaded.services, []);
+  assert.equal(
+    (await handleTechOrders(request("/logos/new-service", body), env, actor, respond)).status,
+    409,
+  );
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/logos/new-service", { ...body, revision: 1, dataUrl: "data:image/svg+xml,bad" }),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await handleTechOrders(request("/logos/new-service", body), env, { role: "editor" }, respond))
+      .status,
+    403,
+  );
+  assert.ok([...env.CLIENTS_BUCKET.map.keys()].every((key) => key.startsWith("tech-orders/v1/")));
+});

@@ -50,6 +50,16 @@ export function validateTechRecord(kind, input, id) {
     input.revision < 0
   )
     throw Error("Identifiant ou version invalide.");
+  if (kind === "logos") {
+    if (
+      !input.dataUrl ||
+      !pngLogo(input.dataUrl) ||
+      !text(input.icon, 80) ||
+      !idPattern.test(input.icon)
+    )
+      throw Error("Logo PNG 256 × 256 et identifiant logiciel requis.");
+    return { id, icon: input.icon, dataUrl: input.dataUrl };
+  }
   if (kind === "services") {
     if (
       !text(input.name, 120) ||
@@ -140,7 +150,8 @@ export async function handleTechOrders(request, env, actor, respond) {
   const path = new URL(request.url).pathname;
   if (path === "/api/tech-orders" && request.method === "GET") {
     const services = [],
-      orders = [];
+      orders = [],
+      logos = {};
     let cursor;
     do {
       const page = await env.CLIENTS_BUCKET.list({
@@ -152,13 +163,14 @@ export async function handleTechOrders(request, env, actor, respond) {
         const object = await env.CLIENTS_BUCKET.get(item.key);
         if (!object) continue;
         const value = JSON.parse(await object.text());
-        (item.key.includes("/services/") ? services : orders).push(value);
+        if (item.key.includes("/logos/")) logos[value.id] = value;
+        else (item.key.includes("/services/") ? services : orders).push(value);
       }
       cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);
-    return respond({ services, orders }, 200);
+    return respond({ services, orders, logos }, 200);
   }
-  const match = path.match(/^\/api\/tech-orders\/(services|orders)\/([a-zA-Z0-9-]{1,80})$/);
+  const match = path.match(/^\/api\/tech-orders\/(services|orders|logos)\/([a-zA-Z0-9-]{1,80})$/);
   if (!match || request.method !== "PUT")
     return respond({ error: "Route ZGR Tech Orders introuvable." }, 404);
   // Read the actual body with a bound, even if Content-Length is omitted or forged.

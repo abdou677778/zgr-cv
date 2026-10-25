@@ -13,6 +13,7 @@ export function FullPageWorkspace({
   iconClassName,
   actions,
   bodyClassName,
+  wrapHeaderActions = false,
   children,
 }: {
   open: boolean;
@@ -23,6 +24,7 @@ export function FullPageWorkspace({
   iconClassName?: string;
   actions?: ReactNode;
   bodyClassName?: string;
+  wrapHeaderActions?: boolean;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -52,7 +54,7 @@ export function FullPageWorkspace({
       className="fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50"
     >
       <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
-        <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center">
+        <div className={cn("mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center",wrapHeaderActions&&"sm:flex-wrap")}>
           <Button
             type="button"
             variant="outline"
@@ -61,7 +63,7 @@ export function FullPageWorkspace({
           >
             <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l’accueil
           </Button>
-          <div className="min-w-0">
+          <div className={cn("min-w-0",wrapHeaderActions&&"sm:min-w-[260px] sm:flex-1")}>
             <h1
               id={titleId}
               className="flex items-center gap-2 text-xl font-black text-slate-950 sm:text-2xl"
@@ -78,7 +80,7 @@ export function FullPageWorkspace({
             </h1>
             <div className="mt-1 text-sm text-slate-600">{description}</div>
           </div>
-          {actions && <div className="shrink-0 sm:ml-auto">{actions}</div>}
+          {actions && <div className={wrapHeaderActions?"w-full":"shrink-0 sm:ml-auto"}>{actions}</div>}
         </div>
       </header>
       <div className={cn("flex min-h-0 flex-1 flex-col", bodyClassName)}>{children}</div>

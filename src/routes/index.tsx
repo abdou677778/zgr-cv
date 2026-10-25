@@ -225,6 +225,10 @@ const PublicationsWorkspace = lazy(async () => {
   const module = await import("@/components/publications-workspace");
   return { default: module.PublicationsWorkspace };
 });
+const TechOrdersWorkspace = lazy(async () => {
+  const module = await import("@/components/tech-orders-workspace");
+  return { default: module.TechOrdersWorkspace };
+});
 const PreviewControlDock = lazy(async () => {
   const module = await import("@/components/preview-control-dock");
   return { default: module.PreviewControlDock };
@@ -785,6 +789,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [promptMasterOpen, setPromptMasterOpen] = useState(false);
   const [publicationsOpen, setPublicationsOpen] = useState(false);
+  const [techOrdersOpen, setTechOrdersOpen] = useState(false);
   const [aiFieldRequest, setAiFieldRequest] = useState<AiFieldRequest | null>(null);
   const [clientDatabaseOpen, setClientDatabaseOpen] = useState(false);
   const [workflowCounts, setWorkflowCounts] = useState<ClientWorkflowCounts>({
@@ -3219,6 +3224,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                   Administration et configuration
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {user.role === 'admin' && <DropdownMenuItem onSelect={()=>setTechOrdersOpen(true)} className="items-start gap-3 rounded-lg px-3 py-3">
+                  <BriefcaseBusiness className="mt-0.5 h-4 w-4 text-indigo-600"/>
+                  <span className="flex flex-col"><span className="font-semibold">ZGR Tech Orders</span><span className="text-xs text-muted-foreground">Abonnements, ventes et marges — espace séparé</span></span>
+                </DropdownMenuItem>}
                 <DropdownMenuItem
                   onSelect={() => setClientDatabaseOpen(true)}
                   className="items-start gap-3 rounded-lg px-3 py-3"
@@ -5006,6 +5015,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         {promptMasterOpen ? (
           <PromptMasterDialog open={promptMasterOpen} onOpenChange={setPromptMasterOpen} />
         ) : null}
+        {techOrdersOpen && user.role === 'admin' ? <TechOrdersWorkspace open={techOrdersOpen} onOpenChange={setTechOrdersOpen}/> : null}
         {publicationsOpen ? (
           <PublicationsWorkspace
             open={publicationsOpen}

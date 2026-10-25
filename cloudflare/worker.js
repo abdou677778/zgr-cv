@@ -1,4 +1,5 @@
 import { destinationCanadaContract } from "./destination-canada.js";
+import { handleTechOrders } from "./tech-orders.js";
 import {
   getVolunteerOpportunityHealth,
   handleVolunteerApi,
@@ -4979,6 +4980,8 @@ async function route(request, env, ctx) {
   const actor = await authenticatedUser(request, env, ctx);
   if (!actor) return json({ error: "Session expirée ou accès non autorisé." }, 401, origin);
   const permissions = rolePermissions(actor.role, actor.workflowManager === true, actor.accessMatrix);
+  if (url.pathname === '/api/tech-orders' || url.pathname.startsWith('/api/tech-orders/'))
+    return handleTechOrders(request,env,actor,(body,status)=>json(body,status,origin));
   if (/^\/api\/(?:software|organization)-logos\//.test(url.pathname) && request.method === "PUT") {
     const namespace = url.pathname.startsWith("/api/organization-logos/") ? "organization-logos" : "software-logos";
     if (actor.role !== "admin") return json({ error: "Droits administrateur requis pour modifier la bibliothèque partagée." }, 403, origin);

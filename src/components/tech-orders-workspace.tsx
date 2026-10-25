@@ -10,6 +10,7 @@ import { techLogoSource, type TechLogo } from "@/lib/tech-order-logos";
 import { normalizedTechLogo } from "@/lib/tech-logo-upload";
 import { techOrderError, techServiceError } from "@/lib/tech-orders-validation";
 import { TechSearchSelect } from "./tech-search-select";
+import { TechRenewalMessage } from "./tech-renewal-message";
 import {
   addTechMonths,
   lineTotals,
@@ -196,6 +197,14 @@ export function TechOrdersWorkspace({
   const [pendingLine, setPendingLine] = useState<TechLine>();
   const [visibleCount, setVisibleCount] = useState(25);
   const [catalogQuery, setCatalogQuery] = useState("");
+  const [messageOrderId, setMessageOrderId] = useState<string>();
+  const messageOrder = orders.find((item) => item.id === messageOrderId);
+  useEffect(() => {
+    if (messageOrderId)
+      document
+        .getElementById("tech-renewal-message")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [messageOrderId]);
   const hasDraft = !!(order || service);
   useEffect(() => {
     if (!hasDraft) return;
@@ -353,6 +362,14 @@ export function TechOrdersWorkspace({
         onClick={() => startSameClient(item)}
       >
         Autre service / vente
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || !!order || !!service || !!renewSource}
+        onClick={() => setMessageOrderId(item.id)}
+      >
+        Message de renouvellement
       </Button>
     </div>
   );
@@ -558,6 +575,15 @@ export function TechOrdersWorkspace({
       bodyClassName="overflow-y-auto"
     >
       <div className="mx-auto w-full max-w-[1800px] space-y-5 p-5 sm:p-8">
+        {messageOrder && (
+          <TechRenewalMessage
+            key={messageOrder.id}
+            order={messageOrder}
+            orders={orders}
+            today={today}
+            onClose={() => setMessageOrderId(undefined)}
+          />
+        )}
         <div className="grid gap-3 sm:grid-cols-3" aria-label="Accès rapide par état">
           {(["active", "ending", "inactive"] as TechState[]).map((state) => (
             <button

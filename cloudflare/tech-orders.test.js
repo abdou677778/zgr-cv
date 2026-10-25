@@ -74,6 +74,9 @@ test("Tech Orders validates dates, safe links, numeric inputs and unique lines",
   for (const bad of [
     { ...service, priceUsd: null },
     { ...service, rate: 0 },
+    { ...service, rate: 1e-10 },
+    { ...service, priceUsd: 1.005 },
+    { ...service, rate: 100000000 },
     { ...service, months: 0 },
     { ...service, logo: '<svg onload="alert(1)">' },
   ])
@@ -89,6 +92,55 @@ test("Tech Orders validates dates, safe links, numeric inputs and unique lines",
     validateTechRecord("orders", { ...order, lines: [{ ...order.lines[0], saleDzd: 0 }] }, order.id)
       .lines[0].saleDzd,
     0,
+  );
+});
+
+test("Tech cloud reads retain every record with at most eight parallel R2 reads", async () => {
+  const bucket = new Bucket();
+  for (let i = 0; i < 30; i++)
+    await bucket.put(
+      `tech-orders/v1/current/services/s-${i}.json`,
+      JSON.stringify({ ...service, id: `s-${i}` }),
+    );
+  let live = 0,
+    peak = 0;
+  const read = bucket.get.bind(bucket);
+  bucket.get = async (key) => {
+    live++;
+    peak = Math.max(peak, live);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    const value = await read(key);
+    live--;
+    return value;
+  };
+  const response = await handleTechOrders(request(""), { CLIENTS_BUCKET: bucket }, actor, respond);
+  assert.equal((await response.json()).services.length, 30);
+  assert.ok(peak > 1 && peak <= 8);
+});
+
+test("Cloud logo size limit agrees with the adaptive 150 KiB client encoder", () => {
+  const logo = (size) => {
+    const bytes = new Uint8Array(size);
+    bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(16, 256);
+    view.setUint32(20, 256);
+    return "data:image/png;base64," + Buffer.from(bytes).toString("base64");
+  };
+  assert.equal(
+    validateTechRecord(
+      "logos",
+      { id: "logo-test", revision: 0, icon: "generic", dataUrl: logo(153600) },
+      "logo-test",
+    ).icon,
+    "generic",
+  );
+  assert.throws(() =>
+    validateTechRecord(
+      "logos",
+      { id: "logo-test", revision: 0, icon: "generic", dataUrl: logo(153601) },
+      "logo-test",
+    ),
   );
 });
 test("Tech Orders cloud writes are isolated, versioned and conflict protected", async () => {

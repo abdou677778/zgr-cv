@@ -19,12 +19,20 @@ aucun paiement et ne produit pas de fausse facture fournisseur.
    doit toujours être enregistré avec son nom et ses prix. Aucun logo CV n’est modifié.
    Sans remplacement Tech Orders, la version cloud déjà corrigée dans Logiciels
    est utilisée avant l’icône intégrée au catalogue.
+   Les types MIME absents ou génériques sont acceptés pour les extensions image
+   connues, avec décodage obligatoire. Le PNG final reste en 256 × 256 ; si le
+   dessin est trop complexe, son contenu est réduit pour rester sous 150 Ko.
+   Un fichier vide, HEIC/PDF ou illisible déclenche un message explicite.
 3. Créer une vente : client, lien Facebook HTTPS optionnel, un ou plusieurs services.
    Dès la sélection, un aperçu affiche le logo, le prix catalogue et un prix de vente
    modifiable avant « Ajouter à la vente ». Ce prix privé ne change pas le catalogue.
    Chaque ligne conserve une copie du nom, du coût USD, du taux, du prix de vente,
    du début et de la fin. Tous les montants couvrent la période saisie. Modifier le
    catalogue ne change jamais les transactions passées.
+   Après ajout, la sélection est vidée pour éviter un second ajout involontaire.
+   Un service sélectionné mais pas encore ajouté bloque la sauvegarde avec une
+   explication ; on peut l’ajouter ou effacer sa sélection. « Enregistrer et saisir
+   la suivante » confirme d’abord l’écriture cloud, puis ouvre un formulaire vide.
 4. La fin est **exclusive** : c’est le jour où renouveler. On peut choisir 1/3/6/12 mois
    depuis le début ou saisir librement la date. Changer les dates d’une vente ne
    change pas les prix : vérifier les montants réels de la période.
@@ -61,6 +69,14 @@ aucun paiement et ne produit pas de fausse facture fournisseur.
   inversée ne renvoie aucune vente et bloque l’export jusqu’à correction.
 - Sur mobile, chaque vente devient une carte avec état, services, dates, coût,
   total, marge et actions, sans faire défiler horizontalement un grand tableau.
+- Les sélecteurs clients, services et logos permettent une recherche au clavier.
+  Les accents français et voyelles arabes ne bloquent pas les correspondances ;
+  plusieurs mots peuvent être saisis dans un ordre différent. La recherche rapide
+  porte aussi sur le lien Facebook, les notes et les références de facture.
+  Aucun client n’est fusionné automatiquement par la recherche.
+- Les raccourcis d’échéance couvrent aujourd’hui, les 7 jours incluant aujourd’hui
+  et le mois courant. Tri possible par récence, prochaine échéance, nom ou montant.
+  Les résultats s’affichent par tranches de 25, sans limiter les totaux ni l’export.
 
 ## Accès mobile privé et APK
 
@@ -116,6 +132,15 @@ Chaque modification vérifie `revision` puis l’ETag R2 (`onlyIf`) pour éviter
 perdre une saisie concurrente. Un conflit retourne 409 et demande un rechargement.
 La taille du corps est contrôlée même sans Content-Length. Les liens sont HTTPS
 sans identifiants intégrés ; les montants, dates, doublons de lignes et logos sont validés.
+Les montants et taux utilisent au maximum deux décimales ; le coût calculé est
+limité à 100 millions DA, comme les montants saisis. Zéro reste accepté pour un
+prix, mais jamais pour le taux. Les nouvelles validations n’altèrent pas les archives.
+Les écritures simultanées depuis le même formulaire sont bloquées ; les champs
+se verrouillent pendant l’envoi. Un conflit propose de récupérer la version cloud,
+sans réécriture automatique : abandon du brouillon confirmé pour une vente/service,
+ou conservation des prix lors du rechargement d’un logo. En cas de coupure après
+une tentative de sauvegarde, contrôler le registre avant de créer une autre vente.
+Les lectures R2 se font par groupes de huit au maximum, dans le namespace privé.
 
 ## Tests
 
@@ -143,3 +168,16 @@ Typecheck, lint des fichiers modifiés, 90 tests unitaires, 12 tests ciblés Wor
 build SPA et contrôle PWA valides. Le budget du bundle initial reste dépassé :
 339,90 Kio gzip après modification, contre 339,47 Kio sur la version de production
 précédente, pour un budget de 310 Kio. Ce contrôle de performance n’est donc pas vert.
+
+Audit complémentaire du 25 octobre : 95 tests unitaires valides et 14 tests ciblés
+Tech Orders/Pages valides. Avant l’ajout du test de limite PNG, la suite Worker
+élargie retourne 84 réussites sur 85 ;
+l’échec porte sur les droits d’un responsable de validation CV, reproduit avec le
+module Tech Orders précédent chargé en mémoire. Les permissions CV ne sont pas
+modifiées dans cet audit. L’accès navigateur étant désactivé, la nouvelle interface
+de recherche et son rendu mobile restent à vérifier visuellement.
+
+L’APK de test local 1.0.1 conserve la même signature que 1.0.0. Il accepte les logos
+dont le fournisseur Android omet le type, à condition que l’extension soit connue ;
+les fichiers refusés affichent un message. Compilation et signature vérifiées,
+installation et fonctionnement sur téléphone toujours non validés.

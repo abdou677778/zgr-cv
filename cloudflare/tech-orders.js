@@ -1,8 +1,14 @@
 // Separate private namespace: never read or write CV profiles, invitations or MCP data.
 const PREFIX = "tech-orders/v1/";
 const idPattern = /^[a-zA-Z0-9-]{1,80}$/;
+const cents = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 const money = (value) =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100000000;
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  value >= 0 &&
+  value <= 100000000 &&
+  (value === 0 || cents(value) > 0) &&
+  Math.abs(cents(value) - value) <= Number.EPSILON * Math.max(1, Math.abs(value)) * 4;
 const text = (value, max) => typeof value === "string" && value.length <= max;
 export function validTechDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -71,6 +77,7 @@ export function validateTechRecord(kind, input, id) {
       !money(input.saleDzd) ||
       !money(input.rate) ||
       input.rate <= 0 ||
+      cents(input.priceUsd * input.rate) > 100000000 ||
       !Number.isInteger(input.months) ||
       input.months < 1 ||
       input.months > 36
@@ -83,9 +90,9 @@ export function validateTechRecord(kind, input, id) {
       name: input.name.trim(),
       icon: input.icon,
       logo: input.logo,
-      priceUsd: input.priceUsd,
-      rate: input.rate,
-      saleDzd: input.saleDzd,
+      priceUsd: cents(input.priceUsd),
+      rate: cents(input.rate),
+      saleDzd: cents(input.saleDzd),
       months: input.months,
     };
   }
@@ -116,6 +123,7 @@ export function validateTechRecord(kind, input, id) {
       !money(line.priceUsd) ||
       !money(line.rate) ||
       line.rate <= 0 ||
+      cents(line.priceUsd * line.rate) > 100000000 ||
       !money(line.saleDzd) ||
       !webUrl(line.invoiceUrl) ||
       !text(line.invoiceRef, 180)
@@ -128,9 +136,9 @@ export function validateTechRecord(kind, input, id) {
       name: line.name.trim(),
       start: line.start,
       end: line.end,
-      priceUsd: line.priceUsd,
-      rate: line.rate,
-      saleDzd: line.saleDzd,
+      priceUsd: cents(line.priceUsd),
+      rate: cents(line.rate),
+      saleDzd: cents(line.saleDzd),
       invoiceUrl: line.invoiceUrl,
       invoiceRef: line.invoiceRef,
     };
@@ -159,12 +167,19 @@ export async function handleTechOrders(request, env, actor, respond) {
         cursor,
         limit: 500,
       });
-      for (const item of page.objects) {
-        const object = await env.CLIENTS_BUCKET.get(item.key);
-        if (!object) continue;
-        const value = JSON.parse(await object.text());
-        if (item.key.includes("/logos/")) logos[value.id] = value;
-        else (item.key.includes("/services/") ? services : orders).push(value);
+      // Bounded parallel reads shorten loading without flooding R2 with requests.
+      for (let offset = 0; offset < page.objects.length; offset += 8) {
+        const values = await Promise.all(
+          page.objects.slice(offset, offset + 8).map(async (item) => {
+            const object = await env.CLIENTS_BUCKET.get(item.key);
+            return object ? { key: item.key, value: JSON.parse(await object.text()) } : null;
+          }),
+        );
+        for (const item of values) {
+          if (!item) continue;
+          if (item.key.includes("/logos/")) logos[item.value.id] = item.value;
+          else (item.key.includes("/services/") ? services : orders).push(item.value);
+        }
       }
       cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);

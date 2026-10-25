@@ -33,7 +33,7 @@ export function FullPageWorkspace({
     if (!open) return undefined;
     const previousOverflow = document.body.style.overflow;
     const returnHome = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onOpenChange(false);
+      if (event.key === "Escape" && !event.defaultPrevented) onOpenChange(false);
     };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", returnHome);

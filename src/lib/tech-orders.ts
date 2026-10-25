@@ -49,6 +49,19 @@ export function orderTotals(order: TechOrder) {
     { cost: 0, sale: 0, margin: 0 },
   );
 }
+export function techOrdersTotals(orders: TechOrder[]) {
+  return orders.reduce(
+    (sum, order) => {
+      const item = orderTotals(order);
+      return {
+        cost: roundMoney(sum.cost + item.cost),
+        sale: roundMoney(sum.sale + item.sale),
+        margin: roundMoney(sum.margin + item.margin),
+      };
+    },
+    { cost: 0, sale: 0, margin: 0 },
+  );
+}
 export function todayAlgiers() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Algiers",
@@ -59,7 +72,14 @@ export function todayAlgiers() {
 }
 export function addTechMonths(value: string, months: number) {
   const date = new Date(`${value}T00:00:00Z`);
-  if (!Number.isFinite(date.getTime()) || !Number.isInteger(months) || months < 1 || months > 36)
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    !Number.isFinite(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value ||
+    !Number.isInteger(months) ||
+    months < 1 ||
+    months > 36
+  )
     return "";
   const day = date.getUTCDate();
   date.setUTCDate(1);
@@ -81,6 +101,18 @@ export function newTechLine(service: TechService, start = todayAlgiers()): TechL
     invoiceUrl: "",
     invoiceRef: "",
   };
+}
+export function techDatePresets(today = todayAlgiers()) {
+  const date = new Date(`${today}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return [];
+  const week = new Date(date);
+  week.setUTCDate(week.getUTCDate() + 6);
+  const monthEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+  return [
+    { label: "Aujourd’hui", from: today, to: today },
+    { label: "7 jours", from: today, to: week.toISOString().slice(0, 10) },
+    { label: "Ce mois", from: today.slice(0, 7) + "-01", to: monthEnd.toISOString().slice(0, 10) },
+  ];
 }
 export function renewTechOrder(
   order: TechOrder,
@@ -133,6 +165,19 @@ export const techOrderLabel = (order: Pick<TechOrder, "id">) =>
   `TECH-${order.id.slice(0, 8).toUpperCase()}`;
 const normalized = (value: string) =>
   value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("fr");
+export const techSearchText = (value: string) =>
+  normalized(value)
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي");
+export const techMatchesSearch = (value: string, query: string) => {
+  const haystack = techSearchText(value);
+  return techSearchText(query)
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((token) => haystack.includes(token));
+};
 /** Do not silently combine matching names with different Facebook contact links. */
 export const techClientKey = (order: Pick<TechOrder, "client" | "facebookUrl">) =>
   JSON.stringify([normalized(order.client), order.facebookUrl.trim()]);
@@ -157,6 +202,7 @@ export type TechFilters = {
   from: string;
   to: string;
   dateBasis: "start" | "end" | "created";
+  sort: "recent" | "ending" | "client" | "sale-desc";
 };
 export const emptyTechFilters: TechFilters = {
   query: "",
@@ -167,6 +213,7 @@ export const emptyTechFilters: TechFilters = {
   from: "",
   to: "",
   dateBasis: "end",
+  sort: "recent",
 };
 export function filterTechOrders(
   orders: TechOrder[],
@@ -187,9 +234,10 @@ export function filterTechOrders(
       if (filters.state && techOrderState(order, today) !== filters.state) return false;
       if (
         filters.query &&
-        !normalized(
-          `${order.id} ${techOrderLabel(order)} ${order.client} ${order.lines.map((l) => l.name).join(" ")}`,
-        ).includes(normalized(filters.query))
+        !techMatchesSearch(
+          `${order.id} ${techOrderLabel(order)} ${order.client} ${order.facebookUrl} ${order.notes} ${order.lines.map((l) => `${l.name} ${l.invoiceRef}`).join(" ")}`,
+          filters.query,
+        )
       )
         return false;
       const dates = !!(filters.from || filters.to);
@@ -217,7 +265,19 @@ export function filterTechOrders(
             inRange(filters.dateBasis === "start" ? line.start : line.end)),
       );
     })
-    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    .sort((a, b) => {
+      if (filters.sort === "client") return a.client.localeCompare(b.client, "fr");
+      if (filters.sort === "sale-desc") return orderTotals(b).sale - orderTotals(a).sale;
+      if (filters.sort === "ending") {
+        const next = (order: TechOrder) =>
+          order.lines
+            .map((l) => l.end)
+            .filter((end) => end > today)
+            .sort()[0] || "9999-12-31";
+        return next(a).localeCompare(next(b));
+      }
+      return (b.createdAt || "").localeCompare(a.createdAt || "");
+    });
 }
 export function newTechOrderForClient(
   client: Pick<TechOrder, "client" | "facebookUrl">,

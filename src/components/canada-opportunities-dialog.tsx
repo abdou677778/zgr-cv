@@ -2957,17 +2957,19 @@ export function CanadaOpportunitiesDialog({
   onOpenChange,
   isAdmin,
   preparation,
+  initialProvider = 'jobbank',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isAdmin: boolean;
   preparation?: React.ReactNode;
+  initialProvider?: 'jobbank' | 'destination_canada';
 }) {
   const [interfaceLanguage, setInterfaceLanguage] = useState<OpportunitiesLanguage>(() => {
     if (typeof window === "undefined") return "fr";
     return window.localStorage.getItem(OPPORTUNITIES_LANGUAGE_STORAGE_KEY) === "ar" ? "ar" : "fr";
   });
-  const [provider, setProvider] = useState<Provider>("jobbank");
+  const [provider, setProvider] = useState<Provider>(initialProvider);
   const [category, setCategory] = useState<OpportunityCategory>("all");
   const [country, setCountry] = useState<"DZ" | "TN">("DZ");
   const [period, setPeriod] = useState<"week" | "recent">("week");

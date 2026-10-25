@@ -28,7 +28,7 @@ type RpcRequest = {
   params?: unknown;
 };
 
-const SERVER_VERSION = '0.9.1';
+const SERVER_VERSION = '0.9.2';
 const MAX_SEARCH_RESULTS = 20;
 const READ_SCOPE = 'zgr:orders:read';
 const JSON_WRITE_SCOPE = 'zgr:json:write';
@@ -51,8 +51,8 @@ const DIRECT_IMAGE_MIME_TYPES = new Set([
 const tools = [
   {
     name:'prepare_destination_canada_tunis',title:'Préparer Destination Canada Tunis pour une commande',
-    description:'Lit le contrat officiel vérifié et le JSON actif de la seule commande demandée pour préparer les réponses. Ne sauvegarde rien, ne transmet aucune donnée au Canada, ne remplit ni ne soumet le site officiel. Demander les éléments manquants et le consentement du candidat ; lire les sources et le prompt maître avant de proposer un JSON modifié.',
-    inputSchema:{type:'object',properties:{order_id:{type:'string'}},required:['order_id'],additionalProperties:false},
+    description:'Prépare un formulaire ZGR prérempli, éditable et un fichier HTML téléchargeable pour la seule commande demandée. Lit le JSON actif et accepte proposed_answers, dictionnaire id de champ officiel -> réponse factuelle, après lecture réelle des sources et get_master_prompt. Retourne draft, validationIssues, profilePatch et artifact HTML. Sans JSON actif, utiliser seulement les sources réellement lues ; ne jamais inventer les réponses manquantes. Ne sauvegarde rien et ne remplit ni ne soumet le site officiel. Consentements réservés au candidat.',
+    inputSchema:{type:'object',properties:{order_id:{type:'string'},proposed_answers:{type:'object',additionalProperties:{type:'string',maxLength:5000},description:'Réponses issues des documents lus ou confirmées explicitement par le candidat ; clés = identifiants du schéma officiel. Aucun consentement automatique.'}},required:['order_id'],additionalProperties:false},
     securitySchemes:readSecuritySchemes,_meta:{securitySchemes:readSecuritySchemes},
     annotations:{readOnlyHint:true,openWorldHint:true,destructiveHint:false},
   },
@@ -889,7 +889,7 @@ async function callTool(
         if(!object)throw new Error('JSON absent');
         return JSON.parse(await object.text());
       },
-    });
+    },args.proposed_answers);
     return textResult(result,'error' in result);
   }
   if (name === 'search_volunteer_opportunities') {

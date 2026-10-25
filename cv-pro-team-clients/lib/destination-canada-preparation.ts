@@ -1,4 +1,5 @@
 import schema from '../assets/destination-canada-tunis.json';
+import {prepareDestinationDraft, destinationHtml} from '../../src/lib/destination-canada';
 
 type Version = { versionNumber: number; storageKey: string };
 type Dependencies = {
@@ -8,7 +9,7 @@ type Dependencies = {
   readJson: (key: string) => Promise<unknown>;
 };
 
-export async function prepareDestinationCanadaContext(orderId: string, dependencies: Dependencies) {
+export async function prepareDestinationCanadaContext(orderId: string, dependencies: Dependencies, proposedAnswers:unknown = {}) {
   if (!(await dependencies.getOrder(orderId))) return { error: 'Commande introuvable.' };
   let contract: Record<string, unknown>;
   try {
@@ -40,10 +41,14 @@ export async function prepareDestinationCanadaContext(orderId: string, dependenc
       issues.push('La version active est répertoriée mais son fichier JSON est absent ou illisible. Aucun profil ne doit être reconstitué ou inventé.');
     }
   }
+  const preparation=prepareDestinationDraft(profile,proposedAnswers);
   return {
     orderId, contract, activeVersion: active?.versionNumber ?? null, profile,
     preparationStatus: !active ? 'missing_profile' : profile ? 'profile_available' : 'profile_unreadable',
     issues, sourceReadingRequired: true, saved: false, submitted: false,
-    instruction: 'Lecture et contrôle uniquement. Lire les documents sources et get_master_prompt avant de proposer des réponses. Demander les données absentes. Ne pas modifier le CV, ne pas sauvegarder et ne pas soumettre. Si contract.status != open, faire vérifier les sources et les choix officiels. Une éventuelle sauvegarde ultérieure exige une validation explicite et la version active comme base_version.',
+    draft:preparation.draft, validationIssues:preparation.issues, reviewRequired:true,
+    profilePatch:{destination_canada_tunis:preparation.draft},
+    artifact:{filename:'brouillon-zgr-destination-canada-tunis.html',mimeType:'text/html;charset=utf-8',content:destinationHtml(preparation.draft)},
+    instruction: 'Lire les sources et get_master_prompt avant de proposer des réponses. Si nécessaire, rappeler cet outil avec proposed_answers (identifiants exacts du schéma) tirées exclusivement des sources réellement lues ou des réponses explicites du candidat. Le préremplissage est une proposition non vérifiée ; contrôler notamment la dernière expérience et le dernier établissement. Ne pas déduire les six niveaux de langue ni l’identité passeport. Présenter artifact comme fichier HTML ZGR téléchargeable, jamais comme confirmation officielle ou fichier de reprise GC Forms. Le brouillon est éditable dans Opportunités > Destination Canada du profil ouvert. Demander les données absentes et vérifier une éventuelle soumission antérieure avant toute démarche. Ne pas modifier le CV, sauvegarder ou soumettre automatiquement. Si contract.status != open, faire vérifier les sources et les choix officiels. Pour conserver profilePatch dans le JSON complet, validation explicite et base_version sont obligatoires.',
   };
 }

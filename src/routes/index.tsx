@@ -796,6 +796,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [clientOrdersOpen, setClientOrdersOpen] = useState(false);
   const [clientArchivesOpen, setClientArchivesOpen] = useState(false);
   const [canadaOpportunitiesOpen, setCanadaOpportunitiesOpen] = useState(false);
+  const [destinationCanadaShortcut, setDestinationCanadaShortcut] = useState(false);
   const [profileOpportunitiesOpen, setProfileOpportunitiesOpen] = useState(false);
   const [opportunityPlan, setOpportunityPlan] = useState<OpportunityPlan | undefined>();
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
@@ -3176,7 +3177,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 variant="outline"
                 size="sm"
                 className="border-red-200 bg-red-50/80 text-red-900 hover:bg-red-100"
-                onClick={() => setCanadaOpportunitiesOpen(true)}
+                onClick={() => {setDestinationCanadaShortcut(false);setCanadaOpportunitiesOpen(true);}}
               >
                 <BriefcaseBusiness className="mr-2 h-4 w-4" /> Opportunités
               </Button>
@@ -3724,6 +3725,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                     className="bg-red-700 hover:bg-red-800"
                   >
                     <BriefcaseBusiness className="mr-2 h-4 w-4" /> Trouver les opportunités
+                  </Button>
+                  <Button type="button" variant="outline" onClick={()=>{setDestinationCanadaShortcut(true);setCanadaOpportunitiesOpen(true);}}>
+                    Formulaire Destination Canada — préremplir / modifier
                   </Button>
                 </div>
                 {!cv.titre_poste.trim() ? (
@@ -5101,6 +5105,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         {canadaOpportunitiesOpen ? (
           <CanadaOpportunitiesDialog
             open={canadaOpportunitiesOpen}
+            initialProvider={destinationCanadaShortcut?'destination_canada':'jobbank'}
             onOpenChange={setCanadaOpportunitiesOpen}
             isAdmin={user.role === "admin"}
             preparation={<Suspense fallback={<p>Chargement de la préparation…</p>}><DestinationCanadaPreparation key={`${activeClientOrder?.id||"profile"}:${cv.nom_complet}`} cv={cv} aiSettings={aiSettings} onAiSettingsChange={setAiSettings} onSave={draft=>setCv(current=>({...current,destination_canada_tunis:draft}))}/></Suspense>}

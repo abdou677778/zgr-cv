@@ -49,3 +49,13 @@ test('MCP returns only the requested active profile without writing any version'
  assert.deepEqual(result.profile,{titre_poste:'TEST'});
  assert.equal(result.preparationStatus,'profile_available');assert.equal(result.saved,false);
 });
+
+test('MCP supplies a portable validated draft and confidential HTML artifact without saving',async()=>{
+ const result=await prepareDestinationCanadaContext('TEST',dependencies,{'112':'Expérience attestée en mécanique.','115':'le 10 décembre 2026','108':"Je suis d'accord"});
+ assert.ok(result.draft);assert.equal(result.draft.answers['112'],'Expérience attestée en mécanique.');
+ assert.equal(result.draft.answers['108'],undefined);assert.equal(result.reviewRequired,true);
+ assert.deepEqual(result.profilePatch?.destination_canada_tunis,result.draft);
+ assert.equal(result.artifact?.mimeType,'text/html;charset=utf-8');
+ assert.ok(result.artifact?.content.includes('Expérience attestée en mécanique.'));
+ assert.equal(result.saved,false);assert.equal(result.submitted,false);
+});

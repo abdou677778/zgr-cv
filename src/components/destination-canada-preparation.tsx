@@ -7,6 +7,7 @@ import {activeDestinationFields, destinationCanadaSchema as schema, destinationF
 export function DestinationCanadaPreparation({cv,onSave,aiSettings,onAiSettingsChange}:{cv:CV;onSave:(draft:NonNullable<CV['destination_canada_tunis']>)=>void;aiSettings:AiSettings;onAiSettingsChange:(value:AiSettings)=>void}){
   const [draft,setDraft]=useState(()=>initialDestinationDraft(cv));const [busy,setBusy]=useState(false);const [message,setMessage]=useState("");
   const [proposal,setProposal]=useState<Record<string,string>>();
+  const [preview,setPreview]=useState(false);
   const [verification,setVerification]=useState("checking");
   const [manualVerification,setManualVerification]=useState(false);
   useEffect(()=>{let active=true;fetch(CLIENTS_API_ENDPOINT.replace(/\/clients$/,"/destination-canada/tunis"),{cache:"no-store"}).then(async r=>{if(!r.ok)throw Error();const value=await r.json();if(active)setVerification(value.status||"unverified");}).catch(()=>{if(active)setVerification("unverified");});return()=>{active=false;};},[]);
@@ -14,6 +15,7 @@ export function DestinationCanadaPreparation({cv,onSave,aiSettings,onAiSettingsC
   const update=(id:string,value:string)=>setDraft(current=>({...current,reviewed:false,answers:{...current.answers,[id]:value}}));
   return <section className="space-y-4 rounded-xl border border-violet-200 p-4">
     <h4 className="font-bold">Préparer la demande — profil ouvert : {cv.nom_complet||"sans nom"}</h4>
+    <p className="text-sm">Les réponses disponibles sont préremplies depuis ce profil uniquement. Vérifiez l’ordre des expériences et des études : le premier élément sert de proposition, sans présumer qu’il est le plus récent. Corrigez les champs ci-dessous avant utilisation.</p>
     <p className="text-sm">Brouillon ZGR, non soumis. Vérifiez l’identité sur le passeport. Les niveaux de langue, consentements, date de participation et déclarations IRCC sont à demander au candidat. Source vérifiée le {schema.checkedAt.slice(0,10)}.</p>
     <p role="status" className="text-xs font-semibold">{verification==='open'?"Vérification en direct : inscriptions ouvertes, version du formulaire concordante.":verification==='checking'?"Vérification des sources officielles…":verification==='review_required'?"Le formulaire ou son statut a changé : préparation IA suspendue, contrat à actualiser.":"Vérification serveur non concluante. Ouvrez le formulaire officiel pour contrôler son état avant de préparer les textes."}</p>
     {verification==='unverified'&&<label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={manualVerification} onChange={e=>setManualVerification(e.target.checked)}/><span>J’ai ouvert le <a className="underline" href={schema.officialUrl} target="_blank" rel="noreferrer">formulaire officiel Tunis</a> et vérifié qu’il est ouvert et que ses questions correspondent à cette préparation. Cette confirmation autorise seulement un brouillon, jamais une soumission.</span></label>}
@@ -34,9 +36,10 @@ export function DestinationCanadaPreparation({cv,onSave,aiSettings,onAiSettingsC
     </label>)}</div>
     <p className="text-sm font-semibold">{issues.length} point(s) à compléter ou vérifier. Les choix officiels ne garantissent pas l’admissibilité ni une invitation.</p>
     {issues.length>0&&<details className="text-xs"><summary>Voir les points à vérifier</summary><ul className="list-disc pl-5">{issues.map((issue,index)=><li key={index}>{issue}</li>)}</ul></details>}
-    <div className="flex flex-wrap gap-3"><button type="button" className="rounded border p-2 text-sm" onClick={()=>{onSave(draft);setMessage("Brouillon enregistré dans le profil ouvert (aucune soumission).");}}>Enregistrer dans ce profil</button><button type="button" className="rounded border p-2 text-sm" onClick={()=>{
+    <div className="flex flex-wrap gap-3"><button type="button" className="rounded border p-2 text-sm" onClick={()=>{onSave(draft);setMessage("Brouillon enregistré dans le profil ouvert (aucune soumission).");}}>Enregistrer dans ce profil</button><button type="button" className="rounded border p-2 text-sm" aria-expanded={preview} onClick={()=>setPreview(value=>!value)}>{preview?'Fermer l’aperçu et modifier':'Ouvrir le formulaire prérempli ZGR'}</button><button type="button" className="rounded border p-2 text-sm" onClick={()=>{
       const url=URL.createObjectURL(new Blob([destinationHtml(draft)],{type:'text/html;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='brouillon-zgr-destination-canada-tunis.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-    }}>Exporter le récapitulatif HTML ZGR</button><a className="rounded border p-2 text-sm" href={schema.officialUrl} target="_blank" rel="noreferrer">Ouvrir le formulaire officiel</a></div>
+    }}>Télécharger le formulaire rempli (HTML ZGR)</button><a className="rounded border p-2 text-sm" href={schema.officialUrl} target="_blank" rel="noreferrer">Ouvrir le formulaire officiel</a></div>
+    {preview&&<iframe title="Formulaire prérempli Destination Canada — brouillon ZGR" sandbox="" referrerPolicy="no-referrer" className="h-[600px] w-full rounded border bg-white" srcDoc={destinationHtml(draft)}/>}
     <p className="text-xs">Le HTML exporté est un récapitulatif confidentiel ZGR, pas un fichier officiel de reprise GC Forms. Vérifier puis reporter les réponses sur le site officiel ; validation et soumission humaines obligatoires.</p>
     {message&&<p role="status" className="text-sm">{message}</p>}
   </section>;

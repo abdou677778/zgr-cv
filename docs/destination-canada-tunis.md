@@ -30,6 +30,14 @@ L’enregistrement conserve `destination_canada_tunis` dans le profil actif ;
 il ne crée aucune inscription officielle. Les sauvegardes de commandes gardent
 leur mécanisme de versionnement et de validation existant.
 
+Le bouton « Formulaire Destination Canada — préremplir / modifier » dans le formulaire
+du profil ouvre ce parcours. Courriel, ville Europass, LinkedIn, premier établissement
+et première expérience disponibles préremplissent une proposition : l’ordre des
+études/expériences est à contrôler. Les réponses déjà éditées restent prioritaires,
+même vides. Aucune troncature silencieuse : les dépassements sont signalés.
+« Ouvrir le formulaire prérempli ZGR » affiche un aperçu isolé, actualisé à chaque
+modification ; « Télécharger le formulaire rempli » produit le HTML imprimable.
+
 L’export HTML est un récapitulatif ZGR confidentiel, **pas** une sauvegarde GC Forms.
 La saisie et la soumission sur le formulaire officiel restent humaines. Aucun client
 n’a été inscrit pendant le développement ; aucun test n’envoie de réponse à IRCC.
@@ -41,6 +49,13 @@ n’a été inscrit pendant le développement ; aucun test n’envoie de répons
   le prompt maître, demander les réponses absentes, présenter le brouillon. Pour
   conserver une version : recharger le JSON actif et utiliser `save_json_version`
   seulement avec validation explicite et `base_version`.
+- L’argument optionnel `proposed_answers` permet au modèle de proposer les réponses
+  après lecture réelle des sources, même sans JSON actif. Les clés suivent le schéma,
+  les choix et longueurs sont contrôlés et les consentements générés sont refusés.
+  Le résultat expose `draft`, `validationIssues`, `profilePatch` et `artifact`
+  (nom, type MIME et contenu HTML). Le modèle doit matérialiser ce contenu en fichier
+  joint s’il le peut, sans prétendre qu’un simple contenu texte est déjà un lien.
+  Le serveur ne stocke aucun fichier ni nouvelle version pendant cet appel.
 - `zgr-editorial.get_destination_canada_tunis()` : informations publiques uniquement,
   pour une publication sourcée ; aucune donnée personnelle ni soumission.
 

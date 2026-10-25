@@ -22,6 +22,7 @@ import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { normalizeProfilePhoto } from "./profile-photo";
 import { normalizeCompanyLogo } from "./company-logo";
 import { normalizeRelocationStatus } from "./relocation-status";
+import {auditMultilingualDocuments} from './multilingual-audit';
 
 export type JsonImportLanguage = "auto" | "fr" | "en";
 
@@ -36,6 +37,7 @@ export type CvJsonSetImportResult = {
   languages: DocumentLanguage[];
   defaultLanguage: DocumentLanguage;
   summary: string;
+  audit: ReturnType<typeof auditMultilingualDocuments>;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -246,11 +248,13 @@ export function importCvJsonSet(value: unknown): CvJsonSetImportResult | null {
   const defaultLanguage =
     requestedDefault && documents[requestedDefault] ? requestedDefault : languages[0];
 
+  const audit=auditMultilingualDocuments(documents);
   return {
     documents,
     languages,
     defaultLanguage,
-    summary: summaryForCv(documents[defaultLanguage]!),
+    summary: `${summaryForCv(documents[defaultLanguage]!)}${audit.errors.length||audit.warnings.length?` · Multilingue : ${audit.errors.length} écart(s), ${audit.warnings.length} traduction(s) à contrôler`:''}`,
+    audit,
   };
 }
 

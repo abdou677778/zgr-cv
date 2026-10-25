@@ -4,6 +4,7 @@ import { languageInfo, type DocumentLanguage } from "./document-language";
 export type FieldAiResponse = { value: string };
 
 export type NocPromptEntry = { code: string; title: string };
+export const CV_LOCALIZATION_RULES = 'Conserve logiciels et custom_sections. Les marques et icon restent inchangés ; traduis la prose descriptive, les titres et toutes les puces dans la langue cible. Conserve id, ordre, nombres et quantité des éléments. Aucun élément attesté ne devient vide dans la traduction. Les données réellement absentes restent "" ou [] : ne jamais inventer pour remplir.';
 
 export const FIELD_AI_SYSTEM = `Tu es un rédacteur senior de CV et lettres de motivation. Tu dois améliorer uniquement le champ demandé, dans la langue demandée, sans inventer aucun fait, chiffre, employeur, compétence, diplôme ou résultat. Préserve les noms propres, dates et technologies. Réponds exclusivement en JSON strict sous la forme {"value":"..."}. Aucun Markdown.`;
 
@@ -65,7 +66,7 @@ export function fieldAiPrompt(
 export const IMPORT_AI_SYSTEM = `Tu es un moteur strict de mapping de données de CV. Transforme le JSON source, même si ses clés ou sa hiérarchie sont inconnues, vers le schéma ZGR fourni. Utilise uniquement les faits présents. N'invente rien. Une chaîne absente vaut "" et une collection absente vaut []. Trie les expériences, formations et études de la plus récente à la plus ancienne. Conserve les noms propres, coordonnées, dates et nombres. Pour adresse, ne produis jamais rue, cité, bloc, numéro, bâtiment ou appartement : utilise strictement « Code postal, Wilaya/Province, Pays » avec les éléments réellement connus. Pour telephone, utilise « (indicatif pays) numéro national », par exemple « (213) 772604280 », sans inventer ni supprimer de chiffre. Pour permis_conduire, retourne seulement « Catégories B et A » avec les catégories attestées; jamais numéro, date ou détail. Pour service_national, retourne seulement un statut attesté : « Dégagé », « Dispensé », « Sursis », « Accompli » ou « En cours ». Réponds exclusivement avec un objet JSON strict directement compatible, sans Markdown.`;
 
 export function importAiPrompt(language: DocumentLanguage, source: unknown) {
-  return `Langue du document produit : ${languageInfo(language).name}.\nJSON source :\n${JSON.stringify(source)}\n\nRègle impérative d’adresse : le champ adresse contient uniquement « Code postal, Wilaya/Province, Pays ». Exclure rue, cité, bloc, numéro, bâtiment et appartement. N’invente jamais un code postal ou un pays absent.\nRègle impérative de téléphone : utiliser « (indicatif pays) numéro national », par exemple « (213) 772604280 ». Ne jamais inventer, supprimer ou modifier un chiffre.\n\nSchéma exact obligatoire :\n${JSON.stringify(
+  return `${CV_LOCALIZATION_RULES}\nLangue du document produit : ${languageInfo(language).name}.\nJSON source :\n${JSON.stringify(source)}\n\nRègle impérative d’adresse : le champ adresse contient uniquement « Code postal, Wilaya/Province, Pays ». Exclure rue, cité, bloc, numéro, bâtiment et appartement. N’invente jamais un code postal ou un pays absent.\nRègle impérative de téléphone : utiliser « (indicatif pays) numéro national », par exemple « (213) 772604280 ». Ne jamais inventer, supprimer ou modifier un chiffre.\n\nSchéma exact obligatoire :\n${JSON.stringify(
     {
       nom_complet: "",
       titre_poste: "",
@@ -90,6 +91,7 @@ export function importAiPrompt(language: DocumentLanguage, source: unknown) {
       objectif: "",
       competences: [],
       logiciels: [{ id: "software-01", label: "", icon: "generic" }],
+      custom_sections: [{id:"custom-01",title:"",items:[]}],
       langues: { fr: "", en: "", ar: "", de: "", es: "", kab: "" },
       experiences: [
         { id: "experience-01", dates: "", lieu: "", titre: "", employeur: "", descriptions: [] },

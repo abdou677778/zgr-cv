@@ -213,7 +213,9 @@
       "website": "",
       "instant_messaging": "",
       "work_permit_countries": [],
-      "driving_licences": ["B"],
+      "driving_licences": [
+        "B"
+      ],
       "social_profiles": [],
       "languages": [
         {
@@ -248,20 +250,142 @@
         }
       ],
       "experience_details": [
-        { "id": "experience-01", "city": "Montréal", "country_code": "ca", "country_label": "Canada", "industry_code": "", "department": "", "website": "" },
-        { "id": "experience-02", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "industry_code": "", "department": "", "website": "" },
-        { "id": "experience-03", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "industry_code": "", "department": "", "website": "" },
-        { "id": "experience-04", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "industry_code": "", "department": "", "website": "" }
+        {
+          "id": "experience-01",
+          "city": "Montréal",
+          "country_code": "ca",
+          "country_label": "Canada",
+          "industry_code": "",
+          "department": "",
+          "website": ""
+        },
+        {
+          "id": "experience-02",
+          "city": "Alger",
+          "country_code": "dz",
+          "country_label": "Algérie",
+          "industry_code": "",
+          "department": "",
+          "website": ""
+        },
+        {
+          "id": "experience-03",
+          "city": "Alger",
+          "country_code": "dz",
+          "country_label": "Algérie",
+          "industry_code": "",
+          "department": "",
+          "website": ""
+        },
+        {
+          "id": "experience-04",
+          "city": "Alger",
+          "country_code": "dz",
+          "country_label": "Algérie",
+          "industry_code": "",
+          "department": "",
+          "website": ""
+        }
       ],
       "education_details": [
-        { "id": "education-01", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
-        { "id": "education-02", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
-        { "id": "education-03", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
-        { "id": "formation-01", "city": "", "country_code": "", "country_label": "", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
-        { "id": "formation-02", "city": "", "country_code": "", "country_label": "", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
-        { "id": "formation-03", "city": "", "country_code": "", "country_label": "", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" },
-        { "id": "formation-04", "city": "Alger", "country_code": "dz", "country_label": "Algérie", "eqf_level": "", "field_code": "", "specific_field_code": "", "website": "" }
+        {
+          "id": "education-01",
+          "city": "Alger",
+          "country_code": "dz",
+          "country_label": "Algérie",
+          "eqf_level": "",
+          "field_code": "",
+          "specific_field_code": "",
+          "website": ""
+        },
+        {
+          "id": "education-02",
+          "city": "Alger",
+          "country_code": "dz",
+          "country_label": "Algérie",
+          "eqf_level": "",
+          "field_code": "",
+          "specific_field_code": "",
+          "website": ""
+        },
+        {
+          "id": "education-03",
+          "city": "Alger",
+          "country_code": "dz",
+          "country_label": "Algérie",
+          "eqf_level": "",
+          "field_code": "",
+          "specific_field_code": "",
+          "website": ""
+        },
+        {
+          "id": "formation-01",
+          "city": "",
+          "country_code": "",
+          "country_label": "",
+          "eqf_level": "",
+          "field_code": "",
+          "specific_field_code": "",
+          "website": ""
+        },
+        {
+          "id": "formation-02",
+          "city": "",
+          "country_code": "",
+          "country_label": "",
+          "eqf_level": "",
+          "field_code": "",
+          "specific_field_code": "",
+          "website": ""
+        },
+        {
+          "id": "formation-03",
+          "city": "",
+          "country_code": "",
+          "country_label": "",
+          "eqf_level": "",
+          "field_code": "",
+          "specific_field_code": "",
+          "website": ""
+        },
+        {
+          "id": "formation-04",
+          "city": "Alger",
+          "country_code": "dz",
+          "country_label": "Algérie",
+          "eqf_level": "",
+          "field_code": "",
+          "specific_field_code": "",
+          "website": ""
+        }
       ]
-    }
+    },
+    "logiciels": [
+      {
+        "id": "software-word",
+        "label": "Microsoft Word",
+        "icon": "microsoftword"
+      },
+      {
+        "id": "software-excel",
+        "label": "Microsoft Excel",
+        "icon": "microsoftexcel"
+      },
+      {
+        "id": "software-canva",
+        "label": "Canva",
+        "icon": "canva"
+      }
+    ],
+    "custom_sections": [
+      {
+        "id": "custom-projects",
+        "title": "Projets",
+        "items": [
+          "Création d’un tableau de suivi des candidatures — 2025.",
+          "Organisation des documents de candidature."
+        ]
+      }
+    ]
   }
 }

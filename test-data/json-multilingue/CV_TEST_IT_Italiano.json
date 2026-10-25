@@ -150,7 +150,7 @@
         "lieu": "Algeri, Algeria",
         "titre": "Anno preparatorio in scienze e tecnologie",
         "institution": "Istituto universitario pubblico di Algeri",
-        "option": "",
+        "option": "Scienze e tecnologie industriali",
         "equivalence": "Crediti scientifici preuniversitari riconosciuti come formazione preparatoria"
       }
     ],
@@ -194,6 +194,33 @@
       "Approfondire le pratiche DevOps e l'osservabilità delle applicazioni",
       "Contribuire regolarmente a progetti open source per ampliare portfolio e rete professionale",
       "Adattare CV e lettere alle aspettative del mercato canadese"
+    ],
+    "logiciels": [
+      {
+        "id": "software-word",
+        "label": "Microsoft Word",
+        "icon": "microsoftword"
+      },
+      {
+        "id": "software-excel",
+        "label": "Microsoft Excel",
+        "icon": "microsoftexcel"
+      },
+      {
+        "id": "software-canva",
+        "label": "Canva",
+        "icon": "canva"
+      }
+    ],
+    "custom_sections": [
+      {
+        "id": "custom-projects",
+        "title": "Progetti",
+        "items": [
+          "Creazione di un foglio per monitorare le candidature — 2025.",
+          "Organizzazione dei documenti di candidatura."
+        ]
+      }
     ]
   }
 }

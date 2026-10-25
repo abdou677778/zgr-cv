@@ -150,7 +150,7 @@
         "lieu": "Algier, Algerien",
         "titre": "Vorbereitungsjahr in Naturwissenschaften und Technik",
         "institution": "Öffentliche Hochschule in Algier",
-        "option": "",
+        "option": "Industriewissenschaften und -technologien",
         "equivalence": "Voruniversitäre naturwissenschaftliche Leistungen als Vorbereitungsausbildung anerkannt"
       }
     ],
@@ -194,6 +194,33 @@
       "DevOps-Verfahren und Anwendungsbeobachtbarkeit weiter ausbauen",
       "Regelmäßig zu Open-Source-Projekten beitragen und das berufliche Netzwerk erweitern",
       "Lebenslauf und Anschreiben auf den kanadischen Arbeitsmarkt abstimmen"
+    ],
+    "logiciels": [
+      {
+        "id": "software-word",
+        "label": "Microsoft Word",
+        "icon": "microsoftword"
+      },
+      {
+        "id": "software-excel",
+        "label": "Microsoft Excel",
+        "icon": "microsoftexcel"
+      },
+      {
+        "id": "software-canva",
+        "label": "Canva",
+        "icon": "canva"
+      }
+    ],
+    "custom_sections": [
+      {
+        "id": "custom-projects",
+        "title": "Projekte",
+        "items": [
+          "Erstellung einer Tabelle zur Nachverfolgung von Bewerbungen — 2025.",
+          "Organisation der Bewerbungsunterlagen."
+        ]
+      }
     ]
   }
 }

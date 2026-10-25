@@ -74,6 +74,8 @@ import { importCvJson, importCvJsonSet } from "@/lib/cv-json";
 import { formatDrivingLicence, formatNationalService } from "@/lib/cv-concise-status";
 import { SoftwareLogoPicker } from "@/components/software-logo-picker";
 import { SharedSoftwareLogo } from "@/components/shared-software-logo";
+import {MultilingualSectionsReview} from '@/components/multilingual-sections-review';
+import {localizedCustomTitle,synchronizeSoftwareEdit} from '@/lib/multilingual-sections';
 import { sampleCVByLanguage } from "@/lib/sample-cv";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "@/lib/document-language";
 import { FORM_COPY, INTERFACE_COPY } from "@/lib/interface-copy";
@@ -1536,7 +1538,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           Object.fromEntries(
             DOCUMENT_LANGUAGES.map((item) => [
               item.id,
-              { ...current[item.id], logiciels: logiciels.map((software) => ({ ...software })) },
+              { ...current[item.id], logiciels:synchronizeSoftwareEdit(current[language].logiciels,logiciels,current[item.id].logiciels,item.id===language) },
             ]),
           ) as Record<DocumentLanguage, CV>,
       );
@@ -1598,7 +1600,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               ...current[item.id],
               custom_sections: [
                 ...(current[item.id].custom_sections || []),
-                { id, title, items: [] },
+                { id, title:localizedCustomTitle(title,item.id), items: [] },
               ],
             },
           ]),
@@ -4751,6 +4753,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               </Button>
             </div>
           </section>
+
+          <MultilingualSectionsReview key={`${activeClientOrder?.id||activeProfileId||'profile'}:${cv.nom_complet}`} documents={cvByLanguage} language={language} settings={aiSettings} onSettingsChange={setAiSettings} onApply={translations=>setCvByLanguage(current=>Object.fromEntries(DOCUMENT_LANGUAGES.map(({id})=>[id,{...current[id],...translations[id]}])) as Record<DocumentLanguage,CV>)}/>
 
           <HiddenSectionTray
             sections={[

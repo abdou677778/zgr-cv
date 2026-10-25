@@ -28,7 +28,7 @@ type RpcRequest = {
   params?: unknown;
 };
 
-const SERVER_VERSION = '0.9.2';
+const SERVER_VERSION = '0.9.3';
 const MAX_SEARCH_RESULTS = 20;
 const READ_SCOPE = 'zgr:orders:read';
 const JSON_WRITE_SCOPE = 'zgr:json:write';
@@ -505,7 +505,7 @@ const tools = [
     name: 'save_json_version',
     title: 'Enregistrer une version JSON ZGR',
     description:
-      'Valide et enregistre une nouvelle version active du JSON multilingue, puis synchronise Google Drive si disponible. Pour modifier un JSON existant, chargez d’abord la version active avec get_json_version et transmettez exactement son numéro dans base_version. Un contenu identique ne crée pas de doublon. Refuse les bases obsolètes et les sources incomplètement lues.',
+      'Après validation explicite, valide et enregistre un JSON complet dans les sept langues fr/en/es/de/it/zh/ar, puis synchronise Google Drive si disponible. Refuse les langues absentes et les sections ou puces omises dans une traduction (dont logiciels et custom_sections). Les marques et codes icon restent inchangés ; titres et prose doivent être localisés. Le contrôle structurel ne certifie pas la qualité linguistique. Pour modifier un JSON, charger get_json_version et fournir son numéro dans base_version. Un contenu identique ne crée pas de doublon. Refuse les bases obsolètes et les sources incomplètement lues.',
     inputSchema: {
       type: 'object',
       properties: {

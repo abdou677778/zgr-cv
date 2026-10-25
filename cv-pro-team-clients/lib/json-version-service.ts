@@ -2,6 +2,7 @@ import { ensureSchema, recordEvent, runtimeEnv } from '@/db/runtime';
 import { driveConfigured, syncOrderToDrive } from '@/lib/google-drive';
 import { safeFileName, sha256Hex } from '@/lib/order-model';
 import { getOrder } from '@/lib/order-repository';
+import { auditMultilingualDocuments } from '../../src/lib/multilingual-audit';
 
 const EXPECTED_LANGUAGES = ['fr', 'en', 'es', 'de', 'it', 'zh', 'ar'];
 const MAX_RELOCATION_CHARACTERS = 33;
@@ -26,7 +27,7 @@ export class JsonVersionError extends Error {
   }
 }
 
-export function validateCandidateJson(value: unknown) {
+export function validateCandidateJson(value: unknown, options:{requireAllLanguages?:boolean} = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {
       valid: false,
@@ -74,15 +75,18 @@ export function validateCandidateJson(value: unknown) {
       ];
     return [];
   });
+  const audit=auditMultilingualDocuments(documents,options.requireAllLanguages===true);
+  const coverageErrors=options.requireAllLanguages?audit.errors:[];
   return {
-    valid: presentLanguages.length > 0 && relocationErrors.length === 0,
+    valid: presentLanguages.length > 0 && relocationErrors.length === 0 && coverageErrors.length===0,
     errors: [
       ...(presentLanguages.length
         ? []
         : ['Aucun document linguistique reconnu.']),
       ...relocationErrors,
+      ...coverageErrors,
     ],
-    warnings,
+    warnings:[...warnings,...audit.warnings,...(options.requireAllLanguages?[]:audit.errors)],
     presentLanguages,
     missingLanguages,
     defaultLanguage: root.default_language,
@@ -146,7 +150,7 @@ export async function saveJsonVersion(options: {
   if (!order) throw new JsonVersionError('Commande introuvable.', 404);
 
   const normalized = normalizeCandidateJson(options.parsed);
-  const validation = validateCandidateJson(normalized);
+  const validation = validateCandidateJson(normalized,{requireAllLanguages:options.source==='mcp'});
   if (!validation.valid) {
     throw new JsonVersionError(
       'Le JSON n’est pas compatible avec ZGR CV.',

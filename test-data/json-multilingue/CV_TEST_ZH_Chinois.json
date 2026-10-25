@@ -150,7 +150,7 @@
         "lieu": "阿尔及利亚阿尔及尔",
         "titre": "科学与技术预科",
         "institution": "阿尔及尔公立大学机构",
-        "option": "",
+        "option": "工业科学与技术",
         "equivalence": "大学预科阶段的科学学分被认可为预备教育"
       }
     ],
@@ -194,6 +194,33 @@
       "持续学习DevOps实践和应用可观测性",
       "定期参与开源项目，丰富作品集并拓展职业网络",
       "根据加拿大市场和招聘实践调整简历与求职信"
+    ],
+    "logiciels": [
+      {
+        "id": "software-word",
+        "label": "Microsoft Word",
+        "icon": "microsoftword"
+      },
+      {
+        "id": "software-excel",
+        "label": "Microsoft Excel",
+        "icon": "microsoftexcel"
+      },
+      {
+        "id": "software-canva",
+        "label": "Canva",
+        "icon": "canva"
+      }
+    ],
+    "custom_sections": [
+      {
+        "id": "custom-projects",
+        "title": "项目",
+        "items": [
+          "制作求职申请跟踪表 — 2025。",
+          "整理求职申请材料。"
+        ]
+      }
     ]
   }
 }

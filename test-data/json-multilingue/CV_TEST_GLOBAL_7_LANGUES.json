@@ -239,6 +239,33 @@
         "Poursuivre l'apprentissage des bonnes pratiques DevOps et de l'observabilité des applications",
         "Participer régulièrement à des projets open source pour enrichir le portfolio et le réseau professionnel",
         "Adapter le CV et les lettres de motivation aux attentes du marché canadien et des recruteurs locaux"
+      ],
+      "logiciels": [
+        {
+          "id": "software-word",
+          "label": "Microsoft Word",
+          "icon": "microsoftword"
+        },
+        {
+          "id": "software-excel",
+          "label": "Microsoft Excel",
+          "icon": "microsoftexcel"
+        },
+        {
+          "id": "software-canva",
+          "label": "Canva",
+          "icon": "canva"
+        }
+      ],
+      "custom_sections": [
+        {
+          "id": "custom-projects",
+          "title": "Projets",
+          "items": [
+            "Création d’un tableau de suivi des candidatures — 2025.",
+            "Organisation des documents de candidature."
+          ]
+        }
       ]
     },
     "en": {
@@ -386,7 +413,7 @@
           "lieu": "Algiers, Algeria",
           "titre": "Preparatory year in science and technology",
           "institution": "Public university institution in Algiers",
-          "option": "",
+          "option": "Industrial science and technology",
           "equivalence": "Pre-university science credits recognized as preparatory training"
         }
       ],
@@ -430,6 +457,33 @@
         "Continue developing expertise in DevOps practices and application observability",
         "Contribute regularly to open-source projects to expand both the professional portfolio and network",
         "Tailor the résumé and cover letters to Canadian market expectations and local recruitment practices"
+      ],
+      "logiciels": [
+        {
+          "id": "software-word",
+          "label": "Microsoft Word",
+          "icon": "microsoftword"
+        },
+        {
+          "id": "software-excel",
+          "label": "Microsoft Excel",
+          "icon": "microsoftexcel"
+        },
+        {
+          "id": "software-canva",
+          "label": "Canva",
+          "icon": "canva"
+        }
+      ],
+      "custom_sections": [
+        {
+          "id": "custom-projects",
+          "title": "Projects",
+          "items": [
+            "Created an application tracking spreadsheet — 2025.",
+            "Organized application documents."
+          ]
+        }
       ]
     },
     "es": {
@@ -577,7 +631,7 @@
           "lieu": "Argel, Argelia",
           "titre": "Año preparatorio en ciencias y tecnología",
           "institution": "Institución universitaria pública de Argel",
-          "option": "",
+          "option": "Ciencias y tecnologías industriales",
           "equivalence": "Créditos preuniversitarios de ciencias reconocidos como formación preparatoria"
         }
       ],
@@ -621,6 +675,33 @@
         "Profundizar en las prácticas DevOps y la observabilidad de aplicaciones",
         "Contribuir regularmente a proyectos de código abierto para ampliar el portafolio y la red profesional",
         "Adaptar el CV y las cartas a las expectativas del mercado canadiense"
+      ],
+      "logiciels": [
+        {
+          "id": "software-word",
+          "label": "Microsoft Word",
+          "icon": "microsoftword"
+        },
+        {
+          "id": "software-excel",
+          "label": "Microsoft Excel",
+          "icon": "microsoftexcel"
+        },
+        {
+          "id": "software-canva",
+          "label": "Canva",
+          "icon": "canva"
+        }
+      ],
+      "custom_sections": [
+        {
+          "id": "custom-projects",
+          "title": "Proyectos",
+          "items": [
+            "Creación de una hoja de seguimiento de candidaturas — 2025.",
+            "Organización de los documentos de candidatura."
+          ]
+        }
       ]
     },
     "de": {
@@ -768,7 +849,7 @@
           "lieu": "Algier, Algerien",
           "titre": "Vorbereitungsjahr in Naturwissenschaften und Technik",
           "institution": "Öffentliche Hochschule in Algier",
-          "option": "",
+          "option": "Industriewissenschaften und -technologien",
           "equivalence": "Voruniversitäre naturwissenschaftliche Leistungen als Vorbereitungsausbildung anerkannt"
         }
       ],
@@ -812,6 +893,33 @@
         "DevOps-Verfahren und Anwendungsbeobachtbarkeit weiter ausbauen",
         "Regelmäßig zu Open-Source-Projekten beitragen und das berufliche Netzwerk erweitern",
         "Lebenslauf und Anschreiben auf den kanadischen Arbeitsmarkt abstimmen"
+      ],
+      "logiciels": [
+        {
+          "id": "software-word",
+          "label": "Microsoft Word",
+          "icon": "microsoftword"
+        },
+        {
+          "id": "software-excel",
+          "label": "Microsoft Excel",
+          "icon": "microsoftexcel"
+        },
+        {
+          "id": "software-canva",
+          "label": "Canva",
+          "icon": "canva"
+        }
+      ],
+      "custom_sections": [
+        {
+          "id": "custom-projects",
+          "title": "Projekte",
+          "items": [
+            "Erstellung einer Tabelle zur Nachverfolgung von Bewerbungen — 2025.",
+            "Organisation der Bewerbungsunterlagen."
+          ]
+        }
       ]
     },
     "it": {
@@ -959,7 +1067,7 @@
           "lieu": "Algeri, Algeria",
           "titre": "Anno preparatorio in scienze e tecnologie",
           "institution": "Istituto universitario pubblico di Algeri",
-          "option": "",
+          "option": "Scienze e tecnologie industriali",
           "equivalence": "Crediti scientifici preuniversitari riconosciuti come formazione preparatoria"
         }
       ],
@@ -1003,6 +1111,33 @@
         "Approfondire le pratiche DevOps e l'osservabilità delle applicazioni",
         "Contribuire regolarmente a progetti open source per ampliare portfolio e rete professionale",
         "Adattare CV e lettere alle aspettative del mercato canadese"
+      ],
+      "logiciels": [
+        {
+          "id": "software-word",
+          "label": "Microsoft Word",
+          "icon": "microsoftword"
+        },
+        {
+          "id": "software-excel",
+          "label": "Microsoft Excel",
+          "icon": "microsoftexcel"
+        },
+        {
+          "id": "software-canva",
+          "label": "Canva",
+          "icon": "canva"
+        }
+      ],
+      "custom_sections": [
+        {
+          "id": "custom-projects",
+          "title": "Progetti",
+          "items": [
+            "Creazione di un foglio per monitorare le candidature — 2025.",
+            "Organizzazione dei documenti di candidatura."
+          ]
+        }
       ]
     },
     "zh": {
@@ -1150,7 +1285,7 @@
           "lieu": "阿尔及利亚阿尔及尔",
           "titre": "科学与技术预科",
           "institution": "阿尔及尔公立大学机构",
-          "option": "",
+          "option": "工业科学与技术",
           "equivalence": "大学预科阶段的科学学分被认可为预备教育"
         }
       ],
@@ -1194,6 +1329,33 @@
         "持续学习DevOps实践和应用可观测性",
         "定期参与开源项目，丰富作品集并拓展职业网络",
         "根据加拿大市场和招聘实践调整简历与求职信"
+      ],
+      "logiciels": [
+        {
+          "id": "software-word",
+          "label": "Microsoft Word",
+          "icon": "microsoftword"
+        },
+        {
+          "id": "software-excel",
+          "label": "Microsoft Excel",
+          "icon": "microsoftexcel"
+        },
+        {
+          "id": "software-canva",
+          "label": "Canva",
+          "icon": "canva"
+        }
+      ],
+      "custom_sections": [
+        {
+          "id": "custom-projects",
+          "title": "项目",
+          "items": [
+            "制作求职申请跟踪表 — 2025。",
+            "整理求职申请材料。"
+          ]
+        }
       ]
     },
     "ar": {
@@ -1341,7 +1503,7 @@
           "lieu": "الجزائر العاصمة، الجزائر",
           "titre": "سنة تحضيرية في العلوم والتكنولوجيا",
           "institution": "مؤسسة جامعية عمومية بالجزائر العاصمة",
-          "option": "",
+          "option": "العلوم والتكنولوجيا الصناعية",
           "equivalence": "أرصدة علمية قبل جامعية معترف بها كتكوين تحضيري"
         }
       ],
@@ -1385,6 +1547,33 @@
         "مواصلة تعلم ممارسات DevOps وقابلية مراقبة التطبيقات",
         "المساهمة دورياً في مشاريع مفتوحة المصدر لتوسيع معرض الأعمال والشبكة المهنية",
         "تكييف السيرة الذاتية ورسائل التقديم مع متطلبات السوق الكندية"
+      ],
+      "logiciels": [
+        {
+          "id": "software-word",
+          "label": "Microsoft Word",
+          "icon": "microsoftword"
+        },
+        {
+          "id": "software-excel",
+          "label": "Microsoft Excel",
+          "icon": "microsoftexcel"
+        },
+        {
+          "id": "software-canva",
+          "label": "Canva",
+          "icon": "canva"
+        }
+      ],
+      "custom_sections": [
+        {
+          "id": "custom-projects",
+          "title": "المشاريع",
+          "items": [
+            "إنشاء جدول لمتابعة طلبات التوظيف — 2025.",
+            "تنظيم وثائق الترشح."
+          ]
+        }
       ]
     }
   }

@@ -150,7 +150,7 @@
         "lieu": "Argel, Argelia",
         "titre": "Año preparatorio en ciencias y tecnología",
         "institution": "Institución universitaria pública de Argel",
-        "option": "",
+        "option": "Ciencias y tecnologías industriales",
         "equivalence": "Créditos preuniversitarios de ciencias reconocidos como formación preparatoria"
       }
     ],
@@ -194,6 +194,33 @@
       "Profundizar en las prácticas DevOps y la observabilidad de aplicaciones",
       "Contribuir regularmente a proyectos de código abierto para ampliar el portafolio y la red profesional",
       "Adaptar el CV y las cartas a las expectativas del mercado canadiense"
+    ],
+    "logiciels": [
+      {
+        "id": "software-word",
+        "label": "Microsoft Word",
+        "icon": "microsoftword"
+      },
+      {
+        "id": "software-excel",
+        "label": "Microsoft Excel",
+        "icon": "microsoftexcel"
+      },
+      {
+        "id": "software-canva",
+        "label": "Canva",
+        "icon": "canva"
+      }
+    ],
+    "custom_sections": [
+      {
+        "id": "custom-projects",
+        "title": "Proyectos",
+        "items": [
+          "Creación de una hoja de seguimiento de candidaturas — 2025.",
+          "Organización de los documentos de candidatura."
+        ]
+      }
     ]
   }
 }

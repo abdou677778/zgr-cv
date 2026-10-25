@@ -150,7 +150,7 @@
         "lieu": "Algiers, Algeria",
         "titre": "Preparatory year in science and technology",
         "institution": "Public university institution in Algiers",
-        "option": "",
+        "option": "Industrial science and technology",
         "equivalence": "Pre-university science credits recognized as preparatory training"
       }
     ],
@@ -194,6 +194,33 @@
       "Continue developing expertise in DevOps practices and application observability",
       "Contribute regularly to open-source projects to expand both the professional portfolio and network",
       "Tailor the résumé and cover letters to Canadian market expectations and local recruitment practices"
+    ],
+    "logiciels": [
+      {
+        "id": "software-word",
+        "label": "Microsoft Word",
+        "icon": "microsoftword"
+      },
+      {
+        "id": "software-excel",
+        "label": "Microsoft Excel",
+        "icon": "microsoftexcel"
+      },
+      {
+        "id": "software-canva",
+        "label": "Canva",
+        "icon": "canva"
+      }
+    ],
+    "custom_sections": [
+      {
+        "id": "custom-projects",
+        "title": "Projects",
+        "items": [
+          "Created an application tracking spreadsheet — 2025.",
+          "Organized application documents."
+        ]
+      }
     ]
   }
 }

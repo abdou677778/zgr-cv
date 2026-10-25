@@ -675,6 +675,9 @@ async function readSoftwareCustomIcon(file: File) {
 
 function Index() {
   const [authUser, setAuthUser] = useState<SessionUser | null>(() => getCurrentUser());
+  const techOrdersOnly =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("workspace") === "tech-orders";
 
   useEffect(() => {
     let active = true;
@@ -712,11 +715,31 @@ function Index() {
   if (!authUser)
     return (
       <AdminLogin
+        techOrdersOnly={techOrdersOnly}
         onAuthenticated={(user) => {
           setAuthUser(user);
         }}
       />
     );
+  if (techOrdersOnly) {
+    const logout = () => {
+      clearAdminSession();
+      setAuthUser(null);
+    };
+    return authUser.role === "admin" ? (
+      <Suspense fallback={<p className="p-6">Chargement ZGR Tech Orders…</p>}>
+        <TechOrdersWorkspace open standalone onOpenChange={logout} />
+      </Suspense>
+    ) : (
+      <main className="grid min-h-screen place-items-center p-6">
+        <section className="space-y-4 rounded-xl border bg-white p-6">
+          <h1 className="text-xl font-bold">ZGR Tech Orders</h1>
+          <p>Cet espace financier est réservé aux administrateurs.</p>
+          <Button onClick={logout}>Déconnexion</Button>
+        </section>
+      </main>
+    );
+  }
   return (
     <Workspace
       user={authUser}

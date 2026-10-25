@@ -4,6 +4,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import {
   addTechMonths,
   lineTotals,
+  newTechLine,
   orderTotals,
   renewTechOrder,
   techLineStatus,
@@ -75,9 +76,31 @@ test("Tech Orders renewal keeps history and invoices isolated, with quoted catal
   assert.notEqual(renewed.id, order.id);
   assert.equal(renewTechOrder(order, [service], 1, "2026-12-01").lines[0].start, "2026-12-01");
   assert.equal(techLineStatus(order.lines[0], "2026-11-25"), "Expiré");
-  assert.equal(techLineStatus(order.lines[0], "2026-11-20"), "Expire sous 7 jours");
+  assert.equal(techLineStatus(order.lines[0], "2026-11-23"), "Expire sous 3 jours");
   assert.equal(techLineStatus(order.lines[0], "2026-10-24"), "À venir");
 });
+test("Selective renewal accepts another service without changing the original sale", () => {
+  const original = { ...order, lines: [...order.lines, { ...order.lines[0], id: "line2" }] };
+  const snapshot = structuredClone(original);
+  const draft = renewTechOrder(
+    { ...original, lines: original.lines.filter((line) => line.id === "line1") },
+    [service],
+    1,
+    "2026-11-01",
+  );
+  assert.equal(draft.lines.length, 1);
+  const extra = newTechLine(
+    { ...service, id: "gemini", name: "Gemini", saleDzd: 3200, priceUsd: 10 },
+    "2026-11-01",
+  );
+  draft.lines.push(extra);
+  assert.equal(draft.client, original.client);
+  assert.equal(draft.renewalOf, original.id);
+  assert.deepEqual(orderTotals(draft), { cost: 7800, sale: 9400, margin: 1600 });
+  assert.notEqual(draft.lines[0].id, extra.id);
+  assert.deepEqual(original, snapshot);
+});
+
 test("Excel export preserves formulas, typed dates, cached totals and literal client text", () => {
   const files = unzipSync(
     buildTechOrdersXlsx([{ ...order, client: '=HYPERLINK("https://bad.test")' }]),

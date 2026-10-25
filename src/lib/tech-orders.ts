@@ -116,7 +116,119 @@ export function renewTechOrder(
 export function techLineStatus(line: TechLine, today = todayAlgiers()) {
   if (today >= line.end) return "Expiré";
   if (today < line.start) return "À venir";
-  return (Date.parse(`${line.end}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000 <= 7
-    ? "Expire sous 7 jours"
+  return (Date.parse(`${line.end}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000 <= 3
+    ? "Expire sous 3 jours"
     : "Actif";
+}
+export type TechState = "active" | "ending" | "inactive";
+export function techOrderState(order: TechOrder, today = todayAlgiers()): TechState {
+  const states = order.lines.map((line) => techLineStatus(line, today));
+  return states.includes("Expire sous 3 jours")
+    ? "ending"
+    : states.includes("Actif")
+      ? "active"
+      : "inactive";
+}
+export const techOrderLabel = (order: Pick<TechOrder, "id">) =>
+  `TECH-${order.id.slice(0, 8).toUpperCase()}`;
+const normalized = (value: string) =>
+  value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("fr");
+/** Do not silently combine matching names with different Facebook contact links. */
+export const techClientKey = (order: Pick<TechOrder, "client" | "facebookUrl">) =>
+  JSON.stringify([normalized(order.client), order.facebookUrl.trim()]);
+export function techClients(orders: TechOrder[]) {
+  const entries = new Map<string, TechOrder>();
+  for (const order of [...orders].sort((a, b) =>
+    (b.createdAt || "").localeCompare(a.createdAt || ""),
+  )) {
+    const key = techClientKey(order);
+    if (!entries.has(key)) entries.set(key, order);
+  }
+  return [...entries]
+    .map(([key, order]) => ({ key, client: order.client, facebookUrl: order.facebookUrl }))
+    .sort((a, b) => a.client.localeCompare(b.client, "fr"));
+}
+export type TechFilters = {
+  query: string;
+  client: string;
+  orderId: string;
+  state: "" | TechState;
+  serviceId: string;
+  from: string;
+  to: string;
+  dateBasis: "start" | "end" | "created";
+};
+export const emptyTechFilters: TechFilters = {
+  query: "",
+  client: "",
+  orderId: "",
+  state: "",
+  serviceId: "",
+  from: "",
+  to: "",
+  dateBasis: "end",
+};
+export function filterTechOrders(
+  orders: TechOrder[],
+  filters: TechFilters,
+  today = todayAlgiers(),
+) {
+  if (filters.from && filters.to && filters.from > filters.to) return [];
+  const inRange = (date: string) =>
+    !!date && (!filters.from || date >= filters.from) && (!filters.to || date <= filters.to);
+  return orders
+    .filter((order) => {
+      if (filters.client && techClientKey(order) !== filters.client) return false;
+      if (
+        filters.orderId &&
+        !normalized(`${order.id} ${techOrderLabel(order)}`).includes(normalized(filters.orderId))
+      )
+        return false;
+      if (filters.state && techOrderState(order, today) !== filters.state) return false;
+      if (
+        filters.query &&
+        !normalized(
+          `${order.id} ${techOrderLabel(order)} ${order.client} ${order.lines.map((l) => l.name).join(" ")}`,
+        ).includes(normalized(filters.query))
+      )
+        return false;
+      const dates = !!(filters.from || filters.to);
+      if (dates && filters.dateBasis === "created") {
+        const created = new Date(order.createdAt || "");
+        if (
+          !Number.isFinite(created.getTime()) ||
+          !inRange(
+            new Intl.DateTimeFormat("en-CA", {
+              timeZone: "Africa/Algiers",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+            }).format(created),
+          )
+        )
+          return false;
+      }
+      // Service and period constraints must describe the same subscription line.
+      return order.lines.some(
+        (line) =>
+          (!filters.serviceId || line.serviceId === filters.serviceId) &&
+          (!dates ||
+            filters.dateBasis === "created" ||
+            inRange(filters.dateBasis === "start" ? line.start : line.end)),
+      );
+    })
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+}
+export function newTechOrderForClient(
+  client: Pick<TechOrder, "client" | "facebookUrl">,
+): TechOrder {
+  return {
+    id: crypto.randomUUID(),
+    revision: 0,
+    client: client.client,
+    facebookUrl: client.facebookUrl,
+    notes: "",
+    renewalOf: "",
+    lines: [],
+  };
 }

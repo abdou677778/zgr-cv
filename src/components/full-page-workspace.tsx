@@ -14,6 +14,7 @@ export function FullPageWorkspace({
   actions,
   bodyClassName,
   wrapHeaderActions = false,
+  backLabel = "Retour à l’accueil",
   children,
 }: {
   open: boolean;
@@ -25,6 +26,7 @@ export function FullPageWorkspace({
   actions?: ReactNode;
   bodyClassName?: string;
   wrapHeaderActions?: boolean;
+  backLabel?: string;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -54,16 +56,21 @@ export function FullPageWorkspace({
       className="fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-slate-50"
     >
       <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
-        <div className={cn("mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center",wrapHeaderActions&&"sm:flex-wrap")}>
+        <div
+          className={cn(
+            "mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center",
+            wrapHeaderActions && "sm:flex-wrap",
+          )}
+        >
           <Button
             type="button"
             variant="outline"
             className="w-fit shrink-0 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-100"
             onClick={() => onOpenChange(false)}
           >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l’accueil
+            <ArrowLeft className="mr-2 h-4 w-4" /> {backLabel}
           </Button>
-          <div className={cn("min-w-0",wrapHeaderActions&&"sm:min-w-[260px] sm:flex-1")}>
+          <div className={cn("min-w-0", wrapHeaderActions && "sm:min-w-[260px] sm:flex-1")}>
             <h1
               id={titleId}
               className="flex items-center gap-2 text-xl font-black text-slate-950 sm:text-2xl"
@@ -80,7 +87,9 @@ export function FullPageWorkspace({
             </h1>
             <div className="mt-1 text-sm text-slate-600">{description}</div>
           </div>
-          {actions && <div className={wrapHeaderActions?"w-full":"shrink-0 sm:ml-auto"}>{actions}</div>}
+          {actions && (
+            <div className={wrapHeaderActions ? "w-full" : "shrink-0 sm:ml-auto"}>{actions}</div>
+          )}
         </div>
       </header>
       <div className={cn("flex min-h-0 flex-1 flex-col", bodyClassName)}>{children}</div>

@@ -15,7 +15,13 @@ import { clearAdminSession, CLOUD_APP_URL, loginAdmin, type SessionUser } from "
 
 const BACKUP_APP_URL = "https://abdou677778.github.io/zgr-cv/";
 
-export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
+export function AdminLogin({
+  onAuthenticated,
+  techOrdersOnly = false,
+}: {
+  onAuthenticated: (user: SessionUser) => void;
+  techOrdersOnly?: boolean;
+}) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,6 +47,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
 
   const openOnlineVersion = () => {
     const target = new URL(CLOUD_APP_URL);
+    if (techOrdersOnly) target.searchParams.set("workspace", "tech-orders");
     if (username.trim()) target.searchParams.set("login", username.trim());
     target.searchParams.set("refresh", Date.now().toString());
     window.location.assign(target.toString());
@@ -57,6 +64,7 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
           : cloudTarget;
     if (username.trim()) target.searchParams.set("login", username.trim());
     target.searchParams.set("refresh", Date.now().toString());
+    if (techOrdersOnly) target.searchParams.set("workspace", "tech-orders");
     window.location.replace(target.toString());
   };
 
@@ -107,10 +115,16 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
         <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-900 px-7 py-7 text-white">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
-              <FileText className="h-6 w-6" />
+              {techOrdersOnly ? (
+                <img src="/icons/zgr-tech-orders.svg" alt="" className="h-10 w-10 rounded-xl" />
+              ) : (
+                <FileText className="h-6 w-6" />
+              )}
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold tracking-tight">ZGR CV Studio</h1>
+              <h1 className="text-2xl font-extrabold tracking-tight">
+                {techOrdersOnly ? "ZGR Tech Orders" : "ZGR CV Studio"}
+              </h1>
               <p className="mt-1 text-xs text-indigo-100">Espace utilisateurs sécurisé</p>
             </div>
           </div>
@@ -118,7 +132,11 @@ export function AdminLogin({ onAuthenticated }: { onAuthenticated: (user: Sessio
         <form className="space-y-5 p-7" onSubmit={submit} aria-busy={busy}>
           <div className="flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-900">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-            <p>Accès privé. Seul l’administrateur peut créer, modifier ou désactiver un profil.</p>
+            <p>
+              {techOrdersOnly
+                ? "Accès privé administrateur. Vos ventes et données clients restent dans votre espace cloud sécurisé."
+                : "Accès privé. Seul l’administrateur peut créer, modifier ou désactiver un profil."}
+            </p>
           </div>
           {(fileMode || localMode) && (
             <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">

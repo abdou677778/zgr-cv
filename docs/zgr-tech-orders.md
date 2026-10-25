@@ -38,6 +38,52 @@ aucun paiement et ne produit pas de fausse facture fournisseur.
    Les prix proposés sont ceux du catalogue, proportionnels à la période choisie ;
    contrôler les remises annuelles, frais et prix réels, puis modifier avant sauvegarde.
    La référence et le lien de facture sont vidés. L’ancienne vente est conservée.
+   On choisit les services à reconduire avec des cases à cocher, puis on peut ajouter
+   d’autres services au brouillon. « Autre service / vente » reprend seulement le
+   client et son lien Facebook pour une vente indépendante. « Nouvelle vente »
+   propose aussi les clients existants, sans fusionner des homonymes ayant des
+   liens Facebook différents.
+
+## États et filtres
+
+- La colonne « État » et les cartes mobiles affichent un cercle et son libellé :
+  jaune si au moins un service actif expire dans 3 jours ou moins ; sinon vert si
+  au moins un service est actif ; sinon rouge. Le détail reste visible par service.
+  Un abonnement à venir est inactif jusqu’à son début. La fin étant exclusive,
+  un service est expiré dès le jour de sa fin. Calcul selon Africa/Algiers, actualisé
+  toutes les minutes et au retour sur la page.
+- Les filtres client, ID de commande (court TECH- ou complet), état, service et dates
+  se combinent. Les dates portent au choix sur le début, la fin ou la création ;
+  les bornes sont inclusives. Service et dates doivent correspondre à la même ligne.
+- Les totaux affichés et l’export concernent les **ventes retenues entières**, tous
+  leurs services inclus ; ils ne sont pas limités aux lignes ayant déclenché le
+  filtre. Les totaux de l’ensemble du registre sont affichés séparément. Une plage
+  inversée ne renvoie aucune vente et bloque l’export jusqu’à correction.
+- Sur mobile, chaque vente devient une carte avec état, services, dates, coût,
+  total, marge et actions, sans faire défiler horizontalement un grand tableau.
+
+## Accès mobile privé et APK
+
+L’adresse dédiée est `https://zgr-cv.pages.dev/?workspace=tech-orders`. Elle utilise
+la connexion existante et ne monte pas l’éditeur CV. Le rôle administrateur reste
+obligatoire côté serveur ; cette adresse n’est pas un lien d’accès sans connexion.
+
+Un APK de **test** Android 8 ou ultérieur a été compilé et signé localement, sans
+convertisseur en ligne ni nouveau dépôt public. Il charge uniquement cet espace
+authentifié ; Internet est nécessaire. Il ne contient ni dossier client ni secret
+de connexion. La seule permission déclarée est Internet. Les logos passent par
+le sélecteur de fichiers Android et l’Excel par une boîte d’enregistrement système,
+sans autorisation générale de lecture du stockage. Les erreurs TLS sont bloquées,
+les sauvegardes Android et captures d’écran sont désactivées dans l’application.
+
+Le paquet, les sources natives et la clé de signature locale restent dans le dossier
+ignoré `output/android-tech-orders/` et ne sont pas publiés dans GitHub ou Pages.
+Ne jamais partager le sous-dossier `.local-signing`. Le paquet actuel est signé
+pour les essais, pas pour une diffusion Play Store. Avant usage quotidien, tester
+sur le téléphone : connexion, reprise de session, création d’une vente fictive,
+import d’un logo, export Excel et déconnexion. Ces essais natifs restent à faire.
+Pour une distribution durable, utiliser une clé de production privée sauvegardée
+de manière sécurisée et conserver la même clé pour les mises à jour.
 
 ## Calcul et export
 
@@ -85,3 +131,15 @@ le renouvellement sur trois mois et la modification manuelle du prix (20000 −
 Le modèle Excel fictif a été recalculé et rendu avec la bibliothèque d’artefacts,
 y compris la vérification d’un prix nul. L’ouverture dans Microsoft Excel desktop
 n’a pas été testée.
+
+Contrôle du 25 octobre 2026 : filtres combinés, seuil exact de 3 jours, états mixtes,
+dates inclusives et fuseau d’Alger couverts par tests automatisés. Contrôle local
+à 390 px : absence de débordement horizontal, filtre jaune et totaux 6200/5200/1000,
+renouvellement d’un seul service sur deux. Aucune vente de production créée.
+La fin de la vérification interactive a été interrompue par la désactivation de
+l’accès navigateur ; l’ajout au brouillon après renouvellement reste couvert par
+les fonctions et tests du code, mais n’a pas été terminé dans le navigateur.
+Typecheck, lint des fichiers modifiés, 90 tests unitaires, 12 tests ciblés Worker/Pages,
+build SPA et contrôle PWA valides. Le budget du bundle initial reste dépassé :
+339,90 Kio gzip après modification, contre 339,47 Kio sur la version de production
+précédente, pour un budget de 310 Kio. Ce contrôle de performance n’est donc pas vert.

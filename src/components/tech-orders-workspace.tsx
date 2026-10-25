@@ -15,6 +15,14 @@ import {
   renewTechOrder,
   techLineStatus,
   todayAlgiers,
+  techOrderState,
+  techOrderLabel,
+  techClients,
+  filterTechOrders,
+  emptyTechFilters,
+  newTechOrderForClient,
+  type TechState,
+  type TechFilters,
   type TechLine,
   type TechOrder,
   type TechService,
@@ -63,6 +71,19 @@ function Logo({ service, override }: { service?: TechService; override?: TechLog
     <span className="grid h-8 w-8 place-items-center rounded border bg-slate-100 text-xs">—</span>
   );
 }
+function StateBadge({ state }: { state: TechState }) {
+  const text =
+    state === "ending" ? "Expire sous 3 jours" : state === "active" ? "Actif" : "Inactif";
+  return (
+    <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs font-semibold">
+      <span
+        aria-hidden="true"
+        className={`h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10 ${state === "ending" ? "bg-yellow-400" : state === "active" ? "bg-green-500" : "bg-red-500"}`}
+      />
+      {text}
+    </span>
+  );
+}
 async function normalizedLogo(file: File) {
   if (
     !["image/png", "image/jpeg", "image/webp", "image/svg+xml"].includes(file.type) ||
@@ -90,7 +111,7 @@ async function normalizedLogo(file: File) {
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="grid gap-1 text-xs font-semibold text-slate-600">
+    <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-600">
       <span>{label}</span>
       {children}
     </label>
@@ -128,9 +149,11 @@ async function cloudJson(path: string, init?: RequestInit) {
 export function TechOrdersWorkspace({
   open,
   onOpenChange,
+  standalone = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  standalone?: boolean;
 }) {
   const [services, setServices] = useState<TechService[]>([]),
     [orders, setOrders] = useState<TechOrder[]>([]);
@@ -144,8 +167,11 @@ export function TechOrdersWorkspace({
     [service, setService] = useState<TechService>();
   const [order, setOrder] = useState<TechOrder>(),
     [selected, setSelected] = useState(""),
-    [query, setQuery] = useState(""),
     [renewMonths, setRenewMonths] = useState(1);
+  const [filters, setFilters] = useState<TechFilters>({ ...emptyTechFilters });
+  const [today, setToday] = useState(todayAlgiers);
+  const [renewSource, setRenewSource] = useState<TechOrder>();
+  const [renewLineIds, setRenewLineIds] = useState<string[]>([]);
   const [pendingLine, setPendingLine] = useState<TechLine>();
   const load = useCallback(async () => {
     setBusy(true);
@@ -171,6 +197,22 @@ export function TechOrdersWorkspace({
     window.addEventListener("zgr-software-logos", update);
     return () => window.removeEventListener("zgr-software-logos", update);
   }, [open, load]);
+  useEffect(() => {
+    const sync = () => setToday(todayAlgiers());
+    const timer = window.setInterval(sync, 60000);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
+  const editorId = order?.id || renewSource?.id;
+  useEffect(() => {
+    if (editorId)
+      document
+        .getElementById("tech-order-editor")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [editorId]);
   const uploadLogo = async (file: File) => {
     if (!service) return;
     const target = { id: service.id, icon: service.icon };
@@ -198,16 +240,62 @@ export function TechOrdersWorkspace({
       setBusy(false);
     }
   };
+  const clients = useMemo(() => techClients(orders), [orders]);
   const filtered = useMemo(
-    () =>
-      orders
-        .filter((item) =>
-          `${item.id} ${item.client} ${item.lines.map((l) => l.name).join(" ")}`
-            .toLocaleLowerCase("fr")
-            .includes(query.toLocaleLowerCase("fr")),
-        )
-        .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")),
-    [orders, query],
+    () => filterTechOrders(orders, filters, today),
+    [orders, filters, today],
+  );
+  const invalidDates = !!(filters.from && filters.to && filters.from > filters.to);
+  const setFilter = <K extends keyof TechFilters>(key: K, value: TechFilters[K]) =>
+    setFilters((current) => ({ ...current, [key]: value }));
+  const startSameClient = (source: TechOrder) => {
+    setOrder(newTechOrderForClient(source));
+    setRenewSource(undefined);
+    setSelected("");
+    setPendingLine(undefined);
+    setMessage(
+      "Nouvelle vente pour ce client : ajoutez un ou plusieurs services, sans modifier ses ventes précédentes.",
+    );
+  };
+  const startRenewal = (source: TechOrder) => {
+    setRenewSource(source);
+    setRenewLineIds(source.lines.map((line) => line.id));
+    setMessage(
+      "Choisissez les services et la période, puis préparez le renouvellement. Aucune vente n’est encore enregistrée.",
+    );
+  };
+  const actionsFor = (item: TechOrder) => (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || !!order || !!renewSource}
+        onClick={() => {
+          setOrder(structuredClone(item));
+          setMessage("");
+          setSelected("");
+          setPendingLine(undefined);
+        }}
+      >
+        Modifier
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || !!order || !!renewSource}
+        onClick={() => startRenewal(item)}
+      >
+        Renouveler
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || !!order || !!renewSource}
+        onClick={() => startSameClient(item)}
+      >
+        Autre service / vente
+      </Button>
+    </div>
   );
   const totals = filtered.reduce(
     (total, item) => {
@@ -219,6 +307,17 @@ export function TechOrdersWorkspace({
       };
     },
     { cost: 0, sale: 0, margin: 0 },
+  );
+  const allTotals = orders.reduce(
+    (total, item) => {
+      const value = orderTotals(item);
+      return {
+        sale: total.sale + value.sale,
+        cost: total.cost + value.cost,
+        margin: total.margin + value.margin,
+      };
+    },
+    { sale: 0, cost: 0, margin: 0 },
   );
   const mutateLine = (id: string, patch: Partial<TechLine>) =>
     setOrder((current) =>
@@ -271,6 +370,7 @@ export function TechOrdersWorkspace({
   };
   return (
     <FullPageWorkspace
+      backLabel={standalone ? "Déconnexion" : "Retour à l’accueil"}
       wrapHeaderActions
       open={open}
       onOpenChange={(value) => {
@@ -305,22 +405,14 @@ export function TechOrdersWorkspace({
           </Button>
           <Button
             variant="outline"
-            disabled={!loaded || busy}
+            disabled={!loaded || busy || invalidDates}
             onClick={async () => {
               setBusy(true);
               try {
                 const { buildTechOrdersXlsx } = await import("@/lib/tech-orders-excel");
                 const bytes = buildTechOrdersXlsx(filtered);
-                const url = URL.createObjectURL(
-                  new Blob([new Uint8Array(bytes)], {
-                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                  }),
-                );
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `zgr-tech-orders-${todayAlgiers()}.xlsx`;
-                a.click();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                const { saveTechExcel } = await import("@/lib/tech-mobile-export");
+                saveTechExcel(bytes, `zgr-tech-orders-${todayAlgiers()}.xlsx`);
                 setMessage(
                   "Export des ventes filtrées. Une ligne par service, sans double comptage.",
                 );
@@ -335,7 +427,7 @@ export function TechOrdersWorkspace({
             Excel
           </Button>
           <Button
-            disabled={!loaded || busy || !!order}
+            disabled={!loaded || busy || !!order || !!renewSource}
             onClick={() => {
               setOrder(blankOrder());
               setSelected("");
@@ -360,6 +452,91 @@ export function TechOrdersWorkspace({
           <p role="status" className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm">
             {message}
           </p>
+        )}
+        {renewSource && (
+          <section
+            id="tech-order-editor"
+            className="space-y-3 rounded-xl border border-indigo-200 bg-white p-4"
+          >
+            <h2 className="font-bold">Renouvellement — {renewSource.client}</h2>
+            <p className="text-xs text-slate-500">
+              Cochez un ou plusieurs services à renouveler. Vous pourrez aussi ajouter d’autres
+              services et corriger les prix avant l’enregistrement.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {renewSource.lines.map((line) => (
+                <label
+                  key={line.id}
+                  className="flex items-center gap-2 rounded-lg border p-3 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={renewLineIds.includes(line.id)}
+                    onChange={(e) =>
+                      setRenewLineIds((current) =>
+                        e.target.checked
+                          ? [...current, line.id]
+                          : current.filter((id) => id !== line.id),
+                      )
+                    }
+                  />
+                  <Logo
+                    service={services.find((s) => s.id === line.serviceId)}
+                    override={logos[line.serviceId]}
+                  />
+                  <span>
+                    {line.name}
+                    <small className="block text-slate-500">Fin : {line.end}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <Field label="Période à renouveler">
+              <select
+                className="h-9 rounded border px-2"
+                value={renewMonths}
+                onChange={(e) => setRenewMonths(Number(e.target.value))}
+              >
+                {[1, 3, 6, 12].map((m) => (
+                  <option key={m} value={m}>
+                    {m} mois
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={busy || !renewLineIds.length}
+                onClick={() => {
+                  setOrder(
+                    renewTechOrder(
+                      {
+                        ...renewSource,
+                        lines: renewSource.lines.filter((line) => renewLineIds.includes(line.id)),
+                      },
+                      services,
+                      renewMonths,
+                      today,
+                    ),
+                  );
+                  setRenewSource(undefined);
+                  setSelected("");
+                  setPendingLine(undefined);
+                  setMessage(
+                    "Renouvellement préparé : vérifiez dates et prix, puis ajoutez d’autres services si nécessaire. Rien n’est encore enregistré.",
+                  );
+                }}
+              >
+                Préparer le renouvellement
+              </Button>
+              <Button variant="outline" onClick={() => startSameClient(renewSource)}>
+                Ajouter seulement un nouveau service
+              </Button>
+              <Button variant="outline" onClick={() => setRenewSource(undefined)}>
+                Annuler
+              </Button>
+            </div>
+          </section>
         )}
         {catalog && (
           <section className="space-y-4 rounded-xl border bg-white p-4">
@@ -507,6 +684,7 @@ export function TechOrdersWorkspace({
         )}
         {order && (
           <form
+            id="tech-order-editor"
             className="space-y-4 rounded-xl border border-indigo-200 bg-white p-4"
             onSubmit={(e) => {
               e.preventDefault();
@@ -523,6 +701,30 @@ export function TechOrdersWorkspace({
                 TECH-{order.id.slice(0, 8).toUpperCase()}
               </small>
             </h2>
+            <Field label="Client existant (facultatif)">
+              <select
+                className="h-9 w-full rounded border bg-white px-2"
+                disabled={!!order.revision}
+                value={
+                  clients.find(
+                    (c) => c.client === order.client && c.facebookUrl === order.facebookUrl,
+                  )?.key || ""
+                }
+                onChange={(e) => {
+                  const client = clients.find((c) => c.key === e.target.value);
+                  if (client)
+                    setOrder({ ...order, client: client.client, facebookUrl: client.facebookUrl });
+                }}
+              >
+                <option value="">Saisir un nouveau client ou choisir…</option>
+                {clients.map((client) => (
+                  <option key={client.key} value={client.key}>
+                    {client.client}
+                    {client.facebookUrl ? ` — ${client.facebookUrl}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Client">
                 <Input
@@ -543,7 +745,7 @@ export function TechOrdersWorkspace({
             <div className="flex flex-wrap gap-2">
               <select
                 aria-label="Service à ajouter à la vente"
-                className="h-9 min-w-48 rounded border bg-white px-2"
+                className="h-9 min-w-48 max-w-full rounded border bg-white px-2"
                 value={selected}
                 onChange={(e) => {
                   setSelected(e.target.value);
@@ -623,9 +825,12 @@ export function TechOrdersWorkspace({
               </div>
             )}
             {order.lines.map((line) => (
-              <fieldset key={line.id} className="space-y-3 rounded-lg border bg-slate-50 p-3">
-                <legend className="px-2 text-sm font-bold">
-                  <span className="inline-flex items-center gap-2">
+              <fieldset
+                key={line.id}
+                className="min-w-0 space-y-3 rounded-lg border bg-slate-50 p-3"
+              >
+                <legend className="max-w-full px-2 text-sm font-bold">
+                  <span className="inline-flex max-w-full items-center gap-2 break-words">
                     <Logo
                       service={services.find((s) => s.id === line.serviceId)}
                       override={logos[line.serviceId]}
@@ -653,7 +858,7 @@ export function TechOrdersWorkspace({
                   </Field>
                   <Field label="Ajuster la fin par période">
                     <select
-                      className="h-9 rounded border bg-white px-2"
+                      className="h-9 min-w-0 max-w-full rounded border bg-white px-2"
                       defaultValue=""
                       onChange={(e) => {
                         if (e.target.value)
@@ -747,9 +952,115 @@ export function TechOrdersWorkspace({
             </div>
           </form>
         )}
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <section
+          className="space-y-3 rounded-xl border bg-white p-4"
+          aria-label="Filtres et totaux"
+        >
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Recherche rapide">
+              <Input
+                value={filters.query}
+                onChange={(e) => setFilter("query", e.target.value)}
+                placeholder="Client, commande, service…"
+              />
+            </Field>
+            <Field label="Filtrer par client">
+              <select
+                className="h-9 min-w-0 rounded border bg-white px-2"
+                value={filters.client}
+                onChange={(e) => setFilter("client", e.target.value)}
+              >
+                <option value="">Tous les clients</option>
+                {clients.map((client) => (
+                  <option key={client.key} value={client.key}>
+                    {client.client}
+                    {client.facebookUrl ? ` — ${client.facebookUrl}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Commande / ID">
+              <Input
+                value={filters.orderId}
+                onChange={(e) => setFilter("orderId", e.target.value)}
+                placeholder="TECH-… ou ID complet"
+              />
+            </Field>
+            <Field label="Filtrer par état">
+              <select
+                className="h-9 rounded border bg-white px-2"
+                value={filters.state}
+                onChange={(e) => setFilter("state", e.target.value as TechFilters["state"])}
+              >
+                <option value="">Tous les états</option>
+                <option value="active">Vert — Actif</option>
+                <option value="ending">Jaune — Expire sous 3 jours</option>
+                <option value="inactive">Rouge — Inactif</option>
+              </select>
+            </Field>
+          </div>
+          <details>
+            <summary className="cursor-pointer text-sm font-semibold text-indigo-700">
+              Filtres par service et dates
+            </summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Service">
+                <select
+                  className="h-9 rounded border bg-white px-2"
+                  value={filters.serviceId}
+                  onChange={(e) => setFilter("serviceId", e.target.value)}
+                >
+                  <option value="">Tous les services</option>
+                  {services.map((service) => (
+                    <option key={service.id} value={service.id}>
+                      {service.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Date à contrôler">
+                <select
+                  className="h-9 rounded border bg-white px-2"
+                  value={filters.dateBasis}
+                  onChange={(e) =>
+                    setFilter("dateBasis", e.target.value as TechFilters["dateBasis"])
+                  }
+                >
+                  <option value="end">Fin d’abonnement</option>
+                  <option value="start">Début d’abonnement</option>
+                  <option value="created">Création de la vente</option>
+                </select>
+              </Field>
+              <Field label="Du (inclus)">
+                <Input
+                  type="date"
+                  value={filters.from}
+                  onChange={(e) => setFilter("from", e.target.value)}
+                />
+              </Field>
+              <Field label="Au (inclus)">
+                <Input
+                  type="date"
+                  value={filters.to}
+                  onChange={(e) => setFilter("to", e.target.value)}
+                />
+              </Field>
+            </div>
+          </details>
+          <Button size="sm" variant="outline" onClick={() => setFilters({ ...emptyTechFilters })}>
+            Réinitialiser les filtres
+          </Button>
+          {invalidDates && (
+            <p role="alert" className="text-sm font-semibold text-red-700">
+              La date de début du filtre doit précéder sa date de fin. Corrigez la période ;
+              l’export est suspendu.
+            </p>
+          )}
           <div className="flex flex-wrap gap-6 text-sm">
-            <span>{filtered.length} vente(s)</span>
+            <span>
+              {filtered.length} vente(s) sur {orders.length} · {techClients(filtered).length}{" "}
+              client(s)
+            </span>
             <span>
               Ventes <strong>{money(totals.sale)}</strong>
             </span>
@@ -763,36 +1074,104 @@ export function TechOrdersWorkspace({
               </strong>
             </span>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Field label="Période du prochain renouvellement">
-              <select
-                className="h-9 rounded border bg-white px-2"
-                value={renewMonths}
-                onChange={(e) => setRenewMonths(Number(e.target.value))}
-              >
-                {[1, 3, 6, 12].map((m) => (
-                  <option key={m} value={m}>
-                    {m} mois
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Rechercher client, ID ou service">
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher…"
-              />
-            </Field>
-          </div>
+          <p className="text-xs text-slate-500">
+            Totaux des ventes retenues, tous leurs services inclus. Ensemble du registre : ventes{" "}
+            {money(allTotals.sale)} · coûts {money(allTotals.cost)} · marge{" "}
+            {money(allTotals.margin)}.
+          </p>
+          <p className="text-xs text-slate-500">
+            État de chaque vente : jaune si un service actif expire d’ici 3 jours ; sinon vert si au
+            moins un service est actif ; sinon rouge. Un service à venir n’est pas encore actif.
+          </p>
+        </section>
+        <div className="space-y-3 md:hidden">
+          {filtered.map((item) => {
+            const value = orderTotals(item);
+            return (
+              <article key={item.id} className="space-y-3 rounded-xl border bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="min-w-0 break-words font-bold">{item.client}</h3>
+                  <StateBadge state={techOrderState(item, today)} />
+                </div>
+                <p className="break-all text-xs text-slate-500">
+                  {techOrderLabel(item)}
+                  {item.renewalOf ? " · Renouvellement" : ""}
+                </p>
+                {item.facebookUrl && (
+                  <a
+                    className="text-xs text-blue-700 underline"
+                    href={item.facebookUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Facebook
+                  </a>
+                )}
+                <div className="space-y-2">
+                  {item.lines.map((line) => (
+                    <div key={line.id} className="flex gap-2">
+                      <Logo
+                        service={services.find((s) => s.id === line.serviceId)}
+                        override={logos[line.serviceId]}
+                      />
+                      <div className="min-w-0 text-sm">
+                        <p className="break-words font-semibold">{line.name}</p>
+                        <small className="text-slate-500">
+                          {line.start} → {line.end}
+                        </small>
+                        <p className="text-xs">{techLineStatus(line, today)}</p>
+                        {line.invoiceUrl && (
+                          <a
+                            className="text-xs text-blue-700 underline"
+                            href={line.invoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Facture fournisseur
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <dl className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <dt className="text-slate-500">Coût</dt>
+                    <dd className="font-semibold">{money(value.cost)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">Total</dt>
+                    <dd className="font-semibold">{money(value.sale)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">Marge</dt>
+                    <dd
+                      className={
+                        value.margin < 0 ? "font-bold text-red-700" : "font-bold text-emerald-700"
+                      }
+                    >
+                      {money(value.margin)}
+                    </dd>
+                  </div>
+                </dl>
+                {actionsFor(item)}
+              </article>
+            );
+          })}
+          {!filtered.length && (
+            <p className="rounded-xl border bg-white p-6 text-center text-sm text-slate-500">
+              {busy ? "Chargement…" : "Aucune vente pour ces filtres."}
+            </p>
+          )}
         </div>
-        <div className="overflow-x-auto rounded-xl border bg-white">
+        <div className="hidden overflow-x-auto rounded-xl border bg-white md:block">
           <table className="w-full min-w-[1050px] text-left text-sm">
             <thead className="bg-slate-100 text-xs uppercase text-slate-600">
               <tr>
                 {[
                   "ID",
                   "Client",
+                  "État",
                   "Services / dates / état",
                   "Coût DA",
                   "Total DA",
@@ -829,6 +1208,9 @@ export function TechOrdersWorkspace({
                         </a>
                       )}
                     </td>
+                    <td className="px-4 py-4">
+                      <StateBadge state={techOrderState(item, today)} />
+                    </td>
                     <td className="space-y-2 px-4 py-4">
                       {item.lines.map((line) => (
                         <div key={line.id} className="flex gap-2">
@@ -842,14 +1224,14 @@ export function TechOrdersWorkspace({
                               {line.start} → {line.end} ·{" "}
                               <span
                                 className={
-                                  techLineStatus(line) === "Expiré"
+                                  techLineStatus(line, today) === "Expiré"
                                     ? "text-red-700"
-                                    : techLineStatus(line) === "Expire sous 7 jours"
+                                    : techLineStatus(line, today) === "Expire sous 3 jours"
                                       ? "text-amber-700"
                                       : ""
                                 }
                               >
-                                {techLineStatus(line)}
+                                {techLineStatus(line, today)}
                               </span>
                             </small>
                             {line.invoiceUrl && (
@@ -875,38 +1257,13 @@ export function TechOrdersWorkspace({
                     >
                       {money(value.margin)}
                     </td>
-                    <td className="space-y-2 px-4 py-4">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy || !!order}
-                        onClick={() => {
-                          setOrder(structuredClone(item));
-                          setMessage("");
-                        }}
-                      >
-                        Modifier
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy || !!order}
-                        onClick={() => {
-                          setOrder(renewTechOrder(item, services, renewMonths));
-                          setMessage(
-                            "Renouvellement à vérifier : prix du catalogue proportionnels à la période, modifiables. Nouvelle facture requise. L’ancienne vente reste inchangée.",
-                          );
-                        }}
-                      >
-                        Renouveler
-                      </Button>
-                    </td>
+                    <td className="px-4 py-4">{actionsFor(item)}</td>
                   </tr>
                 );
               })}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={7} className="p-10 text-center text-slate-500">
+                  <td colSpan={8} className="p-10 text-center text-slate-500">
                     {busy
                       ? "Chargement du cloud…"
                       : loaded

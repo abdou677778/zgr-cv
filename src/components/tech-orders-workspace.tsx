@@ -493,7 +493,6 @@ export function TechOrdersWorkspace({
     );
   };
   const totals = techOrdersTotals(filtered);
-  const allTotals = techOrdersTotals(orders);
   const visible = filtered.slice(0, visibleCount);
   const stateCounts = useMemo(
     () =>
@@ -848,10 +847,6 @@ export function TechOrdersWorkspace({
           selected={filters.state}
           onSelect={(state) => setFilters((current) => ({ ...current, state }))}
         />
-        <p className="text-xs text-slate-500">
-          Coût DA = USD × taux saisi. Marge brute = vente − coût, hors frais et taxes. Les prix sont
-          saisis par vous ; aucune facture fournisseur n’est générée par ZGR.
-        </p>
         {message && (
           <p role="status" className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm">
             {message}
@@ -1457,19 +1452,6 @@ export function TechOrdersWorkspace({
               </strong>
             </span>
           </div>
-          <details className="text-[11px] text-slate-500">
-            <summary className="cursor-pointer">Détail des totaux et des états</summary>
-            <p className="mt-1">
-              Totaux des ventes retenues, tous leurs services inclus. Ensemble du registre : ventes{" "}
-              {money(allTotals.sale)} · coûts {money(allTotals.cost)} · marge{" "}
-              {money(allTotals.margin)}.
-            </p>
-            <p className="text-xs text-slate-500">
-              État de chaque vente : jaune si un service actif expire d’ici 3 jours ; sinon vert si
-              au moins un service est actif ; sinon rouge. Un service à venir n’est pas encore
-              actif.
-            </p>
-          </details>
         </section>
         <div className="space-y-3 md:hidden">
           {visible.map((item) => (

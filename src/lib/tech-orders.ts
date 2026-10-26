@@ -209,7 +209,15 @@ export type TechFilters = {
   from: string;
   to: string;
   dateBasis: "start" | "end" | "created";
-  sort: "recent" | "ending" | "client" | "sale-desc";
+  sort:
+    | "recent"
+    | "oldest"
+    | "ending"
+    | "ending-desc"
+    | "client"
+    | "client-desc"
+    | "sale-desc"
+    | "sale-asc";
 };
 export const emptyTechFilters: TechFilters = {
   query: "",
@@ -221,6 +229,16 @@ export const emptyTechFilters: TechFilters = {
   to: "",
   dateBasis: "end",
   sort: "recent",
+};
+export const techSortLabels: Record<TechFilters["sort"], string> = {
+  recent: "Plus récentes",
+  oldest: "Plus anciennes",
+  ending: "Échéance croissante",
+  "ending-desc": "Échéance décroissante",
+  client: "Client A–Z",
+  "client-desc": "Client Z–A",
+  "sale-desc": "Montant décroissant",
+  "sale-asc": "Montant croissant",
 };
 export function filterTechOrders(
   orders: TechOrder[],
@@ -274,15 +292,24 @@ export function filterTechOrders(
     })
     .sort((a, b) => {
       if (filters.sort === "client") return a.client.localeCompare(b.client, "fr");
+      if (filters.sort === "client-desc") return b.client.localeCompare(a.client, "fr");
       if (filters.sort === "sale-desc") return orderTotals(b).sale - orderTotals(a).sale;
-      if (filters.sort === "ending") {
+      if (filters.sort === "sale-asc") return orderTotals(a).sale - orderTotals(b).sale;
+      if (filters.sort === "ending" || filters.sort === "ending-desc") {
         const next = (order: TechOrder) =>
           order.lines
             .map((l) => l.end)
             .filter((end) => end > today)
             .sort()[0] || "9999-12-31";
-        return next(a).localeCompare(next(b));
+        const first = next(a),
+          second = next(b);
+        if (first === "9999-12-31") return second === first ? 0 : 1;
+        if (second === "9999-12-31") return -1;
+        return filters.sort === "ending"
+          ? first.localeCompare(second)
+          : second.localeCompare(first);
       }
+      if (filters.sort === "oldest") return (a.createdAt || "").localeCompare(b.createdAt || "");
       return (b.createdAt || "").localeCompare(a.createdAt || "");
     });
 }

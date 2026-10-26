@@ -27,6 +27,7 @@ import { TechRenewalMessage } from "./tech-renewal-message";
 import { TechMobileOrderCard } from "./tech-mobile-order-card";
 import { TechFinancePanel } from "./tech-finance-panel";
 import { TechStatusTiles } from "./tech-status-tiles";
+import { TechOrderFilters } from "./tech-order-filters";
 import { TechContactBadge } from "./tech-contact-badge";
 import { emptyTechFinance, type TechFinance } from "@/lib/tech-finance";
 import { formatTechMoney as money } from "@/lib/tech-order-display";
@@ -44,7 +45,6 @@ import {
   orderTotals,
   techOrdersTotals,
   techMatchesSearch,
-  techDatePresets,
   renewTechOrder,
   techLineStatus,
   techContactAt,
@@ -334,8 +334,6 @@ export function TechOrdersWorkspace({
     [orders, filters, today],
   );
   const invalidDates = !!(filters.from && filters.to && filters.from > filters.to);
-  const setFilter = <K extends keyof TechFilters>(key: K, value: TechFilters[K]) =>
-    setFilters((current) => ({ ...current, [key]: value }));
   const startSameClient = (source: TechOrder) => {
     setOrder(newTechOrderForClient(source));
     setRenewSource(undefined);
@@ -848,7 +846,7 @@ export function TechOrdersWorkspace({
         <TechStatusTiles
           counts={stateCounts}
           selected={filters.state}
-          onSelect={(state) => setFilters({ ...emptyTechFilters, state })}
+          onSelect={(state) => setFilters((current) => ({ ...current, state }))}
         />
         <p className="text-xs text-slate-500">
           Coût DA = USD × taux saisi. Marge brute = vente − coût, hors frais et taxes. Les prix sont
@@ -1425,139 +1423,23 @@ export function TechOrdersWorkspace({
           </form>
         )}
         <section
-          className="space-y-3 rounded-xl border bg-white p-4"
+          className="space-y-2 rounded-xl border bg-white p-3"
           aria-label="Filtres et totaux"
         >
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Recherche rapide">
-              <Input
-                value={filters.query}
-                onChange={(e) => setFilter("query", e.target.value)}
-                placeholder="Client, commande, service…"
-              />
-            </Field>
-            <Field label="Filtrer par client">
-              <TechSearchSelect
-                label="Filtrer par client"
-                value={filters.client}
-                options={[
-                  { value: "", label: "Tous les clients" },
-                  ...clients.map((c) => ({ value: c.key, label: c.client, detail: c.facebookUrl })),
-                ]}
-                onChange={(key) => setFilter("client", key)}
-                placeholder="Nom ou lien Facebook…"
-              />
-            </Field>
-            <Field label="Commande / ID">
-              <Input
-                value={filters.orderId}
-                onChange={(e) => setFilter("orderId", e.target.value)}
-                placeholder="TECH-… ou ID complet"
-              />
-            </Field>
-            <Field label="Filtrer par état">
-              <select
-                className="h-9 rounded border bg-white px-2"
-                value={filters.state}
-                onChange={(e) => setFilter("state", e.target.value as TechFilters["state"])}
-              >
-                <option value="">Tous les états</option>
-                <option value="active">Vert — Actif</option>
-                <option value="ending">Jaune — Expire sous 3 jours</option>
-                <option value="inactive">Rouge — Inactif</option>
-              </select>
-            </Field>
-          </div>
-          <details>
-            <summary className="cursor-pointer text-sm font-semibold text-indigo-700">
-              Filtres par service et dates
-            </summary>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Service">
-                <TechSearchSelect
-                  label="Filtrer par service"
-                  value={filters.serviceId}
-                  options={[
-                    { value: "", label: "Tous les services" },
-                    ...services.map((s) => ({ value: s.id, label: s.name })),
-                  ]}
-                  onChange={(id) => setFilter("serviceId", id)}
-                />
-              </Field>
-              <Field label="Date à contrôler">
-                <select
-                  className="h-9 rounded border bg-white px-2"
-                  value={filters.dateBasis}
-                  onChange={(e) =>
-                    setFilter("dateBasis", e.target.value as TechFilters["dateBasis"])
-                  }
-                >
-                  <option value="end">Fin d’abonnement</option>
-                  <option value="start">Début d’abonnement</option>
-                  <option value="created">Création de la vente</option>
-                </select>
-              </Field>
-              <Field label="Du (inclus)">
-                <Input
-                  type="date"
-                  value={filters.from}
-                  onChange={(e) => setFilter("from", e.target.value)}
-                />
-              </Field>
-              <Field label="Au (inclus)">
-                <Input
-                  type="date"
-                  value={filters.to}
-                  onChange={(e) => setFilter("to", e.target.value)}
-                />
-              </Field>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span>Échéances :</span>
-              {techDatePresets(today).map((range) => (
-                <Button
-                  key={range.label}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    setFilters((current) => ({
-                      ...current,
-                      dateBasis: "end",
-                      from: range.from,
-                      to: range.to,
-                    }))
-                  }
-                >
-                  {range.label}
-                </Button>
-              ))}
-            </div>
-          </details>
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Trier les ventes">
-              <select
-                className="h-9 rounded-lg border bg-white px-3"
-                value={filters.sort}
-                onChange={(e) => setFilter("sort", e.target.value as TechFilters["sort"])}
-              >
-                <option value="recent">Plus récentes</option>
-                <option value="ending">Prochaine échéance</option>
-                <option value="client">Client A–Z</option>
-                <option value="sale-desc">Montant décroissant</option>
-              </select>
-            </Field>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => setFilters({ ...emptyTechFilters })}>
-            Réinitialiser les filtres
-          </Button>
+          <TechOrderFilters
+            filters={filters}
+            clients={clients}
+            services={services}
+            today={today}
+            onChange={setFilters}
+          />
           {invalidDates && (
             <p role="alert" className="text-sm font-semibold text-red-700">
               La date de début du filtre doit précéder sa date de fin. Corrigez la période ;
               l’export est suspendu.
             </p>
           )}
-          <div className="flex flex-wrap gap-6 text-sm">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs">
             <span>
               {filtered.length} vente(s) sur {orders.length} · {techClients(filtered).length}{" "}
               client(s)
@@ -1575,15 +1457,19 @@ export function TechOrdersWorkspace({
               </strong>
             </span>
           </div>
-          <p className="text-xs text-slate-500">
-            Totaux des ventes retenues, tous leurs services inclus. Ensemble du registre : ventes{" "}
-            {money(allTotals.sale)} · coûts {money(allTotals.cost)} · marge{" "}
-            {money(allTotals.margin)}.
-          </p>
-          <p className="text-xs text-slate-500">
-            État de chaque vente : jaune si un service actif expire d’ici 3 jours ; sinon vert si au
-            moins un service est actif ; sinon rouge. Un service à venir n’est pas encore actif.
-          </p>
+          <details className="text-[11px] text-slate-500">
+            <summary className="cursor-pointer">Détail des totaux et des états</summary>
+            <p className="mt-1">
+              Totaux des ventes retenues, tous leurs services inclus. Ensemble du registre : ventes{" "}
+              {money(allTotals.sale)} · coûts {money(allTotals.cost)} · marge{" "}
+              {money(allTotals.margin)}.
+            </p>
+            <p className="text-xs text-slate-500">
+              État de chaque vente : jaune si un service actif expire d’ici 3 jours ; sinon vert si
+              au moins un service est actif ; sinon rouge. Un service à venir n’est pas encore
+              actif.
+            </p>
+          </details>
         </section>
         <div className="space-y-3 md:hidden">
           {visible.map((item) => (

@@ -165,7 +165,7 @@ test("Finance periods use the Algerian creation date and each adjustment's own d
   assert.deepEqual(financeMonthRange("2026-13"), { from: "", to: "" });
   assert.deepEqual(financeMonthRange("0000-02"), { from: "", to: "" });
 });
-test("Mobile status squares always share a three-column row and retain their labels and counts", () => {
+test("Mobile status squares share a four-column row including All without duplicating the state filter", () => {
   const html = renderToStaticMarkup(
     createElement(TechStatusTiles, {
       counts: { active: 12, ending: 2, inactive: 3 },
@@ -173,8 +173,9 @@ test("Mobile status squares always share a three-column row and retain their lab
       onSelect: () => {},
     }),
   );
-  assert.equal((html.match(/<button/g) || []).length, 3);
-  assert.match(html, /grid-cols-3/);
+  assert.equal((html.match(/<button/g) || []).length, 4);
+  assert.match(html, /grid-cols-4/);
+  assert.match(html, /Tous : 17 ventes/);
   assert.match(html, /aspect-square/);
   for (const label of ["Actifs", "Inactifs", "Expire sous 3 jours"])
     assert.ok(html.includes(label));

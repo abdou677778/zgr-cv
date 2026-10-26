@@ -174,8 +174,25 @@ export function validateTechRecord(kind, input, id) {
     )
       throw Error("Ligne invalide : dates, prix, taux ou facture. La fin doit suivre le début.");
     ids.add(line.id);
+    const contact = line.renewalContact;
+    if (
+      contact !== undefined &&
+      (!contact ||
+        !validTechDate(contact.start) ||
+        !validTechDate(contact.end) ||
+        contact.end <= contact.start ||
+        typeof contact.at !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(contact.at) ||
+        !Number.isFinite(Date.parse(contact.at)) ||
+        new Date(contact.at).toISOString() !== contact.at ||
+        Date.parse(contact.at) > Date.now() + 60000)
+    )
+      throw Error("Confirmation de contact invalide.");
     return {
       id: line.id,
+      ...(contact
+        ? { renewalContact: { start: contact.start, end: contact.end, at: contact.at } }
+        : {}),
       serviceId: line.serviceId,
       name: line.name.trim(),
       start: line.start,

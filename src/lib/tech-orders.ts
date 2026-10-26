@@ -10,6 +10,7 @@ export type TechService = {
   months: number;
 };
 export type TechLine = {
+  renewalContact?: { start: string; end: string; at: string };
   id: string;
   serviceId: string;
   name: string;
@@ -133,6 +134,7 @@ export function renewTechOrder(
       const factor = service ? months / service.months : 1;
       return {
         ...old,
+        renewalContact: undefined,
         id: crypto.randomUUID(),
         start,
         end: addTechMonths(start, months),
@@ -151,6 +153,11 @@ export function techLineStatus(line: TechLine, today = todayAlgiers()) {
   return (Date.parse(`${line.end}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000 <= 3
     ? "Expire sous 3 jours"
     : "Actif";
+}
+/** A contact applies only to this subscription period, never to a renewal. */
+export function techContactAt(line: TechLine) {
+  const contact = line.renewalContact;
+  return contact?.start === line.start && contact.end === line.end ? contact.at : undefined;
 }
 export type TechState = "active" | "ending" | "inactive";
 export function techOrderState(order: TechOrder, today = todayAlgiers()): TechState {

@@ -8,17 +8,23 @@ import {
   type MessageGender,
 } from "@/lib/tech-renewal-message";
 import type { TechOrder } from "@/lib/tech-orders";
+import { techContactAt, techLineStatus } from "@/lib/tech-orders";
+import { TechContactBadge } from "./tech-contact-badge";
 
 export function TechRenewalMessage({
   order,
   orders,
   today,
   onClose,
+  onConfirmContact,
+  busy,
 }: {
   order: TechOrder;
   orders: TechOrder[];
   today: string;
   onClose: () => void;
+  onConfirmContact: (ids: string[], contacted: boolean) => Promise<void>;
+  busy: boolean;
 }) {
   const [gender, setGender] = useState<MessageGender>("neutral");
   const [ids, setIds] = useState(() => defaultMessageLines(order, today));
@@ -27,6 +33,9 @@ export function TechRenewalMessage({
   const area = useRef<HTMLTextAreaElement>(null);
   const text = custom ?? buildTechRenewalMessage(order, ids, gender, today);
   const contact = safeTechContactUrl(order.facebookUrl);
+  const expired = order.lines.filter(
+    (line) => ids.includes(line.id) && techLineStatus(line, today) === "Expiré",
+  );
   const update = (action: () => void) => {
     if (
       custom !== undefined &&
@@ -167,6 +176,68 @@ export function TechRenewalMessage({
         collez votre message dans la bonne conversation. Les prix ne sont pas proposés
         automatiquement.
       </p>
+      {!!expired.length && (
+        <div className="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-3">
+          <p className="text-sm font-semibold">Suivi du contact — services expirés sélectionnés</p>
+          {expired.map((line) => (
+            <div key={line.id} className="text-xs">
+              {line.name} <TechContactBadge line={line} />
+            </div>
+          ))}
+          <p className="text-xs text-slate-600">
+            Après avoir envoyé le message vous-même, validez ici. Copier ne confirme pas l’envoi.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={busy || expired.every((line) => !!techContactAt(line))}
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    "Confirmez-vous avoir envoyé le message de renouvellement pour les services expirés sélectionnés ?",
+                  )
+                )
+                  return;
+                try {
+                  await onConfirmContact(
+                    expired.map((line) => line.id),
+                    true,
+                  );
+                  setStatus("Contact confirmé et sauvegardé dans le cloud.");
+                } catch (error) {
+                  setStatus(error instanceof Error ? error.message : String(error));
+                }
+              }}
+            >
+              ✓ Valider : client contacté
+            </Button>
+            {expired.some((line) => techContactAt(line)) && (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      "Annuler la confirmation de contact pour les services expirés sélectionnés ?",
+                    )
+                  )
+                    return;
+                  try {
+                    await onConfirmContact(
+                      expired.map((line) => line.id),
+                      false,
+                    );
+                    setStatus("Confirmation annulée.");
+                  } catch (error) {
+                    setStatus(error instanceof Error ? error.message : String(error));
+                  }
+                }}
+              >
+                Annuler la confirmation
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       {status && (
         <p role="status" className="rounded-xl bg-indigo-50 p-3 text-sm text-indigo-800">
           {status}

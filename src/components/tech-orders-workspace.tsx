@@ -27,6 +27,7 @@ import { TechRenewalMessage } from "./tech-renewal-message";
 import { TechMobileOrderCard } from "./tech-mobile-order-card";
 import { TechFinancePanel } from "./tech-finance-panel";
 import { TechStatusTiles } from "./tech-status-tiles";
+import { TechContactBadge } from "./tech-contact-badge";
 import { emptyTechFinance, type TechFinance } from "@/lib/tech-finance";
 import { formatTechMoney as money } from "@/lib/tech-order-display";
 import {
@@ -46,6 +47,7 @@ import {
   techDatePresets,
   renewTechOrder,
   techLineStatus,
+  techContactAt,
   todayAlgiers,
   techOrderState,
   techOrderLabel,
@@ -543,6 +545,48 @@ export function TechOrdersWorkspace({
       setBusy(false);
     }
   };
+  const confirmRenewalContact = async (ids: string[], contacted: boolean) => {
+    if (!messageOrder || writing.current)
+      throw new Error("Enregistrement en cours. Réessayez ensuite.");
+    if (order || financeDirty)
+      throw new Error(
+        "Fermez ou enregistrez le formulaire en cours avant de confirmer le contact.",
+      );
+    writing.current = true;
+    setBusy(true);
+    const at = new Date().toISOString();
+    try {
+      const data = await cloudJson(`/api/tech-orders/orders/${messageOrder.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...messageOrder,
+          lines: messageOrder.lines.map((line) =>
+            ids.includes(line.id) &&
+            techLineStatus(line, today) === "Expiré" &&
+            !(contacted && techContactAt(line))
+              ? {
+                  ...line,
+                  renewalContact: contacted ? { start: line.start, end: line.end, at } : undefined,
+                }
+              : line,
+          ),
+        }),
+      });
+      setOrders((current) =>
+        current.map((item) => (item.id === data.record.id ? data.record : item)),
+      );
+    } catch (error) {
+      if (error instanceof TechCloudError && error.status === 409)
+        throw new Error(
+          "Cette vente a changé dans le cloud. Fermez le message, actualisez le registre puis réessayez. Aucune confirmation enregistrée.",
+        );
+      throw error;
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  };
   const saveOrder = async (next = false) => {
     if (!order || writing.current) return;
     if (pendingLine) {
@@ -787,6 +831,8 @@ export function TechOrdersWorkspace({
                   <TechRenewalMessage
                     key={messageOrder.id}
                     order={messageOrder}
+                    onConfirmContact={confirmRenewalContact}
+                    busy={busy}
                     orders={orders}
                     today={today}
                     onClose={() => setMessageOrderId(undefined)}
@@ -1552,6 +1598,9 @@ export function TechOrdersWorkspace({
                 />
               )}
               menu={mobileMenu(item)}
+              onContact={() =>
+                openRenewalMessage(item, document.activeElement as HTMLElement | null)
+              }
             />
           ))}
           {!filtered.length && (
@@ -1606,6 +1655,22 @@ export function TechOrdersWorkspace({
                     </td>
                     <td className="px-4 py-4">
                       <StateBadge state={techOrderState(item, today)} />
+                      {item.lines
+                        .filter((line) => techLineStatus(line, today) === "Expiré")
+                        .map((line) => (
+                          <div key={line.id}>
+                            <span className="sr-only">{line.name} : </span>
+                            <TechContactBadge
+                              line={line}
+                              onClick={() =>
+                                openRenewalMessage(
+                                  item,
+                                  document.activeElement as HTMLElement | null,
+                                )
+                              }
+                            />
+                          </div>
+                        ))}
                     </td>
                     <td className="space-y-2 px-4 py-4">
                       {item.lines.map((line) => (

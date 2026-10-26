@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TechContactBadge } from "./tech-contact-badge";
 import { orderTotals, techLineStatus, type TechOrder } from "@/lib/tech-orders";
 import { formatTechMoney as money, formatTechDeadline } from "@/lib/tech-order-display";
 
@@ -7,11 +8,13 @@ export function TechMobileOrderCard({
   today,
   renderLogo,
   menu,
+  onContact,
 }: {
   order: TechOrder;
   today: string;
   renderLogo: (serviceId: string) => ReactNode;
   menu: ReactNode;
+  onContact?: () => void;
 }) {
   const value = orderTotals(order);
   return (
@@ -51,6 +54,7 @@ export function TechMobileOrderCard({
                   >
                     {active ? "Actif" : ending ? "Expire ≤ 3 j" : upcoming ? "À venir" : "Inactif"}
                   </span>
+                  {status === "Expiré" && <TechContactBadge line={line} onClick={onContact} />}
                 </div>
               </div>
             );

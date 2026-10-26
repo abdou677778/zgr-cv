@@ -57,6 +57,35 @@ class Bucket {
     };
   }
 }
+test("Renewal contact metadata persists, accepts legacy lines and rejects invalid timestamps", () => {
+  const renewalContact = { start: "2026-09-01", end: "2026-10-01", at: "2026-10-01T10:00:00.000Z" };
+  const value = { ...order, lines: [{ ...order.lines[0], renewalContact }] };
+  assert.deepEqual(
+    validateTechRecord("orders", value, order.id).lines[0].renewalContact,
+    renewalContact,
+  );
+  assert.equal(validateTechRecord("orders", order, order.id).lines[0].renewalContact, undefined);
+  for (const contact of [
+    null,
+    { ...renewalContact, at: "wrong" },
+    { ...renewalContact, at: "2099-01-01T00:00:00.000Z" },
+    { ...renewalContact, start: "2026-02-30" },
+    { ...renewalContact, end: renewalContact.start },
+  ])
+    assert.throws(() =>
+      validateTechRecord(
+        "orders",
+        { ...value, lines: [{ ...value.lines[0], renewalContact: contact }] },
+        order.id,
+      ),
+    );
+  const removed = validateTechRecord(
+    "orders",
+    { ...value, lines: [{ ...value.lines[0], renewalContact: undefined }] },
+    order.id,
+  );
+  assert.equal(removed.lines[0].renewalContact, undefined);
+});
 const actor = { role: "admin", username: "test" };
 const request = (path, body) =>
   new Request(
@@ -64,6 +93,38 @@ const request = (path, body) =>
     body ? { method: "PUT", body: JSON.stringify(body) } : {},
   );
 const respond = (body, status) => Response.json(body, { status });
+
+test("Contact confirmation survives cloud reload, rejects stale writes, and can be undone", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  await handleTechOrders(request("/services/test-service", service), env, actor, respond);
+  const renewalContact = {
+    start: order.lines[0].start,
+    end: order.lines[0].end,
+    at: "2026-10-01T10:00:00.000Z",
+  };
+  const input = { ...order, lines: [{ ...order.lines[0], renewalContact }] };
+  assert.equal(
+    (await handleTechOrders(request("/orders/test-order", input), env, actor, respond)).status,
+    200,
+  );
+  const read = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.deepEqual(read.orders[0].lines[0].renewalContact, renewalContact);
+  assert.equal(
+    (await handleTechOrders(request("/orders/test-order", input), env, actor, respond)).status,
+    409,
+  );
+  const undo = {
+    ...read.orders[0],
+    lines: [{ ...read.orders[0].lines[0], renewalContact: undefined }],
+  };
+  assert.equal(
+    (await handleTechOrders(request("/orders/test-order", undo), env, actor, respond)).status,
+    200,
+  );
+  const fresh = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.equal(fresh.orders[0].lines[0].renewalContact, undefined);
+  assert.ok([...env.CLIENTS_BUCKET.map.keys()].some((key) => key.includes("history/orders/")));
+});
 test("Tech Orders denies anonymous and non-admin access, including read access", async () => {
   const env = { CLIENTS_BUCKET: new Bucket() };
   assert.equal((await handleTechOrders(request(""), env, { role: "editor" }, respond)).status, 403);

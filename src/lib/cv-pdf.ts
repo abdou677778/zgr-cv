@@ -26,12 +26,15 @@ import {
 import {
   CV_TEMPLATES,
   isArabicCvTemplate,
+  isCvProLayoutTemplate,
   normalizeCvTemplateForLanguage,
   type CvTemplateId,
 } from "./document-templates";
 import { toPdfRtlVisualText } from "./arabic-pdf-text";
 import { circularProfilePhotoDataUrlForPdf, profilePhotoDataUrlForPdf } from "./profile-photo";
 import { buildCvProPdf } from "./cv-pro-pdf";
+import {buildCvProArabicV3Pdf} from './cv-pro-ar-v3-pdf';
+import {buildCvProInternationalPdf} from './cv-pro-international-pdf';
 import { prepareSoftwareIconsForPdf } from "./software-icons-pdf";
 import { prepareOrganizationLogos } from "./organization-logos";
 import pdfMake from "pdfmake/build/pdfmake";
@@ -115,7 +118,7 @@ function appendSupplementalSections(
   };
   const softwareItems = cv.logiciels.map((item) => item.label.trim()).filter(Boolean);
   const sections = [
-    ...(templateId !== "cv-pro" && softwareItems.length
+    ...(!isCvProLayoutTemplate(templateId) && softwareItems.length
       ? [{ title: softwareTitles[language], items: softwareItems }]
       : []),
     ...customSections,
@@ -274,7 +277,7 @@ function appendSupplementalSections(
   }
 
   // CV PRO renders custom sections inside its native two-column layout.
-  if (templateId === "cv-pro") return document;
+  if (isCvProLayoutTemplate(templateId)) return document;
 
   const rtl = language === "ar";
   const additions: Content[] = sections.flatMap((section) => [
@@ -518,7 +521,9 @@ async function ensureFontFamily(family: keyof typeof CV_FONTS) {
 }
 
 async function ensureFontsForDocument(templateId: CvTemplateId, language: DocumentLanguage) {
-  const family = isArabicCvTemplate(templateId)
+  const family = isCvProLayoutTemplate(templateId)
+    ? documentFont(language)
+    : isArabicCvTemplate(templateId)
     ? "ArialOfficial"
     : templateId === "canadian-v4" && language !== "zh" && language !== "ar"
       ? "Cambria"
@@ -5027,13 +5032,13 @@ export async function createCvPdfBlob(
         photo: {
           ...cv.photo,
           dataUrl:
-            normalizedTemplateId === "cv-pro"
+            isCvProLayoutTemplate(normalizedTemplateId)
               ? await circularProfilePhotoDataUrlForPdf(cv.photo)
               : await profilePhotoDataUrlForPdf(cv.photo),
         },
       }
     : cv;
-  if (normalizedTemplateId === "cv-pro") {
+  if (isCvProLayoutTemplate(normalizedTemplateId)) {
     pdfCv = { ...pdfCv, logiciels: await prepareSoftwareIconsForPdf(pdfCv.logiciels) };
   }
   pdfCv = await prepareOrganizationLogos(pdfCv);
@@ -5042,6 +5047,10 @@ export async function createCvPdfBlob(
       ? buildCvPdfArabicProV5(pdfCv, language)
       : normalizedTemplateId === "arabic-pro-v2"
         ? buildCvPdfArabicProV2(pdfCv)
+        : normalizedTemplateId === 'cv-pro-ar-v3' || (normalizedTemplateId==='cv-pro' && language==='ar')
+          ? buildCvProArabicV3Pdf(pdfCv)
+          : normalizedTemplateId === 'cv-pro-international'
+            ? buildCvProInternationalPdf(pdfCv,language)
         : normalizedTemplateId === "cv-pro"
           ? buildCvProPdf(pdfCv, language)
           : normalizedTemplateId === "ats-a4"

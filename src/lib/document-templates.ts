@@ -1,3 +1,4 @@
+import { DOCUMENT_LANGUAGES } from "./document-language";
 export type CvTemplateId =
   | "canadian-v1"
   | "canadian-v2"
@@ -5,6 +6,8 @@ export type CvTemplateId =
   | "canadian-v4"
   | "ats-a4"
   | "cv-pro"
+  | "cv-pro-ar-v3"
+  | "cv-pro-international"
   | "arabic-pro-v1"
   | "arabic-pro-v2";
 
@@ -14,28 +17,46 @@ export const CV_TEMPLATES: ReadonlyArray<{ id: CvTemplateId; name: string }> = [
   { id: "canadian-v3", name: "CV Canadien V3" },
   { id: "canadian-v4", name: "CV Canadien V4" },
   { id: "ats-a4", name: "CV ATS Format A4" },
-  { id: "cv-pro", name: "CV PRO" },
+  { id: "cv-pro", name: "CV PRO (historique)" },
+  { id: "cv-pro-international", name: "CV PRO International" },
   { id: "arabic-pro-v1", name: "CV Pro Arabe V1" },
   { id: "arabic-pro-v2", name: "CV PRO Arabe V2" },
+  { id: "cv-pro-ar-v3", name: "CV PRO Arabe V3" },
 ];
 
-export const isArabicCvTemplate = (templateId: string) => /^arabic-pro-v[1-5]$/.test(templateId);
+export const isArabicCvTemplate = (templateId: string) =>
+  templateId === "cv-pro-ar-v3" || /^arabic-pro-v[1-5]$/.test(templateId);
+export const isCvProLayoutTemplate = (templateId: string) =>
+  ["cv-pro", "cv-pro-ar-v3", "cv-pro-international"].includes(templateId);
+export function getTemplateDocumentLanguages(templateId: string) {
+  return DOCUMENT_LANGUAGES.filter((language) =>
+    isArabicCvTemplate(templateId)
+      ? language.id === "ar"
+      : templateId === "cv-pro-international"
+        ? language.id !== "ar"
+        : true,
+  );
+}
 
 /** Arabic designs are intentionally available only with Arabic source data. */
 export function getCvTemplatesForLanguage(language: string) {
   return language === "ar"
-    ? CV_TEMPLATES
+    ? CV_TEMPLATES.filter((template) => template.id !== "cv-pro-international")
     : CV_TEMPLATES.filter((template) => !isArabicCvTemplate(template.id));
 }
 
 /** Keeps the active Arabic designs and routes removed legacy variants to V1. */
 export function normalizeCvTemplateForLanguage(templateId: string, language: string): CvTemplateId {
   const migrated =
-    templateId === "arabic-pro-v1" || templateId === "arabic-pro-v2"
-      ? templateId
-      : isArabicCvTemplate(templateId)
-        ? "arabic-pro-v1"
-        : templateId;
+    templateId === "cv-pro-ar-v3" || templateId === "cv-pro-international"
+      ? language === "ar"
+        ? "cv-pro-ar-v3"
+        : "cv-pro-international"
+      : templateId === "arabic-pro-v1" || templateId === "arabic-pro-v2"
+        ? templateId
+        : isArabicCvTemplate(templateId)
+          ? "arabic-pro-v1"
+          : templateId;
   const available = getCvTemplatesForLanguage(language);
   return (
     available.some((template) => template.id === migrated) ? migrated : "canadian-v1"

@@ -6,6 +6,7 @@ import {
   OPPORTUNITY_PLAN_TEMPLATE_ID,
   getCvTemplatesForLanguage,
   isArabicCvTemplate,
+  getTemplateDocumentLanguages,
   type CoverLetterTemplateId,
   type CvTemplateId,
   type PdfTemplateId,
@@ -115,9 +116,7 @@ export async function createCurrentTemplateMultilingualZip(
 ) {
   const { strToU8, zipSync } = await import("fflate");
   const files: Record<string, Uint8Array> = {};
-  const languages = isArabicCvTemplate(templateId)
-    ? DOCUMENT_LANGUAGES.filter((language) => language.id === "ar")
-    : DOCUMENT_LANGUAGES;
+  const languages = getTemplateDocumentLanguages(templateId);
   const total = languages.length;
   for (const [index, language] of languages.entries()) {
     onProgress?.({ completed: index, total, label: language.name });
@@ -135,7 +134,7 @@ export async function createCurrentTemplateMultilingualZip(
     files[path] = new Uint8Array(await blob.arrayBuffer());
   }
   files["MANIFEST.txt"] = strToU8(
-    `ZGR CV - CURRENT TEMPLATE - ${isArabicCvTemplate(templateId) ? "ARABIC ONLY" : "7 LANGUAGES"}\n${Object.keys(files).join("\n")}\n`,
+    `ZGR CV - CURRENT TEMPLATE - ${isArabicCvTemplate(templateId) ? "ARABIC ONLY" : `${languages.length} LANGUAGES`}\n${Object.keys(files).join("\n")}\n`,
   );
   onProgress?.({ completed: total, total, label: "ZIP" });
   const archive = zipSync(files, { level: 6 });

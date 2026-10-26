@@ -95,7 +95,7 @@ import {
   type DocumentKind,
   type PdfTemplateId,
 } from "@/lib/document-catalog";
-import { isArabicCvTemplate, normalizeCvTemplateForLanguage } from "@/lib/document-templates";
+import { isArabicCvTemplate, isCvProLayoutTemplate, getTemplateDocumentLanguages, normalizeCvTemplateForLanguage } from "@/lib/document-templates";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -393,7 +393,7 @@ const nativePdfSectionOrder = (
       "volunteering", "certifications", "references", "interests", "additional",
     ],
   };
-  const native = standard[templateId] || Array.from(DEFAULT_CV_SECTION_ORDER);
+  const native = standard[isCvProLayoutTemplate(templateId)?'cv-pro':templateId] || Array.from(DEFAULT_CV_SECTION_ORDER);
   return Array.from(
     new Set([
       ...native,
@@ -978,10 +978,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const currentTemplateIsArabicOnly = documentKind === "cv" && isArabicCvTemplate(templateId);
   const currentArchiveLabel = currentTemplateIsArabicOnly
     ? "Modèle arabe actuel · AR (.zip)"
-    : ui.downloadCurrent;
+    : templateId==='cv-pro-international'?'CV PRO International · 6 langues (.zip)':ui.downloadCurrent;
   const currentArchiveHint = currentTemplateIsArabicOnly
     ? "Export arabe uniquement"
-    : ui.downloadCurrentHint;
+    : templateId==='cv-pro-international'?'FR, EN, ES, DE, IT et ZH — sans modifier le modèle arabe':ui.downloadCurrentHint;
   const form = FORM_COPY.fr;
   const outputCv = useMemo(() => applyCvVisibility(cv, hiddenElements), [cv, hiddenElements]);
   const outputCvByLanguage = useMemo(
@@ -2427,8 +2427,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           ? "Conseils"
           : templateId === "ats-a4"
             ? "CV_ATS"
-            : templateId === "cv-pro"
-              ? "CV_PRO"
+            : isCvProLayoutTemplate(templateId)
+              ? templateId==='cv-pro-ar-v3'?'CV_PRO_Arabe_V3':templateId==='cv-pro-international'?'CV_PRO_International':'CV_PRO'
               : String(templateId).startsWith("arabic-pro")
                 ? "CV_Arabe"
                 : "CV_Canadien";
@@ -2550,7 +2550,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setPackLoading(true);
     setPackProgress({
       completed: 0,
-      total: currentTemplateIsArabicOnly ? 1 : DOCUMENT_LANGUAGES.length,
+      total: getTemplateDocumentLanguages(templateId).length,
     });
     setPackMessage(null);
     try {
@@ -2570,7 +2570,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         ok: true,
         text: currentTemplateIsArabicOnly
           ? "Modèle arabe téléchargé en version AR."
-          : ui.currentPackReady,
+          : templateId==='cv-pro-international'?'CV PRO International téléchargé dans les 6 langues étrangères.':ui.currentPackReady,
       });
     } catch (error) {
       console.error(error);

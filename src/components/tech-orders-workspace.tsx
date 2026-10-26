@@ -4,7 +4,6 @@ import {
   Plus,
   RefreshCw,
   Settings2,
-  ShoppingCart,
   MoreVertical,
   Pencil,
   MessageSquare,
@@ -30,6 +29,7 @@ import { TechStatusTiles } from "./tech-status-tiles";
 import { TechOrderFilters } from "./tech-order-filters";
 import { TechOrderNote, TechOrderClientLink } from "./tech-order-details";
 import { TechSaleLineFields } from "./tech-sale-line-fields";
+import { TechBrandLogo } from "./tech-brand-logo";
 import { TechContactBadge } from "./tech-contact-badge";
 import { emptyTechFinance, type TechFinance } from "@/lib/tech-finance";
 import { formatTechMoney as money } from "@/lib/tech-order-display";
@@ -675,8 +675,8 @@ export function TechOrdersWorkspace({
       }}
       title="ZGR Tech Orders"
       description="Ventes et abonnements. Espace privé indépendant des dossiers CV."
-      icon={<ShoppingCart className="h-5 w-5" />}
-      iconClassName="bg-indigo-100 text-indigo-700"
+      icon={<TechBrandLogo />}
+      iconClassName="rounded-none bg-transparent p-0"
       actions={
         <div className="flex flex-wrap gap-2">
           <Button

@@ -54,7 +54,8 @@ export function TechRenewalMessage({
         <div>
           <h2 className="text-lg font-bold">Message de renouvellement</h2>
           <p className="text-sm text-slate-500">
-            Client : {order.client} · TECH-{order.id.slice(0, 8).toUpperCase()}
+            Client : {order.client}
+            <span className="hidden sm:inline"> · TECH-{order.id.slice(0, 8).toUpperCase()}</span>
           </p>
         </div>
         <Button variant="outline" onClick={onClose}>

@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Plus, RefreshCw, Settings2, ShoppingCart } from "lucide-react";
+import {
+  Download,
+  Plus,
+  RefreshCw,
+  Settings2,
+  ShoppingCart,
+  MoreVertical,
+  Pencil,
+  MessageSquare,
+  ExternalLink,
+} from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { FullPageWorkspace } from "./full-page-workspace";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -11,6 +22,15 @@ import { normalizedTechLogo } from "@/lib/tech-logo-upload";
 import { techOrderError, techServiceError } from "@/lib/tech-orders-validation";
 import { TechSearchSelect } from "./tech-search-select";
 import { TechRenewalMessage } from "./tech-renewal-message";
+import { TechMobileOrderCard } from "./tech-mobile-order-card";
+import { formatTechMoney as money } from "@/lib/tech-order-display";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "./ui/dropdown-menu";
 import {
   addTechMonths,
   lineTotals,
@@ -35,12 +55,6 @@ import {
   type TechService,
 } from "@/lib/tech-orders";
 
-const money = (n: number) =>
-  Number.isFinite(n)
-    ? new Intl.NumberFormat("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
-        n,
-      ) + " DA"
-    : "À saisir";
 const numberValue = (n: number) => (Number.isFinite(n) ? n : "");
 const parseNumber = (value: string) => (value.trim() === "" ? NaN : Number(value));
 const blankService = (): TechService => ({
@@ -199,12 +213,13 @@ export function TechOrdersWorkspace({
   const [catalogQuery, setCatalogQuery] = useState("");
   const [messageOrderId, setMessageOrderId] = useState<string>();
   const messageOrder = orders.find((item) => item.id === messageOrderId);
-  useEffect(() => {
-    if (messageOrderId)
-      document
-        .getElementById("tech-renewal-message")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [messageOrderId]);
+  const messageReturnFocus = useRef<HTMLElement | null>(null);
+  const messageOpening = useRef(false);
+  const openRenewalMessage = (item: TechOrder, trigger: HTMLElement | null) => {
+    messageReturnFocus.current = trigger;
+    messageOpening.current = true;
+    setMessageOrderId(item.id);
+  };
   const hasDraft = !!(order || service);
   useEffect(() => {
     if (!hasDraft) return;
@@ -367,12 +382,101 @@ export function TechOrdersWorkspace({
         size="sm"
         variant="outline"
         disabled={busy || !!order || !!service || !!renewSource}
-        onClick={() => setMessageOrderId(item.id)}
+        onClick={(event) => openRenewalMessage(item, event.currentTarget)}
       >
         Message de renouvellement
       </Button>
     </div>
   );
+  const mobileMenu = (item: TechOrder) => {
+    const disabled = busy || !!order || !!service || !!renewSource;
+    const triggerId = `tech-actions-${item.id}`;
+    return (
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            id={triggerId}
+            size="icon"
+            variant="ghost"
+            disabled={busy}
+            className="h-10 w-10 text-indigo-700"
+            aria-label={`Actions pour ${item.client}`}
+          >
+            <MoreVertical className="h-5 w-5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="z-[160] w-64 rounded-xl p-1.5 shadow-xl"
+          collisionPadding={12}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (!messageOpening.current)
+              document.getElementById(triggerId)?.focus({ preventScroll: true });
+          }}
+        >
+          <DropdownMenuItem
+            disabled={disabled}
+            className="min-h-11 rounded-lg"
+            onSelect={() => {
+              setOrder(structuredClone(item));
+              setMessage("");
+              setSelected("");
+              setPendingLine(undefined);
+            }}
+          >
+            <Pencil />
+            Modifier
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={disabled}
+            className="min-h-11 rounded-lg"
+            onSelect={() => startRenewal(item)}
+          >
+            <RefreshCw />
+            Renouveler
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={disabled}
+            className="min-h-11 rounded-lg"
+            onSelect={() => startSameClient(item)}
+          >
+            <Plus />
+            Autre service / vente
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={disabled}
+            className="min-h-11 rounded-lg"
+            onSelect={() => openRenewalMessage(item, document.getElementById(triggerId))}
+          >
+            <MessageSquare />
+            Message de renouvellement
+          </DropdownMenuItem>
+          {(item.facebookUrl || item.lines.some((line) => line.invoiceUrl)) && (
+            <DropdownMenuSeparator />
+          )}
+          {item.facebookUrl && (
+            <DropdownMenuItem asChild className="min-h-11 rounded-lg">
+              <a href={item.facebookUrl} target="_blank" rel="noreferrer noopener">
+                <ExternalLink />
+                Profil du client
+              </a>
+            </DropdownMenuItem>
+          )}
+          {item.lines
+            .filter((line) => line.invoiceUrl)
+            .map((line) => (
+              <DropdownMenuItem key={line.id} asChild className="min-h-11 rounded-lg">
+                <a href={line.invoiceUrl} target="_blank" rel="noreferrer noopener">
+                  <ExternalLink />
+                  <span className="min-w-0 truncate">Facture — {line.name}</span>
+                </a>
+              </DropdownMenuItem>
+            ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
   const totals = techOrdersTotals(filtered);
   const allTotals = techOrdersTotals(orders);
   const visible = filtered.slice(0, visibleCount);
@@ -575,15 +679,51 @@ export function TechOrdersWorkspace({
       bodyClassName="overflow-y-auto"
     >
       <div className="mx-auto w-full max-w-[1800px] space-y-5 p-5 sm:p-8">
-        {messageOrder && (
-          <TechRenewalMessage
-            key={messageOrder.id}
-            order={messageOrder}
-            orders={orders}
-            today={today}
-            onClose={() => setMessageOrderId(undefined)}
-          />
-        )}
+        <DialogPrimitive.Root
+          open={!!messageOrder}
+          onOpenChange={(open) => {
+            if (!open) setMessageOrderId(undefined);
+          }}
+        >
+          {messageOrder && (
+            <DialogPrimitive.Portal>
+              <DialogPrimitive.Overlay className="fixed inset-0 z-[150] bg-slate-950/50" />
+              <DialogPrimitive.Content
+                className="fixed left-1/2 top-1/2 z-[151] flex max-h-[90dvh] w-[calc(100vw_-_16px)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none"
+                onEscapeKeyDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setMessageOrderId(undefined);
+                }}
+                onCloseAutoFocus={(event) => {
+                  event.preventDefault();
+                  messageOpening.current = false;
+                  messageReturnFocus.current?.focus({ preventScroll: true });
+                }}
+              >
+                <DialogPrimitive.Title className="sr-only">
+                  Message de renouvellement pour {messageOrder.client}
+                </DialogPrimitive.Title>
+                <DialogPrimitive.Description className="sr-only">
+                  Préparez et copiez votre message, puis fermez cette fenêtre pour retrouver votre
+                  position dans la liste.
+                </DialogPrimitive.Description>
+                <div className="min-h-0 overflow-y-auto overscroll-contain">
+                  <TechRenewalMessage
+                    key={messageOrder.id}
+                    order={messageOrder}
+                    orders={orders}
+                    today={today}
+                    onClose={() => setMessageOrderId(undefined)}
+                  />
+                </div>
+                <div className="flex shrink-0 justify-end border-t bg-white px-4 py-3">
+                  <Button onClick={() => setMessageOrderId(undefined)}>Retour à la liste</Button>
+                </div>
+              </DialogPrimitive.Content>
+            </DialogPrimitive.Portal>
+          )}
+        </DialogPrimitive.Root>
         <div className="grid gap-3 sm:grid-cols-3" aria-label="Accès rapide par état">
           {(["active", "ending", "inactive"] as TechState[]).map((state) => (
             <button
@@ -1320,79 +1460,20 @@ export function TechOrdersWorkspace({
           </p>
         </section>
         <div className="space-y-3 md:hidden">
-          {visible.map((item) => {
-            const value = orderTotals(item);
-            return (
-              <article key={item.id} className="space-y-3 rounded-xl border bg-white p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="min-w-0 break-words font-bold">{item.client}</h3>
-                  <StateBadge state={techOrderState(item, today)} />
-                </div>
-                <p className="break-all text-xs text-slate-500">
-                  {techOrderLabel(item)}
-                  {item.renewalOf ? " · Renouvellement" : ""}
-                </p>
-                {item.facebookUrl && (
-                  <a
-                    className="text-xs text-blue-700 underline"
-                    href={item.facebookUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Facebook
-                  </a>
-                )}
-                <div className="space-y-2">
-                  {item.lines.map((line) => (
-                    <div key={line.id} className="flex gap-2">
-                      <Logo
-                        service={services.find((s) => s.id === line.serviceId)}
-                        override={logos[line.serviceId]}
-                      />
-                      <div className="min-w-0 text-sm">
-                        <p className="break-words font-semibold">{line.name}</p>
-                        <small className="text-slate-500">
-                          {line.start} → {line.end}
-                        </small>
-                        <p className="text-xs">{techLineStatus(line, today)}</p>
-                        {line.invoiceUrl && (
-                          <a
-                            className="text-xs text-blue-700 underline"
-                            href={line.invoiceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Facture fournisseur
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <dl className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <dt className="text-slate-500">Coût</dt>
-                    <dd className="font-semibold">{money(value.cost)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-slate-500">Total</dt>
-                    <dd className="font-semibold">{money(value.sale)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-slate-500">Marge</dt>
-                    <dd
-                      className={
-                        value.margin < 0 ? "font-bold text-red-700" : "font-bold text-emerald-700"
-                      }
-                    >
-                      {money(value.margin)}
-                    </dd>
-                  </div>
-                </dl>
-                {actionsFor(item)}
-              </article>
-            );
-          })}
+          {visible.map((item) => (
+            <TechMobileOrderCard
+              key={item.id}
+              order={item}
+              today={today}
+              renderLogo={(serviceId) => (
+                <Logo
+                  service={services.find((s) => s.id === serviceId)}
+                  override={logos[serviceId]}
+                />
+              )}
+              menu={mobileMenu(item)}
+            />
+          ))}
           {!filtered.length && (
             <p className="rounded-xl border bg-white p-6 text-center text-sm text-slate-500">
               {busy ? "Chargement…" : "Aucune vente pour ces filtres."}

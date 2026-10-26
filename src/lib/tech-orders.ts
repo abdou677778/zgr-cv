@@ -89,13 +89,17 @@ export function addTechMonths(value: string, months: number) {
   date.setUTCDate(Math.min(day, end));
   return date.toISOString().slice(0, 10);
 }
-export function newTechLine(service: TechService, start = todayAlgiers()): TechLine {
+export function newTechLine(
+  service: TechService,
+  start = todayAlgiers(),
+  months = service.months,
+): TechLine {
   return {
     id: crypto.randomUUID(),
     serviceId: service.id,
     name: service.name,
     start,
-    end: addTechMonths(start, service.months),
+    end: addTechMonths(start, months),
     priceUsd: service.priceUsd,
     rate: service.rate,
     saleDzd: service.saleDzd,

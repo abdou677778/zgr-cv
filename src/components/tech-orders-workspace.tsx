@@ -29,6 +29,7 @@ import { TechFinancePanel } from "./tech-finance-panel";
 import { TechStatusTiles } from "./tech-status-tiles";
 import { TechOrderFilters } from "./tech-order-filters";
 import { TechOrderNote, TechOrderClientLink } from "./tech-order-details";
+import { TechSaleLineFields } from "./tech-sale-line-fields";
 import { TechContactBadge } from "./tech-contact-badge";
 import { emptyTechFinance, type TechFinance } from "@/lib/tech-finance";
 import { formatTechMoney as money } from "@/lib/tech-order-display";
@@ -136,15 +137,22 @@ function Amount({
   label,
   value,
   onChange,
+  highlight = false,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  highlight?: boolean;
 }) {
   return (
     <Field label={label}>
       <Input
         type="number"
+        className={
+          highlight
+            ? "border-emerald-300 bg-emerald-50 font-bold text-emerald-900 focus-visible:ring-emerald-400"
+            : undefined
+        }
         min="0"
         step="0.01"
         max="100000000"
@@ -1076,13 +1084,13 @@ export function TechOrdersWorkspace({
         {order && (
           <form
             id="tech-order-editor"
-            className="space-y-4 rounded-xl border border-indigo-200 bg-white p-4"
+            className="space-y-3 rounded-xl border border-indigo-200 bg-white p-3 sm:p-4"
             onSubmit={(e) => {
               e.preventDefault();
               void saveOrder();
             }}
           >
-            <fieldset disabled={busy} className="min-w-0 space-y-4">
+            <fieldset disabled={busy} className="min-w-0 space-y-3">
               <h2 className="font-bold">
                 {order.revision
                   ? "Modifier la vente"
@@ -1154,7 +1162,7 @@ export function TechOrdersWorkspace({
                     onChange={(id) => {
                       setSelected(id);
                       const service = services.find((s) => s.id === id);
-                      setPendingLine(service ? newTechLine(service) : undefined);
+                      setPendingLine(service ? newTechLine(service, today, 1) : undefined);
                     }}
                     placeholder="Rechercher et choisir un service…"
                   />
@@ -1198,7 +1206,7 @@ export function TechOrdersWorkspace({
               </div>
               {pendingLine && (
                 <div
-                  className="flex flex-wrap items-center gap-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3"
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-2"
                   aria-label="Aperçu du service sélectionné"
                 >
                   <Logo
@@ -1213,16 +1221,14 @@ export function TechOrdersWorkspace({
                     </small>
                   </div>
                   <Amount
-                    label="Prix de vente de ce service (DA) — modifiable"
+                    label="Prix de vente (DA)"
+                    highlight
                     value={pendingLine.saleDzd}
                     onChange={(value) => setPendingLine({ ...pendingLine, saleDzd: value })}
                   />
                   <p className="text-sm">
                     Coût : {money(lineTotals(pendingLine).cost)} · Marge :{" "}
                     <strong>{money(lineTotals(pendingLine).margin)}</strong>
-                    <small className="block text-slate-500">
-                      Ce prix s’applique uniquement à cette vente après « Ajouter à la vente ».
-                    </small>
                   </p>
                   <button
                     type="button"
@@ -1250,80 +1256,11 @@ export function TechOrdersWorkspace({
                       {line.name}
                     </span>
                   </legend>
-                  <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                    <Field label="Début inclus">
-                      <Input
-                        type="date"
-                        required
-                        value={line.start}
-                        onChange={(e) => mutateLine(line.id, { start: e.target.value })}
-                      />
-                    </Field>
-                    <Field label="Fin / renouveler le (exclue)">
-                      <Input
-                        type="date"
-                        required
-                        min={line.start}
-                        value={line.end}
-                        onChange={(e) => mutateLine(line.id, { end: e.target.value })}
-                      />
-                    </Field>
-                    <Field label="Ajuster la fin par période">
-                      <select
-                        className="h-9 min-w-0 max-w-full rounded border bg-white px-2"
-                        defaultValue=""
-                        onChange={(e) => {
-                          if (e.target.value)
-                            mutateLine(line.id, {
-                              end: addTechMonths(line.start, Number(e.target.value)),
-                            });
-                          e.target.value = "";
-                        }}
-                      >
-                        <option value="">Date personnalisée</option>
-                        {[1, 3, 6, 12].map((m) => (
-                          <option key={m} value={m}>
-                            {m} mois depuis le début
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Amount
-                      label="Coût fournisseur USD / période"
-                      value={line.priceUsd}
-                      onChange={(value) => mutateLine(line.id, { priceUsd: value })}
-                    />
-                    <Amount
-                      label="Taux DA / USD"
-                      value={line.rate}
-                      onChange={(value) => mutateLine(line.id, { rate: value })}
-                    />
-                    <Amount
-                      label="Prix vente DA / période"
-                      value={line.saleDzd}
-                      onChange={(value) => mutateLine(line.id, { saleDzd: value })}
-                    />
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Changer les dates ne change pas les montants : saisissez les prix réels pour
-                    toute la période. La date de fin est le jour du renouvellement.
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Référence facture réelle du fournisseur">
-                      <Input
-                        maxLength={180}
-                        value={line.invoiceRef}
-                        onChange={(e) => mutateLine(line.id, { invoiceRef: e.target.value })}
-                      />
-                    </Field>
-                    <Field label="Lien HTTPS vers la facture fournisseur (optionnel)">
-                      <Input
-                        type="url"
-                        value={line.invoiceUrl}
-                        onChange={(e) => mutateLine(line.id, { invoiceUrl: e.target.value })}
-                      />
-                    </Field>
-                  </div>
+                  <TechSaleLineFields
+                    line={line}
+                    disabled={busy}
+                    onChange={(patch) => mutateLine(line.id, patch)}
+                  />
                   <div className="flex flex-wrap justify-between gap-2 text-sm">
                     <span>
                       Coût : {money(lineTotals(line).cost)} · Marge :{" "}

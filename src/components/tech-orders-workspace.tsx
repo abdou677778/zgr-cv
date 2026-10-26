@@ -28,6 +28,7 @@ import { TechMobileOrderCard } from "./tech-mobile-order-card";
 import { TechFinancePanel } from "./tech-finance-panel";
 import { TechStatusTiles } from "./tech-status-tiles";
 import { TechOrderFilters } from "./tech-order-filters";
+import { TechOrderNote, TechOrderClientLink } from "./tech-order-details";
 import { TechContactBadge } from "./tech-contact-badge";
 import { emptyTechFinance, type TechFinance } from "@/lib/tech-finance";
 import { formatTechMoney as money } from "@/lib/tech-order-display";
@@ -362,62 +363,22 @@ export function TechOrdersWorkspace({
       return;
     setService(next);
   };
-  const actionsFor = (item: TechOrder) => (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy || !!order || !!renewSource || financeDirty}
-        onClick={() => {
-          setOrder(structuredClone(item));
-          setMessage("");
-          setSelected("");
-          setPendingLine(undefined);
-        }}
-      >
-        Modifier
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy || !!order || !!renewSource || financeDirty}
-        onClick={() => startRenewal(item)}
-      >
-        Renouveler
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy || !!order || !!renewSource || financeDirty}
-        onClick={() => startSameClient(item)}
-      >
-        Autre service / vente
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy || !!order || !!service || !!renewSource || financeDirty}
-        onClick={(event) => openRenewalMessage(item, event.currentTarget)}
-      >
-        Message de renouvellement
-      </Button>
-    </div>
-  );
-  const mobileMenu = (item: TechOrder) => {
+  const orderMenu = (item: TechOrder, surface: "mobile" | "desktop") => {
     const disabled = busy || !!order || !!service || !!renewSource || financeDirty;
-    const triggerId = `tech-actions-${item.id}`;
+    const triggerId = `tech-actions-${surface}-${item.id}`;
     return (
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
             id={triggerId}
-            size="icon"
-            variant="ghost"
+            size={surface === "mobile" ? "icon" : "sm"}
+            variant={surface === "mobile" ? "ghost" : "outline"}
             disabled={busy}
-            className="h-10 w-10 text-indigo-700"
+            className={surface === "mobile" ? "h-10 w-10 text-indigo-700" : "gap-1 text-indigo-700"}
             aria-label={`Actions pour ${item.client}`}
           >
             <MoreVertical className="h-5 w-5" />
+            {surface === "desktop" && <span>Actions</span>}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -1465,7 +1426,7 @@ export function TechOrdersWorkspace({
                   override={logos[serviceId]}
                 />
               )}
-              menu={mobileMenu(item)}
+              menu={orderMenu(item, "mobile")}
               onContact={() =>
                 openRenewalMessage(item, document.activeElement as HTMLElement | null)
               }
@@ -1489,6 +1450,7 @@ export function TechOrdersWorkspace({
                   "Coût DA",
                   "Total DA",
                   "Marge brute DA",
+                  "Note",
                   "Actions",
                 ].map((h) => (
                   <th key={h} className="whitespace-nowrap px-4 py-3">
@@ -1509,17 +1471,10 @@ export function TechOrdersWorkspace({
                       )}
                     </td>
                     <td className="px-4 py-4">
-                      <strong>{item.client}</strong>
-                      {item.facebookUrl && (
-                        <a
-                          href={item.facebookUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 block text-xs text-blue-700 underline"
-                        >
-                          Facebook
-                        </a>
-                      )}
+                      <strong className="text-indigo-700">{item.client}</strong>
+                      <div className="mt-2">
+                        <TechOrderClientLink client={item.client} url={item.facebookUrl} />
+                      </div>
                     </td>
                     <td className="px-4 py-4">
                       <StateBadge state={techOrderState(item, today)} />
@@ -1586,13 +1541,16 @@ export function TechOrdersWorkspace({
                     >
                       {money(value.margin)}
                     </td>
-                    <td className="px-4 py-4">{actionsFor(item)}</td>
+                    <td className="min-w-40 max-w-60 px-4 py-4">
+                      <TechOrderNote notes={item.notes} />
+                    </td>
+                    <td className="px-4 py-4">{orderMenu(item, "desktop")}</td>
                   </tr>
                 );
               })}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={8} className="p-10 text-center text-slate-500">
+                  <td colSpan={9} className="p-10 text-center text-slate-500">
                     {busy
                       ? "Chargement du cloud…"
                       : loaded

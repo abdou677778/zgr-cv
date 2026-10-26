@@ -9,6 +9,8 @@ import {
   Pencil,
   MessageSquare,
   ExternalLink,
+  Receipt,
+  BarChart3,
 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { FullPageWorkspace } from "./full-page-workspace";
@@ -23,6 +25,9 @@ import { techOrderError, techServiceError } from "@/lib/tech-orders-validation";
 import { TechSearchSelect } from "./tech-search-select";
 import { TechRenewalMessage } from "./tech-renewal-message";
 import { TechMobileOrderCard } from "./tech-mobile-order-card";
+import { TechFinancePanel } from "./tech-finance-panel";
+import { TechStatusTiles } from "./tech-status-tiles";
+import { emptyTechFinance, type TechFinance } from "@/lib/tech-finance";
 import { formatTechMoney as money } from "@/lib/tech-order-display";
 import {
   DropdownMenu,
@@ -192,6 +197,15 @@ export function TechOrdersWorkspace({
   const [services, setServices] = useState<TechService[]>([]),
     [orders, setOrders] = useState<TechOrder[]>([]);
   const [logos, setLogos] = useState<Record<string, TechLogo>>({});
+  const [finance, setFinance] = useState<TechFinance>(emptyTechFinance);
+  const [financeView, setFinanceView] = useState<"expenses" | "stats">();
+  const [financeDirty, setFinanceDirty] = useState(false);
+  useEffect(() => {
+    if (financeView)
+      document
+        .getElementById("tech-finance-panel")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [financeView]);
   const [, refreshLogos] = useState(0);
   const logoInput = useRef<HTMLInputElement>(null);
   const writing = useRef(false);
@@ -220,7 +234,7 @@ export function TechOrdersWorkspace({
     messageOpening.current = true;
     setMessageOrderId(item.id);
   };
-  const hasDraft = !!(order || service);
+  const hasDraft = !!(order || service || financeDirty);
   useEffect(() => {
     if (!hasDraft) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -241,6 +255,7 @@ export function TechOrdersWorkspace({
       setServices(data.services);
       setOrders(data.orders);
       setLogos(data.logos || {});
+      setFinance(data.finance || emptyTechFinance());
       setLoaded(true);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -352,7 +367,7 @@ export function TechOrdersWorkspace({
       <Button
         size="sm"
         variant="outline"
-        disabled={busy || !!order || !!renewSource}
+        disabled={busy || !!order || !!renewSource || financeDirty}
         onClick={() => {
           setOrder(structuredClone(item));
           setMessage("");
@@ -365,7 +380,7 @@ export function TechOrdersWorkspace({
       <Button
         size="sm"
         variant="outline"
-        disabled={busy || !!order || !!renewSource}
+        disabled={busy || !!order || !!renewSource || financeDirty}
         onClick={() => startRenewal(item)}
       >
         Renouveler
@@ -373,7 +388,7 @@ export function TechOrdersWorkspace({
       <Button
         size="sm"
         variant="outline"
-        disabled={busy || !!order || !!renewSource}
+        disabled={busy || !!order || !!renewSource || financeDirty}
         onClick={() => startSameClient(item)}
       >
         Autre service / vente
@@ -381,7 +396,7 @@ export function TechOrdersWorkspace({
       <Button
         size="sm"
         variant="outline"
-        disabled={busy || !!order || !!service || !!renewSource}
+        disabled={busy || !!order || !!service || !!renewSource || financeDirty}
         onClick={(event) => openRenewalMessage(item, event.currentTarget)}
       >
         Message de renouvellement
@@ -389,7 +404,7 @@ export function TechOrdersWorkspace({
     </div>
   );
   const mobileMenu = (item: TechOrder) => {
-    const disabled = busy || !!order || !!service || !!renewSource;
+    const disabled = busy || !!order || !!service || !!renewSource || financeDirty;
     const triggerId = `tech-actions-${item.id}`;
     return (
       <DropdownMenu modal={false}>
@@ -603,16 +618,48 @@ export function TechOrdersWorkspace({
       setBusy(false);
     }
   };
+  const openFinance = (next: "expenses" | "stats") => {
+    if (financeDirty && !window.confirm("Abandonner le formulaire de frais non enregistré ?"))
+      return;
+    setFinanceDirty(false);
+    setCatalog(false);
+    setFinanceView((current) => (current === next ? undefined : next));
+  };
+  const saveFinance = async (next: TechFinance) => {
+    if (writing.current) throw Error("Une opération cloud est déjà en cours.");
+    writing.current = true;
+    setBusy(true);
+    try {
+      const data = await cloudJson("/api/tech-orders/finance/main", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      setFinance(data.record);
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  };
+  const reloadFinance = async () => {
+    setBusy(true);
+    try {
+      const data = await cloudJson("/api/tech-orders");
+      setFinance(data.finance || emptyTechFinance());
+      setOrders(data.orders);
+      setServices(data.services);
+      setLogos(data.logos || {});
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <FullPageWorkspace
       backLabel={standalone ? "Déconnexion" : "Retour à l’accueil"}
       wrapHeaderActions
       open={open}
       onOpenChange={(value) => {
-        if (
-          (order || service) &&
-          !window.confirm("Quitter sans enregistrer le formulaire en cours ?")
-        )
+        if (hasDraft && !window.confirm("Quitter sans enregistrer le formulaire en cours ?"))
           return;
         onOpenChange(value);
       }}
@@ -624,7 +671,7 @@ export function TechOrdersWorkspace({
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            disabled={busy || !!order || !!service || !!renewSource}
+            disabled={busy || !!order || !!service || !!renewSource || financeDirty}
             onClick={() => void load()}
           >
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -633,10 +680,37 @@ export function TechOrdersWorkspace({
           <Button
             variant="outline"
             disabled={!loaded || busy}
-            onClick={() => setCatalog((value) => !value)}
+            onClick={() => {
+              if (
+                financeDirty &&
+                !window.confirm("Abandonner le formulaire de frais non enregistré ?")
+              )
+                return;
+              setFinanceView(undefined);
+              setFinanceDirty(false);
+              setCatalog((value) => !value);
+            }}
           >
             <Settings2 className="mr-2 h-4 w-4" />
             Services et marges
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!loaded || busy || !!order || !!service || !!renewSource}
+            aria-pressed={financeView === "expenses"}
+            onClick={() => openFinance("expenses")}
+          >
+            <Receipt className="mr-2 h-4 w-4" />
+            Frais
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!loaded || busy || !!order || !!service || !!renewSource}
+            aria-pressed={financeView === "stats"}
+            onClick={() => openFinance("stats")}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" />
+            Statistiques
           </Button>
           <Button
             variant="outline"
@@ -659,15 +733,16 @@ export function TechOrdersWorkspace({
             }}
           >
             <Download className="mr-2 h-4 w-4" />
-            Excel
+            Excel ventes
           </Button>
           <Button
-            disabled={!loaded || busy || !!order || !!renewSource}
+            disabled={!loaded || busy || !!order || !!renewSource || financeDirty}
             onClick={() => {
               setOrder(blankOrder());
               setSelected("");
               setPendingLine(undefined);
               setCatalog(false);
+              setFinanceView(undefined);
               setMessage("");
             }}
           >
@@ -724,20 +799,11 @@ export function TechOrdersWorkspace({
             </DialogPrimitive.Portal>
           )}
         </DialogPrimitive.Root>
-        <div className="grid gap-3 sm:grid-cols-3" aria-label="Accès rapide par état">
-          {(["active", "ending", "inactive"] as TechState[]).map((state) => (
-            <button
-              key={state}
-              type="button"
-              aria-pressed={filters.state === state}
-              onClick={() => setFilters({ ...emptyTechFilters, state })}
-              className={`flex items-center justify-between gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:border-indigo-300 ${filters.state === state ? "ring-2 ring-indigo-300" : ""}`}
-            >
-              <StateBadge state={state} />
-              <strong className="text-2xl tabular-nums text-slate-900">{stateCounts[state]}</strong>
-            </button>
-          ))}
-        </div>
+        <TechStatusTiles
+          counts={stateCounts}
+          selected={filters.state}
+          onSelect={(state) => setFilters({ ...emptyTechFilters, state })}
+        />
         <p className="text-xs text-slate-500">
           Coût DA = USD × taux saisi. Marge brute = vente − coût, hors frais et taxes. Les prix sont
           saisis par vous ; aucune facture fournisseur n’est générée par ZGR.
@@ -753,6 +819,20 @@ export function TechOrdersWorkspace({
               ? "Récupérer le logo cloud actuel — conserver les prix"
               : "Récupérer la version cloud du brouillon"}
           </Button>
+        )}
+        {financeView && (
+          <TechFinancePanel
+            key={financeView}
+            view={financeView}
+            finance={finance}
+            orders={orders}
+            today={today}
+            busy={busy}
+            onSave={saveFinance}
+            onReload={reloadFinance}
+            onClose={() => setFinanceView(undefined)}
+            onDirtyChange={setFinanceDirty}
+          />
         )}
         {renewSource && (
           <section
@@ -1491,7 +1571,7 @@ export function TechOrdersWorkspace({
                   "Services / dates / état",
                   "Coût DA",
                   "Total DA",
-                  "Marge DA",
+                  "Marge brute DA",
                   "Actions",
                 ].map((h) => (
                   <th key={h} className="whitespace-nowrap px-4 py-3">

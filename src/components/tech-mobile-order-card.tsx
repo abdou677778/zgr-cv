@@ -69,7 +69,7 @@ export function TechMobileOrderCard({
             <dd className="break-words font-bold text-slate-900">{money(value.sale)}</dd>
           </div>
           <div>
-            <dt className="text-[10px] text-slate-500">Marge</dt>
+            <dt className="text-[10px] text-slate-500">Marge brute</dt>
             <dd
               className={`break-words font-bold ${value.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
             >

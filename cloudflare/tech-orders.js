@@ -66,6 +66,50 @@ export function validateTechRecord(kind, input, id) {
       throw Error("Logo PNG 256 × 256 et identifiant logiciel requis.");
     return { id, icon: input.icon, dataUrl: input.dataUrl };
   }
+  if (kind === "finance") {
+    if (id !== "main" || !Array.isArray(input.entries) || input.entries.length > 1000)
+      throw Error("Registre de frais invalide (1000 lignes maximum).");
+    const seen = new Set();
+    const entries = input.entries.map((entry) => {
+      if (
+        !entry ||
+        typeof entry.id !== "string" ||
+        !idPattern.test(entry.id) ||
+        seen.has(entry.id) ||
+        !validTechDate(entry.date) ||
+        ![
+          "sponsor",
+          "other",
+          "cancellation_fee",
+          "refund",
+          "cancellation",
+          "supplier_credit",
+        ].includes(entry.kind) ||
+        !money(entry.amountDzd) ||
+        entry.amountDzd <= 0 ||
+        !text(entry.label, 180) ||
+        !entry.label.trim() ||
+        !text(entry.orderId, 80) ||
+        (entry.orderId && !idPattern.test(entry.orderId)) ||
+        (["refund", "cancellation"].includes(entry.kind) && !entry.orderId) ||
+        typeof entry.voided !== "boolean"
+      )
+        throw Error(
+          "Frais invalide : date, catégorie, libellé, montant positif à 2 décimales et vente liée si remboursement/annulation.",
+        );
+      seen.add(entry.id);
+      return {
+        id: entry.id,
+        date: entry.date,
+        kind: entry.kind,
+        amountDzd: cents(entry.amountDzd),
+        label: entry.label.trim(),
+        orderId: entry.orderId,
+        voided: entry.voided,
+      };
+    });
+    return { id, entries };
+  }
   if (kind === "services") {
     if (
       !text(input.name, 120) ||
@@ -152,6 +196,30 @@ export function validateTechRecord(kind, input, id) {
     lines,
   };
 }
+export function validateFinanceLinks(finance, orders) {
+  const sums = new Map();
+  for (const entry of finance.entries) {
+    if (!entry.orderId) continue;
+    if (!orders.has(entry.orderId)) throw Error("La vente liée aux frais est introuvable.");
+    if (entry.voided) continue;
+    const current = sums.get(entry.orderId) || { revenue: 0, credit: 0 };
+    if (entry.kind === "refund" || entry.kind === "cancellation")
+      current.revenue = cents(current.revenue + entry.amountDzd);
+    if (entry.kind === "supplier_credit") current.credit = cents(current.credit + entry.amountDzd);
+    sums.set(entry.orderId, current);
+  }
+  for (const [id, amounts] of sums) {
+    const source = orders.get(id);
+    const sale = source.lines.reduce((n, line) => cents(n + line.saleDzd), 0);
+    const cost = source.lines.reduce((n, line) => cents(n + cents(line.priceUsd * line.rate)), 0);
+    if (amounts.revenue > sale)
+      throw Error(
+        "Remboursements + ventes annulées dépassent le total de la vente liée. Ne déduisez pas deux fois le même montant.",
+      );
+    if (amounts.credit > cost)
+      throw Error("Les avoirs fournisseurs liés dépassent le coût de cette vente.");
+  }
+}
 export async function handleTechOrders(request, env, actor, respond) {
   if (actor.role !== "admin")
     return respond({ error: "Espace financier réservé aux administrateurs." }, 403);
@@ -160,6 +228,7 @@ export async function handleTechOrders(request, env, actor, respond) {
     const services = [],
       orders = [],
       logos = {};
+    let finance = { id: "main", revision: 0, entries: [] };
     let cursor;
     do {
       const page = await env.CLIENTS_BUCKET.list({
@@ -178,14 +247,18 @@ export async function handleTechOrders(request, env, actor, respond) {
         for (const item of values) {
           if (!item) continue;
           if (item.key.includes("/logos/")) logos[item.value.id] = item.value;
-          else (item.key.includes("/services/") ? services : orders).push(item.value);
+          else if (item.key === `${PREFIX}current/finance/main.json`) finance = item.value;
+          else if (item.key.includes("/services/")) services.push(item.value);
+          else if (item.key.includes("/orders/")) orders.push(item.value);
         }
       }
       cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);
-    return respond({ services, orders, logos }, 200);
+    return respond({ services, orders, logos, finance }, 200);
   }
-  const match = path.match(/^\/api\/tech-orders\/(services|orders|logos)\/([a-zA-Z0-9-]{1,80})$/);
+  const match = path.match(
+    /^\/api\/tech-orders\/(services|orders|logos|finance)\/([a-zA-Z0-9-]{1,80})$/,
+  );
   if (!match || request.method !== "PUT")
     return respond({ error: "Route ZGR Tech Orders introuvable." }, 404);
   // Read the actual body with a bound, even if Content-Length is omitted or forged.
@@ -197,7 +270,7 @@ export async function handleTechOrders(request, env, actor, respond) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > 260000) {
+    if (size > (match[1] === "finance" ? 2 * 1024 * 1024 : 260000)) {
       await reader.cancel();
       return respond({ error: "Enregistrement trop volumineux." }, 413);
     }
@@ -224,9 +297,69 @@ export async function handleTechOrders(request, env, actor, respond) {
       { error: "Modifié depuis un autre onglet. Actualisez avant de réessayer." },
       409,
     );
+  if (match[1] === "finance") {
+    const nextIds = new Set(record.entries.map((entry) => entry.id));
+    if (old?.entries.some((entry) => !nextIds.has(entry.id)))
+      return respond(
+        {
+          error:
+            "Conservez les anciennes lignes : neutralisez une ligne erronée au lieu de la supprimer.",
+        },
+        400,
+      );
+    const oldEntries = new Map((old?.entries || []).map((entry) => [entry.id, entry]));
+    const changed = record.entries.filter(
+      (entry) => JSON.stringify(entry) !== JSON.stringify(oldEntries.get(entry.id)),
+    );
+    if (changed.length > 25)
+      return respond({ error: "Modifiez au maximum 25 lignes de frais par enregistrement." }, 400);
+    const ids = [
+      ...new Set(
+        changed
+          .flatMap((entry) => [entry.orderId, oldEntries.get(entry.id)?.orderId])
+          .filter(Boolean),
+      ),
+    ];
+    const linkedOrders = new Map();
+    for (let offset = 0; offset < ids.length; offset += 8)
+      await Promise.all(
+        ids.slice(offset, offset + 8).map(async (id) => {
+          const object = await env.CLIENTS_BUCKET.get(`${PREFIX}current/orders/${id}.json`);
+          if (object) linkedOrders.set(id, JSON.parse(await object.text()));
+        }),
+      );
+    try {
+      validateFinanceLinks(
+        { ...record, entries: record.entries.filter((entry) => ids.includes(entry.orderId)) },
+        linkedOrders,
+      );
+    } catch (error) {
+      return respond({ error: error.message }, 400);
+    }
+  }
   if (record.renewalOf === record.id)
     return respond({ error: "Un renouvellement doit créer une nouvelle vente." }, 400);
   if (match[1] === "orders") {
+    const ledger = await env.CLIENTS_BUCKET.get(`${PREFIX}current/finance/main.json`);
+    if (ledger) {
+      const finance = JSON.parse(await ledger.text());
+      const linked = {
+        ...finance,
+        entries: finance.entries.filter((entry) => entry.orderId === record.id),
+      };
+      try {
+        validateFinanceLinks(linked, new Map([[record.id, record]]));
+      } catch (error) {
+        return respond(
+          {
+            error:
+              "Cette modification contredit les remboursements/annulations déjà saisis. Corrigez d’abord les frais concernés. " +
+              error.message,
+          },
+          400,
+        );
+      }
+    }
     for (const line of record.lines) {
       if (!(await env.CLIENTS_BUCKET.get(`${PREFIX}current/services/${line.serviceId}.json`)))
         return respond(

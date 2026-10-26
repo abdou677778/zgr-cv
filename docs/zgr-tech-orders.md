@@ -142,9 +142,57 @@ ou conservation des prix lors du rechargement d’un logo. En cas de coupure apr
 une tentative de sauvegarde, contrôler le registre avant de créer une autre vente.
 Les lectures R2 se font par groupes de huit au maximum, dans le namespace privé.
 
+## Frais et statistiques
+
+Ajout du 26 octobre 2026, sans objectif mensuel conformément au choix de l’utilisateur.
+Les boutons « Frais » et « Statistiques » sont voisins de « Services et marges ».
+Les tuiles Actifs, Expire sous 3 jours et Inactifs sont carrées sur mobile et restent
+sur une seule ligne de trois colonnes.
+
+« Frais » accepte sponsor/publicité, autres frais, frais d’annulation, remboursements
+clients, montants de ventes annulées et avoirs fournisseurs réellement obtenus.
+Chaque ligne comporte une date, un libellé, un montant DA positif à deux décimales
+et une vente liée facultative, obligatoire pour un remboursement ou une vente annulée.
+Une annulation financière ne modifie pas les dates ni l’état de l’abonnement.
+Ne pas saisir le même montant à la fois en remboursement et en vente annulée.
+
+Marge nette calculée = ventes − coûts fournisseurs − frais − remboursements clients
+− ventes annulées + avoirs fournisseurs. Les cartes clients et le tableau restent
+en marge **brute**. Une annulation ne rembourse pas automatiquement le fournisseur :
+son coût reste compté, sauf avoir réel saisi séparément. Les montants ne représentent
+pas un solde bancaire ou des encaissements vérifiés.
+
+Les statistiques couvrent un mois, toutes les données ou des dates personnalisées.
+Les ventes suivent leur date de création dans Africa/Algiers ; les ajustements suivent
+leur date saisie, y compris si la vente liée appartient à un mois précédent. Une vente
+sans date exploitable est signalée et exclue d’une période, mais reste incluse dans
+« Tout le registre ». Les filtres clients du tableau n’affectent pas ces statistiques.
+L’export « Excel ventes » reste limité aux ventes : il n’inclut pas le registre de frais.
+
+Le registre utilise `PUT /api/tech-orders/finance/main` et l’objet privé R2
+`tech-orders/v1/current/finance/main.json`. Le GET principal renvoie un champ `finance`,
+sans le mélanger aux commandes. Le registre contient au maximum 1000 lignes ; le corps
+réel de cette route est limité à 2 Mio. Les autres routes restent limitées à 260000 octets.
+Les contrôles admin, révisions, ETag et copies d’historique restent obligatoires.
+Une écriture modifie au maximum 25 lignes, et les ventes liées ne sont relues que
+pour les groupes concernés. Le formulaire courant traite une ligne à la fois.
+Une ligne peut être modifiée, neutralisée ou rétablie ; ses identifiants ne peuvent pas
+être retirés du registre. Les versions antérieures restent dans l’historique R2.
+
+Le serveur contrôle les ventes liées, les cumuls remboursement + annulation par vente
+et les avoirs liés au coût fournisseur. Une modification ultérieure d’une vente est
+refusée si elle contredit les ajustements présents au moment du contrôle. Les objets
+ventes et finance restent distincts : ces vérifications ne sont pas une transaction
+comptable multi-objets. Ce module n’est pas une comptabilité certifiée et n’exécute
+aucun paiement ni remboursement bancaire.
+
 ## Tests
 
 `npm run typecheck`, `npm run test:unit`, `node --test cloudflare/tech-orders.test.js`.
+Au 26 octobre, 107 tests unitaires et 17 tests ciblés Tech Orders/Pages passent,
+avec couverture de la marge nette, des périodes, neutralisations, plafonds de
+remboursement, révisions et disposition mobile en trois colonnes. Le rendu mobile
+réel reste à vérifier, l’accès au navigateur de test étant désactivé.
 Les tests couvrent l’exemple 20 × 260 = 5200 ; 6200 − 5200 = 1000, zéros,
 arrondis, marges négatives, multi-services, fins de mois, années bissextiles,
 renouvellements sans mutation, formules XLSX, injection de formule, accès admin,

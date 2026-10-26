@@ -228,3 +228,154 @@ test("Tech logos persist separately even before prices are entered, with version
   );
   assert.ok([...env.CLIENTS_BUCKET.map.keys()].every((key) => key.startsWith("tech-orders/v1/")));
 });
+
+const financeEntry = (kind = "sponsor", amountDzd = 300) => ({
+  id: `entry-${kind}`,
+  date: "2026-10-26",
+  kind,
+  amountDzd,
+  label: "TEST TECHNIQUE",
+  orderId: ["refund", "cancellation", "supplier_credit"].includes(kind) ? order.id : "",
+  voided: false,
+});
+const financeRecord = (entries = [financeEntry()], revision = 0) => ({
+  id: "main",
+  revision,
+  entries,
+});
+test("Finance rejects malformed amounts, unsupported categories, missing order links and duplicate entry IDs", () => {
+  for (const entry of [
+    { ...financeEntry(), id: undefined },
+    { ...financeEntry(), amountDzd: -1 },
+    { ...financeEntry(), amountDzd: 1.005 },
+    { ...financeEntry(), date: "2026-02-30" },
+    { ...financeEntry(), kind: "unknown" },
+    { ...financeEntry("refund"), orderId: "" },
+  ])
+    assert.throws(() => validateTechRecord("finance", financeRecord([entry]), "main"));
+  assert.throws(() =>
+    validateTechRecord("finance", financeRecord([financeEntry(), financeEntry()]), "main"),
+  );
+  assert.throws(() => validateTechRecord("finance", { ...financeRecord(), id: "other" }, "other"));
+  assert.throws(() =>
+    validateTechRecord(
+      "finance",
+      financeRecord(
+        Array.from({ length: 1001 }, (_, i) => ({ ...financeEntry(), id: `entry-${i}` })),
+      ),
+      "main",
+    ),
+  );
+});
+test("Finance storage is admin-only, versioned and never appears as an order; neutralisation is reversible without deletion", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  await handleTechOrders(request("/services/test-service", service), env, actor, respond);
+  await handleTechOrders(request("/orders/test-order", order), env, actor, respond);
+  const body = financeRecord([financeEntry(), financeEntry("refund", 200)]);
+  const tooMany = financeRecord(
+    Array.from({ length: 26 }, (_, i) => ({ ...financeEntry(), id: `batch-${i}` })),
+  );
+  assert.equal(
+    (await handleTechOrders(request("/finance/main", tooMany), env, actor, respond)).status,
+    400,
+  );
+  assert.equal(
+    (await handleTechOrders(request("/finance/main", body), env, { role: "editor" }, respond))
+      .status,
+    403,
+  );
+  assert.equal((await worker.fetch(request("/finance/main", body), env, {})).status, 401);
+  assert.equal(
+    (await handleTechOrders(request("/finance/main", body), env, actor, respond)).status,
+    200,
+  );
+  const list = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.equal(list.orders.length, 1);
+  assert.equal(list.finance.entries.length, 2);
+  assert.equal(list.finance.revision, 1);
+  assert.equal(
+    (await handleTechOrders(request("/finance/main", body), env, actor, respond)).status,
+    409,
+  );
+  assert.equal(
+    (await handleTechOrders(request("/finance/main", financeRecord([], 1)), env, actor, respond))
+      .status,
+    400,
+  );
+  const neutralised = body.entries.map((entry) => ({ ...entry, voided: true }));
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/finance/main", financeRecord(neutralised, 1)),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/finance/main", financeRecord(body.entries, 2)),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    200,
+  );
+  assert.ok(
+    [...env.CLIENTS_BUCKET.map.keys()].some((key) =>
+      key.startsWith("tech-orders/v1/history/finance/main/"),
+    ),
+  );
+  assert.ok([...env.CLIENTS_BUCKET.map.keys()].every((key) => key.startsWith("tech-orders/v1/")));
+});
+test("Finance rejects unknown sales and duplicate revenue deductions, and linked adjustments protect later order edits", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  await handleTechOrders(request("/services/test-service", service), env, actor, respond);
+  await handleTechOrders(request("/orders/test-order", order), env, actor, respond);
+  for (const entries of [
+    [{ ...financeEntry("refund", 100), orderId: "missing" }],
+    [financeEntry("refund", 6200), financeEntry("cancellation", 1)],
+    [financeEntry("supplier_credit", 5201)],
+  ])
+    assert.equal(
+      (
+        await handleTechOrders(
+          request("/finance/main", financeRecord(entries)),
+          env,
+          actor,
+          respond,
+        )
+      ).status,
+      400,
+    );
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/finance/main", financeRecord([financeEntry("refund", 100)])),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/orders/test-order", {
+          ...order,
+          revision: 1,
+          lines: [{ ...order.lines[0], saleDzd: 50 }],
+        }),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    400,
+  );
+});

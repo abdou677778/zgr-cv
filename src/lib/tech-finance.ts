@@ -15,8 +15,29 @@ export type TechFinanceEntry = {
   amountDzd: number;
   label: string;
   orderId: string;
+  orderIds?: string[];
+  publicationUrl?: string;
+  sponsorEnd?: string;
   voided: boolean;
 };
+export const financeAllowsMultiple = (kind: FinanceKind) =>
+  ["sponsor", "other", "cancellation_fee"].includes(kind);
+export const financeLinkedOrders = (entry: TechFinanceEntry) => [
+  ...new Set([entry.orderId, ...(entry.orderIds || [])].filter(Boolean)),
+];
+export function sponsorDuration(start: string, end: string) {
+  if (
+    [start, end].some(
+      (value) =>
+        !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+        !Number.isFinite(Date.parse(`${value}T00:00:00Z`)) ||
+        new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value,
+    )
+  )
+    return 0;
+  const days = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000;
+  return Number.isFinite(days) && days >= 0 ? days + 1 : 0;
+}
 export type TechFinance = { id: "main"; revision: number; entries: TechFinanceEntry[] };
 export const emptyTechFinance = (): TechFinance => ({ id: "main", revision: 0, entries: [] });
 export function financeOrderDate(order: TechOrder) {

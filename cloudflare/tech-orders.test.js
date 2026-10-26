@@ -328,6 +328,105 @@ test("Finance rejects malformed amounts, unsupported categories, missing order l
     ),
   );
 });
+
+test("Sponsor supports optional motif, safe publication URL, inclusive dates and multiple real sales in private storage", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  await handleTechOrders(request("/services/test-service", service), env, actor, respond);
+  await handleTechOrders(request("/orders/test-order", order), env, actor, respond);
+  await handleTechOrders(
+    request("/orders/second-order", {
+      ...order,
+      id: "second-order",
+      client: "SECOND CLIENT FICTIF",
+    }),
+    env,
+    actor,
+    respond,
+  );
+  const sponsor = {
+    ...financeEntry(),
+    label: "",
+    orderIds: [order.id, "second-order"],
+    sponsorEnd: "2026-11-03",
+    publicationUrl: "https://www.facebook.com/photo?fbid=1146401367957687&set=a.237727165491783",
+  };
+  for (const bad of [
+    { ...sponsor, publicationUrl: "javascript:alert(1)" },
+    { ...sponsor, publicationUrl: "http://example.com" },
+    { ...sponsor, publicationUrl: "https://user:secret@example.com" },
+    { ...sponsor, sponsorEnd: "2026-10-25" },
+    { ...sponsor, sponsorEnd: "2026-02-30" },
+    { ...sponsor, orderIds: [order.id, order.id] },
+    { ...sponsor, orderIds: "invalid" },
+    { ...sponsor, orderIds: Array.from({ length: 101 }, (_, i) => `order-${i}`) },
+    { ...sponsor, kind: "refund", orderId: order.id },
+  ])
+    assert.throws(() => validateTechRecord("finance", financeRecord([bad]), "main"));
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/finance/main", financeRecord([{ ...sponsor, orderIds: [order.id, "unknown"] }])),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/finance/main", financeRecord([sponsor])),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    200,
+  );
+  const stored = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.deepEqual(stored.finance.entries[0], sponsor);
+  assert.equal(stored.orders.length, 2);
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/finance/main", financeRecord([{ ...sponsor, voided: true }], 1)),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    200,
+  );
+  const reloaded = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.equal(reloaded.finance.entries[0].voided, true);
+  assert.deepEqual(reloaded.finance.entries[0].orderIds, sponsor.orderIds);
+  const withRefund = financeRecord([sponsor, financeEntry("refund", 200)], 2);
+  assert.equal(
+    (await handleTechOrders(request("/finance/main", withRefund), env, actor, respond)).status,
+    200,
+  );
+  const updateRefund = financeRecord([sponsor, financeEntry("refund", 300)], 3);
+  assert.equal(
+    (await handleTechOrders(request("/finance/main", updateRefund), env, actor, respond)).status,
+    200,
+  );
+  const orderData = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/orders/test-order", {
+          ...orderData.orders.find((entry) => entry.id === order.id),
+          notes: "Updated with multi-client sponsor",
+        }),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    200,
+  );
+});
 test("Finance storage is admin-only, versioned and never appears as an order; neutralisation is reversible without deletion", async () => {
   const env = { CLIENTS_BUCKET: new Bucket() };
   await handleTechOrders(request("/services/test-service", service), env, actor, respond);

@@ -10,6 +10,9 @@ const money = (value) =>
   (value === 0 || cents(value) > 0) &&
   Math.abs(cents(value) - value) <= Number.EPSILON * Math.max(1, Math.abs(value)) * 4;
 const text = (value, max) => typeof value === "string" && value.length <= max;
+const financeLinkedOrders = (entry) => [
+  ...new Set([entry?.orderId, ...(entry?.orderIds || [])].filter(Boolean)),
+];
 export function validTechDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);
@@ -88,15 +91,37 @@ export function validateTechRecord(kind, input, id) {
         !money(entry.amountDzd) ||
         entry.amountDzd <= 0 ||
         !text(entry.label, 180) ||
-        !entry.label.trim() ||
         !text(entry.orderId, 80) ||
         (entry.orderId && !idPattern.test(entry.orderId)) ||
         (["refund", "cancellation"].includes(entry.kind) && !entry.orderId) ||
         typeof entry.voided !== "boolean"
       )
         throw Error(
-          "Frais invalide : date, catégorie, libellé, montant positif à 2 décimales et vente liée si remboursement/annulation.",
+          "Frais invalide : date, catégorie, montant positif à 2 décimales et vente liée si remboursement/annulation.",
         );
+      const multiple = ["sponsor", "other", "cancellation_fee"].includes(entry.kind);
+      if (
+        entry.orderIds !== undefined &&
+        (!Array.isArray(entry.orderIds) ||
+          entry.orderIds.length > 100 ||
+          entry.orderIds.some((id) => typeof id !== "string" || !idPattern.test(id)) ||
+          new Set(entry.orderIds).size !== entry.orderIds.length ||
+          (!multiple && entry.orderIds.length > 0))
+      )
+        throw Error(
+          "Sélection de ventes invalide (100 maximum ; un seul bénéficiaire par remboursement/annulation/avoir).",
+        );
+      if (
+        (entry.publicationUrl !== undefined &&
+          (typeof entry.publicationUrl !== "string" || !webUrl(entry.publicationUrl))) ||
+        (entry.sponsorEnd !== undefined &&
+          entry.sponsorEnd !== "" &&
+          (entry.kind !== "sponsor" ||
+            !validTechDate(entry.sponsorEnd) ||
+            entry.sponsorEnd < entry.date))
+      )
+        throw Error("Lien HTTPS ou période du sponsor invalide.");
+      if (financeLinkedOrders(entry).length > 100) throw Error("100 ventes liées maximum.");
       seen.add(entry.id);
       return {
         id: entry.id,
@@ -105,6 +130,9 @@ export function validateTechRecord(kind, input, id) {
         amountDzd: cents(entry.amountDzd),
         label: entry.label.trim(),
         orderId: entry.orderId,
+        ...(entry.orderIds !== undefined ? { orderIds: entry.orderIds } : {}),
+        ...(entry.publicationUrl !== undefined ? { publicationUrl: entry.publicationUrl } : {}),
+        ...(entry.sponsorEnd ? { sponsorEnd: entry.sponsorEnd } : {}),
         voided: entry.voided,
       };
     });
@@ -216,6 +244,8 @@ export function validateTechRecord(kind, input, id) {
 export function validateFinanceLinks(finance, orders) {
   const sums = new Map();
   for (const entry of finance.entries) {
+    for (const id of financeLinkedOrders(entry))
+      if (!orders.has(id)) throw Error("La vente liée aux frais est introuvable.");
     if (!entry.orderId) continue;
     if (!orders.has(entry.orderId)) throw Error("La vente liée aux frais est introuvable.");
     if (entry.voided) continue;
@@ -328,12 +358,16 @@ export async function handleTechOrders(request, env, actor, respond) {
     const changed = record.entries.filter(
       (entry) => JSON.stringify(entry) !== JSON.stringify(oldEntries.get(entry.id)),
     );
+    const changedIds = new Set(changed.map((entry) => entry.id));
     if (changed.length > 25)
       return respond({ error: "Modifiez au maximum 25 lignes de frais par enregistrement." }, 400);
     const ids = [
       ...new Set(
         changed
-          .flatMap((entry) => [entry.orderId, oldEntries.get(entry.id)?.orderId])
+          .flatMap((entry) => [
+            ...financeLinkedOrders(entry),
+            ...financeLinkedOrders(oldEntries.get(entry.id)),
+          ])
           .filter(Boolean),
       ),
     ];
@@ -347,7 +381,15 @@ export async function handleTechOrders(request, env, actor, respond) {
       );
     try {
       validateFinanceLinks(
-        { ...record, entries: record.entries.filter((entry) => ids.includes(entry.orderId)) },
+        {
+          ...record,
+          entries: record.entries.filter(
+            (entry) =>
+              changedIds.has(entry.id) ||
+              (["refund", "cancellation", "supplier_credit"].includes(entry.kind) &&
+                ids.includes(entry.orderId)),
+          ),
+        },
         linkedOrders,
       );
     } catch (error) {
@@ -362,7 +404,11 @@ export async function handleTechOrders(request, env, actor, respond) {
       const finance = JSON.parse(await ledger.text());
       const linked = {
         ...finance,
-        entries: finance.entries.filter((entry) => entry.orderId === record.id),
+        entries: finance.entries.filter(
+          (entry) =>
+            entry.orderId === record.id &&
+            ["refund", "cancellation", "supplier_credit"].includes(entry.kind),
+        ),
       };
       try {
         validateFinanceLinks(linked, new Map([[record.id, record]]));

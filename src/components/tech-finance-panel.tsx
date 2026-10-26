@@ -4,6 +4,9 @@ import { Input } from "./ui/input";
 import { TechSearchSelect } from "./tech-search-select";
 import {
   financeKinds,
+  financeAllowsMultiple,
+  financeLinkedOrders,
+  sponsorDuration,
   financeMonthRange,
   techFinanceStats,
   type FinanceKind,
@@ -43,6 +46,7 @@ export function TechFinancePanel({
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("");
   const [limit, setLimit] = useState(25);
+  const [linkQuery, setLinkQuery] = useState("");
   useEffect(() => onDirtyChange(!!draft), [draft, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   useEffect(() => setLimit(25), [query, kind, mode, month, from, to]);
@@ -60,6 +64,12 @@ export function TechFinancePanel({
     invalidMonth ? "0000" : "" + range.to,
   );
   const orderMap = useMemo(() => new Map(orders.map((order) => [order.id, order])), [orders]);
+  const linkMatches = orders.filter((order) =>
+    techMatchesSearch(
+      `${order.client} ${techOrderLabel(order)} ${order.lines.map((line) => line.name).join(" ")}`,
+      linkQuery,
+    ),
+  );
   const entries = finance.entries
     .map((entry, index) => ({ entry, index }))
     .filter(
@@ -69,7 +79,11 @@ export function TechFinancePanel({
         (!range.to || entry.date <= range.to) &&
         (!kind || entry.kind === kind) &&
         techMatchesSearch(
-          `${entry.label} ${financeKinds[entry.kind]} ${orderMap.get(entry.orderId)?.client || ""}`,
+          `${entry.label} ${entry.publicationUrl || ""} ${financeKinds[entry.kind]} ${financeLinkedOrders(
+            entry,
+          )
+            .map((id) => `${orderMap.get(id)?.client || ""} ${techOrderLabel({ id })}`)
+            .join(" ")}`,
           query,
         ),
     )
@@ -82,12 +96,15 @@ export function TechFinancePanel({
   const save = async () => {
     if (!draft || busy) return;
     if (
-      !draft.label.trim() ||
       !Number.isFinite(draft.amountDzd) ||
       draft.amountDzd <= 0 ||
       Math.abs(Math.round(draft.amountDzd * 100) / 100 - draft.amountDzd) > 0.0000001
     ) {
-      setNotice("Saisissez un libellé et un montant positif, avec 2 décimales maximum.");
+      setNotice("Saisissez un montant positif, avec 2 décimales maximum.");
+      return;
+    }
+    if (draft.kind === "sponsor" && (!draft.sponsorEnd || draft.sponsorEnd < draft.date)) {
+      setNotice("Renseignez la fin du sponsor, égale ou postérieure à son début.");
       return;
     }
     if (["refund", "cancellation"].includes(draft.kind) && !draft.orderId) {
@@ -178,7 +195,9 @@ export function TechFinancePanel({
       </header>
       <p className="text-xs leading-5 text-slate-500">
         Période indépendante des filtres clients. Ventes classées par date de création ; frais et
-        ajustements par date saisie. Aucun paiement bancaire n’est vérifié automatiquement.
+        ajustements par date saisie (début pour le sponsor). Le montant du sponsor est déduit une
+        seule fois à son début, sans prorata ni multiplication par client lié. Aucun paiement
+        bancaire n’est vérifié automatiquement.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1 text-xs font-semibold">
@@ -280,9 +299,13 @@ export function TechFinancePanel({
                   amountDzd: NaN,
                   label: "",
                   orderId: "",
+                  orderIds: [],
+                  publicationUrl: "",
+                  sponsorEnd: today,
                   voided: false,
                 });
                 setNotice("");
+                setLinkQuery("");
               }}
             >
               Ajouter un frais / ajustement
@@ -313,7 +336,26 @@ export function TechFinancePanel({
                   <select
                     className="h-10 min-w-0 rounded-xl border bg-white px-2"
                     value={draft.kind}
-                    onChange={(e) => setDraft({ ...draft, kind: e.target.value as FinanceKind })}
+                    onChange={(e) => {
+                      const nextKind = e.target.value as FinanceKind;
+                      const linked = financeLinkedOrders(draft);
+                      setDraft({
+                        ...draft,
+                        kind: nextKind,
+                        orderId: financeAllowsMultiple(nextKind)
+                          ? ""
+                          : linked.length === 1
+                            ? linked[0]
+                            : "",
+                        orderIds: financeAllowsMultiple(nextKind) ? linked : [],
+                        sponsorEnd: nextKind === "sponsor" ? draft.sponsorEnd || "" : undefined,
+                      });
+                      setNotice(
+                        !financeAllowsMultiple(nextKind) && linked.length > 1
+                          ? "Pour un remboursement, une annulation ou un avoir, choisissez une seule vente afin d’attribuer le montant correctement."
+                          : "",
+                      );
+                    }}
                   >
                     {Object.entries(financeKinds).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -323,7 +365,7 @@ export function TechFinancePanel({
                   </select>
                 </label>
                 <label className="grid min-w-0 gap-1 text-xs font-semibold">
-                  Date
+                  {draft.kind === "sponsor" ? "Début du sponsor" : "Date"}
                   <Input
                     type="date"
                     required
@@ -334,9 +376,8 @@ export function TechFinancePanel({
                   />
                 </label>
                 <label className="grid min-w-0 gap-1 text-xs font-semibold">
-                  Libellé / motif
+                  Libellé / motif — facultatif
                   <Input
-                    required
                     maxLength={180}
                     value={draft.label}
                     onChange={(e) => setDraft({ ...draft, label: e.target.value })}
@@ -361,26 +402,139 @@ export function TechFinancePanel({
                   />
                 </label>
                 <label className="grid min-w-0 gap-1 text-xs font-semibold sm:col-span-2">
-                  Vente liée{" "}
-                  {["refund", "cancellation"].includes(draft.kind)
-                    ? "— obligatoire"
-                    : "— facultative"}
-                  <TechSearchSelect
-                    label="Vente liée aux frais"
-                    value={draft.orderId}
-                    disabled={busy}
-                    options={[
-                      { value: "", label: "Aucune vente liée" },
-                      ...orders.map((order) => ({
-                        value: order.id,
-                        label: order.client,
-                        detail: `${order.lines.map((line) => line.name).join(", ")} · ${techOrderLabel(order)}`,
-                      })),
-                    ]}
-                    onChange={(id) => setDraft({ ...draft, orderId: id })}
-                    placeholder="Rechercher le client ou le service…"
+                  Lien de la publication — facultatif
+                  <Input
+                    type="url"
+                    inputMode="url"
+                    maxLength={2000}
+                    placeholder="https://www.facebook.com/photo?..."
+                    value={draft.publicationUrl || ""}
+                    onChange={(e) => setDraft({ ...draft, publicationUrl: e.target.value.trim() })}
                   />
+                  <span className="font-normal text-slate-500">Lien HTTPS uniquement.</span>
                 </label>
+                {draft.kind === "sponsor" && (
+                  <label className="grid min-w-0 gap-1 text-xs font-semibold">
+                    Fin du sponsor — incluse
+                    <Input
+                      type="date"
+                      required
+                      min={draft.date || "2000-01-01"}
+                      max="2199-12-31"
+                      value={draft.sponsorEnd || ""}
+                      onChange={(e) => setDraft({ ...draft, sponsorEnd: e.target.value })}
+                    />
+                    <span className="font-normal text-slate-500">
+                      {sponsorDuration(draft.date, draft.sponsorEnd || "") || "—"} jour(s) · montant
+                      total pour toute la durée
+                    </span>
+                  </label>
+                )}
+                {financeAllowsMultiple(draft.kind) ? (
+                  <div className="grid min-w-0 gap-2 text-xs sm:col-span-2">
+                    <p className="font-semibold">
+                      Ventes / clients liés — sélection multiple facultative (
+                      {financeLinkedOrders(draft).length}/100)
+                    </p>
+                    <Input
+                      aria-label="Rechercher les ventes à lier"
+                      placeholder="Nom du client, service ou commande…"
+                      value={linkQuery}
+                      onChange={(e) => setLinkQuery(e.target.value)}
+                    />
+                    <div className="flex flex-wrap gap-1">
+                      {!!financeLinkedOrders(draft).length && (
+                        <button
+                          type="button"
+                          className="rounded-lg border px-2 py-1"
+                          onClick={() => setDraft({ ...draft, orderId: "", orderIds: [] })}
+                        >
+                          Tout décocher
+                        </button>
+                      )}
+                      {financeLinkedOrders(draft).map((id) => (
+                        <button
+                          type="button"
+                          key={id}
+                          className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-indigo-800"
+                          aria-label={`Retirer ${orderMap.get(id)?.client || id} — ${techOrderLabel({ id })}`}
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              orderId: "",
+                              orderIds: financeLinkedOrders(draft).filter((value) => value !== id),
+                            })
+                          }
+                        >
+                          {orderMap.get(id)?.client || "Vente"} · {techOrderLabel({ id })} ×
+                        </button>
+                      ))}
+                    </div>
+                    <div className="max-h-48 overflow-y-auto rounded-xl border bg-white p-2">
+                      {linkMatches.slice(0, 50).map((order) => {
+                        const selected = financeLinkedOrders(draft);
+                        return (
+                          <label
+                            key={order.id}
+                            className="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-indigo-50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected.includes(order.id)}
+                              disabled={!selected.includes(order.id) && selected.length >= 100}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  orderId: "",
+                                  orderIds: e.target.checked
+                                    ? [...selected, order.id]
+                                    : selected.filter((id) => id !== order.id),
+                                })
+                              }
+                            />
+                            <span className="min-w-0 break-words">
+                              <strong>{order.client}</strong> · {techOrderLabel(order)}
+                              <span className="block text-slate-500">
+                                {order.lines.map((line) => line.name).join(", ")}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {!linkMatches.length && (
+                        <p className="p-2 text-slate-500">
+                          Aucune vente ne correspond à la recherche.
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-slate-500">
+                      50 résultats maximum affichés : précisez la recherche. Le montant reste
+                      unique, sans répartition ni duplication entre les clients.
+                    </p>
+                  </div>
+                ) : (
+                  <label className="grid min-w-0 gap-1 text-xs font-semibold sm:col-span-2">
+                    Vente liée{" "}
+                    {["refund", "cancellation"].includes(draft.kind)
+                      ? "— obligatoire"
+                      : "— facultative"}
+                    <TechSearchSelect
+                      label="Vente liée aux frais"
+                      value={draft.orderId}
+                      disabled={busy}
+                      options={[
+                        { value: "", label: "Aucune vente liée" },
+                        ...orders.map((order) => ({
+                          value: order.id,
+                          label: order.client,
+                          detail: `${order.lines.map((line) => line.name).join(", ")} · ${techOrderLabel(order)}`,
+                        })),
+                      ]}
+                      onChange={(id) => setDraft({ ...draft, orderId: id })}
+                      placeholder="Rechercher le client ou le service…"
+                    />
+                  </label>
+                )}
                 {notice && <p className="text-sm text-indigo-800 sm:col-span-2">{notice}</p>}
                 <div className="flex flex-wrap gap-2 sm:col-span-2">
                   <Button>Enregistrer</Button>
@@ -428,15 +582,37 @@ export function TechFinancePanel({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="break-words text-sm font-semibold">
-                      {entry.label}
+                      {entry.label || financeKinds[entry.kind]}
                       {entry.voided ? " — neutralisée" : ""}
                     </p>
                     <p className="text-xs text-slate-500">
                       {entry.date} · {financeKinds[entry.kind]}
                     </p>
-                    {entry.orderId && (
+                    {entry.kind === "sponsor" && (
+                      <p className="text-xs text-slate-500">
+                        {entry.sponsorEnd
+                          ? `Sponsor du ${entry.date} au ${entry.sponsorEnd} · ${sponsorDuration(entry.date, entry.sponsorEnd)} jour(s)`
+                          : "Fin du sponsor non renseignée"}
+                      </p>
+                    )}
+                    {entry.publicationUrl && (
+                      <a
+                        href={entry.publicationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-block text-xs text-blue-700 underline"
+                      >
+                        Ouvrir la publication ↗
+                      </a>
+                    )}
+                    {!!financeLinkedOrders(entry).length && (
                       <p className="text-xs text-indigo-700">
-                        {orderMap.get(entry.orderId)?.client || "Vente liée"}
+                        {financeLinkedOrders(entry)
+                          .map(
+                            (id) =>
+                              `${orderMap.get(id)?.client || "Vente liée"} (${techOrderLabel({ id })})`,
+                          )
+                          .join(" · ")}
                       </p>
                     )}
                   </div>
@@ -449,6 +625,7 @@ export function TechFinancePanel({
                     disabled={busy || !!draft}
                     onClick={() => {
                       setDraft({ ...entry });
+                      setLinkQuery("");
                       setNotice("");
                     }}
                   >

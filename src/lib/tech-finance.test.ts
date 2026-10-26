@@ -5,6 +5,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   emptyTechFinance,
   financeMonthRange,
+  financeLinkedOrders,
+  financeAllowsMultiple,
+  sponsorDuration,
   techFinanceStats,
   type TechFinanceEntry,
 } from "./tech-finance";
@@ -42,6 +45,71 @@ const entry = (kind: TechFinanceEntry["kind"], amountDzd: number): TechFinanceEn
   label: "TEST FICTIF",
   orderId: ["refund", "cancellation"].includes(kind) ? order.id : "",
   voided: false,
+});
+
+test("Multi-client sponsor keeps one total fee, counts inclusive duration and preserves legacy links", () => {
+  const sponsor = {
+    ...entry("sponsor", 3300),
+    label: "",
+    orderIds: [order.id, "second-order"],
+    sponsorEnd: "2026-11-03",
+    publicationUrl: "https://www.facebook.com/photo?fbid=1146401367957687&set=a.237727165491783",
+  };
+  assert.deepEqual(financeLinkedOrders(sponsor), [order.id, "second-order"]);
+  assert.deepEqual(financeLinkedOrders(entry("refund", 200)), [order.id]);
+  assert.equal(financeAllowsMultiple("sponsor"), true);
+  assert.equal(financeAllowsMultiple("refund"), false);
+  assert.equal(sponsorDuration(sponsor.date, sponsor.sponsorEnd), 9);
+  assert.equal(sponsorDuration("2028-02-28", "2028-03-01"), 3);
+  assert.equal(sponsorDuration("2026-10-26", "2026-10-26"), 1);
+  assert.equal(sponsorDuration("2026-10-27", "2026-10-26"), 0);
+  assert.equal(sponsorDuration("2026-02-30", "2026-03-05"), 0);
+  const stats = techFinanceStats(
+    [order, { ...order, id: "second-order" }],
+    [sponsor],
+    "2026-10-01",
+    "2026-10-31",
+  );
+  assert.equal(stats.sponsor, 3300);
+  assert.equal(stats.netMargin, -1300);
+  assert.equal(stats.movements, 1);
+  assert.equal(techFinanceStats([], [sponsor], "2026-11-01", "2026-11-30").sponsor, 0);
+});
+
+test("Saved sponsor displays a clickable publication, both clients and real duration even without a motif", () => {
+  const sponsor = {
+    ...entry("sponsor", 3300),
+    label: "",
+    orderIds: [order.id, "second-order"],
+    sponsorEnd: "2026-11-03",
+    publicationUrl: "https://www.facebook.com/photo?fbid=1146401367957687&set=a.237727165491783",
+  };
+  const html = renderToStaticMarkup(
+    createElement(TechFinancePanel, {
+      view: "expenses",
+      finance: { ...emptyTechFinance(), entries: [sponsor] },
+      orders: [order, { ...order, id: "second-order", client: "SECOND CLIENT FICTIF" }],
+      today: "2026-10-26",
+      busy: false,
+      onSave: async () => {},
+      onReload: async () => {},
+      onClose: () => {},
+      onDirtyChange: () => {},
+    }),
+  );
+  for (const value of [
+    "Ouvrir la publication",
+    "CLIENT FICTIF",
+    "SECOND CLIENT FICTIF",
+    "9 jour(s)",
+    "Sponsor / publicité",
+  ])
+    assert.ok(html.includes(value), value);
+  assert.match(
+    html,
+    /href="https:\/\/www.facebook.com\/photo\?fbid=1146401367957687&amp;set=a.237727165491783"/,
+  );
+  assert.match(html, /rel="noopener noreferrer"/);
 });
 test("Net margin subtracts recorded fees, refunds and cancelled revenue without double-counting them as supplier costs", () => {
   const stats = techFinanceStats(

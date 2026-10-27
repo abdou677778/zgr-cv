@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildCvProPdf } from "./cv-pro-pdf";
+import { buildCvProPdf, INTERNATIONAL_SIDEBAR_SECTION_GAP } from "./cv-pro-pdf";
 import { buildCvProArabicV3Pdf } from "./cv-pro-ar-v3-pdf";
 import { buildCvProInternationalPdf } from "./cv-pro-international-pdf";
 import { importCvJsonSet } from "./cv-json";
@@ -119,11 +119,27 @@ test("International changes only contacts and sidebar lists, preserving the rest
     for (const definition of [before, after]) {
       const sidebar = definition.content[3].columns[0];
       sidebar.stack = sidebar.stack.filter((section: any) => !["software", "languages"].includes(section.zgrSectionId));
+      for (const section of sidebar.stack) if (section.zgrSectionId) section.stack[0].margin = [0,0,0,7];
     }
     assert.deepEqual(after, before, id);
     assert.ok(
       snapshot(applyPdfTheme(international, "cv-pro-international", "#123456")).includes("#123456"),
     );
+  }
+});
+
+test('International sidebar sections share one gap with no empty section or trailing item gap',()=>{
+  for(const hide of [{},{'section.skills':true},{'section.software':true,'section.languages':true}]){
+    const cv=applyCvVisibility(documents.fr!,hide as Record<string,true>);
+    const definition=JSON.parse(snapshot(buildCvProInternationalPdf(cv,'fr')));
+    const sections=definition.content[3].columns[0].stack.filter((item:any)=>item.zgrSectionId);
+    for(const section of sections){
+      assert.equal(section.stack[0].margin[3],INTERNATIONAL_SIDEBAR_SECTION_GAP);
+      assert.equal(section.margin[3],INTERNATIONAL_SIDEBAR_SECTION_GAP);
+      if(section.zgrSectionId==='software') assert.equal(section.stack[1].stack.at(-1).margin[3],0);
+      if(section.zgrSectionId==='languages') assert.equal(section.stack.at(-1).margin[3],0);
+    }
+    assert.ok(!sections.some((section:any)=>hide[`section.${section.zgrSectionId}` as keyof typeof hide]));
   }
 });
 

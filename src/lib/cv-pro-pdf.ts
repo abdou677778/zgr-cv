@@ -390,10 +390,14 @@ function mainSection(label: string, content: Content[], language: DocumentLangua
   } as Content;
 }
 
-function sidebarSection(label: string, content: Content[], language: DocumentLanguage): Content {
+export const INTERNATIONAL_SIDEBAR_SECTION_GAP = 10;
+
+function sidebarSection(label: string, content: Content[], language: DocumentLanguage, balanced = false): Content {
+  const heading = sectionBar(label, language, SIDEBAR_SECTION_W);
+  if (balanced) (heading as { margin: number[] }).margin = [0, 0, 0, INTERNATIONAL_SIDEBAR_SECTION_GAP];
   return {
-    stack: [sectionBar(label, language, SIDEBAR_SECTION_W), ...content],
-    margin: [18, 0, 16, 10],
+    stack: [heading, ...content],
+    margin: [18, 0, 16, balanced ? INTERNATIONAL_SIDEBAR_SECTION_GAP : 10],
   } as Content;
 }
 
@@ -1097,7 +1101,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
   if (skills.length)
     sidebar.push(
       tagSection(
-        sidebarSection(labels.skills, [bulletList(skills, language, true)], language),
+        sidebarSection(labels.skills, [bulletList(skills, language, true)], language, options.verticalSidebarLists),
         "skills",
       ),
     );
@@ -1105,20 +1109,20 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
   if (cv.logiciels.some((item) => item.label.trim()))
     sidebar.push(
       tagSection(
-        sidebarSection(labels.software, [options.verticalSidebarLists ? softwareRows(cv) : softwareGrid(cv, language)], language),
+        sidebarSection(labels.software, [options.verticalSidebarLists ? softwareRows(cv) : softwareGrid(cv, language)], language, options.verticalSidebarLists),
         "software",
       ),
     );
 
   const languages = languageRows(cv, language, options.verticalSidebarLists);
   if (languages.length)
-    sidebar.push(tagSection(sidebarSection(labels.languages, languages, language), "languages"));
+    sidebar.push(tagSection(sidebarSection(labels.languages, languages, language, options.verticalSidebarLists), "languages"));
 
   const participation = cv.participations.filter(clean);
   if (participation.length)
     sidebar.push(
       tagSection(
-        sidebarSection(labels.participation, [bulletList(participation, language, true)], language),
+        sidebarSection(labels.participation, [bulletList(participation, language, true)], language, options.verticalSidebarLists),
         "volunteering",
       ),
     );
@@ -1131,6 +1135,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
           labels.certifications,
           [bulletList(certifications, language, true)],
           language,
+          options.verticalSidebarLists,
         ),
         "certifications",
       ),
@@ -1140,7 +1145,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
   if (references.length)
     sidebar.push(
       tagSection(
-        sidebarSection(labels.references, [bulletList(references, language, true)], language),
+        sidebarSection(labels.references, [bulletList(references, language, true)], language, options.verticalSidebarLists),
         "references",
       ),
     );

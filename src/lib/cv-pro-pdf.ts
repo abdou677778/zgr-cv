@@ -599,7 +599,34 @@ function softwareGrid(cv: CV, language: DocumentLanguage): Content {
   } as Content;
 }
 
-function languageRows(cv: CV, language: DocumentLanguage): Content[] {
+function softwareRows(cv: CV): Content {
+  const items = cv.logiciels.filter((item) => item.label.trim());
+  return {
+    stack: items.map((item, index) => {
+      const icon = SOFTWARE[item.icon] || SOFTWARE.generic;
+      const svg = `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="4" fill="${icon.color}"/><text x="16" y="22" text-anchor="middle" font-family="Arial" font-size="18" font-weight="700" fill="white">${icon.letter}</text></svg>`;
+      return {
+        unbreakable: true,
+        columns: [
+          {
+            width: 18,
+            ...(item.customIconDataUrl?.startsWith("data:image/png")
+              ? { image: item.customIconDataUrl }
+              : { svg }),
+            fit: [14, 9.3],
+            alignment: "center",
+            margin: [0, 0.25, 0, 0],
+          },
+          { width: "*", text: item.label.trim(), fontSize: 8.2, lineHeight: META_LINE_HEIGHT, alignment: "left" },
+        ],
+        columnGap: 4,
+        margin: [0, 0, 0, index === items.length - 1 ? 0 : 7],
+      } as Content;
+    }),
+  };
+}
+
+function languageRows(cv: CV, language: DocumentLanguage, spacious = false): Content[] {
   const labels: Record<keyof CV["langues"], Record<DocumentLanguage, string>> = {
     fr: {
       fr: "Français",
@@ -659,7 +686,7 @@ function languageRows(cv: CV, language: DocumentLanguage): Content[] {
   const rtl = language === "ar";
   return (Object.keys(cv.langues) as Array<keyof CV["langues"]>)
     .filter((key) => cv.langues[key].trim())
-    .map((key) => {
+    .map((key, index, keys) => {
       const flag = {
         width: 18,
         svg: LANGUAGE_FLAGS[key],
@@ -683,7 +710,8 @@ function languageRows(cv: CV, language: DocumentLanguage): Content[] {
       return {
         columns: rtl ? [body, flag] : [flag, body],
         columnGap: 4,
-        margin: [0, 0, 0, 4],
+        ...(spacious ? { unbreakable: true } : {}),
+        margin: [0, 0, 0, spacious ? (index === keys.length - 1 ? 0 : 7) : 4],
       } as Content;
     });
 }
@@ -965,7 +993,7 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   return { stack: content } as Content;
 }
 
-export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inlineContacts?:boolean}={}): TDocumentDefinitions {
+export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inlineContacts?:boolean; verticalSidebarLists?:boolean}={}): TDocumentDefinitions {
   const rtl = language === "ar";
   const labels = LABELS[language];
   const main: OrderedContent[] = [];
@@ -1068,12 +1096,12 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
   if (cv.logiciels.some((item) => item.label.trim()))
     sidebar.push(
       tagSection(
-        sidebarSection(labels.software, [softwareGrid(cv, language)], language),
+        sidebarSection(labels.software, [options.verticalSidebarLists ? softwareRows(cv) : softwareGrid(cv, language)], language),
         "software",
       ),
     );
 
-  const languages = languageRows(cv, language);
+  const languages = languageRows(cv, language, options.verticalSidebarLists);
   if (languages.length)
     sidebar.push(tagSection(sidebarSection(labels.languages, languages, language), "languages"));
 

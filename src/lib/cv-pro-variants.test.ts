@@ -24,6 +24,39 @@ const fixture = JSON.parse(
 const documents = importCvJsonSet(fixture)!.documents;
 const snapshot = (value: unknown) =>
   JSON.stringify(value, (_key, item) => (typeof item === "function" ? item.toString() : item));
+
+test("International software rows match languages and preserve full names and prepared logos", () => {
+  for (const { id } of DOCUMENT_LANGUAGES) {
+    if (id === "ar") continue;
+    const cv = { ...documents[id]!, logiciels: [
+      { id: "word", label: "Microsoft Word avec un nom très long", icon: "microsoftword", customIconDataUrl: "data:image/png;base64,fixture" },
+      { id: "empty", label: "   ", icon: "generic" },
+      { id: "canva", label: "Canva", icon: "canva" },
+    ] };
+    const doc = JSON.parse(snapshot(buildCvProInternationalPdf(cv, id)));
+    const sections = doc.content[3].columns[0].stack;
+    const software = sections.find((section: any) => section.zgrSectionId === "software").stack[1].stack;
+    const languages = sections.find((section: any) => section.zgrSectionId === "languages").stack.slice(1);
+    assert.equal(software.length, 2);
+    assert.equal(software[0].columns[1].text, cv.logiciels[0].label);
+    assert.equal(software[1].columns[1].text, "Canva");
+    assert.equal(software[0].columns[0].image, cv.logiciels[0].customIconDataUrl);
+    for (const row of [...software, ...languages]) {
+      assert.equal(row.columns[0].width, 18);
+      assert.deepEqual(row.columns[0].fit, [14, 9.3]);
+      assert.equal(row.columns[1].fontSize, 8.2);
+      assert.equal(row.columnGap, 4);
+      assert.equal(row.unbreakable, true);
+    }
+    assert.equal(software[0].margin[3], 7);
+    assert.equal(languages[0].margin[3], 7);
+    assert.equal(software.at(-1).margin[3], 0);
+    assert.equal(languages.at(-1).margin[3], 0);
+  }
+  const empty = JSON.parse(snapshot(buildCvProInternationalPdf(emptyCV, "fr")));
+  assert.ok(!snapshot(empty.content[3]).includes('"zgrSectionId":"software"'));
+  assert.ok(!snapshot(empty.content[3]).includes('"zgrSectionId":"languages"'));
+});
 test("frozen Arabic V3 preserves the complete current CV PRO definition and page geometry", () => {
   const original = buildCvProPdf(documents.ar!, "ar");
   const frozen = buildCvProArabicV3Pdf(documents.ar!);
@@ -38,7 +71,7 @@ test("frozen Arabic V3 preserves the complete current CV PRO definition and page
     snapshot(applyPdfTheme(original, "cv-pro", "#123456")),
   );
 });
-test("International changes only the contact groups, preserving the rest of each foreign layout", () => {
+test("International changes only contacts and sidebar lists, preserving the rest of each foreign layout", () => {
   assert.throws(
     () => buildCvProInternationalPdf(documents.ar!, "ar"),
     /réservé aux langues étrangères/,
@@ -58,6 +91,10 @@ test("International changes only the contact groups, preserving the rest of each
     before.content[1].table.body[0][0].stack = [];
     after.content[1].table.body[0][0].stack = [];
     before.content[1].absolutePosition.y = after.content[1].absolutePosition.y;
+    for (const definition of [before, after]) {
+      const sidebar = definition.content[3].columns[0];
+      sidebar.stack = sidebar.stack.filter((section: any) => !["software", "languages"].includes(section.zgrSectionId));
+    }
     assert.deepEqual(after, before, id);
     assert.ok(
       snapshot(applyPdfTheme(international, "cv-pro-international", "#123456")).includes("#123456"),

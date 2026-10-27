@@ -26,7 +26,6 @@ import {
   Archive,
   ChevronDown,
   FileDown,
-  Palette,
   Eye,
   EyeOff,
   Bot,
@@ -75,6 +74,7 @@ import { formatDrivingLicence, formatNationalService } from "@/lib/cv-concise-st
 import { SoftwareLogoPicker } from "@/components/software-logo-picker";
 import { SharedSoftwareLogo } from "@/components/shared-software-logo";
 import { LanguageLogoPicker } from "@/components/language-logo-picker";
+import { ModelColorControl } from '@/components/model-color-control';
 import { AdditionalLanguagesEditor } from '@/components/additional-languages-editor';
 import {MultilingualSectionsReview} from '@/components/multilingual-sections-review';
 import {localizedCustomTitle,synchronizeSoftwareEdit} from '@/lib/multilingual-sections';
@@ -330,15 +330,6 @@ async function pdfWithDeadline<T>(operation: Promise<T>) {
     window.clearTimeout(timeoutId);
   }
 }
-const LANGUAGE_VISUALS: Record<DocumentLanguage, { color: string }> = {
-  fr: { color: "from-blue-500 to-indigo-600" },
-  en: { color: "from-sky-500 to-blue-600" },
-  es: { color: "from-amber-400 to-red-500" },
-  de: { color: "from-zinc-700 to-amber-500" },
-  it: { color: "from-emerald-500 to-red-500" },
-  zh: { color: "from-red-500 to-amber-400" },
-  ar: { color: "from-emerald-500 to-emerald-700" },
-};
 const EUROPASS_EDITOR_LANGUAGE: Record<DocumentLanguage, string> = {
   fr: "fr",
   en: "en",
@@ -406,6 +397,15 @@ const nativePdfSectionOrder = (
 };
 type ColorMode = "light" | "dark";
 
+const DOCUMENT_FLAG_COUNTRIES: Record<DocumentLanguage,string> = {fr:'fr',en:'gb',es:'es',de:'de',it:'it',zh:'cn',ar:'dz'};
+
+function DocumentLanguageFlag({language}:{language:DocumentLanguage}){
+  const country=DOCUMENT_FLAG_COUNTRIES[language];
+  return <img src={`/api/language-flags/${country}.svg`} alt="" aria-hidden="true"
+    className="h-4 w-6 shrink-0 rounded-sm object-contain"
+    onError={event=>{if(event.currentTarget.src.includes('/api/language-flags/'))event.currentTarget.src=`/language-flags/${country}.svg`;}} />;
+}
+
 function LanguageMenu({
   language,
   onLanguageChange,
@@ -417,52 +417,20 @@ function LanguageMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          className="zgr-control h-10 gap-2 rounded-xl border-primary/15 px-3"
-          aria-label={`Langue du document : ${selectedLanguage?.name}`}
-        >
-          <span
-            className={`flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br ${LANGUAGE_VISUALS[language].color} text-[10px] font-extrabold text-white shadow-sm`}
-          >
-            {selectedLanguage?.shortName}
-          </span>
-          <Languages className="h-4 w-4 text-primary" />
-          <span className="hidden text-left sm:block">
-            <span className="block text-[10px] font-medium uppercase leading-none text-muted-foreground">
-              Langue
-            </span>
-            <span className="mt-1 block text-xs font-bold leading-none">
-              {selectedLanguage?.name}
-            </span>
-          </span>
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        <Button type="button" variant="outline"
+          className="zgr-control h-10 shrink-0 gap-2 rounded-xl border-primary/15 px-3"
+          aria-label={`Langue du document : ${selectedLanguage?.name}`}>
+          <DocumentLanguageFlag language={language} />
+          <span className="text-xs font-bold">{selectedLanguage?.name}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64 rounded-xl p-2 shadow-xl">
-        <DropdownMenuLabel className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
-          <Languages className="h-4 w-4 text-primary" /> Langue du document et du formulaire
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
+      <DropdownMenuContent align="end" className="w-44 rounded-xl p-1.5 shadow-xl">
         {DOCUMENT_LANGUAGES.map((item) => (
-          <DropdownMenuItem
-            key={item.id}
-            onSelect={() => onLanguageChange(item.id)}
-            className={`my-1 gap-3 rounded-lg px-2.5 py-2.5 ${language === item.id ? "bg-primary/10 text-primary" : ""}`}
-          >
-            <span
-              className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${LANGUAGE_VISUALS[item.id].color} text-[10px] font-extrabold text-white shadow-sm`}
-            >
-              {item.shortName}
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="font-semibold">{item.name}</span>
-              <span className="text-[11px] text-muted-foreground">
-                Code document : {item.shortName}
-              </span>
-            </span>
-            {language === item.id && <Check className="h-4 w-4 text-primary" />}
+          <DropdownMenuItem key={item.id} onSelect={() => onLanguageChange(item.id)}
+            className={`gap-2 rounded-lg px-2.5 py-2 ${language === item.id ? "bg-primary/10 text-primary" : ""}`}>
+            <DocumentLanguageFlag language={item.id} />
+            <span className="font-semibold">{item.name}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -2965,7 +2933,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     <div lang="fr" dir="ltr" className="zgr-app-shell min-h-screen">
       <header className="zgr-app-header sticky top-0 z-20 border-b">
         <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3">
-          <div className="flex w-full items-center justify-between gap-4">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:flex-nowrap">
             <div className="flex min-w-0 items-center gap-3">
               <div className="zgr-brand-mark flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
                 <img
@@ -2986,7 +2954,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 </p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div data-testid="header-appearance-controls" className="flex w-full min-w-0 items-center justify-end gap-2 sm:w-auto sm:shrink-0">
+              {!isEuropassTemplate && <ModelColorControl colors={paletteColors} value={accentColor}
+                original={TEMPLATE_DEFAULT_COLORS[themeTemplateId]} label={ui.palette}
+                originalLabel={ui.originalColor} customLabel={ui.customColor}
+                onChange={color=>setTemplateColors(current=>({...current,[themeTemplateId]:color}))} />}
               <Button
                 type="button"
                 variant="outline"
@@ -4849,79 +4821,6 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               previewFocusMode ? "lg:mx-auto lg:w-full lg:max-w-6xl" : ""
             }`}
           >
-            {!isEuropassTemplate && (
-              <div className="zgr-preview-palette mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Palette className="h-4 w-4" />
-                  </span>
-                  <span>
-                    <span className="block text-xs font-bold">Couleur du modèle</span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      Mise à jour immédiate de l’aperçu
-                    </span>
-                  </span>
-                </div>
-                <div
-                  className="flex flex-wrap items-center gap-2"
-                  role="group"
-                  aria-label={ui.palette}
-                >
-                  {paletteColors.map((color, index) => {
-                    const selected = accentColor.toLowerCase() === color.toLowerCase();
-                    const original =
-                      color.toLowerCase() === TEMPLATE_DEFAULT_COLORS[themeTemplateId];
-                    return (
-                      <button
-                        key={color}
-                        type="button"
-                        className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                          selected
-                            ? "scale-110 border-white ring-2 ring-zinc-500 dark:border-slate-900"
-                            : "border-white/90 dark:border-slate-800"
-                        }`}
-                        style={{ backgroundColor: color }}
-                        aria-label={`${ui.palette} — ${original ? ui.originalColor : color}`}
-                        aria-pressed={selected}
-                        title={original ? ui.originalColor : color}
-                        onClick={() =>
-                          setTemplateColors((current) => ({
-                            ...current,
-                            [themeTemplateId]: color,
-                          }))
-                        }
-                      >
-                        {index === 0 && <span className="sr-only">{ui.originalColor}</span>}
-                      </button>
-                    );
-                  })}
-                  <label
-                    className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-dashed border-zinc-400 bg-white dark:bg-slate-900"
-                    title={ui.customColor}
-                  >
-                    <span
-                      className="h-5 w-5 rounded-full"
-                      style={{
-                        background:
-                          "conic-gradient(from 90deg, #ef4444, #f97316, #059669, #0891b2, #8b5cf6, #ef4444)",
-                      }}
-                    />
-                    <input
-                      type="color"
-                      value={accentColor}
-                      aria-label={ui.customColor}
-                      className="absolute inset-0 cursor-pointer opacity-0"
-                      onChange={(event) =>
-                        setTemplateColors((current) => ({
-                          ...current,
-                          [themeTemplateId]: event.target.value.toLowerCase(),
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-              </div>
-            )}
             <div className="relative min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-md shadow-slate-900/10">
               {isEuropassTemplate ? (
                 <EuropassPreview

@@ -7,6 +7,13 @@ import { buildCvProInternationalPdf } from "./cv-pro-international-pdf";
 import { importCvJsonSet } from "./cv-json";
 import { DOCUMENT_LANGUAGES } from "./document-language";
 import { applyPdfTheme } from "./pdf-theme";
+import {
+  internationalContactLayout,
+  INTERNATIONAL_CONTACT_ROW_HEIGHT,
+  INTERNATIONAL_CONTACT_GAP,
+} from "./cv-pro-international-contact-layout";
+import { applyCvVisibility } from "./cv-visibility";
+import { emptyCV } from "./cv-types";
 
 const fixture = JSON.parse(
   readFileSync(
@@ -40,17 +47,82 @@ test("International changes only the contact groups, preserving the rest of each
     if (id === "ar") continue;
     const original = buildCvProPdf(documents[id]!, id);
     const international = buildCvProInternationalPdf(documents[id]!, id);
-    const before=JSON.parse(snapshot(original));
-    const after=JSON.parse(snapshot(international));
-    const rows=after.content[1].table.body[0][0].stack;
-    for(const row of rows){
-      assert.deepEqual(row.table.widths,['*',11,7,'auto','*'],id);
-      assert.ok(row.table.body[0][1].svg,id);
-      assert.equal(row.table.body[0][3].alignment,'left',id);
+    const before = JSON.parse(snapshot(original));
+    const after = JSON.parse(snapshot(international));
+    const rows = after.content[1].table.body[0][0].stack;
+    for (const row of rows) {
+      assert.deepEqual(row.table.widths, ["*", 11, 7, "auto", "*"], id);
+      assert.ok(row.table.body[0][1].svg, id);
+      assert.equal(row.table.body[0][3].alignment, "left", id);
     }
-    before.content[1].table.body[0][0].stack=[];
-    after.content[1].table.body[0][0].stack=[];
-    assert.deepEqual(after,before,id);
-    assert.ok(snapshot(applyPdfTheme(international,'cv-pro-international','#123456')).includes('#123456'));
+    before.content[1].table.body[0][0].stack = [];
+    after.content[1].table.body[0][0].stack = [];
+    before.content[1].absolutePosition.y = after.content[1].absolutePosition.y;
+    assert.deepEqual(after, before, id);
+    assert.ok(
+      snapshot(applyPdfTheme(international, "cv-pro-international", "#123456")).includes("#123456"),
+    );
   }
+});
+
+test("International dynamically balances margins for every visible subset and portrait state", () => {
+  const groups = [
+    ["telephone"],
+    ["email"],
+    ["date_naissance", "situation_familiale"],
+    ["permis_conduire"],
+    ["service_national"],
+    ["adresse"],
+    ["statut_relocation"],
+  ];
+  for (const hasPhoto of [false, true])
+    for (let mask = 0; mask < 128; mask++) {
+      const hidden: Record<string, true> = {};
+      groups.forEach((fields, index) => {
+        if (!(mask & (1 << index))) for (const field of fields) hidden[`personal.${field}`] = true;
+      });
+      const source = {
+        ...documents.fr!,
+        photo: hasPhoto
+          ? {
+              dataUrl: "data:image/png;base64,fixture",
+              name: "fixture",
+              width: 140,
+              height: 140,
+              sizeBytes: 1,
+              mimeType: "image/webp" as const,
+              updatedAt: "2026-10-27",
+            }
+          : undefined,
+      };
+      const visible = applyCvVisibility(source, hidden);
+      const document = JSON.parse(snapshot(buildCvProInternationalPdf(visible, "fr")));
+      const block = document.content[1];
+      const rows = block.table.body[0][0].stack;
+      const count = groups.filter((_group, index) => mask & (1 << index)).length;
+      assert.equal(rows.length, count, `mask ${mask}`);
+      const geometry = internationalContactLayout(count, hasPhoto);
+      assert.equal(
+        block.absolutePosition.y - geometry.photoBottom,
+        geometry.ovalBottom - (block.absolutePosition.y + geometry.height),
+      );
+      assert.ok(geometry.margin > 0);
+      rows.forEach((row: any, index: number) => {
+        assert.equal(row.table.heights, INTERNATIONAL_CONTACT_ROW_HEIGHT);
+        assert.equal(row.margin[3], index === count - 1 ? 0 : INTERNATIONAL_CONTACT_GAP);
+      });
+    }
+});
+test("Whitespace-only contacts and a hidden address never leave phantom rows", () => {
+  const cv = {
+    ...emptyCV,
+    telephone: "  ",
+    email: " ",
+    permis_conduire: " ",
+    service_national: " ",
+    wilaya: "Alger",
+    pays: "Algérie",
+  };
+  const document = JSON.parse(snapshot(buildCvProInternationalPdf(cv, "fr")));
+  assert.equal(document.content[1].table.body[0][0].stack.length, 0);
 });

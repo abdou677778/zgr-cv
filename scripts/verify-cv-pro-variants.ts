@@ -5,6 +5,8 @@ import { buildCvProPdf } from "../src/lib/cv-pro-pdf";
 import { buildCvProArabicV3Pdf } from "../src/lib/cv-pro-ar-v3-pdf";
 import { buildCvProInternationalPdf } from "../src/lib/cv-pro-international-pdf";
 import { importCvJsonSet } from "../src/lib/cv-json";
+import { applyCvVisibility } from "../src/lib/cv-visibility";
+import { emptyCV } from "../src/lib/cv-types";
 
 const root = new URL("../", import.meta.url);
 const pack = JSON.parse(
@@ -37,6 +39,28 @@ const variants = [
   ["arabic-v3", buildCvProArabicV3Pdf(documents.ar!)],
   ["french-before", buildCvProPdf(documents.fr!, "fr")],
   ["international-fr", buildCvProInternationalPdf(documents.fr!, "fr")],
+  [
+    "international-without-status",
+    buildCvProInternationalPdf({ ...documents.fr!, statut_relocation: "" }, "fr"),
+  ],
+  [
+    "international-hidden-address",
+    buildCvProInternationalPdf(
+      applyCvVisibility(documents.fr!, { "personal.adresse": true }),
+      "fr",
+    ),
+  ],
+  [
+    "international-only-phone",
+    buildCvProInternationalPdf(
+      { ...emptyCV, nom_complet: "Test", telephone: "0555 123 456" },
+      "fr",
+    ),
+  ],
+  [
+    "international-no-contacts",
+    buildCvProInternationalPdf({ ...emptyCV, nom_complet: "Test" }, "fr"),
+  ],
 ] as const;
 for (const [name, definition] of variants) {
   const blob = await pdfMake.createPdf(definition).getBlob();

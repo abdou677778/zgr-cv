@@ -10,6 +10,7 @@ import {
 } from "./cv-types";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { cvEntryLocation } from "./cv-entry-location";
+import {internationalContactLayout,INTERNATIONAL_CONTACT_ROW_HEIGHT,INTERNATIONAL_CONTACT_GAP} from './cv-pro-international-contact-layout';
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
@@ -713,6 +714,7 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     // Equal outside spaces centre the complete value + gap + icon group.
     // The text is measured by pdfmake, including mixed Arabic/Latin values.
     table: {
+      ...(inlineContacts&&!rtl?{heights:INTERNATIONAL_CONTACT_ROW_HEIGHT}:{}),
       widths: rtl ? ["*", "auto", 5, 11, "*"] : inlineContacts ? ["*",11,7,"auto","*"] : [13, "*", 13],
       body: [rtl
         ? [{ text: "" }, textNode, { text: "" }, iconNode, { text: "" }]
@@ -729,7 +731,7 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     // The table spans the fixed contact zone; its centre equals the circle's
     // centre. The middle text cell is therefore perfectly aligned to it.
     // Keep the international group clear of the oval's narrowing bottom curve.
-    margin: [0, 0, 0, rtl ? 5 : inlineContacts ? 4 : 7],
+    margin: [0, 0, 0, rtl ? 5 : inlineContacts ? INTERNATIONAL_CONTACT_GAP : 7],
   } as Content;
 }
 
@@ -755,22 +757,23 @@ function firstPageOverlay(cv: CV, language: DocumentLanguage, inlineContacts=fal
   const identityX = rtl ? 25 : 237;
   const contactWidth = rtl ? 164 : 184;
   const contactX = capsuleX + (204 - contactWidth) / 2;
-  const contactY = rtl ? 213 : 220;
+  let contactY = rtl ? 213 : 220;
   const contactLabels = CONTACT_LABELS[language];
   const birthAndFamily = [cv.date_naissance, cv.situation_familiale]
     .map(clean)
     .filter(Boolean)
     .join(", ");
-  const location = cv.adresse.trim() || [cv.wilaya, cv.pays].map(clean).filter(Boolean).join(", ");
+  const location = cv.adresse.trim() || (inlineContacts?'':[cv.wilaya, cv.pays].map(clean).filter(Boolean).join(", "));
   const relocation = cv.statut_relocation.trim();
+  const present=(value:string)=>inlineContacts?value.trim():value;
   const contacts = [
-    cv.telephone ? contactLine("phone", cv.telephone, language,inlineContacts) : null,
-    cv.email ? contactLine("mail", cv.email, language,inlineContacts) : null,
+    present(cv.telephone) ? contactLine("phone", cv.telephone, language,inlineContacts) : null,
+    present(cv.email) ? contactLine("mail", cv.email, language,inlineContacts) : null,
     birthAndFamily ? contactLine("user", birthAndFamily, language,inlineContacts) : null,
-    cv.permis_conduire
+    present(cv.permis_conduire)
       ? contactLine("car", labeledContact(cv.permis_conduire, contactLabels.driving), language,inlineContacts)
       : null,
-    cv.service_national
+    present(cv.service_national)
       ? contactLine("star", labeledContact(cv.service_national, contactLabels.service), language,inlineContacts)
       : null,
     location ? contactLine("pin", location, language,inlineContacts) : null,
@@ -779,6 +782,11 @@ function firstPageOverlay(cv: CV, language: DocumentLanguage, inlineContacts=fal
     // mistaken for part of the postal address or being wrapped mid-sentence.
     relocation ? contactLine("globe", relocation, language,inlineContacts) : null,
   ].filter((item): item is Content => Boolean(item));
+  if(inlineContacts&&!rtl){
+    contactY=internationalContactLayout(contacts.length,!!cv.photo?.dataUrl).top;
+    // The last row has no trailing spacing, so equal margins use only real content.
+    if(contacts.length)(contacts[contacts.length-1] as {margin:number[]}).margin=[0,0,0,0];
+  }
   const noBorders = {
     hLineWidth: () => 0,
     vLineWidth: () => 0,

@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Receipt,
   BarChart3,
+  Trash2,
 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { FullPageWorkspace } from "./full-page-workspace";
@@ -52,6 +53,9 @@ import {
   techContactAt,
   todayAlgiers,
   techOrderState,
+  techOrderIsRenewalHistory,
+  techRenewedLineIds,
+  techClientKey,
   techOrderLabel,
   techClients,
   filterTechOrders,
@@ -233,6 +237,8 @@ export function TechOrdersWorkspace({
   const [today, setToday] = useState(todayAlgiers);
   const [renewSource, setRenewSource] = useState<TechOrder>();
   const [renewLineIds, setRenewLineIds] = useState<string[]>([]);
+  const [renewStart, setRenewStart] = useState("");
+  const [renewContinuity, setRenewContinuity] = useState(false);
   const [pendingLine, setPendingLine] = useState<TechLine>();
   const [visibleCount, setVisibleCount] = useState(25);
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -245,7 +251,7 @@ export function TechOrdersWorkspace({
     messageOpening.current = true;
     setMessageOrderId(item.id);
   };
-  const hasDraft = !!(order || service || financeDirty);
+  const hasDraft = !!(order || service || financeDirty || renewSource);
   useEffect(() => {
     if (!hasDraft) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -355,9 +361,39 @@ export function TechOrdersWorkspace({
   const startRenewal = (source: TechOrder) => {
     setRenewSource(source);
     setRenewLineIds(source.lines.map((line) => line.id));
-    setMessage(
-      "Choisissez les services et la période, puis préparez le renouvellement. Aucune vente n’est encore enregistrée.",
+    setRenewMonths(1);
+    setRenewContinuity(false);
+    setRenewStart(
+      source.lines.reduce((start, line) => (line.end > start ? line.end : start), today),
     );
+    setMessage(
+      "Choisissez la date réelle de reprise et la période. Préparer ne change aucun état : seul l’enregistrement crée la nouvelle vente.",
+    );
+  };
+  const deleteSale = async (item: TechOrder) => {
+    if (writing.current || hasDraft) return;
+    const label = techOrderLabel(item);
+    const answer = window.prompt(
+      `Supprimer la vente erronée de ${item.client} (${label}) ? Elle sera retirée des listes et totaux, avec une trace conservée. Saisissez ${label} pour confirmer.`,
+    );
+    if (answer?.trim() !== label) return;
+    writing.current = true;
+    setBusy(true);
+    try {
+      await cloudJson(
+        `/api/tech-orders/orders/${item.id}?revision=${item.revision}&confirm=${encodeURIComponent(label)}`,
+        { method: "DELETE" },
+      );
+      setOrders((current) => current.filter((entry) => entry.id !== item.id));
+      setMessage(
+        `Vente ${label} supprimée du registre et des totaux. Une trace privée est conservée.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
   };
   const editService = (next?: TechService) => {
     if (
@@ -457,6 +493,15 @@ export function TechOrdersWorkspace({
                 </a>
               </DropdownMenuItem>
             ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={disabled}
+            className="min-h-11 rounded-lg text-red-700 focus:text-red-800"
+            onSelect={() => void deleteSale(item)}
+          >
+            <Trash2 />
+            Supprimer la vente
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     );
@@ -467,7 +512,8 @@ export function TechOrdersWorkspace({
     () =>
       orders.reduce(
         (counts, item) => {
-          counts[techOrderState(item, today)]++;
+          if (!techOrderIsRenewalHistory(item, orders, today))
+            counts[techOrderState(item, today, orders)]++;
           return counts;
         },
         { active: 0, ending: 0, inactive: 0 },
@@ -577,6 +623,12 @@ export function TechOrdersWorkspace({
         body: JSON.stringify(order),
       });
       setOrders((current) => [...current.filter((o) => o.id !== order.id), data.record]);
+      if (data.record.renewalOf && !next)
+        setFilters({
+          ...emptyTechFilters,
+          client: techClientKey(data.record),
+          state: techOrderState(data.record, today),
+        });
       setOrder(next ? blankOrder() : undefined);
       setPendingLine(undefined);
       setSelected("");
@@ -813,6 +865,7 @@ export function TechOrdersWorkspace({
         </DialogPrimitive.Root>
         <TechStatusTiles
           counts={stateCounts}
+          total={orders.length}
           selected={filters.state}
           onSelect={(state) => setFilters((current) => ({ ...current, state }))}
         />
@@ -880,22 +933,54 @@ export function TechOrdersWorkspace({
                 </label>
               ))}
             </div>
-            <Field label="Période à renouveler">
-              <select
-                className="h-9 rounded border px-2"
-                value={renewMonths}
-                onChange={(e) => setRenewMonths(Number(e.target.value))}
-              >
-                {[1, 3, 6, 12].map((m) => (
-                  <option key={m} value={m}>
-                    {m} mois
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Début réel du nouveau renouvellement">
+                <Input
+                  type="date"
+                  required
+                  min="2000-01-01"
+                  max="2199-12-31"
+                  value={renewStart}
+                  disabled={renewContinuity || busy}
+                  onChange={(event) => setRenewStart(event.target.value)}
+                />
+              </Field>
+              <Field label="Période à renouveler">
+                <select
+                  className="h-9 rounded border px-2"
+                  value={renewMonths}
+                  onChange={(e) => setRenewMonths(Number(e.target.value))}
+                >
+                  {Array.from({ length: 12 }, (_, index) => index + 1).map((m) => (
+                    <option key={m} value={m}>
+                      {m} mois
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={renewContinuity}
+                onChange={(event) => setRenewContinuity(event.target.checked)}
+              />
+              Continuité automatique par service (fin précédente si à venir, sinon aujourd’hui)
+            </label>
+            {!renewContinuity && (
+              <p className="text-xs text-indigo-800">
+                Reprise : {renewStart || "à renseigner"} → fin :{" "}
+                {addTechMonths(renewStart, renewMonths) || "à renseigner"}. L’état suit ces dates
+                réelles, pas la date de saisie.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               <Button
-                disabled={busy || !renewLineIds.length}
+                disabled={
+                  busy ||
+                  !renewLineIds.length ||
+                  (!renewContinuity && !addTechMonths(renewStart, renewMonths))
+                }
                 onClick={() => {
                   setOrder(
                     renewTechOrder(
@@ -906,6 +991,7 @@ export function TechOrdersWorkspace({
                       services,
                       renewMonths,
                       today,
+                      renewContinuity ? undefined : renewStart,
                     ),
                   );
                   setRenewSource(undefined);
@@ -1356,6 +1442,7 @@ export function TechOrdersWorkspace({
             <TechMobileOrderCard
               key={item.id}
               order={item}
+              renewedLineIds={techRenewedLineIds(item, orders, today)}
               today={today}
               renderLogo={(serviceId) => (
                 <Logo
@@ -1414,9 +1501,19 @@ export function TechOrdersWorkspace({
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <StateBadge state={techOrderState(item, today)} />
+                      {techOrderIsRenewalHistory(item, orders, today) ? (
+                        <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
+                          Renouvelé · historique
+                        </span>
+                      ) : (
+                        <StateBadge state={techOrderState(item, today, orders)} />
+                      )}
                       {item.lines
-                        .filter((line) => techLineStatus(line, today) === "Expiré")
+                        .filter(
+                          (line) =>
+                            techLineStatus(line, today) === "Expiré" &&
+                            !techRenewedLineIds(item, orders, today).has(line.id),
+                        )
                         .map((line) => (
                           <div key={line.id}>
                             <span className="sr-only">{line.name} : </span>
@@ -1445,14 +1542,18 @@ export function TechOrdersWorkspace({
                               {line.start} → {line.end} ·{" "}
                               <span
                                 className={
-                                  techLineStatus(line, today) === "Expiré"
-                                    ? "text-red-700"
-                                    : techLineStatus(line, today) === "Expire sous 3 jours"
-                                      ? "text-amber-700"
-                                      : ""
+                                  techRenewedLineIds(item, orders, today).has(line.id)
+                                    ? "text-indigo-700"
+                                    : techLineStatus(line, today) === "Expiré"
+                                      ? "text-red-700"
+                                      : techLineStatus(line, today) === "Expire sous 3 jours"
+                                        ? "text-amber-700"
+                                        : ""
                                 }
                               >
-                                {techLineStatus(line, today)}
+                                {techRenewedLineIds(item, orders, today).has(line.id)
+                                  ? "Renouvelé · historique"
+                                  : techLineStatus(line, today)}
                               </span>
                             </small>
                             {line.invoiceUrl && (

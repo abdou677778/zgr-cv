@@ -9,12 +9,14 @@ export function TechMobileOrderCard({
   renderLogo,
   menu,
   onContact,
+  renewedLineIds = new Set<string>(),
 }: {
   order: TechOrder;
   today: string;
   renderLogo: (serviceId: string) => ReactNode;
   menu: ReactNode;
   onContact?: () => void;
+  renewedLineIds?: Set<string>;
 }) {
   const value = orderTotals(order);
   return (
@@ -32,6 +34,7 @@ export function TechMobileOrderCard({
         <div className="min-w-0 space-y-2.5">
           {order.lines.map((line) => {
             const status = techLineStatus(line, today);
+            const renewed = renewedLineIds.has(line.id);
             const active = status === "Actif",
               ending = status === "Expire sous 3 jours",
               upcoming = status === "À venir";
@@ -49,12 +52,26 @@ export function TechMobileOrderCard({
                     Fin : <time dateTime={line.end}>{formatTechDeadline(line.end)}</time>
                   </p>
                   <span
-                    title={`${status} — calculé automatiquement selon les dates`}
-                    className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold leading-3 ${active ? "bg-green-100 text-green-800" : ending ? "bg-amber-100 text-amber-900" : upcoming ? "bg-slate-100 text-slate-600" : "bg-red-100 text-red-800"}`}
+                    title={
+                      renewed
+                        ? "Ancienne période renouvelée — historique conservé"
+                        : `${status} — calculé automatiquement selon les dates`
+                    }
+                    className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold leading-3 ${renewed ? "bg-indigo-50 text-indigo-700" : active ? "bg-green-100 text-green-800" : ending ? "bg-amber-100 text-amber-900" : upcoming ? "bg-slate-100 text-slate-600" : "bg-red-100 text-red-800"}`}
                   >
-                    {active ? "Actif" : ending ? "Expire ≤ 3 j" : upcoming ? "À venir" : "Inactif"}
+                    {renewed
+                      ? "Renouvelé · historique"
+                      : active
+                        ? "Actif"
+                        : ending
+                          ? "Expire ≤ 3 j"
+                          : upcoming
+                            ? "À venir"
+                            : "Inactif"}
                   </span>
-                  {status === "Expiré" && <TechContactBadge line={line} onClick={onContact} />}
+                  {status === "Expiré" && !renewed && (
+                    <TechContactBadge line={line} onClick={onContact} />
+                  )}
                 </div>
               </div>
             );

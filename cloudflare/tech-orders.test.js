@@ -94,6 +94,121 @@ const request = (path, body) =>
   );
 const respond = (body, status) => Response.json(body, { status });
 
+test("Sale removal is admin-only, confirmed, revision guarded and preserves a recoverable private trace", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  await handleTechOrders(request("/services/test-service", service), env, actor, respond);
+  await handleTechOrders(request("/orders/test-order", order), env, actor, respond);
+  const remove = (revision = 1, confirm = "TECH-TEST-ORD") =>
+    new Request(
+      `https://example.test/api/tech-orders/orders/test-order?revision=${revision}&confirm=${confirm}`,
+      { method: "DELETE" },
+    );
+  assert.equal((await handleTechOrders(remove(), env, { role: "editor" }, respond)).status, 403);
+  assert.equal((await handleTechOrders(remove(1, "wrong"), env, actor, respond)).status, 400);
+  assert.equal((await handleTechOrders(remove(0), env, actor, respond)).status, 409);
+  assert.equal((await handleTechOrders(remove(), env, actor, respond)).status, 200);
+  assert.equal((await handleTechOrders(remove(), env, actor, respond)).status, 200);
+  const read = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.equal(read.orders.length, 0);
+  const tombstone = JSON.parse(
+    env.CLIENTS_BUCKET.map.get("tech-orders/v1/current/orders/test-order.json").text,
+  );
+  assert.equal(tombstone.deletedBy, actor.username);
+  assert.ok(tombstone.deletedAt);
+  assert.ok(
+    [...env.CLIENTS_BUCKET.map.keys()].some((key) =>
+      key.startsWith("tech-orders/v1/history/orders/test-order/"),
+    ),
+  );
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/orders/test-order", { ...order, revision: 2 }),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    410,
+  );
+});
+test("Duplicate renewal periods are rejected; original records and active financial references cannot be removed", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  await handleTechOrders(request("/services/test-service", service), env, actor, respond);
+  await handleTechOrders(request("/orders/test-order", order), env, actor, respond);
+  const child = {
+    ...order,
+    id: "child",
+    renewalOf: order.id,
+    lines: [{ ...order.lines[0], start: "2026-11-27", end: "2026-12-27" }],
+  };
+  assert.equal(
+    (await handleTechOrders(request("/orders/child", child), env, actor, respond)).status,
+    200,
+  );
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/orders/duplicate", { ...child, id: "duplicate" }),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/orders/bad-parent", { ...child, id: "bad-parent", renewalOf: "missing" }),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    400,
+  );
+  const remove = (id) =>
+    new Request(
+      `https://example.test/api/tech-orders/orders/${id}?revision=1&confirm=TECH-${id.slice(0, 8).toUpperCase()}`,
+      { method: "DELETE" },
+    );
+  assert.equal((await handleTechOrders(remove(order.id), env, actor, respond)).status, 409);
+  assert.equal((await handleTechOrders(remove("child"), env, actor, respond)).status, 200);
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/orders/replacement", { ...child, id: "replacement" }),
+        env,
+        actor,
+        respond,
+      )
+    ).status,
+    200,
+  );
+  await handleTechOrders(
+    request("/finance/main", {
+      id: "main",
+      revision: 0,
+      entries: [
+        {
+          id: "fee",
+          date: "2026-10-27",
+          kind: "other",
+          amountDzd: 100,
+          label: "TEST",
+          orderId: "replacement",
+          voided: false,
+        },
+      ],
+    }),
+    env,
+    actor,
+    respond,
+  );
+  assert.equal((await handleTechOrders(remove("replacement"), env, actor, respond)).status, 409);
+});
+
 test("Contact confirmation survives cloud reload, rejects stale writes, and can be undone", async () => {
   const env = { CLIENTS_BUCKET: new Bucket() };
   await handleTechOrders(request("/services/test-service", service), env, actor, respond);

@@ -31,6 +31,7 @@ export type TechOrder = {
   renewalOf: string;
   lines: TechLine[];
   createdAt?: string;
+  deletedAt?: string;
 };
 export const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 export function lineTotals(line: Pick<TechLine, "priceUsd" | "rate" | "saleDzd">) {
@@ -124,6 +125,7 @@ export function renewTechOrder(
   services: TechService[],
   months: number,
   today = todayAlgiers(),
+  startOverride?: string,
 ): TechOrder {
   return {
     id: crypto.randomUUID(),
@@ -134,7 +136,7 @@ export function renewTechOrder(
     renewalOf: order.id,
     lines: order.lines.map((old) => {
       const service = services.find((s) => s.id === old.serviceId);
-      const start = old.end > today ? old.end : today;
+      const start = startOverride ?? (old.end > today ? old.end : today);
       const factor = service ? months / service.months : 1;
       return {
         ...old,
@@ -164,8 +166,44 @@ export function techContactAt(line: TechLine) {
   return contact?.start === line.start && contact.end === line.end ? contact.at : undefined;
 }
 export type TechState = "active" | "ending" | "inactive";
-export function techOrderState(order: TechOrder, today = todayAlgiers()): TechState {
-  const states = order.lines.map((line) => techLineStatus(line, today));
+export function techRenewedLineIds(order: TechOrder, orders: TechOrder[], today = todayAlgiers()) {
+  return new Set(
+    order.lines
+      .filter((line) =>
+        orders.some(
+          (child) =>
+            !child.deletedAt &&
+            child.renewalOf === order.id &&
+            techClientKey(child) === techClientKey(order) &&
+            child.lines.some(
+              (next) =>
+                next.serviceId === line.serviceId &&
+                next.start >= line.start &&
+                next.start <= today,
+            ),
+        ),
+      )
+      .map((line) => line.id),
+  );
+}
+export function techOrderIsRenewalHistory(
+  order: TechOrder,
+  orders: TechOrder[],
+  today = todayAlgiers(),
+) {
+  return (
+    order.lines.length > 0 && techRenewedLineIds(order, orders, today).size === order.lines.length
+  );
+}
+export function techOrderState(
+  order: TechOrder,
+  today = todayAlgiers(),
+  orders: TechOrder[] = [],
+): TechState {
+  const renewed = techRenewedLineIds(order, orders, today);
+  const states = order.lines
+    .filter((line) => !renewed.has(line.id))
+    .map((line) => techLineStatus(line, today));
   return states.includes("Expire sous 3 jours")
     ? "ending"
     : states.includes("Actif")
@@ -254,13 +292,19 @@ export function filterTechOrders(
     !!date && (!filters.from || date >= filters.from) && (!filters.to || date <= filters.to);
   return orders
     .filter((order) => {
+      if (order.deletedAt) return false;
       if (filters.client && techClientKey(order) !== filters.client) return false;
       if (
         filters.orderId &&
         !normalized(`${order.id} ${techOrderLabel(order)}`).includes(normalized(filters.orderId))
       )
         return false;
-      if (filters.state && techOrderState(order, today) !== filters.state) return false;
+      if (
+        filters.state &&
+        (techOrderIsRenewalHistory(order, orders, today) ||
+          techOrderState(order, today, orders) !== filters.state)
+      )
+        return false;
       if (
         filters.query &&
         !techMatchesSearch(

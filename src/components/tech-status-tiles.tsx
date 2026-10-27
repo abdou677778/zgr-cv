@@ -3,15 +3,19 @@ export function TechStatusTiles({
   counts,
   selected,
   onSelect,
+  total,
 }: {
   counts: Record<TechState, number>;
   selected: string;
   onSelect: (state: TechState | "") => void;
+  total?: number;
 }) {
   return (
     <div className="grid grid-cols-4 gap-1.5 sm:gap-3" aria-label="Accès rapide par état">
       {(["", "active", "ending", "inactive"] as const).map((state) => {
-        const count = state ? counts[state] : counts.active + counts.ending + counts.inactive;
+        const count = state
+          ? counts[state]
+          : (total ?? counts.active + counts.ending + counts.inactive);
         const label = !state
           ? "Tous"
           : state === "active"

@@ -245,7 +245,8 @@ export function validateFinanceLinks(finance, orders) {
   const sums = new Map();
   for (const entry of finance.entries) {
     for (const id of financeLinkedOrders(entry))
-      if (!orders.has(id)) throw Error("La vente liée aux frais est introuvable.");
+      if (!orders.has(id) || (orders.get(id).deletedAt && !entry.voided))
+        throw Error("La vente liée aux frais est introuvable ou supprimée.");
     if (!entry.orderId) continue;
     if (!orders.has(entry.orderId)) throw Error("La vente liée aux frais est introuvable.");
     if (entry.voided) continue;
@@ -266,6 +267,28 @@ export function validateFinanceLinks(finance, orders) {
     if (amounts.credit > cost)
       throw Error("Les avoirs fournisseurs liés dépassent le coût de cette vente.");
   }
+}
+async function activeTechOrders(env) {
+  const orders = [];
+  let cursor;
+  do {
+    const page = await env.CLIENTS_BUCKET.list({
+      prefix: `${PREFIX}current/orders/`,
+      cursor,
+      limit: 500,
+    });
+    for (let offset = 0; offset < page.objects.length; offset += 8) {
+      const batch = await Promise.all(
+        page.objects.slice(offset, offset + 8).map(async (item) => {
+          const object = await env.CLIENTS_BUCKET.get(item.key);
+          return object ? JSON.parse(await object.text()) : null;
+        }),
+      );
+      orders.push(...batch.filter((entry) => entry && !entry.deletedAt));
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return orders;
 }
 export async function handleTechOrders(request, env, actor, respond) {
   if (actor.role !== "admin")
@@ -296,7 +319,7 @@ export async function handleTechOrders(request, env, actor, respond) {
           if (item.key.includes("/logos/")) logos[item.value.id] = item.value;
           else if (item.key === `${PREFIX}current/finance/main.json`) finance = item.value;
           else if (item.key.includes("/services/")) services.push(item.value);
-          else if (item.key.includes("/orders/")) orders.push(item.value);
+          else if (item.key.includes("/orders/") && !item.value.deletedAt) orders.push(item.value);
         }
       }
       cursor = page.truncated ? page.cursor : undefined;
@@ -306,6 +329,61 @@ export async function handleTechOrders(request, env, actor, respond) {
   const match = path.match(
     /^\/api\/tech-orders\/(services|orders|logos|finance)\/([a-zA-Z0-9-]{1,80})$/,
   );
+  if (match?.[1] === "orders" && request.method === "DELETE") {
+    const params = new URL(request.url).searchParams;
+    const expected = `TECH-${match[2].slice(0, 8).toUpperCase()}`;
+    if (params.get("confirm") !== expected || !/^\d{1,12}$/.test(params.get("revision") || ""))
+      return respond({ error: "Confirmez l’identifiant de la vente et sa révision." }, 400);
+    const key = `${PREFIX}current/orders/${match[2]}.json`;
+    const previous = await env.CLIENTS_BUCKET.get(key);
+    if (!previous) return respond({ error: "Vente introuvable." }, 404);
+    const old = JSON.parse(await previous.text());
+    if (old.deletedAt) return respond({ deleted: true, id: old.id }, 200);
+    if (old.revision !== Number(params.get("revision")))
+      return respond({ error: "La vente a changé. Actualisez avant de la supprimer." }, 409);
+    const ledger = await env.CLIENTS_BUCKET.get(`${PREFIX}current/finance/main.json`);
+    if (
+      ledger &&
+      JSON.parse(await ledger.text()).entries.some(
+        (entry) => !entry.voided && financeLinkedOrders(entry).includes(old.id),
+      )
+    )
+      return respond(
+        {
+          error:
+            "Cette vente est liée à des frais ou ajustements actifs. Neutralisez ces liens avant de la supprimer.",
+        },
+        409,
+      );
+    if ((await activeTechOrders(env)).some((entry) => entry.renewalOf === old.id))
+      return respond(
+        {
+          error:
+            "Cette vente possède un renouvellement. Supprimez d’abord la vente de renouvellement erronée, pas son origine.",
+        },
+        409,
+      );
+    const now = new Date().toISOString();
+    const updated = {
+      ...old,
+      revision: old.revision + 1,
+      deletedAt: now,
+      deletedBy: actor.username,
+      updatedAt: now,
+      updatedBy: actor.username,
+    };
+    await env.CLIENTS_BUCKET.put(
+      `${PREFIX}history/orders/${old.id}/${old.revision}-${crypto.randomUUID()}.json`,
+      JSON.stringify(old),
+    );
+    const saved = await env.CLIENTS_BUCKET.put(key, JSON.stringify(updated), {
+      onlyIf: { etagMatches: previous.etag },
+      httpMetadata: { contentType: "application/json" },
+    });
+    return saved
+      ? respond({ deleted: true, id: old.id }, 200)
+      : respond({ error: "Modification concurrente. Actualisez avant de supprimer." }, 409);
+  }
   if (!match || request.method !== "PUT")
     return respond({ error: "Route ZGR Tech Orders introuvable." }, 404);
   // Read the actual body with a bound, even if Content-Length is omitted or forged.
@@ -339,6 +417,11 @@ export async function handleTechOrders(request, env, actor, respond) {
   const key = `${PREFIX}current/${match[1]}/${match[2]}.json`;
   const previous = await env.CLIENTS_BUCKET.get(key);
   const old = previous ? JSON.parse(await previous.text()) : null;
+  if (old?.deletedAt)
+    return respond(
+      { error: "Cette vente a été supprimée et ne peut pas être réenregistrée." },
+      410,
+    );
   if ((old?.revision ?? 0) !== input.revision)
     return respond(
       { error: "Modifié depuis un autre onglet. Actualisez avant de réessayer." },
@@ -399,6 +482,50 @@ export async function handleTechOrders(request, env, actor, respond) {
   if (record.renewalOf === record.id)
     return respond({ error: "Un renouvellement doit créer une nouvelle vente." }, 400);
   if (match[1] === "orders") {
+    if (record.renewalOf) {
+      const parentObject = await env.CLIENTS_BUCKET.get(
+        `${PREFIX}current/orders/${record.renewalOf}.json`,
+      );
+      const parent = parentObject ? JSON.parse(await parentObject.text()) : null;
+      const identity = (value) =>
+        JSON.stringify([
+          value.client.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("fr"),
+          value.facebookUrl.trim(),
+        ]);
+      if (!parent || parent.deletedAt || identity(parent) !== identity(record))
+        return respond(
+          { error: "Origine du renouvellement introuvable ou client différent." },
+          400,
+        );
+      const changedPeriod =
+        !old ||
+        old.renewalOf !== record.renewalOf ||
+        JSON.stringify(old.lines.map((line) => [line.serviceId, line.start, line.end])) !==
+          JSON.stringify(record.lines.map((line) => [line.serviceId, line.start, line.end]));
+      if (
+        changedPeriod &&
+        (await activeTechOrders(env)).some(
+          (entry) =>
+            entry.id !== record.id &&
+            entry.renewalOf === record.renewalOf &&
+            entry.lines.some((other) =>
+              record.lines.some(
+                (line) =>
+                  line.serviceId === other.serviceId &&
+                  line.start < other.end &&
+                  other.start < line.end,
+              ),
+            ),
+        )
+      )
+        return respond(
+          {
+            error:
+              "Un renouvellement existe déjà pour ce service sur cette période. Modifiez la vente existante au lieu de créer un doublon.",
+          },
+          409,
+        );
+    }
     const ledger = await env.CLIENTS_BUCKET.get(`${PREFIX}current/finance/main.json`);
     if (ledger) {
       const finance = JSON.parse(await ledger.text());

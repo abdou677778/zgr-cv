@@ -2,6 +2,7 @@ import {expect,test} from '@playwright/test';
 import {readFile,mkdir} from 'node:fs/promises';
 
 for(const width of [1440,375,320])test(`compact header appearance controls at ${width}px`,async({page,context})=>{
+  test.setTimeout(45000);
   await page.setViewportSize({width,height:900});
   const user={username:'admin',displayName:'Test',role:'admin',active:true,permissions:{clientsRead:true,clientsWrite:true,aiUse:true,manageUsers:true}};
   await context.route('**/api/**',async route=>{
@@ -19,8 +20,36 @@ for(const width of [1440,375,320])test(`compact header appearance controls at ${
   await page.getByLabel('Mot de passe').fill('synthetic-test-password');
   await page.getByRole('button',{name:'Se connecter'}).click();
   const controls=page.getByTestId('header-appearance-controls');
-  await expect(page.getByRole('combobox',{name:'Document',exact:true})).toHaveValue('cv');
-  await expect(page.getByRole('combobox',{name:'Document',exact:true}).locator('option:checked')).toHaveText('CV');
+  const documentSelect=page.getByRole('combobox',{name:'Document',exact:true});
+  const modelSelect=page.getByRole('combobox',{name:'Modèle',exact:true});
+  await expect(documentSelect).toHaveText(/^Document\s*CV$/);
+  await expect(modelSelect).not.toContainText('Modèle');
+  expect((await documentSelect.boundingBox())!.width).toBeLessThan(180);
+  const documentBox=(await documentSelect.boundingBox())!;
+  await documentSelect.click();
+  const documentMenu=page.getByRole('listbox');
+  await expect(page.getByRole('option')).toHaveText(['CV','Lettre de motivation','Conseils / Plan professionnel']);
+  await mkdir('output/header-appearance',{recursive:true});
+  await documentMenu.screenshot({path:`output/header-appearance/document-menu-${width}.png`,animations:'disabled'});
+  const menuBox=(await documentMenu.boundingBox())!;
+  expect(Math.abs(documentBox.width-menuBox.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(documentBox.x-menuBox.x)).toBeLessThanOrEqual(1);
+  await page.keyboard.press('Escape');
+  await expect(documentSelect).toBeFocused();
+  await documentSelect.click();
+  await page.getByRole('option',{name:'Lettre de motivation',exact:true}).click();
+  await expect(documentSelect).toContainText('Lettre de motivation');
+  expect((await documentSelect.boundingBox())!.width).toBeGreaterThan(documentBox.width);
+  await documentSelect.click();
+  await page.getByRole('option',{name:'CV',exact:true}).click();
+  const modelBox=(await modelSelect.boundingBox())!;
+  await modelSelect.click();
+  await page.getByRole('listbox').screenshot({path:`output/header-appearance/model-menu-${width}.png`,animations:'disabled'});
+  const modelMenuBox=(await page.getByRole('listbox').boundingBox())!;
+  expect(Math.abs(modelBox.width-modelMenuBox.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(modelBox.x-modelMenuBox.x)).toBeLessThanOrEqual(1);
+  await page.getByRole('option',{name:'CV PRO International',exact:true}).click();
+  await expect(modelSelect).toHaveText('CV PRO International');
   await expect(page.getByRole('button',{name:'Télécharger',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Aperçu',exact:true})).toBeVisible();
   await expect(page.locator('header')).not.toContainText('PDF multilingue sélectionnable');

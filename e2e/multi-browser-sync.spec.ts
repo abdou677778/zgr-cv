@@ -1415,7 +1415,7 @@ test("extrait le XML embarqué d’un PDF Europass et préremplit le formulaire"
       "amine.bensalem@example.com",
     );
     await expect(page.getByAltText("Aperçu de la photo du profil")).toBeVisible();
-    await expect(page.getByLabel("Modèle", { exact: true })).toHaveValue("europass");
+    await expect(page.getByLabel("Modèle", { exact: true })).toHaveText("CV Europass");
 
     const objectiveSection = page.locator("#cv-editor-section-objective");
     const objectiveEditor = objectiveSection.getByRole("textbox", {
@@ -1485,7 +1485,7 @@ test("importe ensemble les versions française et anglaise du même profil Europ
     await page.getByRole("menuitem").filter({ hasText: "English" }).click();
     await openPersonalDetails(page);
     await expect(page.getByPlaceholder("Nom complet")).toHaveValue("Amine Bensalem");
-    await expect(page.getByLabel("Modèle", { exact: true })).toHaveValue("europass");
+    await expect(page.getByLabel("Modèle", { exact: true })).toHaveText("CV Europass");
   } finally {
     await context.close();
   }
@@ -1758,8 +1758,10 @@ test("classe les opportunités du profil et génère le plan PDF cliquable", asy
     await expect(workspace.getByText("1 sélectionnée(s) pour le PDF")).toBeVisible();
     await workspace.getByRole("button", { name: "Retour au CV" }).click();
 
-    await page.getByLabel("Document", { exact: true }).selectOption("advises");
-    await page.getByLabel("Modèle", { exact: true }).selectOption("opportunity-plan-v1");
+    await page.getByLabel("Document", { exact: true }).click();
+    await page.getByRole('option',{name:'Conseils / Plan professionnel',exact:true}).click();
+    await page.getByLabel("Modèle", { exact: true }).click();
+    await page.getByRole('option',{name:'Plan d’opportunités cliquable',exact:true}).click();
     await page.getByRole("button", { name: "Télécharger", exact: true }).click();
     const downloadPromise = page.waitForEvent("download");
     await page.getByText("Télécharger le PDF actuel").click();

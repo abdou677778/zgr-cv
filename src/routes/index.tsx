@@ -75,6 +75,7 @@ import { SoftwareLogoPicker } from "@/components/software-logo-picker";
 import { SharedSoftwareLogo } from "@/components/shared-software-logo";
 import { LanguageLogoPicker } from "@/components/language-logo-picker";
 import { ModelColorControl } from '@/components/model-color-control';
+import { CompactToolbarSelect } from '@/components/compact-toolbar-select';
 import { AdditionalLanguagesEditor } from '@/components/additional-languages-editor';
 import {MultilingualSectionsReview} from '@/components/multilingual-sections-review';
 import {localizedCustomTitle,synchronizeSoftwareEdit} from '@/lib/multilingual-sections';
@@ -2996,46 +2997,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               className="hidden"
               onChange={importEuropass}
             />
-            <div className="zgr-toolbar-group flex flex-wrap items-center gap-2">
-              <div className="zgr-control flex items-center gap-2 rounded-xl border px-3 py-1.5">
-                <Label
-                  htmlFor="document-kind"
-                  className="text-xs font-medium text-muted-foreground"
-                >
-                  {ui.document}
-                </Label>
-                <select
-                  id="document-kind"
-                  aria-label={ui.document}
-                  value={documentKind}
-                  onChange={(event) => changeDocumentKind(event.target.value as DocumentKind)}
-                  className="h-7 min-w-40 cursor-pointer bg-transparent text-sm font-semibold outline-none"
-                >
-                  {getDocumentKinds("fr").map((kind) => (
-                    <option key={kind.id} value={kind.id}>
-                      {kind.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="zgr-control flex items-center gap-2 rounded-xl border px-3 py-1.5">
-                <Label htmlFor="pdf-template" className="text-xs font-medium text-muted-foreground">
-                  {ui.template}
-                </Label>
-                <select
-                  id="pdf-template"
-                  aria-label={ui.template}
-                  value={selectedTemplateOptionId}
-                  onChange={(event) => selectTemplateOption(event.target.value)}
-                  className="h-7 min-w-40 cursor-pointer bg-transparent text-sm font-semibold outline-none"
-                >
-                  {templates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="zgr-toolbar-group flex max-w-full flex-wrap items-center gap-2">
+              <CompactToolbarSelect id="document-kind" label={ui.document} prefix={ui.document}
+                value={documentKind} options={getDocumentKinds("fr")}
+                onValueChange={value=>changeDocumentKind(value as DocumentKind)} />
+              <CompactToolbarSelect id="pdf-template" label={ui.template} value={selectedTemplateOptionId}
+                options={templates} onValueChange={selectTemplateOption} />
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

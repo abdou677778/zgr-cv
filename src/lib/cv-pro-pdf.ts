@@ -383,10 +383,19 @@ function bulletList(items: string[], language: DocumentLanguage, compact = false
   } as Content;
 }
 
-function mainSection(label: string, content: Content[], language: DocumentLanguage): Content {
+function mainSection(label: string, content: Content[], language: DocumentLanguage, balanced = false): Content {
+  const heading = sectionBar(label, language, MAIN_SECTION_W);
+  if (balanced) (heading as { margin: number[] }).margin = [0, 0, 0, INTERNATIONAL_SIDEBAR_SECTION_GAP];
+  const body = balanced ? content.map((item,index)=>{
+    if(index!==content.length-1 || typeof item!=='object' || Array.isArray(item))return item;
+    const margin=(item as {margin?:number[]}).margin;
+    // Entry blocks keep their internal gaps, but the final entry must not add
+    // its own 8 pt on top of the common section-to-section margin.
+    return margin?.length===4 ? {...item,margin:[margin[0],margin[1],margin[2],0]} as Content : item;
+  }) : content;
   return {
-    stack: [sectionBar(label, language, MAIN_SECTION_W), ...content],
-    margin: [0, 0, 0, 8],
+    stack: [heading, ...body],
+    margin: [0, 0, 0, balanced ? INTERNATIONAL_SIDEBAR_SECTION_GAP : 8],
   } as Content;
 }
 
@@ -1029,6 +1038,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
             } as Content,
           ],
           language,
+          options.verticalSidebarLists,
         ),
         "objective",
       ),
@@ -1045,6 +1055,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
           labels.experience,
           experiences.map((item) => experienceBlock(item, language)),
           language,
+          options.verticalSidebarLists,
         ),
         "experience",
       ),
@@ -1059,6 +1070,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
           labels.training,
           formations.map((item) => learningBlock(item, language)),
           language,
+          options.verticalSidebarLists,
         ),
         "training",
       ),
@@ -1073,6 +1085,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
           labels.education,
           educations.map((item) => learningBlock(item, language)),
           language,
+          options.verticalSidebarLists,
         ),
         "education",
       ),
@@ -1091,7 +1104,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
     .forEach((section) => {
       main.push(
         tagSection(
-          mainSection(section.title, [bulletList(section.items, language)], language),
+          mainSection(section.title, [bulletList(section.items, language)], language, options.verticalSidebarLists),
           `custom.${section.id}`,
         ),
       );

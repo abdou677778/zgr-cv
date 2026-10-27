@@ -117,6 +117,13 @@ test("International changes only contacts and sidebar lists, preserving the rest
     after.content[1].table.body[0][0].stack = [];
     before.content[1].absolutePosition.y = after.content[1].absolutePosition.y;
     for (const definition of [before, after]) {
+      for(const section of definition.content[3].columns[1].stack){
+        if(!section.zgrSectionId)continue;
+        section.margin[3]=8;
+        section.stack[0].margin[3]=7;
+        const last=section.stack.at(-1);
+        if(last.margin?.length===4)last.margin[3]=0;
+      }
       const sidebar = definition.content[3].columns[0];
       sidebar.stack = sidebar.stack.filter((section: any) => !["software", "languages"].includes(section.zgrSectionId));
       for (const section of sidebar.stack) if (section.zgrSectionId) section.stack[0].margin = [0,0,0,7];
@@ -140,6 +147,22 @@ test('International sidebar sections share one gap with no empty section or trai
       if(section.zgrSectionId==='languages') assert.equal(section.stack.at(-1).margin[3],0);
     }
     assert.ok(!sections.some((section:any)=>hide[`section.${section.zgrSectionId}` as keyof typeof hide]));
+  }
+});
+
+test('International main sections use the same gap and remove only the final entry trailing margin',()=>{
+  for(const {id} of DOCUMENT_LANGUAGES){
+    if(id==='ar')continue;
+    const document=JSON.parse(snapshot(buildCvProInternationalPdf(documents[id]!,id)));
+    const sections=document.content[3].columns[1].stack.filter((item:any)=>item.zgrSectionId);
+    for(const section of sections){
+      assert.equal(section.margin[3],INTERNATIONAL_SIDEBAR_SECTION_GAP);
+      assert.equal(section.stack[0].margin[3],INTERNATIONAL_SIDEBAR_SECTION_GAP);
+      const entries=section.stack.slice(1);
+      if(entries.at(-1).margin?.length===4)assert.equal(entries.at(-1).margin[3],0);
+      if(['experience','training','education'].includes(section.zgrSectionId))
+        for(const entry of entries.slice(0,-1))assert.equal(entry.margin[3],8);
+    }
   }
 });
 

@@ -4,8 +4,8 @@ import { loadSharedSoftwareLogos } from "./shared-software-logos";
 
 const cache = new Map<string, Promise<string>>();
 
-export function pdfLogo(source: string, trim = false): Promise<string> {
-  const cacheKey = `${trim}:${source}`;
+export function pdfLogo(source: string, trim = false, square = false): Promise<string> {
+  const cacheKey = `${trim}:${square}:${source}`;
   const existing = cache.get(cacheKey);
   if (existing) return existing;
   const promise = (async () => {
@@ -34,10 +34,13 @@ export function pdfLogo(source: string, trim = false): Promise<string> {
       }
       if (right >= left) {
         const cropped = document.createElement("canvas");
-        cropped.width = right - left + 1; cropped.height = bottom - top + 1;
+        const cropWidth = right - left + 1, cropHeight = bottom - top + 1;
+        cropped.width = square ? Math.max(cropWidth, cropHeight) : cropWidth;
+        cropped.height = square ? cropped.width : cropHeight;
         const target = cropped.getContext("2d");
         if (!target) throw new Error("Conversion du logo indisponible.");
-        target.drawImage(canvas, left, top, cropped.width, cropped.height, 0, 0, cropped.width, cropped.height);
+        target.drawImage(canvas, left, top, cropWidth, cropHeight,
+          (cropped.width - cropWidth) / 2, (cropped.height - cropHeight) / 2, cropWidth, cropHeight);
         return cropped.toDataURL("image/png");
       }
     }

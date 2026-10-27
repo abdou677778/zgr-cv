@@ -687,12 +687,18 @@ function languageRows(cv: CV, language: DocumentLanguage, spacious = false): Con
   return (Object.keys(cv.langues) as Array<keyof CV["langues"]>)
     .filter((key) => cv.langues[key].trim())
     .map((key, index, keys) => {
+      const sourceFlag = LANGUAGE_FLAGS[spacious ? cv.language_logos?.[key]?.icon || key : key];
+      // Square visual slot: preserve the rectangular flag while matching the
+      // software icon's visible width, horizontal origin and vertical centre.
+      const flagSvg = spacious
+        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30"><g transform="translate(0 5)">${sourceFlag.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "")}</g></svg>`
+        : sourceFlag;
       const flag = {
         width: 18,
         ...(spacious && cv.language_logos?.[key]?.customIconDataUrl
           ? { image: cv.language_logos[key]!.customIconDataUrl! }
-          : { svg: LANGUAGE_FLAGS[spacious ? cv.language_logos?.[key]?.icon || key : key] }),
-        fit: [14, 9.3],
+          : { svg: flagSvg }),
+        fit: spacious ? [9.3, 9.3] : [14, 9.3],
         alignment: "center",
         margin: [0, spacious ? -1.5 : 0.25, 0, 0],
       } as Content;

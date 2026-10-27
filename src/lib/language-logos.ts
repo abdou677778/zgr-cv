@@ -29,7 +29,7 @@ export async function prepareLanguageLogos(cv: CV): Promise<CV> {
     const selected = cv.language_logos?.[key];
     const source = selected?.customIconDataUrl || sharedLanguageLogo(selected?.icon || key);
     if (!source) return;
-    try { prepared[key] = { ...selected, customIconDataUrl: await pdfLogo(source, true) }; }
+    try { prepared[key] = { ...selected, customIconDataUrl: await pdfLogo(source, true, true) }; }
     catch { prepared[key] = { icon: selected?.icon }; }
   }));
   return { ...cv, language_logos: prepared };

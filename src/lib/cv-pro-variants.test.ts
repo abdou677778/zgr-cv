@@ -43,7 +43,7 @@ test("International software rows match languages and preserve full names and pr
     assert.equal(software[0].columns[0].image, cv.logiciels[0].customIconDataUrl);
     for (const row of [...software, ...languages]) {
       assert.equal(row.columns[0].width, 18);
-      assert.deepEqual(row.columns[0].fit, [14, 9.3]);
+      assert.deepEqual(row.columns[0].fit, software.includes(row) ? [14, 9.3] : [9.3, 9.3]);
       assert.equal(row.columns[1].fontSize, 8.2);
       assert.equal(row.columnGap, 4);
       assert.equal(row.unbreakable, true);

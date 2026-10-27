@@ -41,13 +41,15 @@ test("language logos support selection, local import and admin cloud replacement
     const modulePath = "/src/lib/software-icons-pdf.ts";
     const { pdfLogo } = await import(/* @vite-ignore */ modulePath);
     const source = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="20" y="30" width="60" height="40" fill="blue"/></svg>')}`;
-    const measure = async (trim: boolean) => {
-      const image = new Image(); image.src = await pdfLogo(source, trim); await image.decode();
+    const measure = async (trim: boolean, square = false) => {
+      const image = new Image(); image.src = await pdfLogo(source, trim, square); await image.decode();
       return [image.naturalWidth, image.naturalHeight];
     };
-    return { cropped: await measure(true), original: await measure(false) };
+    return { cropped: await measure(true), original: await measure(false), square: await measure(true, true) };
   });
   expect(dimensions.original).toEqual([128, 128]);
   expect(dimensions.cropped[0]).toBeLessThan(128);
   expect(dimensions.cropped[0] / dimensions.cropped[1]).toBeCloseTo(1.5, 1);
+  expect(dimensions.square[0]).toBe(dimensions.square[1]);
+  expect(dimensions.square[0]).toBe(dimensions.cropped[0]);
 });

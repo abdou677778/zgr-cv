@@ -519,7 +519,7 @@ function migrateLegacyLanguage(value: unknown, language: Exclude<DocumentLanguag
 
 const UI_COPY = {
   fr: {
-    subtitle: "CV · Lettres de motivation · Plan professionnel · PDF bilingue sélectionnable",
+    subtitle: "CV · Lettres de motivation · Plan professionnel",
     document: "Document",
     template: "Modèle",
     palette: "Couleur du modèle",
@@ -530,7 +530,7 @@ const UI_COPY = {
     example: "Exemple",
     reset: "Réinitialiser",
     preparingPdf: "Préparation PDF",
-    downloadPdf: "Télécharger PDF",
+    downloadPdf: "Télécharger",
     downloadCurrent: "Modèle actuel · 7 langues (.zip)",
     downloadCurrentHint: "FR · EN · ES · DE · IT · 中文 · AR",
     downloadPack: "Télécharger le pack complet (.zip)",
@@ -3334,7 +3334,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
               ) : (
                 <Eye className="mr-2 h-4 w-4" />
               )}
-              {previewVisible ? "Masquer l’aperçu" : "Afficher l’aperçu"}
+              {previewVisible ? "Masquer l’aperçu" : "Aperçu"}
             </Button>
             {!isEuropassTemplate && (
               <DropdownMenu>

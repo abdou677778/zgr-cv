@@ -20,7 +20,7 @@ export const COMPLETE_PACK_DOCUMENT_COUNT = DOCUMENT_LANGUAGES.reduce(
 
 export function getDocumentKinds(language: DocumentLanguage) {
   const names = {
-    fr: ["Curriculum vitae", "Lettre de motivation", "Conseils / Plan professionnel"],
+    fr: ["CV", "Lettre de motivation", "Conseils / Plan professionnel"],
     en: ["Résumé / CV", "Cover letter", "Professional advice / Plan"],
     es: ["Currículum vitae", "Carta de presentación", "Consejos / Plan profesional"],
     de: ["Lebenslauf", "Anschreiben", "Beratung / Beruflicher Plan"],

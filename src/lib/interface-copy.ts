@@ -97,7 +97,7 @@ const commonDownloadHint = "FR · EN · ES · DE · IT · 中文 · AR";
 
 export const INTERFACE_COPY: Record<DocumentLanguage, InterfaceCopy> = {
   fr: {
-    subtitle: "CV · Lettres de motivation · Plan professionnel · PDF multilingue sélectionnable",
+    subtitle: "CV · Lettres de motivation · Plan professionnel",
     document: "Document",
     template: "Modèle",
     palette: "Couleur du modèle",
@@ -108,7 +108,7 @@ export const INTERFACE_COPY: Record<DocumentLanguage, InterfaceCopy> = {
     example: "Exemple",
     reset: "Réinitialiser",
     preparingPdf: "Préparation PDF",
-    downloadPdf: "Télécharger PDF",
+    downloadPdf: "Télécharger",
     downloadCurrent: "Modèle actuel · 7 langues (.zip)",
     downloadCurrentHint: commonDownloadHint,
     downloadPack: "Télécharger le pack complet (.zip)",

@@ -19,6 +19,11 @@ for(const width of [1440,375,320])test(`compact header appearance controls at ${
   await page.getByLabel('Mot de passe').fill('synthetic-test-password');
   await page.getByRole('button',{name:'Se connecter'}).click();
   const controls=page.getByTestId('header-appearance-controls');
+  await expect(page.getByRole('combobox',{name:'Document',exact:true})).toHaveValue('cv');
+  await expect(page.getByRole('combobox',{name:'Document',exact:true}).locator('option:checked')).toHaveText('CV');
+  await expect(page.getByRole('button',{name:'Télécharger',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Aperçu',exact:true})).toBeVisible();
+  await expect(page.locator('header')).not.toContainText('PDF multilingue sélectionnable');
   const palette=controls.getByRole('group',{name:'Couleur du modèle',exact:true});
   const theme=controls.getByRole('button',{name:'Activer le mode sombre',exact:true});
   const language=controls.getByRole('button',{name:'Langue du document : Français',exact:true});

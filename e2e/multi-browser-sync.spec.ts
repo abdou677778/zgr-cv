@@ -1512,7 +1512,7 @@ test("les outils lourds sont chargés uniquement lorsqu’ils deviennent utiles"
     await page.getByRole("button", { name: "Déplier Expérience professionnelle" }).click();
     await expect(page.getByRole("button", { name: /Modifier l’expérience/ }).first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Afficher l’aperçu" }).click();
+    await page.getByRole("button", { name: "Aperçu", exact: true }).click();
     await expect(page.getByRole("toolbar", { name: "Outils de l’aperçu" })).toBeVisible();
     await expect(page.getByLabel(/Page 1 sur/)).toBeVisible({ timeout: 30_000 });
 
@@ -1760,7 +1760,7 @@ test("classe les opportunités du profil et génère le plan PDF cliquable", asy
 
     await page.getByLabel("Document", { exact: true }).selectOption("advises");
     await page.getByLabel("Modèle", { exact: true }).selectOption("opportunity-plan-v1");
-    await page.getByRole("button", { name: "Télécharger PDF" }).click();
+    await page.getByRole("button", { name: "Télécharger", exact: true }).click();
     const downloadPromise = page.waitForEvent("download");
     await page.getByText("Télécharger le PDF actuel").click();
     const download = await downloadPromise;

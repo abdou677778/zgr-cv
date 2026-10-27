@@ -116,6 +116,10 @@ test("International changes only contacts and sidebar lists, preserving the rest
     before.content[1].table.body[0][0].stack = [];
     after.content[1].table.body[0][0].stack = [];
     before.content[1].absolutePosition.y = after.content[1].absolutePosition.y;
+    assert.equal(before.pageMargins[1]+before.content[2].margin[3],after.pageMargins[1]+after.content[2].margin[3]);
+    assert.equal(after.pageMargins[1]-82,INTERNATIONAL_SIDEBAR_SECTION_GAP);
+    before.pageMargins[1]=after.pageMargins[1];
+    before.content[2].margin[3]=after.content[2].margin[3];
     for (const definition of [before, after]) {
       for(const section of definition.content[3].columns[1].stack){
         if(!section.zgrSectionId)continue;

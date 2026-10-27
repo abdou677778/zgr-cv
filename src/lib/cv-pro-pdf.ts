@@ -24,6 +24,7 @@ const COLUMN_GAP = 22;
 const MAIN_SECTION_W = 180;
 const SIDEBAR_SECTION_W = 150;
 const PAGE_TOP = 90;
+const CONTINUATION_HEADER_HEIGHT = 82;
 const FIRST_PAGE_BODY_OFFSET = 76;
 const BODY_LINE_HEIGHT = 1.3;
 const META_LINE_HEIGHT = 1.18;
@@ -945,7 +946,7 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   const fallbackCircleCenterY = rtl ? 92 : fallbackRadius;
   const fallbackLabelY = rtl ? fallbackY + fallbackRadius - 2 : 111;
   const fallbackLabelX = rtl ? fallbackX + 16 : fallbackX;
-  const headerHeight = currentPage === 1 ? 163.5 : 82;
+  const headerHeight = currentPage === 1 ? 163.5 : CONTINUATION_HEADER_HEIGHT;
   const content: Content[] = [
     {
       canvas: [
@@ -1182,7 +1183,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
       subject: cv.titre_poste || "Curriculum Vitae",
     },
     pageSize: "A4",
-    pageMargins: [16, PAGE_TOP, 16, 24],
+    pageMargins: [16, options.verticalSidebarLists ? CONTINUATION_HEADER_HEIGHT + INTERNATIONAL_SIDEBAR_SECTION_GAP : PAGE_TOP, 16, 24],
     background: (currentPage) => background(cv, language, currentPage),
     header: (currentPage) => headerContent(cv, language, currentPage),
     defaultStyle: {
@@ -1194,7 +1195,8 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
     },
     content: [
       ...firstPageOverlay(cv, language,options.inlineContacts),
-      { text: "", margin: [0, 0, 0, FIRST_PAGE_BODY_OFFSET] } as Content,
+      // Balance continuation-page header spacing without moving page one's body.
+      { text: "", margin: [0, 0, 0, FIRST_PAGE_BODY_OFFSET - (options.verticalSidebarLists ? CONTINUATION_HEADER_HEIGHT + INTERNATIONAL_SIDEBAR_SECTION_GAP - PAGE_TOP : 0)] } as Content,
       {
         columns: rtl ? [mainColumn, sidebarColumn] : [sidebarColumn, mainColumn],
         columnGap: COLUMN_GAP,

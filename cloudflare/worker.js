@@ -1,4 +1,5 @@
 import { destinationCanadaContract } from "./destination-canada.js";
+import languageFlags from '../src/lib/language-flag-catalog.json' with { type: 'json' };
 import { handleTechOrders } from "./tech-orders.js";
 import {
   getVolunteerOpportunityHealth,
@@ -4958,6 +4959,13 @@ async function route(request, env, ctx) {
     return handleAlgeriaOpportunityApi(request, env, origin);
   if (url.pathname === "/api/destination-canada/tunis" && request.method === "GET")
     return json(await destinationCanadaContract(),200,origin);
+  if (url.pathname.startsWith('/api/language-flags/') && request.method === 'GET') {
+    const file=url.pathname.slice('/api/language-flags/'.length);
+    if(!languageFlags.some(item=>item.file===file)&&!['catalog.json','LICENSE-flag-icons.txt'].includes(file))return json({error:'Drapeau inconnu.'},404,origin);
+    const object=await env.CLIENTS_BUCKET.get(`language-flags/catalog/${file}`);
+    if(!object)return json({error:'Drapeau indisponible.'},404,origin);
+    return new Response(object.body||await object.text(),{headers:{'Content-Type':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.json')?'application/json':'text/plain','Cache-Control':'public, max-age=3600','Access-Control-Allow-Origin':'*','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'"}});
+  }
   if (["/api/software-logos", "/api/organization-logos", "/api/language-logos"].includes(url.pathname) && request.method === "GET") {
     const namespace = url.pathname.slice('/api/'.length);
     const logos = {};
@@ -4987,7 +4995,7 @@ async function route(request, env, ctx) {
     const namespace = url.pathname.split('/')[2];
     if (actor.role !== "admin") return json({ error: "Droits administrateur requis pour modifier la bibliothèque partagée." }, 403, origin);
     const slug = url.pathname.slice(`/api/${namespace}/`.length);
-    if (namespace === "language-logos" && !["fr", "en", "ar", "de", "es", "kab"].includes(slug))
+    if (namespace === "language-logos" && !["fr", "en", "ar", "de", "es", "kab"].includes(slug) && !languageFlags.some(item=>`country-${item.code}`===slug))
       return json({ error: "Langue inconnue." }, 400, origin);
     if (!/^[a-z0-9-]{1,80}$/.test(slug) || slug === "generic")
       return json({ error: "Choisissez un logiciel du catalogue." }, 400, origin);

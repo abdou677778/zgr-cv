@@ -170,6 +170,7 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
       }))
       .filter((section) => section.title.trim() && section.items.some((item) => item.trim())),
     langues,
+    additional_languages: sectionVisible('languages') ? (cv.additional_languages||[]).filter(item=>visible(`languages.${item.id}`)) : [],
     experiences,
     formations,
     educations,

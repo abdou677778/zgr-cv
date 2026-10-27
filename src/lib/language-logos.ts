@@ -2,9 +2,10 @@ import type { CV } from "./cv-types";
 import { CLIENTS_API_ENDPOINT } from "./auth-client";
 import { replaceSharedSoftwareLogo } from "./shared-software-logos";
 import { pdfLogo } from "./software-icons-pdf";
+import { flagAssetUrl } from './language-catalog';
 
 export const LANGUAGE_LOGO_KEYS = ["fr", "en", "ar", "de", "es", "kab"] as const;
-export type LanguageLogoKey = typeof LANGUAGE_LOGO_KEYS[number];
+export type LanguageLogoKey = string;
 const endpoint = CLIENTS_API_ENDPOINT.replace(/\/clients$/, "/language-logos");
 let logos: Record<string, string> = {};
 let loading: Promise<void> | undefined;
@@ -27,10 +28,16 @@ export async function prepareLanguageLogos(cv: CV): Promise<CV> {
   const prepared = { ...cv.language_logos };
   await Promise.all(LANGUAGE_LOGO_KEYS.map(async key => {
     const selected = cv.language_logos?.[key];
-    const source = selected?.customIconDataUrl || sharedLanguageLogo(selected?.icon || key);
+    const source = selected?.customIconDataUrl || sharedLanguageLogo(selected?.icon || key) || flagAssetUrl(selected?.icon || key);
     if (!source) return;
     try { prepared[key] = { ...selected, customIconDataUrl: await pdfLogo(source, true, true) }; }
     catch { prepared[key] = { icon: selected?.icon }; }
   }));
-  return { ...cv, language_logos: prepared };
+  const additional_languages = await Promise.all((cv.additional_languages||[]).map(async item=>{
+    const source=item.customIconDataUrl || sharedLanguageLogo(item.icon||'') || flagAssetUrl(item.icon||'');
+    if(!source)return item;
+    try{return {...item,customIconDataUrl:await pdfLogo(source,true,true)};}
+    catch{return {...item,customIconDataUrl:undefined};}
+  }));
+  return { ...cv, language_logos: prepared, additional_languages };
 }

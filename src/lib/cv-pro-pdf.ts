@@ -10,6 +10,7 @@ import {
 } from "./cv-types";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { cvEntryLocation } from "./cv-entry-location";
+import { additionalLanguageRows } from './additional-language-rows';
 import {internationalContactLayout,INTERNATIONAL_CONTACT_ROW_HEIGHT,INTERNATIONAL_CONTACT_GAP} from './cv-pro-international-contact-layout';
 
 const PAGE_W = 595.28;
@@ -687,7 +688,7 @@ function languageRows(cv: CV, language: DocumentLanguage, spacious = false): Con
   return (Object.keys(cv.langues) as Array<keyof CV["langues"]>)
     .filter((key) => cv.langues[key].trim())
     .map((key, index, keys) => {
-      const sourceFlag = LANGUAGE_FLAGS[spacious ? cv.language_logos?.[key]?.icon || key : key];
+      const sourceFlag = LANGUAGE_FLAGS[(spacious ? cv.language_logos?.[key]?.icon || key : key) as keyof CV['langues']] || LANGUAGE_FLAGS[key];
       // Square visual slot: preserve the rectangular flag while matching the
       // software icon's visible width, horizontal origin and vertical centre.
       const flagSvg = spacious
@@ -719,9 +720,9 @@ function languageRows(cv: CV, language: DocumentLanguage, spacious = false): Con
         columns: rtl ? [body, flag] : [flag, body],
         columnGap: 4,
         ...(spacious ? { unbreakable: true } : {}),
-        margin: [0, 0, 0, spacious ? (index === keys.length - 1 ? 0 : 7) : 4],
+        margin: [0, 0, 0, spacious ? (index === keys.length - 1 && !(cv.additional_languages||[]).some(item=>item.level.trim()&&item.name.trim()) ? 0 : 7) : 4],
       } as Content;
-    });
+    }).concat(additionalLanguageRows(cv,language,spacious,(name,level)=>({width:'*',text:rtl?displayText(`${level}  ${name}`,language,80):[{text:`${name}  `,bold:true},{text:level}],fontSize:8.2,lineHeight:META_LINE_HEIGHT,alignment:rtl?'right':'left'})));
 }
 
 function contactLine(icon: keyof typeof ICONS, value: string, language: DocumentLanguage, inlineContacts=false): Content {

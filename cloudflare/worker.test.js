@@ -257,6 +257,14 @@ test("shared software logos require admin authentication and preserve replaced v
   }));
   assert.equal((await call(env, "/api/language-logos/fr", { method: "PUT" })).status, 401);
   assert.equal((await writeLanguage("invalid")).status, 400);
+  assert.equal((await writeLanguage("country-it")).status, 200);
+  assert.equal((await writeLanguage("country-invalid")).status, 400);
+  await env.CLIENTS_BUCKET.put('language-flags/catalog/it.svg','<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const countryFlag=await call(env,'/api/language-flags/it.svg');
+  assert.equal(countryFlag.status,200);
+  assert.equal(countryFlag.headers.get('Content-Type'),'image/svg+xml');
+  assert.match(await countryFlag.text(),/<svg/);
+  assert.equal((await call(env,'/api/language-flags/invalid.svg')).status,404);
   assert.equal((await writeLanguage("fr")).status, 200);
   assert.equal((await writeLanguage("fr")).status, 200);
   assert.equal((await (await call(env, "/api/language-logos")).json()).logos.fr, dataUrl);

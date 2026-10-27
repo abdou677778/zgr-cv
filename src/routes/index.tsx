@@ -75,6 +75,7 @@ import { formatDrivingLicence, formatNationalService } from "@/lib/cv-concise-st
 import { SoftwareLogoPicker } from "@/components/software-logo-picker";
 import { SharedSoftwareLogo } from "@/components/shared-software-logo";
 import { LanguageLogoPicker } from "@/components/language-logo-picker";
+import { AdditionalLanguagesEditor } from '@/components/additional-languages-editor';
 import {MultilingualSectionsReview} from '@/components/multilingual-sections-review';
 import {localizedCustomTitle,synchronizeSoftwareEdit} from '@/lib/multilingual-sections';
 import { sampleCVByLanguage } from "@/lib/sample-cv";
@@ -753,6 +754,7 @@ function Index() {
 }
 
 function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const [addingLanguage,setAddingLanguage]=useState(false);
   const [logoRevision, setLogoRevision] = useState(0);
   useEffect(() => {
     const update = () => setLogoRevision(value => value + 1);
@@ -1563,9 +1565,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   );
 
   const set = <K extends keyof CV>(k: K, v: CV[K]) => {
+    if (k === "additional_languages") {
+      const entries=v as NonNullable<CV['additional_languages']>;
+      setCvByLanguage(current=>Object.fromEntries(DOCUMENT_LANGUAGES.map(item=>[item.id,{...current[item.id],additional_languages:entries.map(entry=>({...entry,level:item.id===language?entry.level:current[item.id].additional_languages?.find(previous=>previous.id===entry.id)?.level||''}))}])) as Record<DocumentLanguage,CV>);
+      return;
+    }
     if (k === "language_logos") {
       setCvByLanguage(current => Object.fromEntries(DOCUMENT_LANGUAGES.map(item => [item.id,
-        { ...current[item.id], language_logos: v as CV["language_logos"] },
+        { ...current[item.id], [k]: v },
       ])) as Record<DocumentLanguage, CV>);
       return;
     }
@@ -2660,7 +2667,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     {
       id: "languages",
       title: form.languages,
-      count: Object.values(cv.langues).filter((value) => value.trim()).length,
+      count: Object.values(cv.langues).filter((value) => value.trim()).length + (cv.additional_languages||[]).length,
       visible: sectionIsVisible("languages"),
     },
     {
@@ -4151,8 +4158,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             onOpenChange={(open) => setSectionOpen("languages", open)}
             visible={sectionIsVisible("languages")}
             onVisibleChange={(visible) => setSectionVisible("languages", visible)}
-            count={Object.values(cv.langues).filter((value) => value.trim()).length}
+            count={Object.values(cv.langues).filter((value) => value.trim()).length + (cv.additional_languages||[]).length}
             {...orderControls("languages")}
+            onAdd={()=>{setAddingLanguage(true);setSectionOpen('languages',true);}}
           >
             <div className="grid gap-3 sm:grid-cols-2">
               {(
@@ -4186,6 +4194,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 </Field>
               ))}
             </div>
+            <AdditionalLanguagesEditor entries={cv.additional_languages||[]} adding={addingLanguage} onAddingChange={setAddingLanguage}
+              readLocal={readSoftwareCustomIcon} onChange={entries=>set('additional_languages',entries)} />
           </CvSectionPanel>
 
           <CvSectionPanel
@@ -5286,7 +5296,7 @@ function EuropassPreview({
             {[
               [cv.experiences.length, "Expériences"],
               [cv.educations.length + cv.formations.length, "Études"],
-              [Object.values(cv.langues).filter(Boolean).length, "Langues"],
+              [Object.values(cv.langues).filter(Boolean).length + (cv.additional_languages||[]).length, "Langues"],
             ].map(([value, label]) => (
               <div key={String(label)} className="rounded-xl border border-slate-200 px-2 py-3">
                 <p className="text-xl font-black text-[#164194]">{value}</p>

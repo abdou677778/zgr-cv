@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { mkdir,writeFile,readFile } from 'node:fs/promises';
 
 test("language logos support selection, local import and admin cloud replacement", async ({ page, context }) => {
   const user = { username: "admin", displayName: "Test", role: "admin", active: true,
@@ -7,6 +8,11 @@ test("language logos support selection, local import and admin cloud replacement
   let writes = 0;
   await context.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
+    if(path.startsWith('/api/language-flags/')) {
+      const file=path.split('/').at(-1)!;
+      if(!/^[a-z]{2}(?:-[a-z]{2,3})?\.svg$/.test(file))throw Error('Unexpected fixture flag');
+      await route.fulfill({status:200,contentType:'image/svg+xml',body:await readFile(`public/language-flags/${file}`,'utf8')});return;
+    }
     let body: unknown = {};
     if (path === "/api/auth/login") body = { token: "eyJleHAiOjQxMDI0NDQ4MDB9.signature", user };
     if (path === "/api/auth/session") body = { ok: true, user };
@@ -52,4 +58,39 @@ test("language logos support selection, local import and admin cloud replacement
   expect(dimensions.cropped[0] / dimensions.cropped[1]).toBeCloseTo(1.5, 1);
   expect(dimensions.square[0]).toBe(dimensions.square[1]);
   expect(dimensions.square[0]).toBe(dimensions.cropped[0]);
+  await page.getByRole('button',{name:'Ajouter dans Langues',exact:true}).click();
+  await page.getByLabel('Rechercher une langue',{exact:true}).fill('italien');
+  await page.getByRole('button',{name:'Ajouter cette langue',exact:true}).click();
+  await page.getByLabel('Niveau italien',{exact:true}).fill('B2');
+  const additionalFlag=page.getByLabel('Choisir le logo de italien',{exact:true});
+  await expect(additionalFlag).toHaveValue('country-it');
+  await page.getByLabel('Rechercher un drapeau italien',{exact:true}).fill('Canada');
+  await additionalFlag.selectOption('country-ca');
+  await expect(additionalFlag).toHaveValue('country-ca');
+  await expect.poll(async()=>page.evaluate(async()=>{
+    const path='/src/lib/client-profile-db.ts';
+    const {getWorkspaceDraft}=await import(/* @vite-ignore */ path);
+    const draft=await getWorkspaceDraft('admin');
+    return draft?.payload?.cvByLanguage?.fr?.additional_languages?.[0]?.icon;
+  })).toBe('country-ca');
+  await page.reload();
+  if(!await page.getByLabel('Niveau italien',{exact:true}).isVisible())await page.getByText('Langues',{exact:true}).first().click();
+  await expect(page.getByLabel('Niveau italien',{exact:true})).toHaveValue('B2');
+  await expect(page.getByLabel('Choisir le logo de italien',{exact:true})).toHaveValue('country-ca');
+  const pdfs=await page.evaluate(async()=>{
+    const storePath='/src/lib/client-profile-db.ts',pdfPath='/src/lib/cv-pdf.ts';
+    const {getWorkspaceDraft}=await import(/* @vite-ignore */ storePath);
+    const {createCvPdfBlob}=await import(/* @vite-ignore */ pdfPath);
+    const draft=await getWorkspaceDraft('admin');
+    const french=draft.payload.cvByLanguage.fr;
+    const arabic={...draft.payload.cvByLanguage.ar,additional_languages:french.additional_languages};
+    const first=await createCvPdfBlob(french,'cv-pro-international','fr');
+    const second=await createCvPdfBlob(arabic,'cv-pro-ar-v3','ar');
+    return [Array.from(new Uint8Array(await first.arrayBuffer())),Array.from(new Uint8Array(await second.arrayBuffer()))];
+  });
+  await mkdir('output/pdf/language-catalog',{recursive:true});
+  await writeFile('output/pdf/language-catalog/international-added-language.pdf',Buffer.from(pdfs[0]));
+  await writeFile('output/pdf/language-catalog/arabic-added-language.pdf',Buffer.from(pdfs[1]));
+  await page.getByRole('button',{name:'Supprimer la langue italien',exact:true}).click();
+  await expect(page.getByLabel('Niveau italien',{exact:true})).toHaveCount(0);
 });

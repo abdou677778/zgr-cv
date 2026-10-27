@@ -274,7 +274,8 @@ export type CV = {
   custom_sections: CustomCvSection[];
   section_order: string[];
   langues: Langues;
-  language_logos?: Partial<Record<keyof Langues, { icon?: keyof Langues; customIconDataUrl?: string }>>;
+  language_logos?: Partial<Record<keyof Langues, { icon?: string; customIconDataUrl?: string }>>;
+  additional_languages?: Array<{ id: string; code: string; name: string; level: string; icon?: string; customIconDataUrl?: string }>;
   experiences: Experience[];
   formations: Formation[];
   educations: Education[];

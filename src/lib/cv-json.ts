@@ -23,6 +23,7 @@ import { normalizeProfilePhoto } from "./profile-photo";
 import { normalizeCompanyLogo } from "./company-logo";
 import { normalizeRelocationStatus } from "./relocation-status";
 import {auditMultilingualDocuments} from './multilingual-audit';
+import { validFlagKey, LANGUAGE_CODES } from './language-catalog';
 
 export type JsonImportLanguage = "auto" | "fr" | "en";
 
@@ -53,7 +54,7 @@ export function normalizeLanguageLogos(value: unknown): CV["language_logos"] {
   const keys = ["fr", "en", "ar", "de", "es", "kab"] as const;
   for (const key of keys) {
     const entry = record(source[key]);
-    const icon = keys.find(item => item === entry.icon);
+    const icon = validFlagKey(entry.icon) ? entry.icon : undefined;
     const custom = text(entry.customIconDataUrl);
     const customIconDataUrl = custom.length <= 210000 && /^data:image\/(?:png|webp|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/.test(custom) ? custom : undefined;
     if (icon || customIconDataUrl) result[key] = { ...(icon ? { icon } : {}), ...(customIconDataUrl ? { customIconDataUrl } : {}) };
@@ -317,6 +318,11 @@ function directCv(source: JsonRecord): CV {
     competences_format: normalizeObjectiveFormat(source.competences_format),
     logiciels: softwareList(source.logiciels ?? source.software),
     language_logos: normalizeLanguageLogos(source.language_logos),
+    additional_languages: (Array.isArray(source.additional_languages) ? source.additional_languages : []).slice(0,200).map(value=>{
+      const item=record(value);
+      const logo=normalizeLanguageLogos({fr:item})?.fr;
+      return {id:text(item.id)||newId(),code:LANGUAGE_CODES.includes(text(item.code))?text(item.code):'',name:text(item.name).slice(0,100),level:text(item.level).slice(0,80),...logo};
+    }).filter(item=>item.name||item.code),
     custom_sections: customSections,
     // Do not turn legacy / absent values into a global order: each template
     // owns its native default order. Only retain an actual user rearrangement.

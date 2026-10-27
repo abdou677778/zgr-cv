@@ -14,6 +14,7 @@ import {
 } from "./cv-pro-international-contact-layout";
 import { applyCvVisibility } from "./cv-visibility";
 import { emptyCV } from "./cv-types";
+import { languageName } from './language-catalog';
 
 const fixture = JSON.parse(
   readFileSync(
@@ -24,6 +25,20 @@ const fixture = JSON.parse(
 const documents = importCvJsonSet(fixture)!.documents;
 const snapshot = (value: unknown) =>
   JSON.stringify(value, (_key, item) => (typeof item === "function" ? item.toString() : item));
+
+test('additional languages render after existing languages with the same icon geometry',()=>{
+  const cv={...documents.fr!,additional_languages:[{id:'it',code:'it',name:languageName('it'),level:'B2',icon:'country-it'}]};
+  const doc=JSON.parse(snapshot(buildCvProInternationalPdf(cv,'en')));
+  const rows=doc.content[3].columns[0].stack.find((item:any)=>item.zgrSectionId==='languages').stack.slice(1);
+  assert.equal(rows.length,7);
+  assert.equal(rows.at(-2).margin[3],7);
+  assert.equal(rows.at(-1).columns[1].text[0].text,'Italian  ');
+  assert.equal(rows.at(-1).margin[3],0);
+  const arabic=JSON.parse(snapshot(buildCvProArabicV3Pdf({...documents.ar!,additional_languages:cv.additional_languages})));
+  const arabicSection=arabic.content[3].columns[1].stack.find((item:any)=>item.zgrSectionId==='languages');
+  assert.equal(arabicSection.stack.length,8);
+  assert.equal(arabicSection.stack.at(-1).columns[0].alignment,'right');
+});
 
 test("International software rows match languages and preserve full names and prepared logos", () => {
   for (const { id } of DOCUMENT_LANGUAGES) {

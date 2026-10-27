@@ -10,6 +10,7 @@ import {
 } from "./cv-types";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { cvEntryLocation } from "./cv-entry-location";
+import { additionalLanguageRows } from './additional-language-rows';
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
@@ -684,7 +685,7 @@ function languageRows(cv: CV, language: DocumentLanguage): Content[] {
         columnGap: 4,
         margin: [0, 0, 0, 4],
       } as Content;
-    });
+    }).concat(additionalLanguageRows(cv,language,false,(name,level)=>({width:'*',text:displayText(`${level}  ${name}`,language,80),fontSize:8.2,lineHeight:META_LINE_HEIGHT,alignment:'right'})));
 }
 
 function contactLine(icon: keyof typeof ICONS, value: string, language: DocumentLanguage): Content {

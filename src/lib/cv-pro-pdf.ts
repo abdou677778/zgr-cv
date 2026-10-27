@@ -1186,6 +1186,16 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inline
     pageMargins: [16, options.verticalSidebarLists ? CONTINUATION_HEADER_HEIGHT + INTERNATIONAL_SIDEBAR_SECTION_GAP : PAGE_TOP, 16, 24],
     background: (currentPage) => background(cv, language, currentPage),
     header: (currentPage) => headerContent(cv, language, currentPage),
+    ...(options.verticalSidebarLists ? {
+      footer: (currentPage: number, pageCount: number): Content => ({
+        text: `Page ${String(currentPage).padStart(2, '0')}/${String(pageCount).padStart(2, '0')}`,
+        fontSize: 7.2,
+        color: '#777777',
+        alignment: 'right',
+        lineHeight: 1,
+        margin: [16, 6, 16, 0],
+      }),
+    } : {}),
     defaultStyle: {
       font: documentFont(language),
       fontSize: 9,

@@ -107,6 +107,7 @@ test("International changes only contacts and sidebar lists, preserving the rest
     const international = buildCvProInternationalPdf(documents[id]!, id);
     const before = JSON.parse(snapshot(original));
     const after = JSON.parse(snapshot(international));
+    delete after.footer;
     const rows = after.content[1].table.body[0][0].stack;
     for (const row of rows) {
       assert.deepEqual(row.table.widths, ["*", 11, 7, "auto", "*"], id);
@@ -137,6 +138,20 @@ test("International changes only contacts and sidebar lists, preserving the rest
       snapshot(applyPdfTheme(international, "cv-pro-international", "#123456")).includes("#123456"),
     );
   }
+});
+
+test('International page numbering is dynamic, padded and isolated from Arabic layouts',()=>{
+  const document=buildCvProInternationalPdf(documents.fr!,'fr');
+  const footer=document.footer as (page:number,total:number)=>any;
+  for(const [page,total,expected] of [[1,1,'Page 01/01'],[1,2,'Page 01/02'],[2,2,'Page 02/02'],[12,123,'Page 12/123']] as const){
+    const node=footer(page,total);
+    assert.equal(node.text,expected);
+    assert.equal(node.alignment,'right');
+    assert.deepEqual(node.margin,[16,6,16,0]);
+    assert.equal(node.fontSize,7.2);
+  }
+  assert.equal(buildCvProArabicV3Pdf(documents.ar!).footer,undefined);
+  assert.equal(buildCvProPdf(documents.fr!,'fr').footer,undefined);
 });
 
 test('International sidebar sections share one gap with no empty section or trailing item gap',()=>{

@@ -17,7 +17,6 @@ export const CV_TEMPLATES: ReadonlyArray<{ id: CvTemplateId; name: string }> = [
   { id: "canadian-v3", name: "CV Canadien V3" },
   { id: "canadian-v4", name: "CV Canadien V4" },
   { id: "ats-a4", name: "CV ATS Format A4" },
-  { id: "cv-pro", name: "CV PRO (historique)" },
   { id: "cv-pro-international", name: "CV PRO International" },
   { id: "arabic-pro-v1", name: "CV Pro Arabe V1" },
   { id: "arabic-pro-v2", name: "CV PRO Arabe V2" },
@@ -48,7 +47,7 @@ export function getCvTemplatesForLanguage(language: string) {
 /** Keeps the active Arabic designs and routes removed legacy variants to V1. */
 export function normalizeCvTemplateForLanguage(templateId: string, language: string): CvTemplateId {
   const migrated =
-    templateId === "cv-pro-ar-v3" || templateId === "cv-pro-international"
+    templateId === "cv-pro" || templateId === "cv-pro-ar-v3" || templateId === "cv-pro-international"
       ? language === "ar"
         ? "cv-pro-ar-v3"
         : "cv-pro-international"

@@ -12,7 +12,6 @@ test("offers three Arabic layouts without exposing International to Arabic CVs",
       "canadian-v3",
       "canadian-v4",
       "ats-a4",
-      "cv-pro",
       "arabic-pro-v1",
       "arabic-pro-v2",
       "cv-pro-ar-v3",
@@ -30,7 +29,7 @@ test("offers three Arabic layouts without exposing International to Arabic CVs",
   );
   assert.equal(
     templates.getCvTemplatesForLanguage("fr").some((template) => template.id === "cv-pro"),
-    true,
+    false,
   );
   assert.equal(
     templates
@@ -40,9 +39,11 @@ test("offers three Arabic layouts without exposing International to Arabic CVs",
   );
 });
 
-test("new CV PRO variants route by language without changing legacy saved IDs", async () => {
+test("new CV PRO variants route by language and migrate the retired historical template", async () => {
   const templates = await import("./document-templates");
   for (const language of ["fr", "en", "es", "de", "it", "zh"]) {
+    assert.equal(templates.normalizeCvTemplateForLanguage('cv-pro',language),'cv-pro-international');
+    assert.ok(!templates.getCvTemplatesForLanguage(language).some(item=>item.id==='cv-pro'));
     assert.ok(
       templates
         .getCvTemplatesForLanguage(language)
@@ -63,8 +64,9 @@ test("new CV PRO variants route by language without changing legacy saved IDs", 
     "cv-pro-ar-v3",
   );
   assert.equal(templates.normalizeCvTemplateForLanguage("cv-pro-ar-v3", "ar"), "cv-pro-ar-v3");
-  assert.equal(templates.normalizeCvTemplateForLanguage("cv-pro", "ar"), "cv-pro");
-  assert.equal(templates.normalizeCvTemplateForLanguage("cv-pro", "fr"), "cv-pro");
+  assert.equal(templates.normalizeCvTemplateForLanguage("cv-pro", "ar"), "cv-pro-ar-v3");
+  assert.equal(templates.normalizeCvTemplateForLanguage("cv-pro", "fr"), "cv-pro-international");
+  assert.ok(!templates.CV_TEMPLATES.some(item=>item.id==='cv-pro'));
   assert.equal(templates.isArabicCvTemplate("cv-pro-ar-v3"), true);
   assert.deepEqual(
     templates.getTemplateDocumentLanguages("cv-pro-ar-v3").map((item) => item.id),

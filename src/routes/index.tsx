@@ -1206,8 +1206,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             }
           }
         } catch {
-          const migratedTemplate = isArabicCvTemplate(savedTemplate)
-            ? normalizeCvTemplateForLanguage(savedTemplate, "ar")
+          const migratedTemplate = savedTemplate === 'cv-pro' || isArabicCvTemplate(savedTemplate)
+            ? normalizeCvTemplateForLanguage(savedTemplate, isArabicCvTemplate(savedTemplate) ? "ar" : language)
             : savedTemplate;
           if (getTemplates("cv").some((template) => template.id === migratedTemplate)) {
             setTemplateId(migratedTemplate as PdfTemplateId);

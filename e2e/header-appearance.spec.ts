@@ -24,11 +24,16 @@ for(const width of [1440,375,320])test(`compact header appearance controls at ${
   const language=controls.getByRole('button',{name:'Langue du document : Français',exact:true});
   await expect(language).toHaveText('Français');
   await expect(page.locator('.zgr-preview-palette')).toHaveCount(0);
-  const boxes=await Promise.all([palette,theme,language].map(locator=>locator.boundingBox()));
+  const logout=controls.getByRole('button',{name:'Se déconnecter',exact:true});
+  await expect(page.getByRole('button',{name:'Se déconnecter',exact:true})).toHaveCount(1);
+  const boxes=await Promise.all([palette,theme,language,logout].map(locator=>locator.boundingBox()));
   for(const box of boxes){expect(box).not.toBeNull();expect(box!.height).toBe(40);expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(width);}
   expect(boxes[0]!.y).toBe(boxes[1]!.y);expect(boxes[1]!.y).toBe(boxes[2]!.y);
   expect(boxes[0]!.x+boxes[0]!.width).toBeLessThan(boxes[1]!.x);
   expect(boxes[1]!.x+boxes[1]!.width).toBeLessThan(boxes[2]!.x);
+  expect(boxes[2]!.x+boxes[2]!.width).toBeLessThan(boxes[3]!.x);
+  expect(boxes[2]!.y).toBe(boxes[3]!.y);
+  expect(boxes[3]!.width).toBe(40);
   await palette.getByRole('button').nth(1).click();
   await expect(palette.getByRole('button').nth(1)).toHaveAttribute('aria-pressed','true');
   const custom=palette.getByLabel('Couleur personnalisée',{exact:true});
@@ -51,4 +56,6 @@ for(const width of [1440,375,320])test(`compact header appearance controls at ${
   await expect.poll(()=>language.locator('img').evaluate((image:HTMLImageElement)=>image.naturalWidth)).toBeGreaterThan(0);
   await mkdir('output/header-appearance',{recursive:true});
   await page.locator('header').screenshot({path:`output/header-appearance/header-${width}.png`});
+  await logout.click();
+  await expect(page.getByRole('button',{name:'Se connecter',exact:true})).toBeVisible();
 });

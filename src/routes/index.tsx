@@ -418,7 +418,7 @@ function LanguageMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline"
-          className="zgr-control h-10 shrink-0 gap-2 rounded-xl border-primary/15 px-3"
+          className="zgr-control h-10 shrink-0 gap-1.5 rounded-xl border-primary/15 px-2 sm:gap-2 sm:px-3"
           aria-label={`Langue du document : ${selectedLanguage?.name}`}>
           <DocumentLanguageFlag language={language} />
           <span className="text-xs font-bold">{selectedLanguage?.name}</span>
@@ -2963,7 +2963,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 type="button"
                 variant="outline"
                 size="icon"
-                className="zgr-control h-10 w-10 rounded-xl"
+                className="zgr-control h-10 w-10 shrink-0 rounded-xl"
                 aria-label={
                   colorMode === "dark" ? "Activer le mode clair" : "Activer le mode sombre"
                 }
@@ -2973,6 +2973,11 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 {colorMode === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               <LanguageMenu language={language} onLanguageChange={setLanguage} />
+              <Button type="button" variant="outline" size="icon"
+                className="zgr-control h-10 w-10 shrink-0 rounded-xl"
+                aria-label="Se déconnecter" title="Se déconnecter" onClick={onLogout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
             </div>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2">
@@ -3330,15 +3335,6 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 <Eye className="mr-2 h-4 w-4" />
               )}
               {previewVisible ? "Masquer l’aperçu" : "Afficher l’aperçu"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Se déconnecter"
-              title="Se déconnecter"
-              onClick={onLogout}
-            >
-              <LogOut className="h-4 w-4" />
             </Button>
             {!isEuropassTemplate && (
               <DropdownMenu>

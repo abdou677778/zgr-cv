@@ -4,7 +4,7 @@ export function ModelColorControl({colors,value,original,label,originalLabel,cus
   colors:string[];value:string;original:string;label:string;originalLabel:string;customLabel:string;onChange:(color:string)=>void;
 }){
   return <div role="group" aria-label={label} title={label}
-    className="zgr-control flex h-10 min-w-24 max-w-[280px] flex-1 items-center gap-2 rounded-xl border border-primary/15 px-2 sm:flex-none">
+    className="zgr-control flex h-10 min-w-16 max-w-[280px] flex-1 items-center gap-2 rounded-xl border border-primary/15 px-2 sm:flex-none">
     <Palette aria-hidden="true" className="h-4 w-4 shrink-0 text-primary" />
     <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none]">
       {colors.map(color=>{

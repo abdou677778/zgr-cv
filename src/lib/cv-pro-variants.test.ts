@@ -31,7 +31,7 @@ test("frozen Arabic V3 preserves the complete current CV PRO definition and page
     snapshot(applyPdfTheme(original, "cv-pro", "#123456")),
   );
 });
-test("International starts with exactly the existing foreign-language CV PRO layouts", () => {
+test("International changes only the contact groups, preserving the rest of each foreign layout", () => {
   assert.throws(
     () => buildCvProInternationalPdf(documents.ar!, "ar"),
     /réservé aux langues étrangères/,
@@ -40,11 +40,17 @@ test("International starts with exactly the existing foreign-language CV PRO lay
     if (id === "ar") continue;
     const original = buildCvProPdf(documents[id]!, id);
     const international = buildCvProInternationalPdf(documents[id]!, id);
-    assert.equal(snapshot(international), snapshot(original), id);
-    assert.equal(
-      snapshot(applyPdfTheme(international, "cv-pro-international", "#123456")),
-      snapshot(applyPdfTheme(original, "cv-pro", "#123456")),
-      id,
-    );
+    const before=JSON.parse(snapshot(original));
+    const after=JSON.parse(snapshot(international));
+    const rows=after.content[1].table.body[0][0].stack;
+    for(const row of rows){
+      assert.deepEqual(row.table.widths,['*',11,7,'auto','*'],id);
+      assert.ok(row.table.body[0][1].svg,id);
+      assert.equal(row.table.body[0][3].alignment,'left',id);
+    }
+    before.content[1].table.body[0][0].stack=[];
+    after.content[1].table.body[0][0].stack=[];
+    assert.deepEqual(after,before,id);
+    assert.ok(snapshot(applyPdfTheme(international,'cv-pro-international','#123456')).includes('#123456'));
   }
 });

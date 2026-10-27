@@ -687,7 +687,7 @@ function languageRows(cv: CV, language: DocumentLanguage): Content[] {
     });
 }
 
-function contactLine(icon: keyof typeof ICONS, value: string, language: DocumentLanguage): Content {
+function contactLine(icon: keyof typeof ICONS, value: string, language: DocumentLanguage, inlineContacts=false): Content {
   const rtl = language === "ar";
   const length = Array.from(value.trim()).length;
   const fontSize = length > 48 ? 7.2 : length > 40 ? 7.8 : length > 32 ? 8.5 : 9.4;
@@ -713,10 +713,10 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     // Equal outside spaces centre the complete value + gap + icon group.
     // The text is measured by pdfmake, including mixed Arabic/Latin values.
     table: {
-      widths: rtl ? ["*", "auto", 5, 11, "*"] : [13, "*", 13],
+      widths: rtl ? ["*", "auto", 5, 11, "*"] : inlineContacts ? ["*",11,7,"auto","*"] : [13, "*", 13],
       body: [rtl
         ? [{ text: "" }, textNode, { text: "" }, iconNode, { text: "" }]
-        : [iconNode, textNode, { text: "" }]],
+        : inlineContacts ? [{text:""},iconNode,{text:""},{...textNode as object,alignment:'left'}, {text:""}] : [iconNode, textNode, { text: "" }]],
     },
     layout: {
       hLineWidth: () => 0,
@@ -728,7 +728,8 @@ function contactLine(icon: keyof typeof ICONS, value: string, language: Document
     },
     // The table spans the fixed contact zone; its centre equals the circle's
     // centre. The middle text cell is therefore perfectly aligned to it.
-    margin: [0, 0, 0, rtl ? 5 : 7],
+    // Keep the international group clear of the oval's narrowing bottom curve.
+    margin: [0, 0, 0, rtl ? 5 : inlineContacts ? 4 : 7],
   } as Content;
 }
 
@@ -748,7 +749,7 @@ function labeledContact(value: string, label: string) {
     : `${label}: ${normalizedValue}`;
 }
 
-function firstPageOverlay(cv: CV, language: DocumentLanguage): Content[] {
+function firstPageOverlay(cv: CV, language: DocumentLanguage, inlineContacts=false): Content[] {
   const rtl = language === "ar";
   const capsuleX = rtl ? PAGE_W - 204 : 16;
   const identityX = rtl ? 25 : 237;
@@ -763,20 +764,20 @@ function firstPageOverlay(cv: CV, language: DocumentLanguage): Content[] {
   const location = cv.adresse.trim() || [cv.wilaya, cv.pays].map(clean).filter(Boolean).join(", ");
   const relocation = cv.statut_relocation.trim();
   const contacts = [
-    cv.telephone ? contactLine("phone", cv.telephone, language) : null,
-    cv.email ? contactLine("mail", cv.email, language) : null,
-    birthAndFamily ? contactLine("user", birthAndFamily, language) : null,
+    cv.telephone ? contactLine("phone", cv.telephone, language,inlineContacts) : null,
+    cv.email ? contactLine("mail", cv.email, language,inlineContacts) : null,
+    birthAndFamily ? contactLine("user", birthAndFamily, language,inlineContacts) : null,
     cv.permis_conduire
-      ? contactLine("car", labeledContact(cv.permis_conduire, contactLabels.driving), language)
+      ? contactLine("car", labeledContact(cv.permis_conduire, contactLabels.driving), language,inlineContacts)
       : null,
     cv.service_national
-      ? contactLine("star", labeledContact(cv.service_national, contactLabels.service), language)
+      ? contactLine("star", labeledContact(cv.service_national, contactLabels.service), language,inlineContacts)
       : null,
-    location ? contactLine("pin", location, language) : null,
+    location ? contactLine("pin", location, language,inlineContacts) : null,
     // The address and mobility preference are distinct facts. Keeping them
     // on separate rows prevents a Canadian mobility statement from being
     // mistaken for part of the postal address or being wrapped mid-sentence.
-    relocation ? contactLine("globe", relocation, language) : null,
+    relocation ? contactLine("globe", relocation, language,inlineContacts) : null,
   ].filter((item): item is Content => Boolean(item));
   const noBorders = {
     hLineWidth: () => 0,
@@ -956,7 +957,7 @@ function background(cv: CV, language: DocumentLanguage, currentPage: number): Co
   return { stack: content } as Content;
 }
 
-export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefinitions {
+export function buildCvProPdf(cv: CV, language: DocumentLanguage,options:{inlineContacts?:boolean}={}): TDocumentDefinitions {
   const rtl = language === "ar";
   const labels = LABELS[language];
   const main: OrderedContent[] = [];
@@ -1129,7 +1130,7 @@ export function buildCvProPdf(cv: CV, language: DocumentLanguage): TDocumentDefi
       alignment: rtl ? "right" : undefined,
     },
     content: [
-      ...firstPageOverlay(cv, language),
+      ...firstPageOverlay(cv, language,options.inlineContacts),
       { text: "", margin: [0, 0, 0, FIRST_PAGE_BODY_OFFSET] } as Content,
       {
         columns: rtl ? [mainColumn, sidebarColumn] : [sidebarColumn, mainColumn],

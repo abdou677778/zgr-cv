@@ -8,5 +8,5 @@ export function buildCvProInternationalPdf(cv: CV, language: DocumentLanguage) {
     throw new Error(
       "CV PRO International est réservé aux langues étrangères. Utiliser CV PRO Arabe V3.",
     );
-  return buildCvProPdf(cv, language);
+  return buildCvProPdf(cv, language,{inlineContacts:true});
 }

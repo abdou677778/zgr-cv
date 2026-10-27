@@ -76,6 +76,8 @@ import { SharedSoftwareLogo } from "@/components/shared-software-logo";
 import { LanguageLogoPicker } from "@/components/language-logo-picker";
 import { ModelColorControl } from '@/components/model-color-control';
 import { CompactToolbarSelect } from '@/components/compact-toolbar-select';
+import { PwaUpdateControl } from '@/components/pwa-update-control';
+import { applyPwaUpdateAfterSaving } from '@/lib/pwa-update-safety';
 import { AdditionalLanguagesEditor } from '@/components/additional-languages-editor';
 import {MultilingualSectionsReview} from '@/components/multilingual-sections-review';
 import {localizedCustomTitle,synchronizeSoftwareEdit} from '@/lib/multilingual-sections';
@@ -735,6 +737,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     };
   }, []);
   const pwa = usePwaStatus();
+  const [pwaUpdating,setPwaUpdating]=useState(false);
   const [language, setLanguage] = useState<DocumentLanguage>("fr");
   const [colorMode, setColorMode] = useState<ColorMode>(() => {
     if (typeof window === "undefined") return "light";
@@ -1408,6 +1411,23 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     }, 700);
     return () => window.clearTimeout(timer);
   }, [baselineFingerprint, draftFingerprint, draftPayload, loaded, user.username]);
+
+  const applyAvailableUpdate=async()=>{
+    if(!loaded||pwaUpdating)return;
+    setPwaUpdating(true);
+    const savedAt=new Date().toISOString();
+    try{
+      const activated=await applyPwaUpdateAfterSaving(async()=>{
+        await saveWorkspaceDraft({username:user.username,version:1,savedAt,fingerprint:draftFingerprint,
+          baselineFingerprint:baselineFingerprint??draftFingerprint,payload:draftPayload});
+        setLastDraftSavedAt(savedAt);setDraftState('saved');
+      },activatePwaUpdate);
+      if(!activated){setPwaUpdating(false);setImportMessage({ok:false,text:'La mise à jour n’est plus disponible. Votre brouillon est conservé.'});}
+    }catch{
+      setPwaUpdating(false);setDraftState('error');
+      setImportMessage({ok:false,text:'Actualisation annulée : le brouillon n’a pas pu être sauvegardé. Votre travail reste ouvert.'});
+    }
+  };
 
   useEffect(() => {
     if (!loaded) return;
@@ -2944,11 +2964,13 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 />
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <h1 className="zgr-brand-title text-xl font-extrabold tracking-tight">ZGR CV</h1>
                   <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-200">
                     Studio
                   </span>
+                  <PwaUpdateControl available={pwa.updateAvailable} busy={pwaUpdating} disabled={!loaded}
+                    onActivate={()=>void applyAvailableUpdate()} />
                 </div>
                 <p className="hidden max-w-2xl truncate text-xs text-muted-foreground sm:block">
                   {ui.subtitle}
@@ -3422,28 +3444,6 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             )}
           </div>
         </div>
-        {pwa.updateAvailable && (
-          <div
-            role="alert"
-            aria-live="polite"
-            className="mx-auto mb-2 flex max-w-7xl flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-950 shadow-sm"
-          >
-            <span>
-              <strong>Nouvelle version disponible.</strong>{" "}
-              {hasUnsavedChanges
-                ? "Votre brouillon local est conservé avant l’actualisation."
-                : "Vous pouvez l’appliquer maintenant sans perdre votre travail."}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              className="gap-2 bg-violet-700 text-white hover:bg-violet-800"
-              onClick={activatePwaUpdate}
-            >
-              <RefreshCw className="h-4 w-4" /> Actualiser
-            </Button>
-          </div>
-        )}
       </header>
       {importMessage && (
         <div

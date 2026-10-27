@@ -20,6 +20,7 @@ for(const width of [1440,375,320])test(`compact header appearance controls at ${
   await page.getByLabel('Mot de passe').fill('synthetic-test-password');
   await page.getByRole('button',{name:'Se connecter'}).click();
   const controls=page.getByTestId('header-appearance-controls');
+  await expect(page.getByRole('button',{name:'Mise à jour disponible',exact:true})).toHaveCount(0);
   const documentSelect=page.getByRole('combobox',{name:'Document',exact:true});
   const modelSelect=page.getByRole('combobox',{name:'Modèle',exact:true});
   await expect(documentSelect).toHaveText(/^Document\s*CV$/);

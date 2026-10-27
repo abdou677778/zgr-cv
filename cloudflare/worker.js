@@ -4958,8 +4958,8 @@ async function route(request, env, ctx) {
     return handleAlgeriaOpportunityApi(request, env, origin);
   if (url.pathname === "/api/destination-canada/tunis" && request.method === "GET")
     return json(await destinationCanadaContract(),200,origin);
-  if (["/api/software-logos", "/api/organization-logos"].includes(url.pathname) && request.method === "GET") {
-    const namespace = url.pathname === "/api/organization-logos" ? "organization-logos" : "software-logos";
+  if (["/api/software-logos", "/api/organization-logos", "/api/language-logos"].includes(url.pathname) && request.method === "GET") {
+    const namespace = url.pathname.slice('/api/'.length);
     const logos = {};
     const organizations = [];
     let cursor;
@@ -4983,10 +4983,12 @@ async function route(request, env, ctx) {
   const permissions = rolePermissions(actor.role, actor.workflowManager === true, actor.accessMatrix);
   if (url.pathname === '/api/tech-orders' || url.pathname.startsWith('/api/tech-orders/'))
     return handleTechOrders(request,env,actor,(body,status)=>json(body,status,origin));
-  if (/^\/api\/(?:software|organization)-logos\//.test(url.pathname) && request.method === "PUT") {
-    const namespace = url.pathname.startsWith("/api/organization-logos/") ? "organization-logos" : "software-logos";
+  if (/^\/api\/(?:software|organization|language)-logos\//.test(url.pathname) && request.method === "PUT") {
+    const namespace = url.pathname.split('/')[2];
     if (actor.role !== "admin") return json({ error: "Droits administrateur requis pour modifier la bibliothèque partagée." }, 403, origin);
     const slug = url.pathname.slice(`/api/${namespace}/`.length);
+    if (namespace === "language-logos" && !["fr", "en", "ar", "de", "es", "kab"].includes(slug))
+      return json({ error: "Langue inconnue." }, 400, origin);
     if (!/^[a-z0-9-]{1,80}$/.test(slug) || slug === "generic")
       return json({ error: "Choisissez un logiciel du catalogue." }, 400, origin);
     if (Number(request.headers.get("content-length") || 0) > 220000)

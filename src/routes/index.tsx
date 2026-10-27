@@ -74,6 +74,7 @@ import { importCvJson, importCvJsonSet } from "@/lib/cv-json";
 import { formatDrivingLicence, formatNationalService } from "@/lib/cv-concise-status";
 import { SoftwareLogoPicker } from "@/components/software-logo-picker";
 import { SharedSoftwareLogo } from "@/components/shared-software-logo";
+import { LanguageLogoPicker } from "@/components/language-logo-picker";
 import {MultilingualSectionsReview} from '@/components/multilingual-sections-review';
 import {localizedCustomTitle,synchronizeSoftwareEdit} from '@/lib/multilingual-sections';
 import { sampleCVByLanguage } from "@/lib/sample-cv";
@@ -752,6 +753,16 @@ function Index() {
 }
 
 function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const [logoRevision, setLogoRevision] = useState(0);
+  useEffect(() => {
+    const update = () => setLogoRevision(value => value + 1);
+    window.addEventListener("zgr-language-logos", update);
+    window.addEventListener("zgr-software-logos", update);
+    return () => {
+      window.removeEventListener("zgr-language-logos", update);
+      window.removeEventListener("zgr-software-logos", update);
+    };
+  }, []);
   const pwa = usePwaStatus();
   const [language, setLanguage] = useState<DocumentLanguage>("fr");
   const [colorMode, setColorMode] = useState<ColorMode>(() => {
@@ -995,6 +1006,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     [cvByLanguage, hiddenElements],
   );
   const cvKey = JSON.stringify({
+    logoRevision,
     cv: outputCv,
     templateId,
     documentKind,
@@ -1551,6 +1563,12 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   );
 
   const set = <K extends keyof CV>(k: K, v: CV[K]) => {
+    if (k === "language_logos") {
+      setCvByLanguage(current => Object.fromEntries(DOCUMENT_LANGUAGES.map(item => [item.id,
+        { ...current[item.id], language_logos: v as CV["language_logos"] },
+      ])) as Record<DocumentLanguage, CV>);
+      return;
+    }
     // Software names are product names, not translated prose. Keeping the
     // same list in each language prevents a complete multilingual pack from
     // silently omitting software entered while another language was selected.
@@ -4162,6 +4180,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                       set("langues", { ...cv.langues, [key]: e.target.value.slice(0, 40) })
                     }
                   />
+                  <LanguageLogoPicker language={key} value={cv.language_logos?.[key]}
+                    readLocal={readSoftwareCustomIcon}
+                    onChange={value => set("language_logos", { ...cv.language_logos, [key]: value })} />
                 </Field>
               ))}
             </div>

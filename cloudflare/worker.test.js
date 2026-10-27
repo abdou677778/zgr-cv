@@ -252,6 +252,25 @@ test("shared software logos require admin authentication and preserve replaced v
   assert.equal((await response.json()).logos.canva, dataUrl);
   assert.equal((await write()).status, 200);
   assert.ok([...env.CLIENTS_BUCKET.objects.keys()].some((key) => key.startsWith("software-logos/history/canva/")));
+  const writeLanguage = (slug) => call(env, `/api/language-logos/${slug}`, authorized(admin.token, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }),
+  }));
+  assert.equal((await call(env, "/api/language-logos/fr", { method: "PUT" })).status, 401);
+  assert.equal((await writeLanguage("invalid")).status, 400);
+  assert.equal((await writeLanguage("fr")).status, 200);
+  assert.equal((await writeLanguage("fr")).status, 200);
+  assert.equal((await (await call(env, "/api/language-logos")).json()).logos.fr, dataUrl);
+  assert.equal((await (await call(env, "/api/software-logos")).json()).logos.fr, undefined);
+  assert.ok([...env.CLIENTS_BUCKET.objects.keys()].some(key => key.startsWith("language-logos/history/fr/")));
+  const createEditor = await call(env, "/api/admin/users", authorized(admin.token, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "logo-editor", displayName: "Test", password: "test-logo-editor-password", role: "editor" }),
+  }));
+  assert.equal(createEditor.status, 201);
+  const editor = await login(env, "logo-editor", "test-logo-editor-password");
+  assert.equal((await call(env, "/api/language-logos/fr", authorized(editor.token, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }),
+  }))).status, 403);
   assert.equal((await call(env, "/api/organization-logos/dz-1", authorized(admin.token, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }),
   }))).status, 200);

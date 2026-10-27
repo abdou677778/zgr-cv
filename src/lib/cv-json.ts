@@ -47,6 +47,20 @@ const record = (value: unknown): JsonRecord =>
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
+export function normalizeLanguageLogos(value: unknown): CV["language_logos"] {
+  const result: NonNullable<CV["language_logos"]> = {};
+  const source = record(value);
+  const keys = ["fr", "en", "ar", "de", "es", "kab"] as const;
+  for (const key of keys) {
+    const entry = record(source[key]);
+    const icon = keys.find(item => item === entry.icon);
+    const custom = text(entry.customIconDataUrl);
+    const customIconDataUrl = custom.length <= 210000 && /^data:image\/(?:png|webp|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/.test(custom) ? custom : undefined;
+    if (icon || customIconDataUrl) result[key] = { ...(icon ? { icon } : {}), ...(customIconDataUrl ? { customIconDataUrl } : {}) };
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
 const stringList = (value: unknown): string[] => {
   if (Array.isArray(value)) return value.map(text).filter(Boolean);
   return Object.values(record(value)).map(text).filter(Boolean);
@@ -302,6 +316,7 @@ function directCv(source: JsonRecord): CV {
     competences: stringList(source.competences),
     competences_format: normalizeObjectiveFormat(source.competences_format),
     logiciels: softwareList(source.logiciels ?? source.software),
+    language_logos: normalizeLanguageLogos(source.language_logos),
     custom_sections: customSections,
     // Do not turn legacy / absent values into a global order: each template
     // owns its native default order. Only retain an actual user rearrangement.

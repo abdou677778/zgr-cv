@@ -3,6 +3,19 @@ import test from "node:test";
 
 import { importCvJson, importCvJsonSet } from "./cv-json";
 
+test("language logos survive JSON reload and reject external or oversized images", () => {
+  const customIconDataUrl = "data:image/png;base64,iVBORw0KGgo=";
+  const result = importCvJson({ nom_complet: "Test", language_logos: {
+    fr: { icon: "en", customIconDataUrl },
+    en: { icon: "invalid", customIconDataUrl: "https://external.test/logo.png" },
+    ar: { customIconDataUrl: `data:image/png;base64,${"A".repeat(210001)}` },
+    unknown: { icon: "fr" },
+  } }, "auto");
+  assert.deepEqual(result.cv.language_logos, { fr: { icon: "en", customIconDataUrl } });
+  const reloaded = importCvJson(JSON.parse(JSON.stringify(result.cv)), "auto");
+  assert.deepEqual(reloaded.cv.language_logos, result.cv.language_logos);
+});
+
 test("keeps legacy JSON compatible when the software section is absent", () => {
   const result = importCvJson({ nom_complet: "Legacy Profile", experiences: [] }, "auto");
   assert.deepEqual(result.cv.logiciels, []);

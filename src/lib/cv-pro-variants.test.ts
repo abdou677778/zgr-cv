@@ -47,6 +47,7 @@ test("International software rows match languages and preserve full names and pr
       assert.equal(row.columns[1].fontSize, 8.2);
       assert.equal(row.columnGap, 4);
       assert.equal(row.unbreakable, true);
+      assert.deepEqual(row.columns[0].margin, [0, -1.5, 0, 0]);
     }
     assert.equal(software[0].margin[3], 7);
     assert.equal(languages[0].margin[3], 7);
@@ -56,6 +57,15 @@ test("International software rows match languages and preserve full names and pr
   const empty = JSON.parse(snapshot(buildCvProInternationalPdf(emptyCV, "fr")));
   assert.ok(!snapshot(empty.content[3]).includes('"zgrSectionId":"software"'));
   assert.ok(!snapshot(empty.content[3]).includes('"zgrSectionId":"languages"'));
+});
+
+test("International accepts a language logo override without modifying Arabic V3", () => {
+  const language_logos = { fr: { icon: "en" as const, customIconDataUrl: "data:image/png;base64,fixture" } };
+  const cv = { ...documents.fr!, language_logos };
+  const document = JSON.parse(snapshot(buildCvProInternationalPdf(cv, "fr")));
+  const section = document.content[3].columns[0].stack.find((item: any) => item.zgrSectionId === "languages");
+  assert.equal(section.stack[1].columns[0].image, language_logos.fr.customIconDataUrl);
+  assert.equal(snapshot(buildCvProArabicV3Pdf({ ...documents.ar!, language_logos })), snapshot(buildCvProArabicV3Pdf(documents.ar!)));
 });
 test("frozen Arabic V3 preserves the complete current CV PRO definition and page geometry", () => {
   const original = buildCvProPdf(documents.ar!, "ar");

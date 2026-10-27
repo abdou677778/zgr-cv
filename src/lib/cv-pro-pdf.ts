@@ -175,7 +175,7 @@ type ProIcon = keyof typeof PRO_ICONS;
 
 const proIconSvg = (icon: ProIcon, color = ACCENT) => PRO_ICONS[icon].replaceAll(ACCENT, color);
 
-const LANGUAGE_FLAGS: Record<keyof CV["langues"], string> = {
+export const LANGUAGE_FLAGS: Record<keyof CV["langues"], string> = {
   fr: '<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="10" height="20" fill="#0055a4"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#ef4135"/><rect x=".5" y=".5" width="29" height="19" fill="none" stroke="#cbd5e1"/></svg>',
   en: '<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#012169"/><path d="M0 0 30 20M30 0 0 20" stroke="#fff" stroke-width="5"/><path d="M0 0 30 20M30 0 0 20" stroke="#c8102e" stroke-width="2"/><path d="M15 0v20M0 10h30" stroke="#fff" stroke-width="7"/><path d="M15 0v20M0 10h30" stroke="#c8102e" stroke-width="4"/><rect x=".5" y=".5" width="29" height="19" fill="none" stroke="#cbd5e1"/></svg>',
   ar: '<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="15" height="20" fill="#006233"/><rect x="15" width="15" height="20" fill="#fff"/><circle cx="15" cy="10" r="5" fill="#d21034"/><circle cx="16.8" cy="10" r="4" fill="#fff"/><path d="m16 6.5.9 2.1 2.3.2-1.8 1.5.6 2.2-2-1.2-1.9 1.2.5-2.2-1.7-1.5 2.3-.2Z" fill="#d21034"/><rect x=".5" y=".5" width="29" height="19" fill="none" stroke="#cbd5e1"/></svg>',
@@ -615,7 +615,7 @@ function softwareRows(cv: CV): Content {
               : { svg }),
             fit: [14, 9.3],
             alignment: "center",
-            margin: [0, 0.25, 0, 0],
+            margin: [0, -1.5, 0, 0],
           },
           { width: "*", text: item.label.trim(), fontSize: 8.2, lineHeight: META_LINE_HEIGHT, alignment: "left" },
         ],
@@ -689,10 +689,12 @@ function languageRows(cv: CV, language: DocumentLanguage, spacious = false): Con
     .map((key, index, keys) => {
       const flag = {
         width: 18,
-        svg: LANGUAGE_FLAGS[key],
+        ...(spacious && cv.language_logos?.[key]?.customIconDataUrl
+          ? { image: cv.language_logos[key]!.customIconDataUrl! }
+          : { svg: LANGUAGE_FLAGS[spacious ? cv.language_logos?.[key]?.icon || key : key] }),
         fit: [14, 9.3],
         alignment: "center",
-        margin: [0, 0.25, 0, 0],
+        margin: [0, spacious ? -1.5 : 0.25, 0, 0],
       } as Content;
       const body = {
         width: "*",

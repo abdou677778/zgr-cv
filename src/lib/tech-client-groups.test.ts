@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyTechFilters, type TechOrder } from "./tech-orders";
-import { groupTechClients, filterTechClientGroups } from "./tech-client-groups";
+import {
+  groupTechClients,
+  filterTechClientGroups,
+  groupTechServicePeriods,
+} from "./tech-client-groups";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { TechClientHistory } from "../components/tech-client-history";
 
 function order(id: string, start: string, end: string, saleDzd = 1900): TechOrder {
   return {
@@ -29,6 +36,51 @@ function order(id: string, start: string, end: string, saleDzd = 1900): TechOrde
 }
 const old = order("old", "2026-08-22", "2026-09-22");
 const next = order("next", "2026-10-24", "2026-11-24");
+test("Service history has one heading per catalog service, chronological dates and no financial rewrites", () => {
+  const another = {
+    ...next,
+    id: "other",
+    lines: [
+      {
+        ...next.lines[0],
+        id: "other-line",
+        serviceId: "plus",
+        name: "ChatGPT Plus",
+        saleDzd: 6200,
+      },
+    ],
+  };
+  const group = groupTechClients([next, another, old], "2026-10-28")[0];
+  const services = groupTechServicePeriods([...group.periods].reverse());
+  assert.equal(services.length, 2);
+  assert.deepEqual(
+    services[0].periods.map((p) => p.line.start),
+    ["2026-08-22", "2026-10-24"],
+  );
+  assert.equal(services[0].periods[0].line.saleDzd, 1900);
+  for (const mobile of [true, false]) {
+    const html = renderToStaticMarkup(
+      createElement(TechClientHistory, {
+        group,
+        today: "2026-10-28",
+        mobile,
+        logo: (id) => createElement("img", { alt: id }),
+        menu: null,
+        onContact: () => {},
+      }),
+    );
+    assert.equal((html.match(/<strong[^>]*>ChatGPT Go<\/strong>/g) || []).length, 1);
+    assert.equal((html.match(/<strong[^>]*>ChatGPT Plus<\/strong>/g) || []).length, 1);
+    assert.equal((html.match(/<summary[^>]*>Plus d’infos<\/summary>/g) || []).length, 2);
+    assert.doesNotMatch(html, /<details[^>]*\bopen[= >]/);
+    assert.match(html, /text-emerald-700[^>]*>Actif/);
+    assert.match(html, /text-red-700[^>]*>Expiré/);
+    assert.match(html, /<dt>Achat<\/dt>/);
+    assert.match(html, /<dt>Vente<\/dt>/);
+    assert.match(html, /<dt>Marge<\/dt>/);
+    assert.ok(html.indexOf("22/08/2026") < html.indexOf("24/10/2026"));
+  }
+});
 test("One client, chronological periods, independent prices and exact ledger totals", () => {
   const group = groupTechClients(
     [{ ...next, lines: [{ ...next.lines[0], saleDzd: 2200 }] }, old],

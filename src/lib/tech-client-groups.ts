@@ -54,6 +54,22 @@ export function groupTechClients(orders: TechOrder[], today: string) {
 }
 export type TechClientGroup = ReturnType<typeof groupTechClients>[number];
 
+/** Group by catalog identity, not display name: different plans stay separate. */
+export function groupTechServicePeriods(periods: TechClientGroup["periods"]) {
+  const services = new Map<string, TechClientGroup["periods"]>();
+  for (const period of [...periods].sort(
+    (a, b) => a.line.start.localeCompare(b.line.start) || a.line.end.localeCompare(b.line.end),
+  )) {
+    const key = period.line.serviceId;
+    services.set(key, [...(services.get(key) || []), period]);
+  }
+  return [...services].map(([serviceId, history]) => ({
+    serviceId,
+    name: history.at(-1)!.line.name,
+    periods: history,
+  }));
+}
+
 /** Match a client through any ledger record; always display its complete history. */
 export function filterTechClientGroups(orders: TechOrder[], filters: TechFilters, today: string) {
   const matching = filterTechOrders(orders, { ...filters, state: "" }, today);

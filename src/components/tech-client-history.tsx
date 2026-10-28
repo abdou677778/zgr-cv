@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TechClientGroup } from "@/lib/tech-client-groups";
+import { groupTechServicePeriods, type TechClientGroup } from "@/lib/tech-client-groups";
 import { lineTotals, techLineStatus, techOrderLabel } from "@/lib/tech-orders";
 import { formatTechMoney as money, formatTechDeadline as date } from "@/lib/tech-order-display";
 import { TechOrderClientLink, TechOrderNote } from "./tech-order-details";
@@ -47,53 +47,90 @@ export function TechClientHistory({
           corrigés automatiquement.
         </p>
       )}
-      {group.periods.map(({ order, line }) => {
-        const total = lineTotals(line);
-        return (
-          <div
-            key={`${order.id}:${line.id}`}
-            className={`rounded-lg border p-2 ${group.duplicates.has(`${order.id}:${line.id}`) ? "border-amber-400" : "border-slate-100"}`}
-          >
-            <div className="flex items-start gap-2">
-              {logo(line.serviceId)}
-              <div className="min-w-0 flex-1 text-xs">
-                <strong>{line.name}</strong>
-                <div>
-                  {date(line.start)} → {date(line.end)}
-                </div>
-                <div
-                  className={
-                    techLineStatus(line, today) === "Expiré" ? "text-red-700" : "text-indigo-700"
-                  }
-                >
-                  {techLineStatus(line, today)}
-                </div>
-              </div>
-            </div>
-            <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-slate-600">
-              <span>Coût {money(total.cost)}</span>
-              <span>
-                Vente <b>{money(total.sale)}</b>
-              </span>
-              <span>
-                Marge <b>{money(total.margin)}</b>
-              </span>
-            </div>
-            {techLineStatus(line, today) === "Expiré" &&
-              !group.periods.some(
-                (p) =>
-                  p.line.serviceId === line.serviceId &&
-                  p.line.start > line.start &&
-                  p.line.start <= today,
-              ) && <TechContactBadge line={line} onClick={() => onContact(order)} />}
-            <details className="mt-1 text-xs text-slate-500">
-              <summary className="cursor-pointer">Note / référence de cette période</summary>
-              <span>{techOrderLabel(order)}</span>
-              <TechOrderNote notes={order.notes} />
-            </details>
+      {groupTechServicePeriods(group.periods).map((service) => (
+        <section
+          key={service.serviceId}
+          aria-label={service.name}
+          className="min-w-0 rounded-lg border border-slate-100 p-2"
+        >
+          <div className="mb-1.5 flex items-center gap-2">
+            {logo(service.serviceId)}
+            <strong className="min-w-0 break-words text-xs">{service.name}</strong>
           </div>
-        );
-      })}
+          <div className="space-y-1">
+            {service.periods.map(({ order, line }) => {
+              const state = techLineStatus(line, today);
+              return (
+                <div
+                  key={`${order.id}:${line.id}`}
+                  className={`flex items-center justify-between gap-2 rounded px-1 py-0.5 text-[11px] ${group.duplicates.has(`${order.id}:${line.id}`) ? "bg-amber-50 ring-1 ring-amber-400" : ""}`}
+                >
+                  <span className="whitespace-nowrap tabular-nums">
+                    {date(line.start)} → {date(line.end)}
+                  </span>
+                  <span
+                    className={`shrink-0 text-right font-semibold ${state === "Expiré" ? "text-red-700" : state === "Actif" ? "text-emerald-700" : state === "Expire sous 3 jours" ? "text-amber-700" : "text-slate-500"}`}
+                  >
+                    {state === "Expire sous 3 jours" ? "Expire ≤ 3 j" : state}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {service.periods
+            .filter(
+              ({ line }) =>
+                techLineStatus(line, today) === "Expiré" &&
+                !service.periods.some((p) => p.line.start > line.start && p.line.start <= today),
+            )
+            .map(({ order, line }) => (
+              <TechContactBadge
+                key={`${order.id}:${line.id}`}
+                line={line}
+                onClick={() => onContact(order)}
+              />
+            ))}
+          <details className="group mt-1.5 text-xs text-slate-600">
+            <summary className="cursor-pointer rounded py-1 font-medium text-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
+              Plus d’infos
+            </summary>
+            <div className="mt-1 space-y-2 border-t border-slate-100 pt-2">
+              {service.periods.map(({ order, line }) => {
+                const total = lineTotals(line);
+                return (
+                  <div key={`${order.id}:${line.id}`} className="space-y-1 rounded bg-slate-50 p-2">
+                    <div className="text-[11px] font-semibold tabular-nums">
+                      {date(line.start)} → {date(line.end)}
+                    </div>
+                    <dl className="grid grid-cols-3 gap-1 text-[11px]">
+                      <div>
+                        <dt>Achat</dt>
+                        <dd className="font-semibold">{money(total.cost)}</dd>
+                      </div>
+                      <div>
+                        <dt>Vente</dt>
+                        <dd className="font-semibold">{money(total.sale)}</dd>
+                      </div>
+                      <div>
+                        <dt>Marge</dt>
+                        <dd
+                          className={`font-semibold ${total.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
+                        >
+                          {money(total.margin)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <span className="block text-[10px] text-slate-400">
+                      {techOrderLabel(order)}
+                    </span>
+                    <TechOrderNote notes={order.notes} />
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        </section>
+      ))}
     </div>
   );
   const totals = (

@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { CvTransactionsLauncher } from "@/components/cv-transactions-launcher";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -3442,6 +3443,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+            {user.role === "admin" && <CvTransactionsLauncher />}
           </div>
         </div>
       </header>

@@ -5054,6 +5054,8 @@ async function route(request, env, ctx) {
   }
 
   if (clientOrderPortalPath(url.pathname)) {
+    if ((url.pathname === '/api/admin/client-orders/transactions' || url.pathname.startsWith('/api/admin/client-orders/transactions/')) && actor.role !== 'admin')
+      return json({error: 'Registre financier réservé aux administrateurs.'}, 403, origin);
     if (!canAccessOrders(actor))
       return json({ error: "Compte actif requis pour accéder aux commandes." }, 403, origin);
     // Creating an empty five-day upload invitation is a baseline team action,

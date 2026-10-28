@@ -1,5 +1,6 @@
 import { recordEvent, runtimeEnv } from "@/db/runtime";
 import { safeFileName } from "@/lib/order-model";
+import { CV_RECEIPT_FOLDER_ID } from "../../shared/cv-transactions";
 import {
   getDeliverables,
   getJsonVersions,
@@ -22,11 +23,7 @@ type DriveDirectoryCache = Map<string, Map<string, DriveEntry>>;
 
 let tokenCache: { token: string; expiresAt: number } | undefined;
 
-async function bufferedFetchWithHardTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-) {
+async function bufferedFetchWithHardTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
   const timeoutError = new Error(`Délai Google dépassé après ${Math.round(timeoutMs / 1000)} s.`);
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -63,6 +60,93 @@ export function driveConfigured() {
     env.GOOGLE_REFRESH_TOKEN &&
     env.GOOGLE_DRIVE_ROOT_FOLDER_ID,
   );
+}
+
+/** Payment proofs never use public delivery sharing or the CV document mirror. */
+export async function inspectCvReceiptFolder() {
+  if (!driveConfigured()) throw new Error("Connexion Google Drive serveur non configurée.");
+  const response = await driveFetch(
+    `/files/${CV_RECEIPT_FOLDER_ID}?fields=id,name,mimeType,trashed,capabilities(canAddChildren)&supportsAllDrives=true`,
+  );
+  const folder = (await response.json()) as {
+    id: string;
+    name: string;
+    mimeType: string;
+    trashed?: boolean;
+    capabilities?: { canAddChildren?: boolean };
+  };
+  if (
+    folder.trashed ||
+    folder.mimeType !== FOLDER_MIME_TYPE ||
+    !folder.capabilities?.canAddChildren
+  )
+    throw new Error(
+      "Le dossier des justificatifs n’est pas accessible en écriture avec la connexion serveur.",
+    );
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({
+      fields: "nextPageToken,permissions(type)",
+      pageSize: "100",
+      supportsAllDrives: "true",
+      ...(pageToken ? { pageToken } : {}),
+    });
+    const permissions = (await (
+      await driveFetch(`/files/${CV_RECEIPT_FOLDER_ID}/permissions?${params}`)
+    ).json()) as { permissions?: { type: string }[]; nextPageToken?: string };
+    if ((permissions.permissions || []).some((p) => p.type === "anyone" || p.type === "domain"))
+      throw new Error(
+        "Le dossier Drive est partagé publiquement ou avec un domaine. L’envoi des justificatifs privés est bloqué ; ses permissions n’ont pas été modifiées.",
+      );
+    pageToken = permissions.nextPageToken;
+  } while (pageToken);
+  return { folderId: folder.id, name: folder.name, private: true, writable: true };
+}
+
+export async function uploadCvPaymentReceipt(
+  transactionId: string,
+  bytes: Uint8Array,
+  contentType: "image/png" | "image/jpeg" | "image/webp",
+) {
+  await inspectCvReceiptFolder();
+  const extension =
+    contentType === "image/jpeg" ? "jpg" : contentType === "image/png" ? "png" : "webp";
+  const name = `TX-${transactionId}_${crypto.randomUUID().slice(0, 8)}.${extension}`;
+  const session = await driveFetch(
+    `${DRIVE_UPLOAD_API}/files?uploadType=resumable&fields=id,name,webViewLink&supportsAllDrives=true`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Upload-Content-Type": contentType,
+        "X-Upload-Content-Length": String(bytes.byteLength),
+      },
+      body: JSON.stringify({
+        name,
+        parents: [CV_RECEIPT_FOLDER_ID],
+        appProperties: { zgrCvTransaction: transactionId },
+      }),
+    },
+  );
+  const location = session.headers.get("Location");
+  if (!location || new URL(location).origin !== "https://www.googleapis.com")
+    throw new Error("Session d’envoi Google invalide.");
+  const response = await driveFetch(
+    location,
+    {
+      method: "PUT",
+      headers: { "Content-Type": contentType, "Content-Length": String(bytes.byteLength) },
+      body: bytes as BodyInit,
+    },
+    DRIVE_UPLOAD_TIMEOUT_MS,
+  );
+  const file = (await response.json()) as { id: string; name: string };
+  if (!/^[a-zA-Z0-9_-]+$/.test(file.id)) throw new Error("Référence Drive invalide.");
+  return {
+    fileId: file.id,
+    name: file.name,
+    url: `https://drive.google.com/file/d/${file.id}/view`,
+  };
 }
 
 async function accessToken() {
@@ -338,12 +422,7 @@ async function uploadToFolder(input: {
     entries.set(input.name, { ...uploaded, name: input.name });
     return;
   }
-  const multipart = multipartUploadBody(
-    metadata,
-    input.contentType,
-    input.size,
-    input.body,
-  );
+  const multipart = multipartUploadBody(metadata, input.contentType, input.size, input.body);
   const response = await driveFetch(uploadPath, {
     method: existing ? "PATCH" : "POST",
     headers: {
@@ -501,8 +580,7 @@ export async function syncOrderToDrive(orderId: string, options: DriveSyncOption
     // the last binary. Keeping binary streaming and final tree construction in
     // separate invocations stays within the CPU budget of the free Worker plan.
     const complete =
-      nextOffset >= sortedFiles.length &&
-      !(options.deferFinalization && selectedFiles.length > 0);
+      nextOffset >= sortedFiles.length && !(options.deferFinalization && selectedFiles.length > 0);
     const versions = complete ? await getJsonVersions(orderId) : [];
     const deliverables = complete ? await getDeliverables(orderId) : [];
 

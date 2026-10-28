@@ -221,6 +221,8 @@ test("every active account can consult orders and create invitations without gai
     const session=await login(env,username,'test-orders-user-password');
     assert.equal(session.user.permissions.ordersRead,true);
     assert.equal((await call(env,'/api/admin/client-orders',authorized(session.token))).status,200);
+    for (const method of ['GET','PUT','POST'])
+      assert.equal((await call(env,'/api/admin/client-orders/transactions',authorized(session.token,{method}))).status,403);
     assert.equal((await call(env,'/api/admin/client-orders/invitations',authorized(session.token,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"validDays":5}'}))).status,201);
     assert.equal(forwarded.at(-1).actor,username);
     for(const [path,method] of [['/api/admin/client-orders/fixture','DELETE'],['/api/admin/client-orders/archive-create','POST'],['/api/admin/client-orders/archive-import','POST'],['/api/admin/client-orders/invitations/fixture','POST'],['/api/admin/client-orders/fixture','PATCH']]){
@@ -228,6 +230,8 @@ test("every active account can consult orders and create invitations without gai
     }
   }
   assert.equal((await call(env,'/api/admin/client-orders/invitations',authorized(admin.token,{method:'POST'}))).status,201);
+  assert.equal((await call(env,'/api/admin/client-orders/transactions',authorized(admin.token))).status,200);
+  assert.equal(forwarded.at(-1).path,'/api/admin/orders/transactions');
   assert.deepEqual(forwarded.filter(entry=>entry.method==='POST').map(entry=>entry.path),Array(3).fill('/api/admin/orders/invitations'));
 });
 

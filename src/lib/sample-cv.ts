@@ -918,4 +918,25 @@ export const sampleCVByLanguage: Record<DocumentLanguage, ReturnType<typeof impo
   ar: localizedClone("ar"),
 };
 
+// These bundled rows describe the same fictional history in every language.
+// Keep their identities stable; real imported clients must never be matched by index.
+const industrialStudies: Record<DocumentLanguage, string> = {
+  fr: "Sciences et technologies industrielles",
+  en: "Industrial sciences and technology",
+  es: "Ciencias y tecnologías industriales",
+  de: "Industriewissenschaften und -technologien",
+  it: "Scienze e tecnologie industriali",
+  zh: "工业科学与技术",
+  ar: "العلوم والتكنولوجيا الصناعية",
+};
+for (const language of Object.keys(sampleCVByLanguage) as DocumentLanguage[]) {
+  const cv = sampleCVByLanguage[language];
+  for (const section of ["experiences", "formations", "educations"] as const) {
+    cv[section].forEach((row, index) => {
+      row.id = `sample-${section}-${index + 1}`;
+    });
+  }
+  cv.educations[2].option = industrialStudies[language];
+}
+
 export const sampleCV = sampleCVByLanguage.fr;

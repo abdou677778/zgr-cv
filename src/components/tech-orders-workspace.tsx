@@ -29,6 +29,7 @@ import { TechClientHistory } from "./tech-client-history";
 import { filterTechClientGroups, groupTechClients } from "@/lib/tech-client-groups";
 import { TechFinancePanel } from "./tech-finance-panel";
 import { TechServiceCatalogPanel } from "./tech-service-catalog-panel";
+import { sortTechServicesByName } from "@/lib/tech-service-sort";
 import { TechStatusTiles } from "./tech-status-tiles";
 import { TechOrderFilters } from "./tech-order-filters";
 import { TechSaleLineFields } from "./tech-sale-line-fields";
@@ -200,6 +201,7 @@ export function TechOrdersWorkspace({
 }) {
   const [services, setServices] = useState<TechService[]>([]),
     [orders, setOrders] = useState<TechOrder[]>([]);
+  const sortedServices = useMemo(() => sortTechServicesByName(services), [services]);
   const [logos, setLogos] = useState<Record<string, TechLogo>>({});
   const [finance, setFinance] = useState<TechFinance>(emptyTechFinance);
   const [financeView, setFinanceView] = useState<"expenses" | "stats">();
@@ -1156,7 +1158,7 @@ export function TechOrdersWorkspace({
               onChange={(e) => setCatalogQuery(e.target.value)}
             />
             <div className="flex flex-wrap gap-2">
-              {services
+              {sortedServices
                 .filter((s) => techMatchesSearch(s.name, catalogQuery))
                 .map((s) => (
                   <button
@@ -1391,7 +1393,7 @@ export function TechOrdersWorkspace({
                     label="Service à ajouter à la vente"
                     disabled={busy}
                     value={selected}
-                    options={services.map((s) => ({
+                    options={sortedServices.map((s) => ({
                       value: s.id,
                       label: s.name,
                       detail: `${money(s.saleDzd)} · ${s.months} mois`,

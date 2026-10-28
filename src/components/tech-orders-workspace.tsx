@@ -202,6 +202,8 @@ export function TechOrdersWorkspace({
   const [finance, setFinance] = useState<TechFinance>(emptyTechFinance);
   const [financeView, setFinanceView] = useState<"expenses" | "stats">();
   const [financeDirty, setFinanceDirty] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TechOrder>();
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   useEffect(() => {
     if (financeView)
       document
@@ -358,13 +360,15 @@ export function TechOrdersWorkspace({
       "Choisissez la date réelle de reprise et la période. Préparer ne change aucun état : seul l’enregistrement crée la nouvelle vente.",
     );
   };
+  const requestDelete = (item: TechOrder) => {
+    if (writing.current || hasDraft) return;
+    setDeleteConfirmation("");
+    setDeleteTarget(item);
+  };
   const deleteSale = async (item: TechOrder) => {
     if (writing.current || hasDraft) return;
     const label = techOrderLabel(item);
-    const answer = window.prompt(
-      `Supprimer la vente erronée de ${item.client} (${label}) ? Elle sera retirée des listes et totaux, avec une trace conservée. Saisissez ${label} pour confirmer.`,
-    );
-    if (answer?.trim() !== label) return;
+    if (deleteConfirmation.trim() !== label) return;
     writing.current = true;
     setBusy(true);
     try {
@@ -373,6 +377,7 @@ export function TechOrdersWorkspace({
         { method: "DELETE" },
       );
       setOrders((current) => current.filter((entry) => entry.id !== item.id));
+      setDeleteTarget(undefined);
       setMessage(
         `Vente ${label} supprimée du registre et des totaux. Une trace privée est conservée.`,
       );
@@ -463,7 +468,7 @@ export function TechOrdersWorkspace({
                       <DropdownMenuItem
                         disabled={disabled}
                         className="text-red-700"
-                        onSelect={() => void deleteSale(record)}
+                        onSelect={() => requestDelete(record)}
                       >
                         Supprimer cette vente erronée
                       </DropdownMenuItem>
@@ -535,7 +540,7 @@ export function TechOrdersWorkspace({
           <DropdownMenuItem
             disabled={disabled}
             className="min-h-11 rounded-lg text-red-700 focus:text-red-800"
-            onSelect={() => void deleteSale(item)}
+            onSelect={() => requestDelete(item)}
           >
             <Trash2 />
             Supprimer la vente
@@ -853,6 +858,63 @@ export function TechOrdersWorkspace({
       bodyClassName="overflow-y-auto"
     >
       <div className="mx-auto w-full max-w-[1800px] space-y-5 p-5 sm:p-8">
+        <DialogPrimitive.Root
+          open={!!deleteTarget}
+          onOpenChange={(open) => {
+            if (!open && !busy) setDeleteTarget(undefined);
+          }}
+        >
+          <DialogPrimitive.Portal>
+            <DialogPrimitive.Overlay className="fixed inset-0 z-[180] bg-slate-950/50" />
+            <DialogPrimitive.Content
+              className="fixed left-1/2 top-1/2 z-[190] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-xl bg-white p-5 shadow-xl"
+              onEscapeKeyDown={(event) => event.stopPropagation()}
+            >
+              <DialogPrimitive.Title className="font-bold">
+                Supprimer la vente erronée
+              </DialogPrimitive.Title>
+              <DialogPrimitive.Description className="text-sm text-slate-600">
+                {deleteTarget?.client} — {deleteTarget && techOrderLabel(deleteTarget)}. Cette vente
+                sera retirée des listes et des totaux. Une trace privée est conservée ; ce n’est pas
+                un remboursement.
+              </DialogPrimitive.Description>
+              {deleteTarget?.lines.map((line) => (
+                <p key={line.id} className="text-sm">
+                  {line.name} · {line.start} → {line.end} · {money(line.saleDzd)}
+                </p>
+              ))}
+              <label className="block space-y-1 text-sm">
+                <span>Recopiez {deleteTarget && techOrderLabel(deleteTarget)} pour confirmer</span>
+                <Input
+                  aria-label="Confirmation de suppression"
+                  value={deleteConfirmation}
+                  onChange={(event) => setDeleteConfirmation(event.target.value)}
+                  disabled={busy}
+                />
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => setDeleteTarget(undefined)}
+                >
+                  Annuler la suppression
+                </Button>
+                <Button
+                  className="bg-red-700 hover:bg-red-800"
+                  disabled={
+                    busy ||
+                    !deleteTarget ||
+                    deleteConfirmation.trim() !== techOrderLabel(deleteTarget)
+                  }
+                  onClick={() => deleteTarget && void deleteSale(deleteTarget)}
+                >
+                  Confirmer la suppression
+                </Button>
+              </div>
+            </DialogPrimitive.Content>
+          </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
         <DialogPrimitive.Root
           open={!!messageOrder}
           onOpenChange={(open) => {

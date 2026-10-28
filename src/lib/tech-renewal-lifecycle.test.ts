@@ -94,6 +94,8 @@ test("Renewal preparation includes an explicit date and is guarded as an unsaved
   assert.match(code, /renewContinuity \? undefined : renewStart/);
   assert.match(code, /financeDirty \|\| renewSource/);
   assert.match(code, /Supprimer la vente/);
-  assert.match(code, /window.prompt/);
+  assert.match(code, /Confirmation de suppression/);
+  assert.match(code, /deleteConfirmation.trim\(\) !== label/);
+  assert.doesNotMatch(code, /window.prompt/);
   assert.match(code, /method: "DELETE"/);
 });

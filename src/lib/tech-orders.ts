@@ -8,6 +8,8 @@ export type TechService = {
   rate: number;
   saleDzd: number;
   months: number;
+  catalogVisible?: boolean;
+  officialInvoiceAvailable?: boolean;
 };
 export type TechLine = {
   renewalContact?: { start: string; end: string; at: string };

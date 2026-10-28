@@ -11,6 +11,7 @@ import {
   Receipt,
   BarChart3,
   Trash2,
+  ImageDown,
 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { FullPageWorkspace } from "./full-page-workspace";
@@ -27,6 +28,7 @@ import { TechRenewalMessage } from "./tech-renewal-message";
 import { TechClientHistory } from "./tech-client-history";
 import { filterTechClientGroups, groupTechClients } from "@/lib/tech-client-groups";
 import { TechFinancePanel } from "./tech-finance-panel";
+import { TechServiceCatalogPanel } from "./tech-service-catalog-panel";
 import { TechStatusTiles } from "./tech-status-tiles";
 import { TechOrderFilters } from "./tech-order-filters";
 import { TechSaleLineFields } from "./tech-sale-line-fields";
@@ -219,6 +221,7 @@ export function TechOrdersWorkspace({
     [message, setMessage] = useState("");
   const [catalog, setCatalog] = useState(false),
     [service, setService] = useState<TechService>();
+  const [clientCatalog, setClientCatalog] = useState(false);
   const [order, setOrder] = useState<TechOrder>(),
     [selected, setSelected] = useState(""),
     [renewMonths, setRenewMonths] = useState(1);
@@ -800,6 +803,15 @@ export function TechOrdersWorkspace({
           </Button>
           <Button
             variant="outline"
+            disabled={!loaded || busy || !!order || !!service || !!renewSource || financeDirty}
+            aria-pressed={clientCatalog}
+            onClick={() => setClientCatalog((value) => !value)}
+          >
+            <ImageDown className="mr-2 h-4 w-4" />
+            Catalogue client
+          </Button>
+          <Button
+            variant="outline"
             disabled={!loaded || busy || !!order || !!service || !!renewSource}
             aria-pressed={financeView === "expenses"}
             onClick={() => openFinance("expenses")}
@@ -1113,6 +1125,17 @@ export function TechOrdersWorkspace({
             </div>
           </section>
         )}
+        {clientCatalog && (
+          <TechServiceCatalogPanel
+            services={services}
+            logos={logos}
+            onClose={() => setClientCatalog(false)}
+            onEdit={() => {
+              setCatalog(true);
+              setClientCatalog(false);
+            }}
+          />
+        )}
         {catalog && (
           <section className="space-y-4 rounded-xl border bg-white p-4">
             <div className="flex flex-wrap justify-between gap-2">
@@ -1224,6 +1247,35 @@ export function TechOrdersWorkspace({
                         placeholder="Canva, ChatGPT, Adobe…"
                       />
                     </Field>
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
+                    <strong>Présentation dans le catalogue client</strong>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={service.catalogVisible !== false}
+                        onChange={(e) =>
+                          setService({ ...service, catalogVisible: e.target.checked })
+                        }
+                      />
+                      Afficher ce service dans le catalogue client et le texte arabe
+                    </label>
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={service.officialInvoiceAvailable === true}
+                        onChange={(e) =>
+                          setService({ ...service, officialInvoiceAvailable: e.target.checked })
+                        }
+                      />
+                      Je confirme qu’une facture officielle du fournisseur est disponible pour cette
+                      offre
+                    </label>
+                    <p className="text-slate-500">
+                      Ne cochez la facture qu’après vérification réelle. ZGR ne crée pas de facture
+                      au nom du fournisseur. Un tarif à zéro est présenté « prix sur demande », pas
+                      comme une offre gratuite.
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <button

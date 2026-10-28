@@ -13,6 +13,25 @@ const service = {
   saleDzd: 6200,
   months: 1,
 };
+test("Client catalog options preserve legacy services and require explicit boolean invoice confirmation", () => {
+  const legacy = validateTechRecord("services", service, service.id);
+  assert.equal(legacy.officialInvoiceAvailable, undefined);
+  const configured = validateTechRecord(
+    "services",
+    { ...service, catalogVisible: false, officialInvoiceAvailable: true },
+    service.id,
+  );
+  assert.equal(configured.catalogVisible, false);
+  assert.equal(configured.officialInvoiceAvailable, true);
+  assert.equal(configured.priceUsd, 20);
+  assert.equal(configured.saleDzd, 6200);
+  assert.throws(() =>
+    validateTechRecord("services", { ...service, officialInvoiceAvailable: "yes" }, service.id),
+  );
+  assert.throws(() =>
+    validateTechRecord("services", { ...service, catalogVisible: 1 }, service.id),
+  );
+});
 const order = {
   id: "test-order",
   revision: 0,

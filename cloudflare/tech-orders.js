@@ -139,6 +139,10 @@ export function validateTechRecord(kind, input, id) {
     return { id, entries };
   }
   if (kind === "services") {
+    for (const option of ["catalogVisible", "officialInvoiceAvailable"]) {
+      if (input[option] !== undefined && typeof input[option] !== "boolean")
+        throw Error("Options de catalogue invalides.");
+    }
     if (
       !text(input.name, 120) ||
       !input.name.trim() ||
@@ -166,6 +170,10 @@ export function validateTechRecord(kind, input, id) {
       rate: cents(input.rate),
       saleDzd: cents(input.saleDzd),
       months: input.months,
+      ...(input.catalogVisible === undefined ? {} : { catalogVisible: input.catalogVisible }),
+      ...(input.officialInvoiceAvailable === undefined
+        ? {}
+        : { officialInvoiceAvailable: input.officialInvoiceAvailable }),
     };
   }
   if (

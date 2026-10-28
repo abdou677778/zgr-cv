@@ -48,7 +48,11 @@ test("Arabic text follows saved sale prices and durations, never claims unknown 
   assert.match(text, /السعر عند الطلب/);
   assert.match(text, /12 شهراً/);
   assert.match(text, /بدون كراك/);
-  assert.doesNotMatch(text, /مجاني|مجاناً|260|5.?200/);
+  assert.doesNotMatch(text, /260|5.?200/);
+  assert.match(text, /تجربة مجانية رسمية/);
+  assert.match(text, /متى توفرت واستُوفيت شروطها/);
+  assert.match(text, /أي موقع أو منصة/);
+  assert.match(text, /القنوات الرسمية/);
   assert.equal(publicTechPeriod(2), "شهران");
   assert.equal(publicTechPeriod(3), "3 أشهر");
   assert.equal(publicTechPrice(rows.find((r) => r.id === "zero")!), "السعر عند الطلب");

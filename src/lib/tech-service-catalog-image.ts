@@ -1,5 +1,6 @@
 import {
   TECH_CATALOG_TITLE,
+  TECH_CATALOG_COMMERCIAL_LINES,
   techCatalogPages,
   publicTechArabicText,
   publicTechPrice,
@@ -151,15 +152,10 @@ export async function drawTechCatalogPage(
   }
   ctx.direction = "rtl";
   ctx.textAlign = "right";
-  ctx.font = "23px Arial";
+  ctx.font = "18px Arial";
   ctx.fillStyle = "#0f172a";
-  ctx.fillText("اشتراكات أصلية فقط — بدون كراك أو حسابات غير رسمية.", 1035, canvas.height - 122);
-  ctx.font = "20px Arial";
-  ctx.fillStyle = "#64748b";
-  ctx.fillText(
-    "الفاتورة الرسمية والتوفر وشروط الاشتراك تُؤكَّد قبل الدفع.",
-    1035,
-    canvas.height - 83,
+  TECH_CATALOG_COMMERCIAL_LINES.forEach((line, index) =>
+    ctx.fillText(line, 1035, canvas.height - 147 + index * 23),
   );
   ctx.direction = "ltr";
   ctx.textAlign = "left";

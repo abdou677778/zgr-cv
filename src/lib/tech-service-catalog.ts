@@ -2,6 +2,13 @@ import type { TechService } from "./tech-orders";
 
 export const TECH_CATALOG_TITLE = "Services ZGR Tech";
 export const TECH_CATALOG_PAGE_SIZE = 18;
+export const TECH_CATALOG_COMMERCIAL_LINES = [
+  "نوفر فواتير رسمية صادرة عن المورّد لاشتراكاتكم، بما يعزز شفافية خدماتنا ومصداقيتها.",
+  "وعند الطلب، نساعدكم على الاستفادة من تجربة مجانية رسمية حسب نوع الخدمة،",
+  "متى توفرت واستُوفيت شروطها، مع إمكانية متابعة الاشتراك الأصلي.",
+  "كما يمكنكم طلب الشراء من أي موقع أو منصة؛ ونتكفل بالدفع عبر القنوات الرسمية بعد تأكيد إمكانية الطلب.",
+  "يُؤكَّد توفر الفاتورة والتجربة المجانية وشروط الخدمة قبل الدفع.",
+];
 export type PublicTechService = {
   id: string;
   name: string;
@@ -79,7 +86,7 @@ export function publicTechArabicText(services: PublicTechService[]) {
     lines.push("");
   }
   lines.push(
-    "توفّر الفاتورة الرسمية يُؤكَّد قبل الطلب؛ ولا تُنشئ ZGR فواتير باسم المورّد.",
+    ...TECH_CATALOG_COMMERCIAL_LINES,
     "الأسعار تخص المدة الموضحة، ويُؤكَّد السعر والتوفر وشروط الاشتراك قبل الدفع.",
     "يمكنكم الاستفسار عن خدمات أخرى. راسلونا باسم الخدمة والمدة المطلوبة.",
   );

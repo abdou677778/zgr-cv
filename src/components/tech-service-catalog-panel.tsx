@@ -5,6 +5,7 @@ import type { TechService } from "@/lib/tech-orders";
 import { techLogoSource, type TechLogo } from "@/lib/tech-order-logos";
 import {
   TECH_CATALOG_TITLE,
+  TECH_CATALOG_COMMERCIAL_LINES,
   publicTechServices,
   publicTechArabicText,
   publicTechPrice,
@@ -184,8 +185,7 @@ export function TechServiceCatalogPanel({
           </p>
         )}
         <p className="px-4 pb-3 text-xs text-slate-600" dir="rtl">
-          اشتراكات أصلية فقط — بدون كراك أو حسابات غير رسمية. الفاتورة الرسمية والتوفر وشروط
-          الاشتراك تُؤكَّد قبل الدفع.
+          {TECH_CATALOG_COMMERCIAL_LINES.join(" ")}
         </p>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">

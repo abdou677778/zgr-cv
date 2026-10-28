@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/admin-auth";
-import { runtimeEnv } from "@/db/runtime";
+import { ensureSchema, runtimeEnv } from "@/db/runtime";
 import { jsonResponse } from "@/lib/order-model";
-import { getOrder, listOrders } from "@/lib/order-repository";
+import { getOrder } from "@/lib/order-repository";
 import { inspectCvReceiptFolder, uploadCvPaymentReceipt } from "@/lib/google-drive";
 import { CvTransactionError, cvTransactionStore } from "@/lib/cv-transaction-repository";
 import { cvReceiptType } from "../../shared/cv-transactions";
@@ -36,14 +36,27 @@ export async function cvTransactionApi(request: Request, parts: string[] = []) {
   const actor = (request.headers.get("X-ZGR-Actor") || "portal-admin").slice(0, 120);
   try {
     if (!parts.length && request.method === "GET") {
-      const [records, orders] = await Promise.all([store.list(), listOrders()]);
+      await ensureSchema();
+      const [records, choices] = await Promise.all([
+        store.list(),
+        runtimeEnv()
+          .DB.prepare(
+            "SELECT id, client_name, admin_username, writer_username FROM orders ORDER BY created_at DESC",
+          )
+          .all<{
+            id: string;
+            client_name: string;
+            admin_username: string;
+            writer_username: string;
+          }>(),
+      ]);
       return jsonResponse({
         records,
-        orders: orders.map((order) => ({
+        orders: choices.results.map((order) => ({
           id: order.id,
-          clientName: order.clientName,
-          adminUsername: order.adminUsername,
-          writerUsername: order.writerUsername,
+          clientName: order.client_name,
+          adminUsername: order.admin_username,
+          writerUsername: order.writer_username,
         })),
       });
     }

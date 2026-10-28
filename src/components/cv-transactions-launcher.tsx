@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { createPortal } from "react-dom";
 import { Receipt } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth-client";
 import { Button } from "./ui/button";
@@ -19,11 +20,13 @@ export function CvTransactionsLauncher() {
         <Receipt className="mr-2 h-4 w-4" />
         Transactions
       </Button>
-      {open && (
-        <Suspense fallback={<p role="status">Chargement des transactions…</p>}>
-          <Workspace onClose={() => setOpen(false)} />
-        </Suspense>
-      )}
+      {open &&
+        createPortal(
+          <Suspense fallback={<p role="status">Chargement des transactions…</p>}>
+            <Workspace onClose={() => setOpen(false)} />
+          </Suspense>,
+          document.body,
+        )}
     </>
   );
 }

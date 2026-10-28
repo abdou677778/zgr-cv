@@ -10,6 +10,8 @@ export type TechService = {
   months: number;
   catalogVisible?: boolean;
   officialInvoiceAvailable?: boolean;
+  websiteUrl?: string;
+  features?: string;
 };
 export type TechLine = {
   renewalContact?: { start: string; end: string; at: string };

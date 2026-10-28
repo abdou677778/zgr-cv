@@ -29,6 +29,7 @@ import { TechClientHistory } from "./tech-client-history";
 import { filterTechClientGroups, groupTechClients } from "@/lib/tech-client-groups";
 import { TechFinancePanel } from "./tech-finance-panel";
 import { TechServiceCatalogPanel } from "./tech-service-catalog-panel";
+import { TechServiceDetails } from "./tech-service-details";
 import { sortTechServicesByName } from "@/lib/tech-service-sort";
 import { TechStatusTiles } from "./tech-status-tiles";
 import { TechOrderFilters } from "./tech-order-filters";
@@ -1161,20 +1162,23 @@ export function TechOrdersWorkspace({
               {sortedServices
                 .filter((s) => techMatchesSearch(s.name, catalogQuery))
                 .map((s) => (
-                  <button
-                    key={s.id}
-                    disabled={busy}
-                    className="flex items-center gap-2 rounded-lg border p-2 text-sm"
-                    onClick={() => editService({ ...s })}
-                  >
-                    <Logo service={s} override={logos[s.id]} />
-                    <span>
-                      {s.name}
-                      <small className="block text-slate-500">
-                        {money(s.saleDzd)} / {s.months} mois
-                      </small>
-                    </span>
-                  </button>
+                  <div key={s.id} className="min-w-0 max-w-xs rounded-lg border bg-white p-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="flex w-full items-center gap-2 rounded-lg text-left text-sm"
+                      onClick={() => editService({ ...s })}
+                    >
+                      <Logo service={s} override={logos[s.id]} />
+                      <span>
+                        {s.name}
+                        <small className="block text-slate-500">
+                          {money(s.saleDzd)} / {s.months} mois
+                        </small>
+                      </span>
+                    </button>
+                    <TechServiceDetails service={s} />
+                  </div>
                 ))}
             </div>
             {service && (
@@ -1250,34 +1254,31 @@ export function TechOrdersWorkspace({
                       />
                     </Field>
                   </div>
-                  <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
-                    <strong>Présentation dans le catalogue client</strong>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={service.catalogVisible !== false}
-                        onChange={(e) =>
-                          setService({ ...service, catalogVisible: e.target.checked })
-                        }
+                  <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-2">
+                    <Field label="Lien du site (facultatif)">
+                      <Input
+                        type="url"
+                        maxLength={2000}
+                        placeholder="https://…"
+                        value={service.websiteUrl || ""}
+                        onChange={(e) => setService({ ...service, websiteUrl: e.target.value })}
                       />
-                      Afficher ce service dans le catalogue client et le texte arabe
-                    </label>
-                    <label className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={service.officialInvoiceAvailable === true}
-                        onChange={(e) =>
-                          setService({ ...service, officialInvoiceAvailable: e.target.checked })
-                        }
+                    </Field>
+                    <Field label="Caractéristiques de l’abonnement (facultatif)">
+                      <textarea
+                        rows={3}
+                        maxLength={4000}
+                        dir="auto"
+                        className="w-full min-w-0 resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm focus-visible:outline-indigo-500"
+                        placeholder="Fonctionnalités incluses, limites, conditions… Une information par ligne."
+                        value={service.features || ""}
+                        onChange={(e) => setService({ ...service, features: e.target.value })}
                       />
-                      Je confirme qu’une facture officielle du fournisseur est disponible pour cette
-                      offre
-                    </label>
-                    <p className="text-slate-500">
-                      Ne cochez la facture qu’après vérification réelle. ZGR ne crée pas de facture
-                      au nom du fournisseur. Un tarif à zéro est présenté « prix sur demande », pas
-                      comme une offre gratuite.
-                    </p>
+                      <span className="text-xs text-slate-500">
+                        {(service.features || "").length}/4000 · Visible dans les caractéristiques
+                        du service.
+                      </span>
+                    </Field>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <button

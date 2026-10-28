@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Copy, Download, ImageDown, Settings2, X } from "lucide-react";
 import { Button } from "./ui/button";
+import { TechServiceDetails } from "./tech-service-details";
 import type { TechService } from "@/lib/tech-orders";
 import { techLogoSource, type TechLogo } from "@/lib/tech-order-logos";
 import {
@@ -176,6 +177,7 @@ export function TechServiceCatalogPanel({
                   <p className="mt-1 text-xs text-indigo-700">فاتورة رسمية متاحة بعد التأكيد</p>
                 )}
               </div>
+              <TechServiceDetails service={services.find((s) => s.id === item.id) || item} />
             </article>
           ))}
         </div>

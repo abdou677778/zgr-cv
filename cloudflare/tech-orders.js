@@ -139,6 +139,12 @@ export function validateTechRecord(kind, input, id) {
     return { id, entries };
   }
   if (kind === "services") {
+    if (
+      (input.websiteUrl !== undefined &&
+        (typeof input.websiteUrl !== "string" || !webUrl(input.websiteUrl))) ||
+      (input.features !== undefined && !text(input.features, 4000))
+    )
+      throw Error("Lien du site HTTPS et caractéristiques (4000 caractères maximum) requis.");
     for (const option of ["catalogVisible", "officialInvoiceAvailable"]) {
       if (input[option] !== undefined && typeof input[option] !== "boolean")
         throw Error("Options de catalogue invalides.");
@@ -170,6 +176,8 @@ export function validateTechRecord(kind, input, id) {
       rate: cents(input.rate),
       saleDzd: cents(input.saleDzd),
       months: input.months,
+      ...(input.websiteUrl === undefined ? {} : { websiteUrl: input.websiteUrl }),
+      ...(input.features === undefined ? {} : { features: input.features.trim() }),
       ...(input.catalogVisible === undefined ? {} : { catalogVisible: input.catalogVisible }),
       ...(input.officialInvoiceAvailable === undefined
         ? {}

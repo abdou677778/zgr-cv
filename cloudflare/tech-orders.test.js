@@ -13,6 +13,35 @@ const service = {
   saleDzd: 6200,
   months: 1,
 };
+test("Service website and features round-trip without changing legacy financial fields", () => {
+  const legacy = validateTechRecord("services", service, service.id);
+  assert.equal(legacy.websiteUrl, undefined);
+  assert.equal(legacy.features, undefined);
+  const saved = validateTechRecord(
+    "services",
+    {
+      ...service,
+      websiteUrl: "https://example.com/pricing",
+      features: "  Fonction A\nميزة ثانية  ",
+    },
+    service.id,
+  );
+  assert.equal(saved.websiteUrl, "https://example.com/pricing");
+  assert.equal(saved.features, "Fonction A\nميزة ثانية");
+  assert.equal(saved.saleDzd, service.saleDzd);
+  for (const websiteUrl of [
+    "javascript:alert(1)",
+    "http://example.com",
+    "https://user:secret@example.com",
+    123,
+  ]) {
+    assert.throws(() => validateTechRecord("services", { ...service, websiteUrl }, service.id));
+  }
+  assert.throws(() =>
+    validateTechRecord("services", { ...service, features: "a".repeat(4001) }, service.id),
+  );
+  assert.throws(() => validateTechRecord("services", { ...service, features: [] }, service.id));
+});
 test("Client catalog options preserve legacy services and require explicit boolean invoice confirmation", () => {
   const legacy = validateTechRecord("services", service, service.id);
   assert.equal(legacy.officialInvoiceAvailable, undefined);
@@ -112,6 +141,26 @@ const request = (path, body) =>
     body ? { method: "PUT", body: JSON.stringify(body) } : {},
   );
 const respond = (body, status) => Response.json(body, { status });
+test("Saved service details survive cloud reload and reject stale edits without touching sales", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  const payload = { ...service, websiteUrl: "https://example.com", features: "Option A\nميزة" };
+  const saved = await handleTechOrders(
+    request("/services/test-service", payload),
+    env,
+    actor,
+    respond,
+  );
+  assert.equal(saved.status, 200);
+  const read = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.equal(read.services[0].features, payload.features);
+  assert.equal(read.services[0].websiteUrl, payload.websiteUrl);
+  assert.equal(read.orders.length, 0);
+  assert.equal(
+    (await handleTechOrders(request("/services/test-service", payload), env, actor, respond))
+      .status,
+    409,
+  );
+});
 
 test("Sale removal is admin-only, confirmed, revision guarded and preserves a recoverable private trace", async () => {
   const env = { CLIENTS_BUCKET: new Bucket() };

@@ -36,6 +36,16 @@ export function validTechDraftDate(value: string) {
   );
 }
 export function techServiceError(service: TechService) {
+  if (
+    service.websiteUrl !== undefined &&
+    (typeof service.websiteUrl !== "string" || !url(service.websiteUrl))
+  )
+    return "Le lien du site doit être une adresse HTTPS sans identifiants intégrés.";
+  if (
+    service.features !== undefined &&
+    (typeof service.features !== "string" || service.features.length > 4000)
+  )
+    return "Les caractéristiques sont limitées à 4000 caractères.";
   if (!service.name.trim() || service.name.length > 120)
     return "Saisissez le nom du service (120 caractères maximum).";
   if (!Number.isInteger(service.months) || service.months < 1 || service.months > 36)

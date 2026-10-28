@@ -4,11 +4,13 @@ export function TechStatusTiles({
   selected,
   onSelect,
   total,
+  unit = "ventes",
 }: {
   counts: Record<TechState, number>;
   selected: string;
   onSelect: (state: TechState | "") => void;
   total?: number;
+  unit?: "ventes" | "clients";
 }) {
   return (
     <div className="grid grid-cols-4 gap-1.5 sm:gap-3" aria-label="Accès rapide par état">
@@ -27,7 +29,7 @@ export function TechStatusTiles({
           <button
             key={state}
             type="button"
-            aria-label={`${label} : ${count} ventes`}
+            aria-label={`${label} : ${count} ${unit}`}
             aria-pressed={selected === state}
             onClick={() => onSelect(state)}
             className={`relative flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-xl border bg-white p-2 text-center shadow-sm transition hover:border-indigo-300 sm:aspect-auto sm:flex-row-reverse sm:justify-between sm:p-4 ${selected === state ? "ring-2 ring-indigo-300" : ""}`}

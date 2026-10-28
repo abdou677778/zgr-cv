@@ -24,11 +24,11 @@ import { normalizedTechLogo } from "@/lib/tech-logo-upload";
 import { techOrderError, techServiceError } from "@/lib/tech-orders-validation";
 import { TechSearchSelect } from "./tech-search-select";
 import { TechRenewalMessage } from "./tech-renewal-message";
-import { TechMobileOrderCard } from "./tech-mobile-order-card";
+import { TechClientHistory } from "./tech-client-history";
+import { filterTechClientGroups, groupTechClients } from "@/lib/tech-client-groups";
 import { TechFinancePanel } from "./tech-finance-panel";
 import { TechStatusTiles } from "./tech-status-tiles";
 import { TechOrderFilters } from "./tech-order-filters";
-import { TechOrderNote, TechOrderClientLink } from "./tech-order-details";
 import { TechSaleLineFields } from "./tech-sale-line-fields";
 import { TechBrandLogo } from "./tech-brand-logo";
 import { TechContactBadge } from "./tech-contact-badge";
@@ -40,6 +40,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "./ui/dropdown-menu";
 import {
   addTechMonths,
@@ -53,12 +56,9 @@ import {
   techContactAt,
   todayAlgiers,
   techOrderState,
-  techOrderIsRenewalHistory,
-  techRenewedLineIds,
   techClientKey,
   techOrderLabel,
   techClients,
-  filterTechOrders,
   emptyTechFilters,
   newTechOrderForClient,
   type TechState,
@@ -113,19 +113,6 @@ function Logo({ service, override }: { service?: TechService; override?: TechLog
       className="grid h-8 w-8 shrink-0 place-items-center rounded border bg-slate-100 text-xs"
     >
       —
-    </span>
-  );
-}
-function StateBadge({ state }: { state: TechState }) {
-  const text =
-    state === "ending" ? "Expire sous 3 jours" : state === "active" ? "Actif" : "Inactif";
-  return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs font-semibold">
-      <span
-        aria-hidden="true"
-        className={`h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10 ${state === "ending" ? "bg-yellow-400" : state === "active" ? "bg-green-500" : "bg-red-500"}`}
-      />
-      {text}
     </span>
   );
 }
@@ -344,10 +331,11 @@ export function TechOrdersWorkspace({
     }
   };
   const clients = useMemo(() => techClients(orders), [orders]);
-  const filtered = useMemo(
-    () => filterTechOrders(orders, filters, today),
+  const groups = useMemo(
+    () => filterTechClientGroups(orders, filters, today),
     [orders, filters, today],
   );
+  const filtered = useMemo(() => groups.flatMap((group) => group.orders), [groups]);
   const invalidDates = !!(filters.from && filters.to && filters.from > filters.to);
   const startSameClient = (source: TechOrder) => {
     setOrder(newTechOrderForClient(source));
@@ -407,7 +395,7 @@ export function TechOrdersWorkspace({
       return;
     setService(next);
   };
-  const orderMenu = (item: TechOrder, surface: "mobile" | "desktop") => {
+  const orderMenu = (item: TechOrder, surface: "mobile" | "desktop", history: TechOrder[] = []) => {
     const disabled = busy || !!order || !!service || !!renewSource || financeDirty;
     const triggerId = `tech-actions-${surface}-${item.id}`;
     return (
@@ -435,6 +423,56 @@ export function TechOrdersWorkspace({
               document.getElementById(triggerId)?.focus({ preventScroll: true });
           }}
         >
+          {history.length > 1 && (
+            <>
+              <div className="px-2 py-1 text-xs font-semibold text-slate-500">
+                Dernière période —{" "}
+                {item.lines
+                  .map((l) => l.start)
+                  .sort()
+                  .at(-1)}
+              </div>
+              {history
+                .filter((record) => record.id !== item.id)
+                .sort((a, b) => (a.lines[0]?.start || "").localeCompare(b.lines[0]?.start || ""))
+                .map((record) => (
+                  <DropdownMenuSub key={record.id}>
+                    <DropdownMenuSubTrigger>
+                      {record.lines[0]?.start} · {techOrderLabel(record)}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="z-[170] max-w-[90vw]">
+                      <DropdownMenuItem
+                        disabled={disabled}
+                        onSelect={() => {
+                          setOrder(structuredClone(record));
+                          setMessage("");
+                          setSelected("");
+                          setPendingLine(undefined);
+                        }}
+                      >
+                        Modifier cette période
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={disabled}
+                        onSelect={() =>
+                          openRenewalMessage(record, document.getElementById(triggerId))
+                        }
+                      >
+                        Message / contact
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={disabled}
+                        className="text-red-700"
+                        onSelect={() => void deleteSale(record)}
+                      >
+                        Supprimer cette vente erronée
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                ))}
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuItem
             disabled={disabled}
             className="min-h-11 rounded-lg"
@@ -507,13 +545,12 @@ export function TechOrdersWorkspace({
     );
   };
   const totals = techOrdersTotals(filtered);
-  const visible = filtered.slice(0, visibleCount);
+  const visible = groups.slice(0, visibleCount);
   const stateCounts = useMemo(
     () =>
-      orders.reduce(
-        (counts, item) => {
-          if (!techOrderIsRenewalHistory(item, orders, today))
-            counts[techOrderState(item, today, orders)]++;
+      groupTechClients(orders, today).reduce(
+        (counts, group) => {
+          counts[group.state]++;
           return counts;
         },
         { active: 0, ending: 0, inactive: 0 },
@@ -865,7 +902,8 @@ export function TechOrdersWorkspace({
         </DialogPrimitive.Root>
         <TechStatusTiles
           counts={stateCounts}
-          total={orders.length}
+          total={clients.length}
+          unit="clients"
           selected={filters.state}
           onSelect={(state) => setFilters((current) => ({ ...current, state }))}
         />
@@ -1438,22 +1476,19 @@ export function TechOrdersWorkspace({
           </div>
         </section>
         <div className="space-y-3 md:hidden">
-          {visible.map((item) => (
-            <TechMobileOrderCard
-              key={item.id}
-              order={item}
-              renewedLineIds={techRenewedLineIds(item, orders, today)}
+          {visible.map((group) => (
+            <TechClientHistory
+              key={group.key}
+              group={group}
               today={today}
-              renderLogo={(serviceId) => (
-                <Logo
-                  service={services.find((s) => s.id === serviceId)}
-                  override={logos[serviceId]}
-                />
+              mobile
+              logo={(id) => (
+                <Logo service={services.find((s) => s.id === id)} override={logos[id]} />
               )}
-              menu={orderMenu(item, "mobile")}
-              onContact={() =>
-                openRenewalMessage(item, document.activeElement as HTMLElement | null)
+              onContact={(record) =>
+                openRenewalMessage(record, document.activeElement as HTMLElement | null)
               }
+              menu={orderMenu(group.latest, "mobile", group.orders)}
             />
           ))}
           {!filtered.length && (
@@ -1467,7 +1502,7 @@ export function TechOrdersWorkspace({
             <thead className="bg-slate-100 text-xs uppercase text-slate-600">
               <tr>
                 {[
-                  "ID",
+                  "Historique",
                   "Client",
                   "État",
                   "Services / dates / état",
@@ -1484,108 +1519,20 @@ export function TechOrdersWorkspace({
               </tr>
             </thead>
             <tbody>
-              {visible.map((item) => {
-                const value = orderTotals(item);
-                return (
-                  <tr key={item.id} className="border-t align-top">
-                    <td className="px-4 py-4 font-mono text-xs" title={item.id}>
-                      TECH-{item.id.slice(0, 8).toUpperCase()}
-                      {item.renewalOf && (
-                        <small className="block text-indigo-600">Renouvellement</small>
-                      )}
-                    </td>
-                    <td className="px-4 py-4">
-                      <strong className="text-indigo-700">{item.client}</strong>
-                      <div className="mt-2">
-                        <TechOrderClientLink client={item.client} url={item.facebookUrl} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      {techOrderIsRenewalHistory(item, orders, today) ? (
-                        <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
-                          Renouvelé · historique
-                        </span>
-                      ) : (
-                        <StateBadge state={techOrderState(item, today, orders)} />
-                      )}
-                      {item.lines
-                        .filter(
-                          (line) =>
-                            techLineStatus(line, today) === "Expiré" &&
-                            !techRenewedLineIds(item, orders, today).has(line.id),
-                        )
-                        .map((line) => (
-                          <div key={line.id}>
-                            <span className="sr-only">{line.name} : </span>
-                            <TechContactBadge
-                              line={line}
-                              onClick={() =>
-                                openRenewalMessage(
-                                  item,
-                                  document.activeElement as HTMLElement | null,
-                                )
-                              }
-                            />
-                          </div>
-                        ))}
-                    </td>
-                    <td className="space-y-2 px-4 py-4">
-                      {item.lines.map((line) => (
-                        <div key={line.id} className="flex gap-2">
-                          <Logo
-                            service={services.find((s) => s.id === line.serviceId)}
-                            override={logos[line.serviceId]}
-                          />
-                          <div>
-                            {line.name}
-                            <small className="block text-slate-500">
-                              {line.start} → {line.end} ·{" "}
-                              <span
-                                className={
-                                  techRenewedLineIds(item, orders, today).has(line.id)
-                                    ? "text-indigo-700"
-                                    : techLineStatus(line, today) === "Expiré"
-                                      ? "text-red-700"
-                                      : techLineStatus(line, today) === "Expire sous 3 jours"
-                                        ? "text-amber-700"
-                                        : ""
-                                }
-                              >
-                                {techRenewedLineIds(item, orders, today).has(line.id)
-                                  ? "Renouvelé · historique"
-                                  : techLineStatus(line, today)}
-                              </span>
-                            </small>
-                            {line.invoiceUrl && (
-                              <a
-                                className="text-xs text-blue-700 underline"
-                                href={line.invoiceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Facture fournisseur
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4 text-right">{money(value.cost)}</td>
-                    <td className="whitespace-nowrap px-4 py-4 text-right font-bold">
-                      {money(value.sale)}
-                    </td>
-                    <td
-                      className={`whitespace-nowrap px-4 py-4 text-right font-bold ${value.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
-                    >
-                      {money(value.margin)}
-                    </td>
-                    <td className="min-w-40 max-w-60 px-4 py-4">
-                      <TechOrderNote notes={item.notes} />
-                    </td>
-                    <td className="px-4 py-4">{orderMenu(item, "desktop")}</td>
-                  </tr>
-                );
-              })}
+              {visible.map((group) => (
+                <TechClientHistory
+                  key={group.key}
+                  group={group}
+                  today={today}
+                  logo={(id) => (
+                    <Logo service={services.find((s) => s.id === id)} override={logos[id]} />
+                  )}
+                  onContact={(record) =>
+                    openRenewalMessage(record, document.activeElement as HTMLElement | null)
+                  }
+                  menu={orderMenu(group.latest, "desktop", group.orders)}
+                />
+              ))}
               {!filtered.length && (
                 <tr>
                   <td colSpan={9} className="p-10 text-center text-slate-500">
@@ -1603,12 +1550,12 @@ export function TechOrdersWorkspace({
         {filtered.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4 text-sm">
             <span>
-              {Math.min(visibleCount, filtered.length)} sur {filtered.length} ventes affichées. Les
+              {Math.min(visibleCount, groups.length)} sur {groups.length} clients affichés. Les
               totaux et l’export incluent tous les résultats filtrés.
             </span>
-            {visibleCount < filtered.length && (
+            {visibleCount < groups.length && (
               <Button variant="outline" onClick={() => setVisibleCount((count) => count + 25)}>
-                Afficher 25 ventes de plus
+                Afficher 25 clients de plus
               </Button>
             )}
           </div>

@@ -46,11 +46,15 @@ test("Desktop and mobile reuse the same action menu with distinct trigger IDs an
     new URL("../components/tech-orders-workspace.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /orderMenu\(item, "mobile"\)/);
-  assert.match(source, /orderMenu\(item, "desktop"\)/);
+  assert.match(source, /orderMenu\(group.latest, "mobile", group.orders\)/);
+  assert.match(source, /orderMenu\(group.latest, "desktop", group.orders\)/);
   assert.match(source, /tech-actions-\$\{surface\}-\$\{item.id\}/);
   assert.doesNotMatch(source, /const actionsFor|const mobileMenu/);
-  assert.match(source, /<TechOrderNote notes=\{item.notes\}/);
+  const history = readFileSync(
+    new URL("../components/tech-client-history.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(history, /<TechOrderNote notes=\{order.notes\}/);
   assert.match(source, /colSpan=\{9\}/);
   assert.match(
     source,

@@ -3,6 +3,7 @@ import { driveConfigured, syncOrderToDrive } from '@/lib/google-drive';
 import { safeFileName, sha256Hex } from '@/lib/order-model';
 import { getOrder } from '@/lib/order-repository';
 import { auditMultilingualDocuments } from '../../src/lib/multilingual-audit';
+import { validateMcpJsonContract } from '../../src/lib/mcp-json-contract';
 
 const EXPECTED_LANGUAGES = ['fr', 'en', 'es', 'de', 'it', 'zh', 'ar'];
 const MAX_RELOCATION_CHARACTERS = 33;
@@ -76,7 +77,7 @@ export function validateCandidateJson(value: unknown, options:{requireAllLanguag
     return [];
   });
   const audit=auditMultilingualDocuments(documents,options.requireAllLanguages===true);
-  const coverageErrors=options.requireAllLanguages?audit.errors:[];
+  const coverageErrors=options.requireAllLanguages?validateMcpJsonContract(value).errors:[];
   return {
     valid: presentLanguages.length > 0 && relocationErrors.length === 0 && coverageErrors.length===0,
     errors: [
@@ -149,6 +150,11 @@ export async function saveJsonVersion(options: {
   const order = await getOrder(options.orderId);
   if (!order) throw new JsonVersionError('Commande introuvable.', 404);
 
+  // MCP payloads must pass before normalization can hide missing/invalid facts.
+  if (options.source === 'mcp') {
+    const validation = validateCandidateJson(options.parsed, { requireAllLanguages: true });
+    if (!validation.valid) throw new JsonVersionError('JSON MCP refusé avant normalisation.', 422, validation);
+  }
   const normalized = normalizeCandidateJson(options.parsed);
   const validation = validateCandidateJson(normalized,{requireAllLanguages:options.source==='mcp'});
   if (!validation.valid) {

@@ -505,7 +505,8 @@ const tools = [
     name: 'save_json_version',
     title: 'Enregistrer une version JSON ZGR',
     description:
-      'Après validation explicite, valide et enregistre un JSON complet dans les sept langues fr/en/es/de/it/zh/ar, puis synchronise Google Drive si disponible. Refuse les langues absentes et les sections ou puces omises dans une traduction (dont logiciels et custom_sections). Les marques et codes icon restent inchangés ; titres et prose doivent être localisés. Le contrôle structurel ne certifie pas la qualité linguistique. Pour modifier un JSON, charger get_json_version et fournir son numéro dans base_version. Un contenu identique ne crée pas de doublon. Refuse les bases obsolètes et les sources incomplètement lues.',
+      'Ordre chronologique inverse obligatoire pour expériences, formations et études : en cours puis fin/début décroissants, dates inconnues en dernier. Refuse pending_translations non résolu et chronology qui contredit les dates. ' +
+      'Après validation explicite, valide avant normalisation et enregistre un JSON complet dans les sept langues fr/en/es/de/it/zh/ar, puis synchronise Google Drive si disponible. Refuse les langues absentes/inattendues, identités latines ou coordonnées divergentes, types invalides, années incohérentes, versions translation_review non résolues et sections ou puces omises (dont logiciels et custom_sections). version=1.0 et default_language reconnue obligatoires. Les marques et codes icon restent inchangés ; titres et prose doivent être localisés. Les contrôles techniques ne certifient ni traduction ni véracité documentaire. Pour modifier, charger le JSON actif avec get_json_version et fournir base_version. Une erreur 422 nécessite correction et revalidation ; 409 nécessite relecture de la version active. Un contenu identique ne crée pas de doublon. Refuse les bases obsolètes et les sources incomplètement lues.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1527,7 +1528,7 @@ async function callTool(
       promptVersion:
         typeof args.prompt_version === 'string'
           ? args.prompt_version
-          : 'mcp-1.0',
+          : '1.8',
       source: 'mcp',
       expectedBaseVersion: baseVersion,
     });

@@ -23,6 +23,11 @@ import { normalizeObjectiveFormat } from "@/lib/cv-objective-format";
 import type { CompanyLogo, Experience } from "@/lib/cv-types";
 import { cn } from "@/lib/utils";
 import { OrganizationLogoPicker } from "./organization-logo-picker";
+import {
+  ChronologyNotice,
+  TranslationChangeNotice,
+  usePendingTranslation,
+} from "./translation-change-review";
 
 type ExperienceWorkspaceLabels = {
   dates: string;
@@ -178,19 +183,21 @@ function AiButton({ label, onClick }: { label: string; onClick: () => void }) {
 
 function ExperienceField({
   label,
+  pending = false,
   visible,
   onToggleVisibility,
   onAi,
   children,
 }: {
   label: string;
+  pending?: boolean;
   visible: boolean;
   onToggleVisibility: () => void;
   onAi: () => void;
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className={cn("space-y-1.5", pending && "rounded-lg border border-red-300 bg-red-50 p-2")}>
       <div className="flex min-h-7 items-center justify-between gap-2">
         <Label className="text-xs font-semibold text-slate-500">{label}</Label>
         <div className="flex items-center gap-1">
@@ -216,6 +223,7 @@ export function ExperienceWorkspace({
   onLogoChange,
   onAi,
 }: ExperienceWorkspaceProps) {
+  const pending = usePendingTranslation();
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [logoError, setLogoError] = useState("");
   const [logoLoading, setLogoLoading] = useState(false);
@@ -244,7 +252,11 @@ export function ExperienceWorkspace({
             return (
               <div
                 key={item.id}
-                className="group flex min-h-[74px] items-center gap-3 px-4 py-3 transition hover:bg-indigo-50/45 sm:px-5"
+                className={cn(
+                  "group flex min-h-[74px] items-center gap-3 px-4 py-3 transition hover:bg-indigo-50/45 sm:px-5",
+                  pending(`experiences.${item.id}`) && "bg-red-50 border-l-4 border-red-400",
+                )}
+                data-pending-translation={pending(`experiences.${item.id}`) || undefined}
               >
                 <GripVertical className="h-5 w-5 shrink-0 text-slate-300" aria-hidden="true" />
                 {item.logo && (
@@ -264,6 +276,11 @@ export function ExperienceWorkspace({
                   <span className="mt-0.5 block truncate text-sm text-slate-500">
                     {itemEmployer}
                   </span>
+                  {pending(`experiences.${item.id}`) && (
+                    <span className="text-xs font-semibold text-red-700">
+                      À traduire / vérifier
+                    </span>
+                  )}
                 </button>
                 <Button
                   type="button"
@@ -374,9 +391,12 @@ export function ExperienceWorkspace({
       </div>
 
       <div className="space-y-6 bg-slate-50/55 p-4 sm:p-5">
+        <TranslationChangeNotice prefix={`experiences.${experience.id}`} />
+        <ChronologyNotice row={experience} />
         <div className="grid gap-4 sm:grid-cols-2">
           <ExperienceField
             label={labels.title}
+            pending={pending(`experiences.${experience.id}.titre`)}
             visible={isVisible(fieldPath("titre"))}
             onToggleVisibility={() => onToggleVisibility(fieldPath("titre"))}
             onAi={() =>
@@ -389,6 +409,7 @@ export function ExperienceWorkspace({
               <Briefcase className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-400" />
               <Input
                 value={experience.titre}
+                aria-label={labels.title}
                 onChange={(event) =>
                   onUpdate(experience.id, { titre: event.target.value.slice(0, 120) })
                 }
@@ -398,6 +419,7 @@ export function ExperienceWorkspace({
           </ExperienceField>
           <ExperienceField
             label={labels.employer}
+            pending={pending(`experiences.${experience.id}.employeur`)}
             visible={isVisible(fieldPath("employeur"))}
             onToggleVisibility={() => onToggleVisibility(fieldPath("employeur"))}
             onAi={() =>
@@ -479,12 +501,19 @@ export function ExperienceWorkspace({
                   : "PNG, JPG ou WebP · 64 à 4096 px · 2 Mo max · ajusté automatiquement en 128 × 128 px."}
               </p>
               {logoError && <p className="text-xs font-medium text-rose-600">{logoError}</p>}
-              <OrganizationLogoPicker name={experience.employeur} logo={experience.logo}
-                onSelect={(employeur, logo) => { onUpdate(experience.id, { employeur }); onLogoChange(experienceIndex, logo); }} />
+              <OrganizationLogoPicker
+                name={experience.employeur}
+                logo={experience.logo}
+                onSelect={(employeur, logo) => {
+                  onUpdate(experience.id, { employeur });
+                  onLogoChange(experienceIndex, logo);
+                }}
+              />
             </div>
           </ExperienceField>
           <ExperienceField
             label={labels.dates}
+            pending={pending(`experiences.${experience.id}.dates`)}
             visible={isVisible(fieldPath("dates"))}
             onToggleVisibility={() => onToggleVisibility(fieldPath("dates"))}
             onAi={() =>
@@ -497,6 +526,7 @@ export function ExperienceWorkspace({
               <CalendarRange className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-400" />
               <Input
                 value={experience.dates}
+                aria-label={labels.dates}
                 placeholder="Ex. Mai 2025 – Présent"
                 onChange={(event) =>
                   onUpdate(experience.id, { dates: event.target.value.slice(0, 40) })
@@ -507,6 +537,7 @@ export function ExperienceWorkspace({
           </ExperienceField>
           <ExperienceField
             label={labels.place}
+            pending={pending(`experiences.${experience.id}.lieu`)}
             visible={isVisible(fieldPath("lieu"))}
             onToggleVisibility={() => onToggleVisibility(fieldPath("lieu"))}
             onAi={() =>
@@ -519,6 +550,7 @@ export function ExperienceWorkspace({
               <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-400" />
               <Input
                 value={experience.lieu}
+                aria-label={labels.place}
                 placeholder="Ville, région ou télétravail"
                 onChange={(event) =>
                   onUpdate(experience.id, { lieu: event.target.value.slice(0, 80) })
@@ -529,7 +561,12 @@ export function ExperienceWorkspace({
           </ExperienceField>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div
+          className={cn(
+            "overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm",
+            pending(`experiences.${experience.id}.descriptions`) && "ring-2 ring-red-300 bg-red-50",
+          )}
+        >
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">

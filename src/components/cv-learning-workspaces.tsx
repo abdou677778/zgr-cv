@@ -23,6 +23,11 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Education, Formation, CompanyLogo } from "@/lib/cv-types";
 import { OrganizationLogoPicker } from "./organization-logo-picker";
 import { cn } from "@/lib/utils";
+import {
+  ChronologyNotice,
+  TranslationChangeNotice,
+  usePendingTranslation,
+} from "./translation-change-review";
 
 type LearningBase = {
   logo?: CompanyLogo;
@@ -113,19 +118,21 @@ function AiButton({ label, onClick }: { label: string; onClick: () => void }) {
 
 function LearningField({
   label,
+  pending = false,
   visible,
   onToggleVisibility,
   onAi,
   children,
 }: {
   label: string;
+  pending?: boolean;
   visible: boolean;
   onToggleVisibility: () => void;
   onAi: () => void;
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className={cn("space-y-1.5", pending && "rounded-lg border border-red-300 bg-red-50 p-2")}>
       <div className="flex min-h-7 items-center justify-between gap-2">
         <Label className="text-xs font-semibold text-slate-500">{label}</Label>
         <div className="flex items-center gap-1">
@@ -155,6 +162,8 @@ function LearningWorkspace<T extends LearningBase>({
   onToggleVisibility,
   onAi,
 }: LearningWorkspaceProps<T>) {
+  const pending = usePendingTranslation();
+  const pendingSection = sectionPrefix === "formation" ? "formations" : "educations";
   const itemIndex = items.findIndex((item) => item.id === editingId);
   const item = itemIndex >= 0 ? items[itemIndex] : null;
 
@@ -180,7 +189,11 @@ function LearningWorkspace<T extends LearningBase>({
             return (
               <div
                 key={entry.id}
-                className="group flex min-h-[74px] items-center gap-3 px-4 py-3 transition hover:bg-indigo-50/45 sm:px-5"
+                className={cn(
+                  "group flex min-h-[74px] items-center gap-3 px-4 py-3 transition hover:bg-indigo-50/45 sm:px-5",
+                  pending(`${pendingSection}.${entry.id}`) && "bg-red-50 border-l-4 border-red-400",
+                )}
+                data-pending-translation={pending(`${pendingSection}.${entry.id}`) || undefined}
               >
                 <GripVertical className="h-5 w-5 shrink-0 text-slate-300" aria-hidden="true" />
                 <button
@@ -193,6 +206,11 @@ function LearningWorkspace<T extends LearningBase>({
                     {title}
                   </span>
                   <span className="mt-0.5 block truncate text-sm text-slate-500">{subtitle}</span>
+                  {pending(`${pendingSection}.${entry.id}`) && (
+                    <span className="text-xs font-semibold text-red-700">
+                      À traduire / vérifier
+                    </span>
+                  )}
                 </button>
                 <Button
                   type="button"
@@ -288,6 +306,8 @@ function LearningWorkspace<T extends LearningBase>({
       </div>
 
       <div className="space-y-5 bg-slate-50/55 p-4 sm:p-5">
+        <TranslationChangeNotice prefix={`${pendingSection}.${item.id}`} />
+        <ChronologyNotice row={item} />
         <div className="grid gap-4 sm:grid-cols-2">
           {coreFields.map((field) => {
             const Icon = field.icon;
@@ -296,6 +316,7 @@ function LearningWorkspace<T extends LearningBase>({
               <LearningField
                 key={field.key}
                 label={field.label}
+                pending={pending(`${pendingSection}.${item.id}.${field.key}`)}
                 visible={isVisible(fieldPath(field.key))}
                 onToggleVisibility={() => onToggleVisibility(fieldPath(field.key))}
                 onAi={() =>
@@ -306,6 +327,7 @@ function LearningWorkspace<T extends LearningBase>({
                   <Icon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-400" />
                   <Input
                     value={value}
+                    aria-label={field.label}
                     onChange={(event) =>
                       updateField(field.key, event.target.value, field.maxLength)
                     }
@@ -317,8 +339,11 @@ function LearningWorkspace<T extends LearningBase>({
           })}
         </div>
 
-        <OrganizationLogoPicker name={item.institution} logo={item.logo}
-          onSelect={(institution, logo) => onUpdate(item.id, { institution, logo } as Partial<T>)} />
+        <OrganizationLogoPicker
+          name={item.institution}
+          logo={item.logo}
+          onSelect={(institution, logo) => onUpdate(item.id, { institution, logo } as Partial<T>)}
+        />
         {extraFields.map((field) => {
           const Icon = field.icon;
           const value = String(item[field.key] || "");
@@ -326,6 +351,7 @@ function LearningWorkspace<T extends LearningBase>({
             <LearningField
               key={field.key}
               label={field.label}
+              pending={pending(`${pendingSection}.${item.id}.${field.key}`)}
               visible={isVisible(fieldPath(field.key))}
               onToggleVisibility={() => onToggleVisibility(fieldPath(field.key))}
               onAi={() =>

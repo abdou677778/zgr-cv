@@ -67,15 +67,15 @@ test("preserves every populated CV item until the user hides it", () => {
   });
   assert.deepEqual(
     filtered.experiences.map((item) => item.id),
-    ["experience-0", "experience-2", "experience-3"],
+    ["experience-3", "experience-2", "experience-0"],
   );
   assert.deepEqual(
     filtered.formations.map((item) => item.id),
-    ["formation-1", "formation-2"],
+    ["formation-2", "formation-1"],
   );
   assert.deepEqual(
     filtered.educations.map((item) => item.id),
-    ["education-0", "education-1"],
+    ["education-1", "education-0"],
   );
   assert.deepEqual(filtered.competences, ["مهارة أولى", "مهارة ثالثة"]);
   assert.deepEqual(

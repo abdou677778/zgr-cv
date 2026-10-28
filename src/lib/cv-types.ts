@@ -1,4 +1,5 @@
 export type Experience = {
+  chronology?: import("./cv-chronology").Chronology;
   id: string;
   dates: string;
   lieu: string;
@@ -31,6 +32,7 @@ export type ProfilePhoto = {
 };
 
 export type Formation = {
+  chronology?: import("./cv-chronology").Chronology;
   logo?: CompanyLogo;
   id: string;
   date: string;
@@ -41,6 +43,7 @@ export type Formation = {
 };
 
 export type Education = {
+  chronology?: import("./cv-chronology").Chronology;
   logo?: CompanyLogo;
   id: string;
   date: string;
@@ -250,6 +253,9 @@ export function hasCustomCvSectionOrder(
 }
 
 export type CV = {
+  pending_translations?: Record<string, { source_language: "fr" | "en" | "es" | "de" | "it" | "zh" | "ar"; kind: "added" | "modified" | "deleted"; source_value: unknown }>;
+  /** Advisory only; never certifies a translation or authorizes replacing it. */
+  translation_review?: { source_language: "fr" | "en" | "es" | "de" | "it" | "zh" | "ar" };
   destination_canada_tunis?: {formId:string;schemaVersion:number;answers:Record<string,string>;reviewed:boolean};
   photo?: ProfilePhoto;
   nom_complet: string;

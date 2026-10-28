@@ -65,7 +65,6 @@ import {
   type ProfilePhoto,
   type ObjectiveFormat,
   DEFAULT_CV_SECTION_ORDER,
-  emptyCV,
   hasCustomCvSectionOrder,
   newId,
   resolveCvSectionOrder,
@@ -81,11 +80,18 @@ import { PwaUpdateControl } from '@/components/pwa-update-control';
 import { applyPwaUpdateAfterSaving } from '@/lib/pwa-update-safety';
 import { AdditionalLanguagesEditor } from '@/components/additional-languages-editor';
 import {MultilingualSectionsReview} from '@/components/multilingual-sections-review';
+import { applyMultilingualEdit, createMultilingualProfile } from '@/lib/multilingual-profile';
+import { MultilingualProfileStatus } from '@/components/multilingual-profile-status';
+import { FullProfileTranslationReview } from '@/components/full-profile-translation-review';
+import { acceptFullProfileTranslations } from '@/lib/full-profile-translation';
+import { sortCvChronology } from '@/lib/cv-chronology';
+import { acknowledgeTranslation, remapDatedVisibility } from '@/lib/multilingual-edit-sync';
+import { TranslationChangesProvider, TranslationChangeNotice } from '@/components/translation-change-review';
 import {localizedCustomTitle,synchronizeSoftwareEdit} from '@/lib/multilingual-sections';
 import { sampleCVByLanguage } from "@/lib/sample-cv";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "@/lib/document-language";
 import { FORM_COPY, INTERFACE_COPY } from "@/lib/interface-copy";
-import { applyCvVisibility, cvElementIsVisible, type HiddenCvElements } from "@/lib/cv-visibility";
+import { applyCvVisibility, cvElementIsVisible, stableDatedVisibilityPath, type HiddenCvElements } from "@/lib/cv-visibility";
 import {
   DEFAULT_TEMPLATE_COLORS,
   TEMPLATE_DEFAULT_COLORS,
@@ -842,6 +848,17 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const resetBaselineRef = useRef(false);
   const queueFlushRef = useRef(false);
   const cv = cvByLanguage[language];
+  const previousChronologyRef = useRef({ documents: cvByLanguage, language, profile: activeProfileId, order: activeClientOrder?.id });
+  useEffect(() => {
+    const before = previousChronologyRef.current;
+    previousChronologyRef.current = { documents: cvByLanguage, language, profile: activeProfileId, order: activeClientOrder?.id };
+    if (before.documents !== cvByLanguage && before.language === language && before.profile === activeProfileId && before.order === activeClientOrder?.id) {
+      setHiddenElements(hidden => remapDatedVisibility(hidden, before.documents[language]));
+    }
+    const sorted = Object.fromEntries(DOCUMENT_LANGUAGES.map(({id}) => [id, sortCvChronology(cvByLanguage[id])])) as Record<DocumentLanguage,CV>;
+    const order = (documents: Record<DocumentLanguage,CV>) => JSON.stringify(DOCUMENT_LANGUAGES.map(({id}) => [documents[id].experiences.map(row=>row.id), documents[id].formations.map(row=>row.id), documents[id].educations.map(row=>row.id)]));
+    if (order(sorted) !== order(cvByLanguage)) setCvByLanguage(sorted);
+  }, [cvByLanguage, language, activeProfileId, activeClientOrder?.id]);
   const canWriteClients = user.permissions.clientsWrite;
   const profileEditingLocked =
     Boolean(activeProfileId) && activeProfileWorkflowStatus === "approved";
@@ -994,7 +1011,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setCvByLanguage((current) => {
       const active = current[language];
       const next = typeof value === "function" ? value(active) : value;
-      return { ...current, [language]: next };
+      return applyMultilingualEdit(current, language, next);
     });
 
   const flushPendingCloud = useCallback(async () => {
@@ -1112,7 +1129,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           byLanguage?: Partial<Record<DocumentLanguage, unknown>>;
         };
         if (saved.version === STORAGE_VERSION && saved.byLanguage) {
-          const restored = { ...sampleCVByLanguage };
+          const restored = createMultilingualProfile();
           for (const item of DOCUMENT_LANGUAGES) {
             const stored = saved.byLanguage[item.id];
             if (stored) restored[item.id] = importCvJson(stored, "auto").cv;
@@ -1122,7 +1139,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             setLanguage(saved.language);
           }
         } else if (saved.version === 3 && saved.byLanguage) {
-          const restored = { ...sampleCVByLanguage };
+          const restored = createMultilingualProfile();
           for (const item of DOCUMENT_LANGUAGES) {
             const stored = saved.byLanguage[item.id];
             if (stored) restored[item.id] = importCvJson(stored, "auto").cv;
@@ -1140,7 +1157,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           // Version 2 stored the additional languages before their complete
           // contextual translations existed. Replace only values that still
           // equal the English defaults; preserve every manual user edit.
-          const restored = { ...sampleCVByLanguage };
+          const restored = createMultilingualProfile();
           for (const preservedLanguage of ["fr", "en"] as const) {
             const stored = saved.byLanguage[preservedLanguage];
             if (stored) restored[preservedLanguage] = importCvJson(stored, "auto").cv;
@@ -1155,7 +1172,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             setLanguage(saved.language);
           }
         } else {
-          setCvByLanguage((current) => ({ ...current, fr: importCvJson(saved, "auto").cv }));
+          setCvByLanguage(createMultilingualProfile({ fr: importCvJson(saved, "auto").cv }));
         }
       }
 
@@ -1242,7 +1259,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       .then((draft) => {
         if (cancelled || !draft || draft.version !== 1 || !draft.payload) return;
         const payload = draft.payload;
-        const restored = { ...sampleCVByLanguage };
+        const restored = createMultilingualProfile();
         for (const item of DOCUMENT_LANGUAGES) {
           const stored = payload.cvByLanguage?.[item.id];
           if (stored) restored[item.id] = importCvJson(stored, "auto").cv;
@@ -1557,7 +1574,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const set = <K extends keyof CV>(k: K, v: CV[K]) => {
     if (k === "additional_languages") {
       const entries=v as NonNullable<CV['additional_languages']>;
-      setCvByLanguage(current=>Object.fromEntries(DOCUMENT_LANGUAGES.map(item=>[item.id,{...current[item.id],additional_languages:entries.map(entry=>({...entry,level:item.id===language?entry.level:current[item.id].additional_languages?.find(previous=>previous.id===entry.id)?.level||''}))}])) as Record<DocumentLanguage,CV>);
+      setCvByLanguage(current=>{
+        const reviewed=applyMultilingualEdit(current,language,{...current[language],additional_languages:entries});
+        return Object.fromEntries(DOCUMENT_LANGUAGES.map(item=>[item.id,{...reviewed[item.id],additional_languages:entries.map(entry=>({...entry,level:item.id===language?entry.level:current[item.id].additional_languages?.find(previous=>previous.id===entry.id)?.level||''}))}])) as Record<DocumentLanguage,CV>;
+      });
       return;
     }
     if (k === "language_logos") {
@@ -1572,13 +1592,15 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     if (k === "logiciels") {
       const logiciels = (v as CV["logiciels"]).map((item) => ({ ...item }));
       setCvByLanguage(
-        (current) =>
-          Object.fromEntries(
+        (current) => {
+          const reviewed=applyMultilingualEdit(current,language,{...current[language],logiciels});
+          return Object.fromEntries(
             DOCUMENT_LANGUAGES.map((item) => [
               item.id,
-              { ...current[item.id], logiciels:synchronizeSoftwareEdit(current[language].logiciels,logiciels,current[item.id].logiciels,item.id===language) },
+              { ...reviewed[item.id], logiciels:synchronizeSoftwareEdit(current[language].logiciels,logiciels,current[item.id].logiciels,item.id===language) },
             ]),
-          ) as Record<DocumentLanguage, CV>,
+          ) as Record<DocumentLanguage, CV>;
+        },
       );
       return;
     }
@@ -1777,9 +1799,10 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       },
     });
   };
-  const isVisible = (path: string) => cvElementIsVisible(hiddenElements, path);
+  const isVisible = (path: string) => cvElementIsVisible(hiddenElements, path, cv);
   const toggleVisibility = (path: string) =>
     setHiddenElements((current) => {
+      path = stableDatedVisibilityPath(cv, path);
       if (current[path]) {
         const next = { ...current };
         delete next[path];
@@ -1804,6 +1827,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     setSectionAppearance((current) => ({ ...current, [id]: appearance }));
   const removeIndexedVisibility = (prefix: string, removedIndex: number) =>
     setHiddenElements((current) => {
+      prefix = stableDatedVisibilityPath(cv, prefix);
       const next: HiddenCvElements = {};
       const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const pattern = new RegExp(`^${escapedPrefix}\\.(\\d+)(\\..+)?$`);
@@ -1846,8 +1870,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         if (!languageCv.experiences[index]) continue;
         next[item.id] = {
           ...languageCv,
-          experiences: languageCv.experiences.map((experience, experienceIndex) =>
-            experienceIndex === index ? { ...experience, logo } : experience,
+          experiences: languageCv.experiences.map((experience) =>
+            experience.id === current[language].experiences[index]?.id ? { ...experience, logo } : experience,
           ),
         };
       }
@@ -1863,8 +1887,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           ]),
         ) as Record<DocumentLanguage, CV>,
     );
-  const removeExp = (id: string, index: number) => {
-    removeIndexedVisibility("experience", index);
+  const removeExp = (id: string) => {
     setCv((c) => ({ ...c, experiences: c.experiences.filter((e) => e.id !== id) }));
     if (editingExperienceId === id) setEditingExperienceId(null);
   };
@@ -1886,8 +1909,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       ...c,
       formations: c.formations.map((f) => (f.id === id ? { ...f, ...patch } : f)),
     }));
-  const removeForm = (id: string, index: number) => {
-    removeIndexedVisibility("formation", index);
+  const removeForm = (id: string) => {
     setCv((c) => ({ ...c, formations: c.formations.filter((f) => f.id !== id) }));
     if (editingFormationId === id) setEditingFormationId(null);
   };
@@ -1917,15 +1939,14 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       ...c,
       educations: c.educations.map((e) => (e.id === id ? { ...e, ...patch } : e)),
     }));
-  const removeEdu = (id: string, index: number) => {
-    removeIndexedVisibility("education", index);
+  const removeEdu = (id: string) => {
     setCv((c) => ({ ...c, educations: c.educations.filter((e) => e.id !== id) }));
     if (editingEducationId === id) setEditingEducationId(null);
   };
 
   const reset = () => {
     if (confirm(ui.resetConfirm)) {
-      setCv(emptyCV);
+      setCvByLanguage(createMultilingualProfile());
       updateProfilePhoto(undefined);
       setHiddenElements({});
       setActiveProfileId(null);
@@ -1936,7 +1957,8 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
     }
   };
   const loadSample = () => {
-    setCv(sampleCVByLanguage[language]);
+    if (!confirm(ui.resetConfirm)) return;
+    setCvByLanguage(createMultilingualProfile(sampleCVByLanguage));
     updateProfilePhoto(undefined);
     setHiddenElements({});
     setActiveProfileId(null);
@@ -1968,7 +1990,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       if (file.name.toLowerCase().endsWith(".xml") || fileText.trim().startsWith("<")) {
         const { parseEuropassXml } = await loadEuropassTools();
         const importedCv = await parseEuropassXml(fileText);
-        const next = { ...cvByLanguage, [language]: importedCv };
+        const next = createMultilingualProfile({ [language]: importedCv });
         setCvByLanguage(next);
         updateProfilePhoto(importedCv.photo);
         setHiddenElements({});
@@ -1985,7 +2007,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const parsed = JSON.parse(fileText) as unknown;
       const root =
         parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-      const next = { ...cvByLanguage };
+      const next = createMultilingualProfile();
       const importedLanguages: DocumentLanguage[] = [];
       const importedSet = importCvJsonSet(parsed);
       if (importedSet) {
@@ -2049,7 +2071,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
       const result = await importEuropassFiles(files, language);
       setEuropassImportReport(result);
       setEuropassImportReportExpanded(false);
-      const next = { ...cvByLanguage };
+      const next = createMultilingualProfile();
       for (const importedLanguage of result.languages) {
         const document = result.documents[importedLanguage];
         if (document) next[importedLanguage] = document;
@@ -2320,7 +2342,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         root._zgr && typeof root._zgr === "object" && !Array.isArray(root._zgr)
           ? (root._zgr as Record<string, unknown>)
           : null;
-      const next = { ...cvByLanguage };
+      const next = createMultilingualProfile();
       const importedSet = importCvJsonSet(value);
       const importedLanguages: DocumentLanguage[] = [];
       if (importedSet) {
@@ -3618,6 +3640,9 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
         </div>
       )}
 
+      <TranslationChangesProvider cv={cv} readOnly={profileEditingLocked} onAcknowledge={path=>{if(!profileEditingLocked)setCvByLanguage(current=>({...current,[language]:acknowledgeTranslation(current[language],path)}));}}>
+      <MultilingualProfileStatus documents={cvByLanguage} language={language} />
+      <div className="mx-auto max-w-7xl px-4"><TranslationChangeNotice /></div>
       <main
         className={`mx-auto grid min-w-0 gap-6 px-4 py-7 ${
           previewVisible && !previewFocusMode
@@ -4745,6 +4770,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
             </div>
           </section>
 
+          {user.permissions.aiUse && <FullProfileTranslationReview key={`full:${activeClientOrder?.id||activeProfileId||'profile'}`} documents={cvByLanguage} language={language} settings={aiSettings} onSettingsChange={setAiSettings} onApply={(translations,source)=>setCvByLanguage(current=>acceptFullProfileTranslations(current,translations,source))} />}
           <MultilingualSectionsReview key={`${activeClientOrder?.id||activeProfileId||'profile'}:${cv.nom_complet}`} documents={cvByLanguage} language={language} settings={aiSettings} onSettingsChange={setAiSettings} onApply={translations=>setCvByLanguage(current=>Object.fromEntries(DOCUMENT_LANGUAGES.map(({id})=>[id,{...current[id],...translations[id]}])) as Record<DocumentLanguage,CV>)}/>
 
           <HiddenSectionTray
@@ -4924,6 +4950,7 @@ function Workspace({ user, onLogout }: { user: SessionUser; onLogout: () => void
           </section>
         )}
       </main>
+      </TranslationChangesProvider>
       <Suspense fallback={null}>
         {aiSettingsOpen ? (
           <AiSettingsDialog

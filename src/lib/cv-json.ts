@@ -15,6 +15,9 @@ import {
 import { formatImportedCvAddress, formatImportedCvPhone } from "./contact-address";
 import { cleanEntryField } from "./cv-entry-location";
 import { normalizeDestinationDraft } from "./destination-canada";
+import { normalizeTranslationReview } from "./multilingual-profile";
+import { normalizePendingChanges } from "./multilingual-edit-sync";
+import { normalizeChronology } from "./cv-chronology";
 import { formatDrivingLicence, formatNationalService } from "./cv-concise-status";
 import { normalizeSoftwareIcon } from "./software-icons";
 import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "./document-language";
@@ -293,6 +296,8 @@ function directCv(source: JsonRecord): CV {
   return {
     ...emptyCV,
     photo: normalizeProfilePhoto(source.photo),
+    translation_review: normalizeTranslationReview(source.translation_review),
+    pending_translations: normalizePendingChanges(source.pending_translations),
     destination_canada_tunis: normalizeDestinationDraft(source.destination_canada_tunis),
     nom_complet: text(source.nom_complet),
     titre_poste: text(source.titre_poste),
@@ -342,6 +347,7 @@ function directCv(source: JsonRecord): CV {
       (item): Experience => ({
         id: text(item.id) || newId(),
         dates: text(item.dates),
+        chronology: normalizeChronology(item.chronology),
         lieu: cleanEntryField(text(item.lieu)),
         titre: text(item.titre),
         employeur: cleanEntryField(text(item.employeur)),
@@ -354,6 +360,7 @@ function directCv(source: JsonRecord): CV {
       (item): Formation => ({
         id: text(item.id) || newId(),
         date: text(item.date),
+        chronology: normalizeChronology(item.chronology),
         lieu: cleanEntryField(text(item.lieu)),
         titre: text(item.titre),
         institution: cleanEntryField(text(item.institution)),
@@ -365,6 +372,7 @@ function directCv(source: JsonRecord): CV {
       (item): Education => ({
         id: text(item.id) || newId(),
         date: text(item.date),
+        chronology: normalizeChronology(item.chronology),
         lieu: cleanEntryField(text(item.lieu)),
         titre: text(item.titre),
         institution: cleanEntryField(text(item.institution)),

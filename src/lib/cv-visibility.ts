@@ -1,8 +1,16 @@
 import type { CV, Education, Experience, Formation, Langues, LettreMotivation } from "./cv-types";
+import { sortCvChronology } from "./cv-chronology";
 
 export type HiddenCvElements = Record<string, true>;
 
-export const cvElementIsVisible = (hidden: HiddenCvElements, path: string) => !hidden[path];
+export function stableDatedVisibilityPath(cv: CV, path: string): string {
+  const match = path.match(/^(experience|formation|education)\.(\d+)(.*)$/);
+  if (!match) return path;
+  const section = { experience: "experiences", formation: "formations", education: "educations" } as const;
+  const id = cv[section[match[1] as keyof typeof section]][+match[2]]?.id;
+  return id ? `${match[1]}Id.${id}${match[3]}` : path;
+}
+export const cvElementIsVisible = (hidden: HiddenCvElements, path: string, cv?: CV) => !hidden[path] && !(cv && hidden[stableDatedVisibilityPath(cv,path)]);
 
 const hasExperienceContent = (item: Experience) =>
   Boolean(item.dates || item.lieu || item.titre || item.employeur || item.descriptions.length);
@@ -20,7 +28,7 @@ const hasEducationContent = (item: Education) =>
  * in the editor state but are removed from previews and every PDF export.
  */
 export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
-  const visible = (path: string) => cvElementIsVisible(hidden, path);
+  const visible = (path: string) => cvElementIsVisible(hidden, path, cv);
   const sectionVisible = (id: string) => visible(`section.${id}`);
   const visibleList = (items: string[], sectionId: string, prefix: string) =>
     sectionVisible(sectionId) ? items.filter((_, index) => visible(`${prefix}.${index}`)) : [];
@@ -130,8 +138,10 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
         formule_politesse: "",
       };
 
-  return {
+  return sortCvChronology({
     ...cv,
+    pending_translations: undefined,
+    translation_review: undefined,
     photo: sectionVisible("personal") && visible("personal.photo") ? cv.photo : undefined,
     nom_complet: scalar("nom_complet"),
     titre_poste: scalar("titre_poste"),
@@ -197,5 +207,5 @@ export function applyCvVisibility(cv: CV, hidden: HiddenCvElements): CV {
     plan_developpement: sectionVisible("development")
       ? cv.plan_developpement.filter((_, index) => visible(`plan_developpement.${index}`))
       : [],
-  };
+  });
 }

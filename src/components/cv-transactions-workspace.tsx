@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, ExternalLink, Plus, Receipt, RefreshCw } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { authenticatedFetch, getCurrentUser } from "@/lib/auth-client";
 import { todayAlgiers, techMatchesSearch } from "@/lib/tech-orders";
 import { FullPageWorkspace } from "./full-page-workspace";
@@ -61,6 +62,7 @@ export function CvTransactionsWorkspace({ onClose }: { onClose: () => void }) {
   const [records, setRecords] = useState<CvTransaction[]>([]);
   const [orders, setOrders] = useState<CvTransactionOrder[]>([]);
   const [draft, setDraft] = useState<CvTransaction>();
+  const [pendingDiscard, setPendingDiscard] = useState<{ run: () => void }>();
   const [amount, setAmount] = useState("");
   const [file, setFile] = useState<File>();
   const [customService, setCustomService] = useState("");
@@ -104,18 +106,21 @@ export function CvTransactionsWorkspace({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("beforeunload", preventLoss);
   }, [draft]);
   const close = () => {
-    if (!busy && (!draft || window.confirm("Abandonner la saisie non enregistrée ?"))) onClose();
+    if (busy) return;
+    if (draft) setPendingDiscard({ run: onClose });
+    else onClose();
   };
   const edit = (record: CvTransaction) => {
-    if (busy || (draft && !window.confirm("Abandonner la saisie actuelle ?"))) return;
-    setDraft(structuredClone(record));
-    setAmount(record.amountMinor ? cvAmountInput(record.amountMinor, record.currency) : "");
-    setFile(undefined);
-    setCustomService("");
-    setMessage("");
-    document
-      .getElementById("cv-transaction-form")
-      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    if (busy) return;
+    const apply = () => {
+      setDraft(structuredClone(record));
+      setAmount(record.amountMinor ? cvAmountInput(record.amountMinor, record.currency) : "");
+      setFile(undefined);
+      setCustomService("");
+      setMessage("");
+    };
+    if (draft) setPendingDiscard({ run: apply });
+    else apply();
   };
   const draftId = draft?.id;
   useEffect(() => {
@@ -336,6 +341,41 @@ export function CvTransactionsWorkspace({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="mx-auto w-full max-w-[1800px] space-y-4 p-4 sm:p-6">
+        <Dialog.Root
+          open={!!pendingDiscard}
+          onOpenChange={(open) => {
+            if (!open) setPendingDiscard(undefined);
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-[180] bg-slate-950/50" />
+            <Dialog.Content
+              className="fixed left-1/2 top-1/2 z-[190] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-xl bg-white p-5 shadow-xl"
+              onEscapeKeyDown={(event) => event.stopPropagation()}
+            >
+              <Dialog.Title className="font-bold">Abandonner la saisie ?</Dialog.Title>
+              <Dialog.Description className="text-sm text-slate-600">
+                Seules les modifications non enregistrées de ce formulaire seront abandonnées. Les
+                transactions déjà enregistrées resteront inchangées.
+              </Dialog.Description>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="outline" onClick={() => setPendingDiscard(undefined)}>
+                  Continuer la saisie
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    const action = pendingDiscard;
+                    setPendingDiscard(undefined);
+                    action?.run();
+                  }}
+                >
+                  Abandonner la saisie
+                </Button>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
         {message && (
           <p role="status" className="rounded-xl border bg-white p-3 text-sm">
             {message}
@@ -595,10 +635,12 @@ export function CvTransactionsWorkspace({ onClose }: { onClose: () => void }) {
                 variant="outline"
                 disabled={busy}
                 onClick={() => {
-                  if (window.confirm("Abandonner cette saisie ?")) {
-                    setDraft(undefined);
-                    setFile(undefined);
-                  }
+                  setPendingDiscard({
+                    run: () => {
+                      setDraft(undefined);
+                      setFile(undefined);
+                    },
+                  });
                 }}
               >
                 Annuler la saisie

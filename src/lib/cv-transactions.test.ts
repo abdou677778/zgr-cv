@@ -31,6 +31,15 @@ const input: CvTransaction = {
   voided: false,
   voidReason: "",
 };
+test("Transactions use an in-app draft confirmation, not a blocking browser dialog", () => {
+  const code = readFileSync(
+    new URL("../components/cv-transactions-workspace.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(code, /Abandonner la saisie/);
+  assert.match(code, /pendingDiscard/);
+  assert.doesNotMatch(code, /window\.(confirm|prompt)\(/);
+});
 class Bucket {
   items = new Map<string, { body: string; etag: string }>();
   count = 0;

@@ -31,6 +31,11 @@ import { TechFinancePanel } from "./tech-finance-panel";
 import { TechServiceCatalogPanel } from "./tech-service-catalog-panel";
 import { TechServiceDetails } from "./tech-service-details";
 import { sortTechServicesByName } from "@/lib/tech-service-sort";
+import {
+  officialTechDetails,
+  officialTechFeatures,
+  TECH_SERVICE_DETAILS_CHECKED,
+} from "@/data/tech-official-service-details";
 import { TechStatusTiles } from "./tech-status-tiles";
 import { TechOrderFilters } from "./tech-order-filters";
 import { TechSaleLineFields } from "./tech-sale-line-fields";
@@ -1158,7 +1163,7 @@ export function TechOrdersWorkspace({
               value={catalogQuery}
               onChange={(e) => setCatalogQuery(e.target.value)}
             />
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-start gap-2">
               {sortedServices
                 .filter((s) => techMatchesSearch(s.name, catalogQuery))
                 .map((s) => (
@@ -1254,6 +1259,24 @@ export function TechOrdersWorkspace({
                       />
                     </Field>
                   </div>
+                  {officialTechDetails(service.name) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const details = officialTechDetails(service.name);
+                        if (details)
+                          setService({
+                            ...service,
+                            websiteUrl: details.websiteUrl,
+                            features: officialTechFeatures(details),
+                          });
+                      }}
+                    >
+                      Préremplir la fiche officielle · {TECH_SERVICE_DETAILS_CHECKED}
+                    </Button>
+                  )}
                   <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-2">
                     <Field label="Lien du site (facultatif)">
                       <Input

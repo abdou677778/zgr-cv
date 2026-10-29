@@ -3,6 +3,33 @@ import test from "node:test";
 
 import { buildCvProPdf } from "./cv-pro-pdf";
 import { emptyCV } from "./cv-types";
+import { buildCvProInternationalPdf } from "./cv-pro-international-pdf";
+
+test("International uses an Arabic-capable font for Arabic institution names without changing Latin runs", () => {
+  for (const language of ["fr", "en", "es", "de", "it", "zh"] as const) {
+    const document = buildCvProInternationalPdf({ ...emptyCV, educations: [{
+      id: "usthb", titre: "Licence en informatique", date: "2012 – 2015",
+      institution: "جامعة هواري بومدين للعلوم والتكنولوجيا (USTHB)",
+      lieu: "Alger, Algérie", option: "", equivalence: "",
+    }] }, language);
+    const arabicRuns: Record<string, unknown>[] = [];
+    const latinRuns: Record<string, unknown>[] = [];
+    const visit = (value: unknown) => {
+      if (!value || typeof value !== "object") return;
+      const node = value as Record<string, unknown>;
+      if (typeof node.text === "string") {
+        if (/\p{Script=Arabic}/u.test(node.text)) arabicRuns.push(node);
+        if (node.text.includes("USTHB")) latinRuns.push(node);
+      }
+      Object.values(node).forEach(child => Array.isArray(child) ? child.forEach(visit) : visit(child));
+    };
+    visit(document.content);
+    assert.ok(arabicRuns.length > 0);
+    assert.ok(arabicRuns.every(run => run.font === "NotoSansArabic"));
+    assert.ok(latinRuns.some(run => String(run.text).includes("(USTHB), Alger, Algérie")));
+    assert.ok(latinRuns.every(run => run.font === undefined));
+  }
+});
 
 test("does not insert an artificial line break into an Arabic education heading", () => {
   const document = buildCvProPdf({...emptyCV,educations:[{

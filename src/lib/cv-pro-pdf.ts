@@ -224,7 +224,7 @@ function abbreviateDateMonths(value: string, language: DocumentLanguage) {
   );
 }
 
-type PdfTextRun = { text: string; bold?: boolean; color?: string };
+type PdfTextRun = { text: string; bold?: boolean; color?: string; font?: string };
 type PdfText = string | PdfTextRun[];
 
 function rtlVisualLine(words: string[]): PdfTextRun[] {
@@ -293,9 +293,16 @@ function rtlMixedText(value: string, maxChars: number): PdfTextRun[] {
 
 function displayText(value: string, language: DocumentLanguage, maxChars = 55) {
   const normalized = value.trim();
-  return language === "ar" && /\p{Script=Arabic}/u.test(normalized)
-    ? rtlMixedText(normalized, maxChars)
-    : normalized;
+  if (!/\p{Script=Arabic}/u.test(normalized)) return normalized;
+  if (language === "ar") return rtlMixedText(normalized, maxChars);
+  // A shared organization label can be Arabic even in a French CV. Keep the
+  // surrounding Latin text in its original font and LTR order, but shape each
+  // Arabic phrase with the already embedded Arabic-capable font.
+  return normalized.split(/([\p{Script=Arabic}\p{Mark}]+(?:[ \u00a0]+[\p{Script=Arabic}\p{Mark}]+)*)/gu)
+    .filter(Boolean)
+    .flatMap((part): PdfTextRun[] => /\p{Script=Arabic}/u.test(part)
+      ? rtlMixedText(part, maxChars).map(run => ({ ...run, font: "NotoSansArabic" }))
+      : [{ text: part }]);
 }
 
 function withRunStyle(value: PdfText, style: Omit<PdfTextRun, "text">): PdfTextRun[] {

@@ -35,6 +35,11 @@ pdfMake.addVirtualFileSystem(vfs);
 const output = new URL("output/pdf/cv-pro-variants/", root);
 await mkdir(output, { recursive: true });
 const variants = [
+  ["international-arabic-institution", buildCvProInternationalPdf({
+    ...documents.fr!,
+    educations: [{ id: "usthb", titre: "Licence en informatique", date: "2012 – 2015",
+      institution: "جامعة هواري بومدين للعلوم والتكنولوجيا (USTHB)", lieu: "Alger, Algérie", option: "", equivalence: "" }],
+  }, "fr")],
   ["arabic-before", buildCvProPdf(documents.ar!, "ar")],
   ["arabic-v3", buildCvProArabicV3Pdf(documents.ar!)],
   ["french-before", buildCvProPdf(documents.fr!, "fr")],

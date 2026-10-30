@@ -18,6 +18,7 @@ import {
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { documentFont, type DocumentLanguage } from "./document-language";
 import { explicitPdfFonts } from "./pdf-font-dependencies";
+import { projectOrganizationLogos, supportsOrganizationLogos } from "./organization-logo-policy";
 import { applyPdfTheme } from "./pdf-theme";
 import {
   applyTemplateDesigner,
@@ -5046,7 +5047,9 @@ export async function createCvPdfBlob(
     pdfCv = { ...pdfCv, logiciels: await prepareSoftwareIconsForPdf(pdfCv.logiciels, normalizedTemplateId === 'cv-pro-international') };
   }
   if (normalizedTemplateId === 'cv-pro-international' || (isCvProLayoutTemplate(normalizedTemplateId)&&pdfCv.additional_languages?.length)) pdfCv = await prepareLanguageLogos(pdfCv);
-  pdfCv = await prepareOrganizationLogos(pdfCv);
+  pdfCv = supportsOrganizationLogos(normalizedTemplateId)
+    ? await prepareOrganizationLogos(pdfCv)
+    : projectOrganizationLogos(pdfCv, normalizedTemplateId);
   const document =
     normalizedTemplateId === "arabic-pro-v1"
       ? buildCvPdfArabicProV5(pdfCv, language)

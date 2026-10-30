@@ -2,6 +2,45 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
 const arabicName = "جامعة هواري بومدين للعلوم والتكنولوجيا (USTHB)";
+test("five standard PDF templates ignore saved organization artwork", async ({ page }) => {
+  const results = await page.evaluate(async () => {
+    const pdfPath = "/src/lib/cv-pdf.ts";
+    const typesPath = "/src/lib/cv-types.ts";
+    const { createCvPdfBlob } = await import(pdfPath);
+    const { emptyCV } = await import(typesPath);
+    // Invalid artwork would fail PDF rendering if any standard template used it.
+    const logo = {
+      dataUrl: "data:image/png;base64,NOT_AN_IMAGE",
+      name: "test.png",
+      width: 1,
+      height: 1,
+    };
+    const cv = {
+      ...emptyCV,
+      nom_complet: "TEST STANDARD",
+      experiences: [
+        {
+          id: "e",
+          titre: "Poste",
+          employeur: "Entreprise",
+          dates: "2025",
+          lieu: "Alger",
+          descriptions: [],
+          logo,
+        },
+      ],
+    };
+    const outputs = [];
+    for (const template of ["canadian-v1", "canadian-v2", "canadian-v3", "canadian-v4", "ats-a4"]) {
+      const blob = await createCvPdfBlob(cv, template, "fr");
+      outputs.push({ template, signature: await blob.slice(0, 4).text() });
+    }
+    return { outputs, logoRetained: cv.experiences[0].logo === logo };
+  });
+  expect(results.outputs).toHaveLength(5);
+  expect(results.outputs.every((item) => item.signature === "%PDF")).toBe(true);
+  expect(results.logoRetained).toBe(true);
+});
 test.beforeEach(async ({ page, context }) => {
   const pack = JSON.parse(
     await readFile("test-data/json-multilingue/CV_TEST_GLOBAL_7_LANGUES.json", "utf8"),

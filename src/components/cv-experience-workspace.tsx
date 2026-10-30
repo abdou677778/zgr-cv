@@ -504,8 +504,7 @@ export function ExperienceWorkspace({
               <OrganizationLogoPicker
                 name={experience.employeur}
                 logo={experience.logo}
-                onSelect={(employeur, logo) => {
-                  onUpdate(experience.id, { employeur });
+                onLogoSelect={(logo) => {
                   onLogoChange(experienceIndex, logo);
                 }}
               />

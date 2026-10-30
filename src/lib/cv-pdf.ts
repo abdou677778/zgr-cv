@@ -17,6 +17,7 @@ import {
 } from "./cv-types";
 import { normalizeObjectiveFormat } from "./cv-objective-format";
 import { documentFont, type DocumentLanguage } from "./document-language";
+import { explicitPdfFonts } from "./pdf-font-dependencies";
 import { applyPdfTheme } from "./pdf-theme";
 import {
   applyTemplateDesigner,
@@ -5077,15 +5078,16 @@ export async function createCvPdfBlob(
     pdfCv,
     language,
   );
-  return pdfMake
-    .createPdf(
-      applyTemplateDesigner(
+  const finalDocument = applyTemplateDesigner(
         applyPdfTheme(documentWithSectionOrder, normalizedTemplateId, accentColor),
         effectiveDesign,
         normalizedTemplateId,
-      ),
-    )
-    .getBlob();
+      );
+  await Promise.all(explicitPdfFonts(finalDocument).map(async family => {
+    if (!Object.hasOwn(CV_FONTS, family)) throw new Error(`Police PDF non configurée : ${family}`);
+    await ensureFontFamily(family as keyof typeof CV_FONTS);
+  }));
+  return pdfMake.createPdf(finalDocument).getBlob();
 }
 
 export function downloadCvPdf(blob: Blob, cv: CV) {

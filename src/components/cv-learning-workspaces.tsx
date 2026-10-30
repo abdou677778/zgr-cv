@@ -342,7 +342,7 @@ function LearningWorkspace<T extends LearningBase>({
         <OrganizationLogoPicker
           name={item.institution}
           logo={item.logo}
-          onSelect={(institution, logo) => onUpdate(item.id, { institution, logo } as Partial<T>)}
+          onLogoSelect={(logo) => onUpdate(item.id, { logo } as Partial<T>)}
         />
         {extraFields.map((field) => {
           const Icon = field.icon;

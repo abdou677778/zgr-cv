@@ -1,15 +1,14 @@
 import { MessageCircle, MessageCircleCheck } from "lucide-react";
 import { techContactAt, type TechLine } from "@/lib/tech-orders";
+const contactFormatter = new Intl.DateTimeFormat("fr-DZ", {
+  timeZone: "Africa/Algiers",
+  dateStyle: "short",
+  timeStyle: "short",
+});
 
 export function TechContactBadge({ line, onClick }: { line: TechLine; onClick?: () => void }) {
   const at = techContactAt(line);
-  const date = at
-    ? new Intl.DateTimeFormat("fr-DZ", {
-        timeZone: "Africa/Algiers",
-        dateStyle: "short",
-        timeStyle: "short",
-      }).format(new Date(at))
-    : "";
+  const date = at ? contactFormatter.format(new Date(at)) : "";
   const Icon = at ? MessageCircleCheck : MessageCircle;
   return (
     <button

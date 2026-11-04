@@ -68,13 +68,15 @@ export function techOrdersTotals(orders: TechOrder[]) {
     { cost: 0, sale: 0, margin: 0 },
   );
 }
+const techAlgiersDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Africa/Algiers",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const techClientCollator = new Intl.Collator("fr");
 export function todayAlgiers() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Africa/Algiers",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  return techAlgiersDateFormatter.format(new Date());
 }
 export function addTechMonths(value: string, months: number) {
   const date = new Date(`${value}T00:00:00Z`);
@@ -244,7 +246,7 @@ export function techClients(orders: TechOrder[]) {
   }
   return [...entries]
     .map(([key, order]) => ({ key, client: order.client, facebookUrl: order.facebookUrl }))
-    .sort((a, b) => a.client.localeCompare(b.client, "fr"));
+    .sort((a, b) => techClientCollator.compare(a.client, b.client));
 }
 export type TechFilters = {
   query: string;
@@ -322,14 +324,7 @@ export function filterTechOrders(
         const created = new Date(order.createdAt || "");
         if (
           !Number.isFinite(created.getTime()) ||
-          !inRange(
-            new Intl.DateTimeFormat("en-CA", {
-              timeZone: "Africa/Algiers",
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-            }).format(created),
-          )
+          !inRange(techAlgiersDateFormatter.format(created))
         )
           return false;
       }
@@ -343,8 +338,8 @@ export function filterTechOrders(
       );
     })
     .sort((a, b) => {
-      if (filters.sort === "client") return a.client.localeCompare(b.client, "fr");
-      if (filters.sort === "client-desc") return b.client.localeCompare(a.client, "fr");
+      if (filters.sort === "client") return techClientCollator.compare(a.client, b.client);
+      if (filters.sort === "client-desc") return techClientCollator.compare(b.client, a.client);
       if (filters.sort === "sale-desc") return orderTotals(b).sale - orderTotals(a).sale;
       if (filters.sort === "sale-asc") return orderTotals(a).sale - orderTotals(b).sale;
       if (filters.sort === "ending" || filters.sort === "ending-desc") {

@@ -12,7 +12,9 @@ export function groupTechClients(orders: TechOrder[], today: string) {
   const buckets = new Map<string, TechOrder[]>();
   for (const order of orders.filter((o) => !o.deletedAt)) {
     const key = techClientKey(order);
-    buckets.set(key, [...(buckets.get(key) || []), order]);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(order);
+    else buckets.set(key, [order]);
   }
   return [...buckets].map(([key, records]) => {
     const periods = records
@@ -61,7 +63,9 @@ export function groupTechServicePeriods(periods: TechClientGroup["periods"]) {
     (a, b) => a.line.start.localeCompare(b.line.start) || a.line.end.localeCompare(b.line.end),
   )) {
     const key = period.line.serviceId;
-    services.set(key, [...(services.get(key) || []), period]);
+    const bucket = services.get(key);
+    if (bucket) bucket.push(period);
+    else services.set(key, [period]);
   }
   return [...services].map(([serviceId, history]) => ({
     serviceId,
@@ -71,14 +75,19 @@ export function groupTechServicePeriods(periods: TechClientGroup["periods"]) {
 }
 
 /** Match a client through any ledger record; always display its complete history. */
-export function filterTechClientGroups(orders: TechOrder[], filters: TechFilters, today: string) {
+export function filterTechClientGroups(
+  orders: TechOrder[],
+  filters: TechFilters,
+  today: string,
+  preparedGroups?: TechClientGroup[],
+) {
   const matching = filterTechOrders(orders, { ...filters, state: "" }, today);
   const rank = new Map<string, number>();
   matching.forEach((order) => {
     const key = techClientKey(order);
     if (!rank.has(key)) rank.set(key, rank.size);
   });
-  return groupTechClients(orders, today)
+  return (preparedGroups || groupTechClients(orders, today))
     .filter((group) => rank.has(group.key) && (!filters.state || group.state === filters.state))
     .sort((a, b) =>
       filters.sort === "sale-desc"

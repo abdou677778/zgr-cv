@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Download,
   Plus,
@@ -19,7 +20,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { authenticatedFetch } from "@/lib/auth-client";
 import { SOFTWARE_ICON_CATALOG } from "@/data/software-icon-catalog";
-import { loadSharedSoftwareLogos } from "@/lib/shared-software-logos";
+import { loadTechSoftwareLogos } from "@/lib/shared-software-logos";
 import { techLogoSource, type TechLogo } from "@/lib/tech-order-logos";
 import { normalizedTechLogo } from "@/lib/tech-logo-upload";
 import { techOrderError, techServiceError } from "@/lib/tech-orders-validation";
@@ -240,7 +241,9 @@ export function TechOrdersWorkspace({
   const [renewStart, setRenewStart] = useState("");
   const [renewContinuity, setRenewContinuity] = useState(false);
   const [pendingLine, setPendingLine] = useState<TechLine>();
-  const [visibleCount, setVisibleCount] = useState(25);
+  const [page, setPage] = useState(0);
+  const mobileLayout = useIsMobile();
+  const deferredFilters = useDeferredValue(filters);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [messageOrderId, setMessageOrderId] = useState<string>();
   const messageOrder = orders.find((item) => item.id === messageOrderId);
@@ -262,7 +265,7 @@ export function TechOrdersWorkspace({
     return () => window.removeEventListener("beforeunload", warn);
   }, [hasDraft]);
   useEffect(() => {
-    setVisibleCount(25);
+    setPage(0);
   }, [filters, orders.length]);
   const load = useCallback(async () => {
     setBusy(true);
@@ -274,6 +277,7 @@ export function TechOrdersWorkspace({
       setLogos(data.logos || {});
       setFinance(data.finance || emptyTechFinance());
       setLoaded(true);
+      void loadTechSoftwareLogos(data.services.map((item: TechService) => item.icon));
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -283,7 +287,6 @@ export function TechOrdersWorkspace({
   useEffect(() => {
     if (open) {
       void load();
-      void loadSharedSoftwareLogos(true);
     }
     const update = () => refreshLogos((value) => value + 1);
     window.addEventListener("zgr-software-logos", update);
@@ -344,9 +347,10 @@ export function TechOrdersWorkspace({
     }
   };
   const clients = useMemo(() => techClients(orders), [orders]);
+  const allGroups = useMemo(() => groupTechClients(orders, today), [orders, today]);
   const groups = useMemo(
-    () => filterTechClientGroups(orders, filters, today),
-    [orders, filters, today],
+    () => filterTechClientGroups(orders, deferredFilters, today, allGroups),
+    [orders, deferredFilters, today, allGroups],
   );
   const filtered = useMemo(() => groups.flatMap((group) => group.orders), [groups]);
   const invalidDates = !!(filters.from && filters.to && filters.from > filters.to);
@@ -560,18 +564,19 @@ export function TechOrdersWorkspace({
       </DropdownMenu>
     );
   };
-  const totals = techOrdersTotals(filtered);
-  const visible = groups.slice(0, visibleCount);
+  const totals = useMemo(() => techOrdersTotals(filtered), [filtered]);
+  const pageIndex = Math.min(page, Math.max(0, Math.ceil(groups.length / 25) - 1));
+  const visible = groups.slice(pageIndex * 25, pageIndex * 25 + 25);
   const stateCounts = useMemo(
     () =>
-      groupTechClients(orders, today).reduce(
+      allGroups.reduce(
         (counts, group) => {
           counts[group.state]++;
           return counts;
         },
         { active: 0, ending: 0, inactive: 0 },
       ),
-    [orders, today],
+    [allGroups],
   );
   const mutateLine = (id: string, patch: Partial<TechLine>) =>
     setOrder((current) =>
@@ -838,7 +843,7 @@ export function TechOrdersWorkspace({
           </Button>
           <Button
             variant="outline"
-            disabled={!loaded || busy || invalidDates}
+            disabled={!loaded || busy || invalidDates || filters !== deferredFilters}
             onClick={async () => {
               setBusy(true);
               try {
@@ -1615,88 +1620,112 @@ export function TechOrdersWorkspace({
             </span>
           </div>
         </section>
-        <div className="space-y-3 md:hidden">
-          {visible.map((group) => (
-            <TechClientHistory
-              key={group.key}
-              group={group}
-              today={today}
-              mobile
-              logo={(id) => (
-                <Logo service={services.find((s) => s.id === id)} override={logos[id]} />
-              )}
-              onContact={(record) =>
-                openRenewalMessage(record, document.activeElement as HTMLElement | null)
-              }
-              menu={orderMenu(group.latest, "mobile", group.orders)}
-            />
-          ))}
-          {!filtered.length && (
-            <p className="rounded-xl border bg-white p-6 text-center text-sm text-slate-500">
-              {busy ? "Chargement…" : "Aucune vente pour ces filtres."}
-            </p>
-          )}
-        </div>
-        <div className="hidden overflow-x-auto rounded-xl border bg-white md:block">
-          <table className="w-full min-w-[1050px] text-left text-sm">
-            <thead className="bg-slate-100 text-xs uppercase text-slate-600">
-              <tr>
-                {[
-                  "Historique",
-                  "Client",
-                  "État",
-                  "Services / dates / état",
-                  "Coût DA",
-                  "Total DA",
-                  "Marge brute DA",
-                  "Note",
-                  "Actions",
-                ].map((h) => (
-                  <th key={h} className="whitespace-nowrap px-4 py-3">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((group) => (
-                <TechClientHistory
-                  key={group.key}
-                  group={group}
-                  today={today}
-                  logo={(id) => (
-                    <Logo service={services.find((s) => s.id === id)} override={logos[id]} />
-                  )}
-                  onContact={(record) =>
-                    openRenewalMessage(record, document.activeElement as HTMLElement | null)
-                  }
-                  menu={orderMenu(group.latest, "desktop", group.orders)}
-                />
-              ))}
-              {!filtered.length && (
+        {mobileLayout && (
+          <div className="space-y-3 md:hidden" aria-busy={filters !== deferredFilters}>
+            {visible.map((group) => (
+              <TechClientHistory
+                key={group.key}
+                group={group}
+                today={today}
+                mobile
+                logo={(id) => (
+                  <Logo service={services.find((s) => s.id === id)} override={logos[id]} />
+                )}
+                onContact={(record) =>
+                  openRenewalMessage(record, document.activeElement as HTMLElement | null)
+                }
+                menu={orderMenu(group.latest, "mobile", group.orders)}
+              />
+            ))}
+            {!filtered.length && (
+              <p className="rounded-xl border bg-white p-6 text-center text-sm text-slate-500">
+                {busy ? "Chargement…" : "Aucune vente pour ces filtres."}
+              </p>
+            )}
+          </div>
+        )}
+        {!mobileLayout && (
+          <div
+            className="hidden overflow-x-auto rounded-xl border bg-white md:block"
+            aria-busy={filters !== deferredFilters}
+          >
+            <table className="w-full min-w-[1050px] text-left text-sm">
+              <thead className="bg-slate-100 text-xs uppercase text-slate-600">
                 <tr>
-                  <td colSpan={9} className="p-10 text-center text-slate-500">
-                    {busy
-                      ? "Chargement du cloud…"
-                      : loaded
-                        ? "Aucune vente. Ajoutez vos services puis votre première vente."
-                        : "Les données cloud ne sont pas chargées. Cliquez sur Actualiser."}
-                  </td>
+                  {[
+                    "Historique",
+                    "Client",
+                    "État",
+                    "Services / dates / état",
+                    "Coût DA",
+                    "Total DA",
+                    "Marge brute DA",
+                    "Note",
+                    "Actions",
+                  ].map((h) => (
+                    <th key={h} className="whitespace-nowrap px-4 py-3">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {visible.map((group) => (
+                  <TechClientHistory
+                    key={group.key}
+                    group={group}
+                    today={today}
+                    logo={(id) => (
+                      <Logo service={services.find((s) => s.id === id)} override={logos[id]} />
+                    )}
+                    onContact={(record) =>
+                      openRenewalMessage(record, document.activeElement as HTMLElement | null)
+                    }
+                    menu={orderMenu(group.latest, "desktop", group.orders)}
+                  />
+                ))}
+                {!filtered.length && (
+                  <tr>
+                    <td colSpan={9} className="p-10 text-center text-slate-500">
+                      {busy
+                        ? "Chargement du cloud…"
+                        : loaded
+                          ? "Aucune vente. Ajoutez vos services puis votre première vente."
+                          : "Les données cloud ne sont pas chargées. Cliquez sur Actualiser."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
         {filtered.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4 text-sm">
             <span>
-              {Math.min(visibleCount, groups.length)} sur {groups.length} clients affichés. Les
-              totaux et l’export incluent tous les résultats filtrés.
+              {pageIndex * 25 + 1}–{Math.min((pageIndex + 1) * 25, groups.length)} sur{" "}
+              {groups.length} clients affichés. Les totaux et l’export incluent tous les résultats
+              filtrés.
             </span>
-            {visibleCount < groups.length && (
-              <Button variant="outline" onClick={() => setVisibleCount((count) => count + 25)}>
-                Afficher 25 clients de plus
-              </Button>
+            {groups.length > 25 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  disabled={pageIndex === 0}
+                  onClick={() => setPage(pageIndex - 1)}
+                >
+                  Précédents
+                </Button>
+                <span className="text-xs text-slate-500">
+                  {pageIndex + 1} / {Math.ceil(groups.length / 25)}
+                </span>
+                <Button
+                  variant="outline"
+                  disabled={(pageIndex + 1) * 25 >= groups.length}
+                  onClick={() => setPage(pageIndex + 1)}
+                >
+                  Suivants
+                </Button>
+              </div>
             )}
           </div>
         )}

@@ -4,9 +4,15 @@ const LEGACY_ICON_SLUGS: Record<string, string> = {
   word: "microsoftword",
   excel: "microsoftexcel",
   powerpoint: "microsoftpowerpoint",
-  "leonardo ai": "leonardoai", "hey gen": "heygen", "gamma ai": "gamma",
-  "cursor ai": "cursor", "eleven labs": "elevenlabs", "genspark ai": "genspark",
-  "manus ai": "manus", "n8n.io": "n8n", grammrly: "grammarly",
+  "leonardo ai": "leonardoai",
+  "hey gen": "heygen",
+  "gamma ai": "gamma",
+  "cursor ai": "cursor",
+  "eleven labs": "elevenlabs",
+  "genspark ai": "genspark",
+  "manus ai": "manus",
+  "n8n.io": "n8n",
+  grammrly: "grammarly",
 };
 
 const catalogSlugs = new Set(SOFTWARE_ICON_CATALOG.map((item) => item.slug));
@@ -14,6 +20,10 @@ let sharedLogos: Record<string, string> = {};
 export function setSharedSoftwareLogos(logos: Record<string, string>) {
   sharedLogos = logos;
   if (typeof window !== "undefined") window.dispatchEvent(new Event("zgr-software-logos"));
+}
+export function mergeSharedSoftwareLogos(logos: Record<string, string>) {
+  if (Object.entries(logos).some(([slug, value]) => sharedLogos[slug] !== value))
+    setSharedSoftwareLogos({ ...sharedLogos, ...logos });
 }
 
 export function normalizeSoftwareIcon(value: string | undefined) {
@@ -31,8 +41,10 @@ export function normalizeSoftwareIcon(value: string | undefined) {
 export function softwareIconUrl(icon: string | undefined) {
   const slug = normalizeSoftwareIcon(icon);
   const entry = SOFTWARE_ICON_CATALOG.find((item) => item.slug === slug);
-  return slug === "generic" ? "" : sharedLogos[slug] ||
-    (entry?.asset === "" ? "" : `/software-icons/${entry?.asset || `${slug}.svg`}`);
+  return slug === "generic"
+    ? ""
+    : sharedLogos[slug] ||
+        (entry?.asset === "" ? "" : `/software-icons/${entry?.asset || `${slug}.svg`}`);
 }
 
 export { SOFTWARE_ICON_CATALOG };

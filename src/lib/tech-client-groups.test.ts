@@ -75,9 +75,8 @@ test("Service history has one heading per catalog service, chronological dates a
     assert.doesNotMatch(html, /<details[^>]*\bopen[= >]/);
     assert.match(html, /text-emerald-700[^>]*>Actif/);
     assert.match(html, /text-red-700[^>]*>Expiré/);
-    assert.match(html, /<dt>Achat<\/dt>/);
-    assert.match(html, /<dt>Vente<\/dt>/);
-    assert.match(html, /<dt>Marge<\/dt>/);
+    // Closed histories do not build hidden financial rows; totals remain visible.
+    assert.doesNotMatch(html, /<dt>Achat<\/dt>|<dt>Vente<\/dt>|<dt>Marge<\/dt>/);
     assert.ok(html.indexOf("22/08/2026") < html.indexOf("24/10/2026"));
   }
 });

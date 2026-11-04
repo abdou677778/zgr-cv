@@ -1,10 +1,26 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { groupTechServicePeriods, type TechClientGroup } from "@/lib/tech-client-groups";
 import { lineTotals, techLineStatus, techOrderLabel } from "@/lib/tech-orders";
 import { formatTechMoney as money, formatTechDeadline as date } from "@/lib/tech-order-display";
 import { TechOrderClientLink, TechOrderNote } from "./tech-order-details";
 import { TechContactBadge } from "./tech-contact-badge";
 import type { TechOrder } from "@/lib/tech-orders";
+
+/** Financial detail DOM is mounted only when the user opens this service. */
+export function TechHistoryDisclosure({ children }: { children: () => ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <details
+      className="group mt-1.5 text-xs text-slate-600"
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer rounded py-1 font-medium text-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
+        Plus d’infos
+      </summary>
+      {expanded && children()}
+    </details>
+  );
+}
 
 export function TechClientHistory({
   group,
@@ -90,45 +106,47 @@ export function TechClientHistory({
                 onClick={() => onContact(order)}
               />
             ))}
-          <details className="group mt-1.5 text-xs text-slate-600">
-            <summary className="cursor-pointer rounded py-1 font-medium text-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
-              Plus d’infos
-            </summary>
-            <div className="mt-1 space-y-2 border-t border-slate-100 pt-2">
-              {service.periods.map(({ order, line }) => {
-                const total = lineTotals(line);
-                return (
-                  <div key={`${order.id}:${line.id}`} className="space-y-1 rounded bg-slate-50 p-2">
-                    <div className="text-[11px] font-semibold tabular-nums">
-                      {date(line.start)} → {date(line.end)}
+          <TechHistoryDisclosure>
+            {() => (
+              <div className="mt-1 space-y-2 border-t border-slate-100 pt-2">
+                {service.periods.map(({ order, line }) => {
+                  const total = lineTotals(line);
+                  return (
+                    <div
+                      key={`${order.id}:${line.id}`}
+                      className="space-y-1 rounded bg-slate-50 p-2"
+                    >
+                      <div className="text-[11px] font-semibold tabular-nums">
+                        {date(line.start)} → {date(line.end)}
+                      </div>
+                      <dl className="grid grid-cols-3 gap-1 text-[11px]">
+                        <div>
+                          <dt>Achat</dt>
+                          <dd className="font-semibold">{money(total.cost)}</dd>
+                        </div>
+                        <div>
+                          <dt>Vente</dt>
+                          <dd className="font-semibold">{money(total.sale)}</dd>
+                        </div>
+                        <div>
+                          <dt>Marge</dt>
+                          <dd
+                            className={`font-semibold ${total.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
+                          >
+                            {money(total.margin)}
+                          </dd>
+                        </div>
+                      </dl>
+                      <span className="block text-[10px] text-slate-400">
+                        {techOrderLabel(order)}
+                      </span>
+                      <TechOrderNote notes={order.notes} />
                     </div>
-                    <dl className="grid grid-cols-3 gap-1 text-[11px]">
-                      <div>
-                        <dt>Achat</dt>
-                        <dd className="font-semibold">{money(total.cost)}</dd>
-                      </div>
-                      <div>
-                        <dt>Vente</dt>
-                        <dd className="font-semibold">{money(total.sale)}</dd>
-                      </div>
-                      <div>
-                        <dt>Marge</dt>
-                        <dd
-                          className={`font-semibold ${total.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
-                        >
-                          {money(total.margin)}
-                        </dd>
-                      </div>
-                    </dl>
-                    <span className="block text-[10px] text-slate-400">
-                      {techOrderLabel(order)}
-                    </span>
-                    <TechOrderNote notes={order.notes} />
-                  </div>
-                );
-              })}
-            </div>
-          </details>
+                  );
+                })}
+              </div>
+            )}
+          </TechHistoryDisclosure>
         </section>
       ))}
     </div>

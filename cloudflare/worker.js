@@ -1,6 +1,7 @@
 import { destinationCanadaContract } from "./destination-canada.js";
 import languageFlags from '../src/lib/language-flag-catalog.json' with { type: 'json' };
 import { handleTechOrders } from "./tech-orders.js";
+import { softwareLogoSubset } from "./software-logo-subset.js";
 import {
   getVolunteerOpportunityHealth,
   handleVolunteerApi,
@@ -4968,6 +4969,10 @@ async function route(request, env, ctx) {
   }
   if (["/api/software-logos", "/api/organization-logos", "/api/language-logos"].includes(url.pathname) && request.method === "GET") {
     const namespace = url.pathname.slice('/api/'.length);
+    if (namespace === "software-logos" && url.searchParams.has("slugs")) {
+      try { return json({ logos: await softwareLogoSubset(env.CLIENTS_BUCKET, url.searchParams.get("slugs") || "") }, 200, origin); }
+      catch (error) { return json({ error: error.message || "Logos indisponibles." }, 400, origin); }
+    }
     const logos = {};
     const organizations = [];
     let cursor;

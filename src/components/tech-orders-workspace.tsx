@@ -18,7 +18,8 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { FullPageWorkspace } from "./full-page-workspace";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { authenticatedFetch } from "@/lib/auth-client";
+import { authenticatedFetch, getAdminSession } from "@/lib/auth-client";
+import { techDashboardMemory } from "@/lib/tech-dashboard-memory";
 import { SOFTWARE_ICON_CATALOG } from "@/data/software-icon-catalog";
 import { loadTechSoftwareLogos } from "@/lib/shared-software-logos";
 import { techLogoSource, type TechLogo } from "@/lib/tech-order-logos";
@@ -182,9 +183,14 @@ async function cloudJson(path: string, init?: RequestInit) {
       "Connexion cloud interrompue. Votre saisie est conservée à l’écran. Vérifiez la connexion ; en cas d’enregistrement incertain, contrôlez le registre avant de recréer la vente.",
     );
   }
-  if (response.status === 401)
+  if (response.status === 401) {
+    techDashboardMemory.clear();
     throw Error("Session expirée. Reconnectez-vous avant de poursuivre.");
-  if (response.status === 403) throw Error("Ce registre est réservé aux administrateurs.");
+  }
+  if (response.status === 403) {
+    techDashboardMemory.clear();
+    throw Error("Ce registre est réservé aux administrateurs.");
+  }
   let body;
   try {
     body = await response.json();
@@ -206,11 +212,17 @@ export function TechOrdersWorkspace({
   onOpenChange: (open: boolean) => void;
   standalone?: boolean;
 }) {
-  const [services, setServices] = useState<TechService[]>([]),
-    [orders, setOrders] = useState<TechOrder[]>([]);
+  const [dashboardSession] = useState(getAdminSession);
+  const [initialDashboard] = useState(() => techDashboardMemory.read(dashboardSession));
+  const [services, setServices] = useState<TechService[]>(initialDashboard?.services || []),
+    [orders, setOrders] = useState<TechOrder[]>(initialDashboard?.orders || []);
   const sortedServices = useMemo(() => sortTechServicesByName(services), [services]);
-  const [logos, setLogos] = useState<Record<string, TechLogo>>({});
-  const [finance, setFinance] = useState<TechFinance>(emptyTechFinance);
+  const [logos, setLogos] = useState<Record<string, TechLogo>>(initialDashboard?.logos || {});
+  const [finance, setFinance] = useState<TechFinance>(
+    initialDashboard?.finance || emptyTechFinance,
+  );
+  const [refreshing, setRefreshing] = useState(false);
+  const [stale, setStale] = useState(!!initialDashboard);
   const [financeView, setFinanceView] = useState<"expenses" | "stats">();
   const [financeDirty, setFinanceDirty] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TechOrder>();
@@ -225,7 +237,7 @@ export function TechOrdersWorkspace({
   const logoInput = useRef<HTMLInputElement>(null);
   const writing = useRef(false);
   const [conflict, setConflict] = useState<"logos" | "services" | "orders">();
-  const [loaded, setLoaded] = useState(false),
+  const [loaded, setLoaded] = useState(!!initialDashboard),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const [catalog, setCatalog] = useState(false),
@@ -269,6 +281,8 @@ export function TechOrdersWorkspace({
   }, [filters, orders.length]);
   const load = useCallback(async () => {
     setBusy(true);
+    setRefreshing(true);
+    setStale(true);
     setMessage("");
     try {
       const data = await cloudJson("/api/tech-orders");
@@ -277,12 +291,23 @@ export function TechOrdersWorkspace({
       setLogos(data.logos || {});
       setFinance(data.finance || emptyTechFinance());
       setLoaded(true);
+      setStale(false);
       void loadTechSoftwareLogos(data.services.map((item: TechService) => item.icon));
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      setRefreshing(false);
     }
+  }, []);
+  useEffect(() => {
+    if (loaded && !stale && getAdminSession() === dashboardSession)
+      techDashboardMemory.put(dashboardSession, { services, orders, logos, finance });
+  }, [loaded, stale, dashboardSession, services, orders, logos, finance]);
+  useEffect(() => {
+    const clear = () => techDashboardMemory.clear();
+    window.addEventListener("zgr-cv-session-changed", clear);
+    return () => window.removeEventListener("zgr-cv-session-changed", clear);
   }, []);
   useEffect(() => {
     if (open) {
@@ -994,6 +1019,13 @@ export function TechOrdersWorkspace({
           selected={filters.state}
           onSelect={(state) => setFilters((current) => ({ ...current, state }))}
         />
+        {loaded && stale && (
+          <p role="status" className="text-xs text-slate-500">
+            {refreshing
+              ? "Dernières données en mémoire — vérification cloud en cours…"
+              : "Données non actualisées : vérifiez la connexion puis cliquez sur Actualiser."}
+          </p>
+        )}
         {message && (
           <p role="status" className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm">
             {message}

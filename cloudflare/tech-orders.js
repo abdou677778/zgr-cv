@@ -1,3 +1,4 @@
+import { readTechDashboard } from "./tech-dashboard.js";
 // Separate private namespace: never read or write CV profiles, invitations or MCP data.
 const PREFIX = "tech-orders/v1/";
 const idPattern = /^[a-zA-Z0-9-]{1,80}$/;
@@ -311,36 +312,7 @@ export async function handleTechOrders(request, env, actor, respond) {
     return respond({ error: "Espace financier réservé aux administrateurs." }, 403);
   const path = new URL(request.url).pathname;
   if (path === "/api/tech-orders" && request.method === "GET") {
-    const services = [],
-      orders = [],
-      logos = {};
-    let finance = { id: "main", revision: 0, entries: [] };
-    let cursor;
-    do {
-      const page = await env.CLIENTS_BUCKET.list({
-        prefix: `${PREFIX}current/`,
-        cursor,
-        limit: 500,
-      });
-      // Bounded parallel reads shorten loading without flooding R2 with requests.
-      for (let offset = 0; offset < page.objects.length; offset += 8) {
-        const values = await Promise.all(
-          page.objects.slice(offset, offset + 8).map(async (item) => {
-            const object = await env.CLIENTS_BUCKET.get(item.key);
-            return object ? { key: item.key, value: JSON.parse(await object.text()) } : null;
-          }),
-        );
-        for (const item of values) {
-          if (!item) continue;
-          if (item.key.includes("/logos/")) logos[item.value.id] = item.value;
-          else if (item.key === `${PREFIX}current/finance/main.json`) finance = item.value;
-          else if (item.key.includes("/services/")) services.push(item.value);
-          else if (item.key.includes("/orders/") && !item.value.deletedAt) orders.push(item.value);
-        }
-      }
-      cursor = page.truncated ? page.cursor : undefined;
-    } while (cursor);
-    return respond({ services, orders, logos, finance }, 200);
+    return respond(await readTechDashboard(env.CLIENTS_BUCKET), 200);
   }
   const match = path.match(
     /^\/api\/tech-orders\/(services|orders|logos|finance)\/([a-zA-Z0-9-]{1,80})$/,

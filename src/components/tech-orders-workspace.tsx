@@ -28,6 +28,7 @@ import { techOrderError, techServiceError } from "@/lib/tech-orders-validation";
 import { TechSearchSelect } from "./tech-search-select";
 import { TechRenewalMessage } from "./tech-renewal-message";
 import { TechClientHistory } from "./tech-client-history";
+import { TechPaymentButtons } from "./tech-payment-buttons";
 import { filterTechClientGroups, groupTechClients } from "@/lib/tech-client-groups";
 import { TechFinancePanel } from "./tech-finance-panel";
 import { TechServiceCatalogPanel } from "./tech-service-catalog-panel";
@@ -677,6 +678,39 @@ export function TechOrdersWorkspace({
           "Cette vente a changé dans le cloud. Fermez le message, actualisez le registre puis réessayez. Aucune confirmation enregistrée.",
         );
       throw error;
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  };
+  const changePayment = async (
+    target: TechOrder,
+    paymentStatus: NonNullable<TechOrder["paymentStatus"]>,
+  ) => {
+    if (writing.current || busy || hasDraft || target.paymentStatus === paymentStatus) return;
+    writing.current = true;
+    setBusy(true);
+    setMessage("Enregistrement du statut de paiement…");
+    try {
+      const data = await cloudJson(`/api/tech-orders/orders/${target.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...target, paymentStatus }),
+      });
+      setOrders((current) =>
+        current.map((item) => (item.id === data.record.id ? data.record : item)),
+      );
+      setMessage(
+        `${techOrderLabel(target)} : ${paymentStatus === "paid" ? "Payé" : "Non payé"}. Confirmation manuelle enregistrée ; montants et dates inchangés.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof TechCloudError && error.status === 409
+          ? "Cette vente a changé. Actualisez avant de modifier le paiement ; aucun statut n’a été écrasé."
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
     } finally {
       writing.current = false;
       setBusy(false);
@@ -1585,6 +1619,19 @@ export function TechOrdersWorkspace({
                   </div>
                 </fieldset>
               ))}
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <span className="text-xs font-semibold text-slate-700">
+                  Paiement de cette vente
+                </span>
+                <TechPaymentButtons
+                  order={order}
+                  disabled={busy}
+                  onChange={(paymentStatus) => setOrder({ ...order, paymentStatus })}
+                />
+                <span className="text-[10px] text-slate-500">
+                  Validation manuelle, indépendante de l’état de l’abonnement.
+                </span>
+              </div>
               <Field label="Notes (ne pas saisir de mot de passe ou de numéro de carte)">
                 <Input
                   maxLength={3000}
@@ -1660,6 +1707,8 @@ export function TechOrdersWorkspace({
                 group={group}
                 today={today}
                 mobile
+                paymentDisabled={busy || hasDraft}
+                onPaymentChange={(record, status) => void changePayment(record, status)}
                 logo={(id) => (
                   <Logo service={services.find((s) => s.id === id)} override={logos[id]} />
                 )}
@@ -1688,6 +1737,7 @@ export function TechOrdersWorkspace({
                     "Historique",
                     "Client",
                     "État",
+                    "Paiement",
                     "Services / dates / état",
                     "Coût DA",
                     "Total DA",
@@ -1707,6 +1757,8 @@ export function TechOrdersWorkspace({
                     key={group.key}
                     group={group}
                     today={today}
+                    paymentDisabled={busy || hasDraft}
+                    onPaymentChange={(record, status) => void changePayment(record, status)}
                     logo={(id) => (
                       <Logo service={services.find((s) => s.id === id)} override={logos[id]} />
                     )}
@@ -1718,7 +1770,7 @@ export function TechOrdersWorkspace({
                 ))}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={9} className="p-10 text-center text-slate-500">
+                    <td colSpan={10} className="p-10 text-center text-slate-500">
                       {busy
                         ? "Chargement du cloud…"
                         : loaded

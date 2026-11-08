@@ -53,6 +53,8 @@ export function techServiceError(service: TechService) {
   return prices(service);
 }
 export function techOrderError(order: TechOrder, services: TechService[]) {
+  if (order.paymentStatus !== undefined && !["paid", "unpaid"].includes(order.paymentStatus))
+    return "Choisissez Payé ou Non payé pour le statut de paiement.";
   if (!order.client.trim() || order.client.length > 180)
     return "Saisissez le nom du client (180 caractères maximum).";
   if (!url(order.facebookUrl))

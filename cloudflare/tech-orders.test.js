@@ -141,6 +141,66 @@ const request = (path, body) =>
     body ? { method: "PUT", body: JSON.stringify(body) } : {},
   );
 const respond = (body, status) => Response.json(body, { status });
+test("Payment is manual, versioned, admin-only and preserves amounts, history and legacy statuses", async () => {
+  const env = { CLIENTS_BUCKET: new Bucket() };
+  await handleTechOrders(request("/services/test-service", service), env, actor, respond);
+  const created = await (
+    await handleTechOrders(
+      request("/orders/test-order", { ...order, notes: "Payé dans une ancienne note" }),
+      env,
+      actor,
+      respond,
+    )
+  ).json();
+  assert.equal(created.record.paymentStatus, undefined);
+  const paidInput = { ...created.record, paymentStatus: "paid" };
+  assert.equal(
+    (
+      await handleTechOrders(
+        request("/orders/test-order", paidInput),
+        env,
+        { role: "editor" },
+        respond,
+      )
+    ).status,
+    403,
+  );
+  const paid = await (
+    await handleTechOrders(request("/orders/test-order", paidInput), env, actor, respond)
+  ).json();
+  assert.equal(paid.record.paymentStatus, "paid");
+  assert.deepEqual(paid.record.lines, order.lines);
+  assert.equal(paid.record.notes, created.record.notes);
+  assert.equal(
+    (await handleTechOrders(request("/orders/test-order", paidInput), env, actor, respond)).status,
+    409,
+  );
+  const legacyInput = { ...paid.record };
+  delete legacyInput.paymentStatus;
+  const legacySaved = await (
+    await handleTechOrders(request("/orders/test-order", legacyInput), env, actor, respond)
+  ).json();
+  assert.equal(legacySaved.record.paymentStatus, "paid");
+  const unpaid = await (
+    await handleTechOrders(
+      request("/orders/test-order", { ...legacySaved.record, paymentStatus: "unpaid" }),
+      env,
+      actor,
+      respond,
+    )
+  ).json();
+  assert.equal(unpaid.record.paymentStatus, "unpaid");
+  assert.deepEqual(unpaid.record.lines, order.lines);
+  const reloaded = await (await handleTechOrders(request(""), env, actor, respond)).json();
+  assert.equal(reloaded.orders[0].paymentStatus, "unpaid");
+  assert.ok(
+    [...env.CLIENTS_BUCKET.map.keys()].some((k) =>
+      k.startsWith("tech-orders/v1/history/orders/test-order/"),
+    ),
+  );
+  for (const value of [true, "yes", null, "pending", 123])
+    assert.throws(() => validateTechRecord("orders", { ...order, paymentStatus: value }, order.id));
+});
 test("Saved service details survive cloud reload and reject stale edits without touching sales", async () => {
   const env = { CLIENTS_BUCKET: new Bucket() };
   const payload = { ...service, websiteUrl: "https://example.com", features: "Option A\nميزة" };

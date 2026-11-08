@@ -27,6 +27,7 @@ export type TechLine = {
   invoiceRef: string;
 };
 export type TechOrder = {
+  paymentStatus?: "paid" | "unpaid";
   id: string;
   revision: number;
   client: string;

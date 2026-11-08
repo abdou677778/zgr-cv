@@ -4,6 +4,7 @@ import { lineTotals, techLineStatus, techOrderLabel } from "@/lib/tech-orders";
 import { formatTechMoney as money, formatTechDeadline as date } from "@/lib/tech-order-display";
 import { TechOrderClientLink, TechOrderNote } from "./tech-order-details";
 import { TechContactBadge } from "./tech-contact-badge";
+import { TechPaymentButtons } from "./tech-payment-buttons";
 import type { TechOrder } from "@/lib/tech-orders";
 
 /** Financial detail DOM is mounted only when the user opens this service. */
@@ -29,6 +30,8 @@ export function TechClientHistory({
   menu,
   onContact,
   mobile = false,
+  paymentDisabled = false,
+  onPaymentChange,
 }: {
   group: TechClientGroup;
   today: string;
@@ -36,6 +39,8 @@ export function TechClientHistory({
   menu: ReactNode;
   mobile?: boolean;
   onContact: (order: TechOrder) => void;
+  paymentDisabled?: boolean;
+  onPaymentChange?: (order: TechOrder, status: NonNullable<TechOrder["paymentStatus"]>) => void;
 }) {
   const client = (
     <>
@@ -54,6 +59,26 @@ export function TechClientHistory({
       />
       {group.state === "inactive" ? "Inactif" : group.state === "ending" ? "Expire ≤ 3 j" : "Actif"}
     </span>
+  );
+  const olderUnpaid = group.orders.filter(
+    (order) => order.id !== group.latest.id && order.paymentStatus === "unpaid",
+  ).length;
+  const payment = (
+    <div className="space-y-1">
+      {group.orders.length > 1 && (
+        <span className="text-[10px] text-slate-500">Dernière vente</span>
+      )}
+      <TechPaymentButtons
+        order={group.latest}
+        disabled={paymentDisabled}
+        onChange={onPaymentChange ? (status) => onPaymentChange(group.latest, status) : undefined}
+      />
+      {olderUnpaid > 0 && (
+        <span className="block text-[10px] text-red-700">
+          Historique : {olderUnpaid} vente(s) non payée(s)
+        </span>
+      )}
+    </div>
   );
   const history = (
     <div className="space-y-2">
@@ -141,6 +166,13 @@ export function TechClientHistory({
                         {techOrderLabel(order)}
                       </span>
                       <TechOrderNote notes={order.notes} />
+                      <TechPaymentButtons
+                        order={order}
+                        disabled={paymentDisabled}
+                        onChange={
+                          onPaymentChange ? (status) => onPaymentChange(order, status) : undefined
+                        }
+                      />
                     </div>
                   );
                 })}
@@ -170,6 +202,7 @@ export function TechClientHistory({
           </div>
         </div>
         {history}
+        {payment}
         {totals}
       </article>
     );
@@ -178,6 +211,7 @@ export function TechClientHistory({
       <td className="px-4 py-4">{group.periods.length} période(s)</td>
       <td className="px-4 py-4">{client}</td>
       <td className="px-4 py-4">{status}</td>
+      <td className="min-w-40 px-4 py-4">{payment}</td>
       <td className="min-w-80 px-4 py-4">{history}</td>
       <td className="px-4 py-4 text-right">{money(group.totals.cost)}</td>
       <td className="px-4 py-4 text-right font-bold">{money(group.totals.sale)}</td>

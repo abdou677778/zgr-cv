@@ -185,6 +185,8 @@ export function validateTechRecord(kind, input, id) {
         : { officialInvoiceAvailable: input.officialInvoiceAvailable }),
     };
   }
+  if (input.paymentStatus !== undefined && !["paid", "unpaid"].includes(input.paymentStatus))
+    throw Error("Statut de paiement invalide : payé ou non payé.");
   if (
     !text(input.client, 180) ||
     !input.client.trim() ||
@@ -254,6 +256,7 @@ export function validateTechRecord(kind, input, id) {
     client: input.client.trim(),
     facebookUrl: input.facebookUrl,
     notes: input.notes,
+    ...(input.paymentStatus === undefined ? {} : { paymentStatus: input.paymentStatus }),
     renewalOf: input.renewalOf,
     lines,
   };
@@ -548,6 +551,9 @@ export async function handleTechOrders(request, env, actor, respond) {
   }
   const updated = {
     ...record,
+    ...(match[1] === "orders" && (record.paymentStatus || old?.paymentStatus)
+      ? { paymentStatus: record.paymentStatus ?? old.paymentStatus }
+      : {}),
     revision: input.revision + 1,
     createdAt: old?.createdAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString(),

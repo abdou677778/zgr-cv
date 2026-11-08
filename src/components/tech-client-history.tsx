@@ -77,7 +77,7 @@ export function TechClientHistory({
               className="text-red-700"
               title={`Historique : ${olderUnpaid} vente(s) non payée(s)`}
             >
-              · {olderUnpaid} impayée(s)
+              · hist. {olderUnpaid} impayée(s)
             </span>
           )}
         </div>

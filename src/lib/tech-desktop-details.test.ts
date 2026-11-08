@@ -41,7 +41,7 @@ test("Direct client button uses the stored HTTPS link and rejects unsafe or miss
       /<a\b/,
     );
 });
-test("Desktop and mobile reuse the same action menu with distinct trigger IDs and eight compact columns including payment", () => {
+test("Desktop and mobile reuse the same action menu with distinct trigger IDs and nine spreadsheet columns including payment", () => {
   const source = readFileSync(
     new URL("../components/tech-orders-workspace.tsx", import.meta.url),
     "utf8",
@@ -55,7 +55,7 @@ test("Desktop and mobile reuse the same action menu with distinct trigger IDs an
     "utf8",
   );
   assert.match(history, /<TechOrderNote notes=\{order.notes\}/);
-  assert.match(source, /colSpan=\{8\}/);
+  assert.match(source, /colSpan=\{9\}/);
   assert.match(source, /"Paiement"/);
   assert.match(
     source,

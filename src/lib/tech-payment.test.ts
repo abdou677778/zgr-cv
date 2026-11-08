@@ -76,7 +76,7 @@ test("Both surfaces expose latest-sale payment while preserving independently un
         onPaymentChange: () => {},
       }),
     );
-    assert.match(html, /Dernière vente/);
+    assert.match(html, mobile ? /Dernière vente/ : /Vente de cette période/);
     assert.match(html, /Historique : 1 vente\(s\) non payée/);
     assert.match(html, /bg-emerald-600 text-white/);
   }

@@ -14,6 +14,7 @@ export function FullPageWorkspace({
   actions,
   bodyClassName,
   wrapHeaderActions = false,
+  fullWidth = false,
   backLabel = "Retour à l’accueil",
   children,
 }: {
@@ -26,6 +27,7 @@ export function FullPageWorkspace({
   actions?: ReactNode;
   bodyClassName?: string;
   wrapHeaderActions?: boolean;
+  fullWidth?: boolean;
   backLabel?: string;
   children: ReactNode;
 }) {
@@ -58,7 +60,8 @@ export function FullPageWorkspace({
       <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
         <div
           className={cn(
-            "mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:flex-row sm:items-center",
+            "mx-auto flex w-full flex-col gap-4 sm:flex-row sm:items-center",
+            !fullWidth && "max-w-[1800px]",
             wrapHeaderActions && "sm:flex-wrap",
           )}
         >

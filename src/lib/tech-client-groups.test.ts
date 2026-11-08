@@ -74,11 +74,11 @@ test("Service history has one heading per catalog service, chronological dates a
     assert.equal(
       mobile
         ? (html.match(/<summary[^>]*>Plus d’infos<\/summary>/g) || []).length
-        : (html.match(/aria-label="Plus d’infos — /g) || []).length,
+        : (html.match(/aria-label="Historique et détails — /g) || []).length,
       2,
     );
     assert.doesNotMatch(html, /<details[^>]*\bopen[= >]/);
-    assert.match(html, /text-emerald-700[^>]*>Actif/);
+    assert.match(html, mobile ? /text-emerald-700[^>]*>Actif/ : /Actif<\/span>/);
     if (mobile) assert.match(html, /text-red-700[^>]*>Expiré/);
     // Closed histories do not build hidden financial rows; totals remain visible.
     assert.doesNotMatch(html, /<dt>Achat<\/dt>|<dt>Vente<\/dt>|<dt>Marge<\/dt>/);

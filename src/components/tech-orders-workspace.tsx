@@ -840,6 +840,7 @@ export function TechOrdersWorkspace({
     <FullPageWorkspace
       backLabel={standalone ? "Déconnexion" : "Retour à l’accueil"}
       wrapHeaderActions
+      fullWidth
       open={open}
       onOpenChange={(value) => {
         if (hasDraft && !window.confirm("Quitter sans enregistrer le formulaire en cours ?"))
@@ -945,7 +946,7 @@ export function TechOrdersWorkspace({
       }
       bodyClassName="overflow-y-auto"
     >
-      <div className="mx-auto w-full max-w-[1800px] space-y-5 p-5 sm:p-8">
+      <div className="w-full space-y-5 p-3 sm:p-5 xl:p-6">
         <DialogPrimitive.Root
           open={!!deleteTarget}
           onOpenChange={(open) => {
@@ -1736,35 +1737,37 @@ export function TechOrdersWorkspace({
             aria-busy={filters !== deferredFilters}
           >
             <table
-              className="w-full min-w-[1480px] table-auto text-left text-xs"
-              aria-label="Commandes Tech — montants cumulés par client, paiement de la dernière vente"
+              className="w-full min-w-[1320px] table-auto border-collapse text-left text-xs"
+              aria-label="Commandes Tech — tableau par service, montants cumulés et sous-totaux client"
             >
               <colgroup>
-                <col className="w-[220px]" />
+                <col className="w-[210px]" />
                 <col />
-                <col className="w-[100px]" />
+                <col className="w-[210px]" />
+                <col className="w-[120px]" />
                 <col className="w-[180px]" />
-                <col className="w-[160px]" />
-                <col className="w-[160px]" />
-                <col className="w-[160px]" />
+                <col className="w-[130px]" />
+                <col className="w-[130px]" />
+                <col className="w-[130px]" />
                 <col className="w-14" />
               </colgroup>
-              <thead className="bg-slate-100 text-xs uppercase text-slate-600">
+              <thead className="bg-indigo-100/80 text-[11px] uppercase text-indigo-950">
                 <tr>
                   {[
                     "Client",
-                    "Services / périodes",
+                    "Service",
+                    "Période",
                     "État",
                     "Paiement",
-                    "Coût DA",
-                    "Total DA",
+                    "Achat DA",
+                    "Vente DA",
                     "Marge brute DA",
                     "Actions",
                   ].map((h) => (
                     <th
                       key={h}
                       scope="col"
-                      className={`whitespace-nowrap px-3 py-2.5 ${["Coût DA", "Total DA", "Marge brute DA", "Actions"].includes(h) ? "text-right" : "text-left"}`}
+                      className={`whitespace-nowrap border-b border-r border-indigo-200 px-3 py-3 ${["Achat DA", "Vente DA", "Marge brute DA", "Actions"].includes(h) ? "text-right" : "text-left"}`}
                     >
                       {h}
                     </th>
@@ -1791,7 +1794,7 @@ export function TechOrdersWorkspace({
                 ))}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={8} className="p-10 text-center text-slate-500">
+                    <td colSpan={9} className="p-10 text-center text-slate-500">
                       {busy
                         ? "Chargement du cloud…"
                         : loaded

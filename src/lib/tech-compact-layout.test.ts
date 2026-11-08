@@ -30,7 +30,7 @@ const fixture: TechOrder = {
     },
   ],
 };
-test("Compact desktop has eight aligned cells with atomic monetary values and one-line payment controls", () => {
+test("Spreadsheet desktop has nine aligned cells with atomic money and horizontal payment controls", () => {
   const snapshot = structuredClone(fixture),
     group = groupTechClients([fixture], "2026-11-08")[0];
   const html = renderToStaticMarkup(
@@ -42,9 +42,9 @@ test("Compact desktop has eight aligned cells with atomic monetary values and on
       onContact: () => {},
     }),
   );
-  assert.equal((html.match(/<td\b/g) || []).length, 8);
+  assert.equal((html.match(/<td\b/g) || []).length, 9);
   assert.match(html, /align-middle/);
-  assert.match(html, /whitespace-nowrap px-3 py-2 text-right/);
+  assert.match(html, /whitespace-nowrap text-right tabular-nums/);
   assert.match(html, /tabular-nums/);
   assert.match(html, /Voir la note de/);
   assert.match(html, /title="عميل طويل/);

@@ -10,8 +10,17 @@ import { TechContactBadge } from "./tech-contact-badge";
 import { TechPaymentButtons } from "./tech-payment-buttons";
 import { primaryTechPeriod } from "@/lib/tech-visible-period";
 import type { TechOrder } from "@/lib/tech-orders";
+import { TechSpreadsheetClient } from "./tech-spreadsheet-client";
 
-export function TechClientHistory({
+export function TechClientHistory(props: Parameters<typeof TechMobileClientHistory>[0]) {
+  return props.mobile ? (
+    <TechMobileClientHistory {...props} />
+  ) : (
+    <TechSpreadsheetClient {...props} />
+  );
+}
+
+function TechMobileClientHistory({
   group,
   today,
   logo,
@@ -292,35 +301,15 @@ export function TechClientHistory({
       </article>
     );
   return (
-    <tr
-      data-client-band={rowIndex % 2 ? "alternate" : "base"}
-      className={`group/client border-t-2 border-slate-300/70 align-middle transition-colors hover:bg-indigo-100/60 focus-within:bg-indigo-100/60 ${band}`}
-    >
-      <td className="border-l-[3px] border-l-transparent px-3 py-2 group-hover/client:border-l-indigo-400 group-focus-within/client:border-l-indigo-500">
-        {client}
-      </td>
-      <td className="min-w-[420px] px-3 py-2">{history}</td>
-      <td className="whitespace-nowrap px-3 py-2">{status}</td>
-      <td className="min-w-[180px] px-3 py-2">{payment}</td>
-      <td
-        title="Coût cumulé du client"
-        className="whitespace-nowrap px-3 py-2 text-right tabular-nums"
-      >
-        {money(group.totals.cost)}
-      </td>
-      <td
-        title="Ventes cumulées du client"
-        className="whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums"
-      >
-        {money(group.totals.sale)}
-      </td>
-      <td
-        title="Marge brute cumulée du client"
-        className={`whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums ${group.totals.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
-      >
-        {money(group.totals.margin)}
-      </td>
-      <td className="whitespace-nowrap px-2 py-2 text-right">{menu}</td>
-    </tr>
+    <TechSpreadsheetClient
+      group={group}
+      today={today}
+      logo={logo}
+      menu={menu}
+      rowIndex={rowIndex}
+      onContact={onContact}
+      paymentDisabled={paymentDisabled}
+      onPaymentChange={onPaymentChange}
+    />
   );
 }

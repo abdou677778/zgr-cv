@@ -34,20 +34,29 @@ const order: TechOrder = {
     },
   ],
 };
-test("Payment controls use SVG, explicit labels and separate green/red selected states; legacy data stays unknown", () => {
+test("One payment toggle shows stored state and names the next action; legacy data stays unknown", () => {
   const render = (value: TechOrder) =>
     renderToStaticMarkup(createElement(TechPaymentButtons, { order: value, onChange: () => {} }));
   const unknown = render(order);
   assert.match(unknown, /À renseigner/);
-  assert.equal((unknown.match(/aria-pressed="false"/g) || []).length, 2);
+  assert.equal((unknown.match(/<button\b/g) || []).length, 1);
+  assert.match(unknown, /À renseigner — Marquer TECH-FIXTURE comme payé/);
   const paid = render({ ...order, paymentStatus: "paid" });
   assert.match(paid, /bg-emerald-600 text-white/);
   assert.match(paid, /aria-pressed="true"/);
   assert.doesNotMatch(paid, /À renseigner/);
+  assert.equal((paid.match(/<button\b/g) || []).length, 1);
+  assert.match(paid, /Payé — Marquer TECH-FIXTURE comme non payé/);
   const unpaid = render({ ...order, paymentStatus: "unpaid" });
   assert.match(unpaid, /bg-red-600 text-white/);
   assert.match(unpaid, /<svg/);
   assert.match(unpaid, /Non payé/);
+  assert.equal((unpaid.match(/<button\b/g) || []).length, 1);
+  assert.match(unpaid, /Non payé — Marquer TECH-FIXTURE comme payé/);
+  const locked = renderToStaticMarkup(
+    createElement(TechPaymentButtons, { order, disabled: true, onChange: () => {} }),
+  );
+  assert.match(locked, /disabled=""/);
 });
 test("Payment never changes totals or subscription state and cannot carry into a new sale or renewal", () => {
   const paid = { ...order, paymentStatus: "paid" as const };

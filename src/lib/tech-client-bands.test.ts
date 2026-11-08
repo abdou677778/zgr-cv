@@ -116,7 +116,10 @@ test("One sale with two services keeps one payment scope and a subtotal without 
   assert.deepEqual(group.totals, { cost: 10400, sale: 13200, margin: 2800 });
   assert.match(html, /13.?200,00 DA/);
   assert.equal((html.match(/Paiement commun à cette vente/g) || []).length, 2);
-  assert.equal((html.match(/Marquer TECH-ORDER-0 comme non payé/g) || []).length, 2);
+  assert.equal(
+    (html.match(/aria-label="Payé — Marquer TECH-ORDER-0 comme non payé"/g) || []).length,
+    2,
+  );
   assert.match(html, /rowSpan="3"/i);
   assert.deepEqual(sale, before);
 });

@@ -1705,12 +1705,13 @@ export function TechOrdersWorkspace({
         </section>
         {mobileLayout && (
           <div className="space-y-3 md:hidden" aria-busy={filters !== deferredFilters}>
-            {visible.map((group) => (
+            {visible.map((group, index) => (
               <TechClientHistory
                 key={group.key}
                 group={group}
                 today={today}
                 mobile
+                rowIndex={pageIndex * 25 + index}
                 paymentDisabled={busy || hasDraft}
                 onPaymentChange={(record, status) => void changePayment(record, status)}
                 logo={(id) => (
@@ -1771,10 +1772,11 @@ export function TechOrdersWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {visible.map((group) => (
+                {visible.map((group, index) => (
                   <TechClientHistory
                     key={group.key}
                     group={group}
+                    rowIndex={pageIndex * 25 + index}
                     today={today}
                     paymentDisabled={busy || hasDraft}
                     onPaymentChange={(record, status) => void changePayment(record, status)}

@@ -38,6 +38,7 @@ export function TechCompactServiceHistory({
   onContact,
   paymentDisabled,
   onPaymentChange,
+  maxServices = Infinity,
 }: {
   group: TechClientGroup;
   today: string;
@@ -45,128 +46,131 @@ export function TechCompactServiceHistory({
   onContact: (order: TechOrder) => void;
   paymentDisabled?: boolean;
   onPaymentChange?: (order: TechOrder, status: NonNullable<TechOrder["paymentStatus"]>) => void;
+  maxServices?: number;
 }) {
   return (
     <div className="min-w-0 space-y-1">
       {group.duplicates.size > 0 && <TechDuplicateNotice />}
-      {groupTechServicePeriods(group.periods).map((service) => {
-        const primary = primaryTechPeriod(service.periods, today);
-        if (!primary) return null;
-        const { line } = primary;
-        return (
-          <section
-            key={service.serviceId}
-            aria-label={service.name}
-            className="min-w-0 rounded-md hover:bg-slate-50"
-          >
-            <TechHistoryDisclosure
-              label={`Plus d’infos — ${service.name}`}
-              summary={
-                <div className="flex min-h-8 items-center gap-2 whitespace-nowrap">
-                  <span className="shrink-0">{logo(service.serviceId)}</span>
-                  <strong
-                    title={service.name}
-                    dir="auto"
-                    className="min-w-0 flex-1 truncate text-xs text-slate-800"
-                  >
-                    {service.name}
-                  </strong>
-                  <span className="shrink-0 text-[11px] tabular-nums">
-                    {date(line.start)} → {date(line.end)}
-                  </span>
-                  <PeriodState state={techLineStatus(line, today)} />
-                  <span
-                    className="inline-flex shrink-0 items-center gap-1 text-[10px] text-indigo-700"
-                    title={`${service.periods.length} période(s) — historique chronologique et détails`}
-                  >
-                    {service.periods.length > 1 && (
-                      <span className="rounded bg-indigo-50 px-1">{service.periods.length}</span>
-                    )}
-                    <ChevronDown
-                      aria-hidden="true"
-                      className="h-3.5 w-3.5 transition-transform group-open:rotate-180"
-                    />
-                  </span>
-                </div>
-              }
+      {groupTechServicePeriods(group.periods)
+        .slice(0, maxServices)
+        .map((service) => {
+          const primary = primaryTechPeriod(service.periods, today);
+          if (!primary) return null;
+          const { line } = primary;
+          return (
+            <section
+              key={service.serviceId}
+              aria-label={service.name}
+              className="min-w-0 rounded-md"
             >
-              {() => (
-                <div className="my-2 space-y-2 border-l-2 border-indigo-100 pl-3">
-                  {service.periods.map(({ order, line: period }) => {
-                    const total = lineTotals(period);
-                    return (
-                      <div
-                        key={`${order.id}:${period.id}`}
-                        className={`space-y-2 rounded-lg border p-3 ${group.duplicates.has(`${order.id}:${period.id}`) ? "border-amber-300 bg-amber-50" : "border-slate-100 bg-slate-50"}`}
-                      >
-                        <div className="flex items-center justify-between gap-3 whitespace-nowrap">
-                          <span className="text-[11px] tabular-nums">
-                            {date(period.start)} → {date(period.end)}
-                          </span>
-                          <PeriodState state={techLineStatus(period, today)} />
+              <TechHistoryDisclosure
+                label={`Plus d’infos — ${service.name}`}
+                summary={
+                  <div className="flex min-h-8 items-center gap-2 whitespace-nowrap">
+                    <span className="shrink-0">{logo(service.serviceId)}</span>
+                    <strong
+                      title={service.name}
+                      dir="auto"
+                      className="min-w-0 flex-1 truncate text-xs text-slate-800"
+                    >
+                      {service.name}
+                    </strong>
+                    <span className="shrink-0 text-[11px] tabular-nums">
+                      {date(line.start)} → {date(line.end)}
+                    </span>
+                    <PeriodState state={techLineStatus(line, today)} />
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1 text-[10px] text-indigo-700"
+                      title={`${service.periods.length} période(s) — historique chronologique et détails`}
+                    >
+                      {service.periods.length > 1 && (
+                        <span className="rounded bg-indigo-50 px-1">{service.periods.length}</span>
+                      )}
+                      <ChevronDown
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5 transition-transform group-open:rotate-180"
+                      />
+                    </span>
+                  </div>
+                }
+              >
+                {() => (
+                  <div className="my-2 space-y-2 border-l-2 border-indigo-100 pl-3">
+                    {service.periods.map(({ order, line: period }) => {
+                      const total = lineTotals(period);
+                      return (
+                        <div
+                          key={`${order.id}:${period.id}`}
+                          className={`space-y-2 rounded-lg border p-3 ${group.duplicates.has(`${order.id}:${period.id}`) ? "border-amber-300 bg-amber-50" : "border-slate-100 bg-slate-50"}`}
+                        >
+                          <div className="flex items-center justify-between gap-3 whitespace-nowrap">
+                            <span className="text-[11px] tabular-nums">
+                              {date(period.start)} → {date(period.end)}
+                            </span>
+                            <PeriodState state={techLineStatus(period, today)} />
+                          </div>
+                          <dl className="flex flex-wrap gap-x-5 gap-y-2 text-[11px]">
+                            <div>
+                              <dt>Achat</dt>
+                              <dd className="whitespace-nowrap font-semibold tabular-nums">
+                                {money(total.cost)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Vente</dt>
+                              <dd className="whitespace-nowrap font-semibold tabular-nums">
+                                {money(total.sale)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Marge</dt>
+                              <dd
+                                className={`whitespace-nowrap font-semibold tabular-nums ${total.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
+                              >
+                                {money(total.margin)}
+                              </dd>
+                            </div>
+                          </dl>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="text-[10px] text-slate-400">
+                              {techOrderLabel(order)}
+                            </span>
+                            <TechPaymentButtons
+                              compact
+                              order={order}
+                              disabled={paymentDisabled}
+                              onChange={
+                                onPaymentChange
+                                  ? (status) => onPaymentChange(order, status)
+                                  : undefined
+                              }
+                            />
+                          </div>
+                          <TechOrderNote notes={order.notes} />
                         </div>
-                        <dl className="flex flex-wrap gap-x-5 gap-y-2 text-[11px]">
-                          <div>
-                            <dt>Achat</dt>
-                            <dd className="whitespace-nowrap font-semibold tabular-nums">
-                              {money(total.cost)}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Vente</dt>
-                            <dd className="whitespace-nowrap font-semibold tabular-nums">
-                              {money(total.sale)}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Marge</dt>
-                            <dd
-                              className={`whitespace-nowrap font-semibold tabular-nums ${total.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
-                            >
-                              {money(total.margin)}
-                            </dd>
-                          </div>
-                        </dl>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className="text-[10px] text-slate-400">
-                            {techOrderLabel(order)}
-                          </span>
-                          <TechPaymentButtons
-                            compact
-                            order={order}
-                            disabled={paymentDisabled}
-                            onChange={
-                              onPaymentChange
-                                ? (status) => onPaymentChange(order, status)
-                                : undefined
-                            }
-                          />
-                        </div>
-                        <TechOrderNote notes={order.notes} />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </TechHistoryDisclosure>
-            {service.periods
-              .filter(
-                (p) =>
-                  techLineStatus(p.line, today) === "Expiré" &&
-                  !service.periods.some(
-                    (next) => next.line.start > p.line.start && next.line.start <= today,
-                  ),
-              )
-              .map((p) => (
-                <TechContactBadge
-                  key={`${p.order.id}:${p.line.id}`}
-                  line={p.line}
-                  onClick={() => onContact(p.order)}
-                />
-              ))}
-          </section>
-        );
-      })}
+                      );
+                    })}
+                  </div>
+                )}
+              </TechHistoryDisclosure>
+              {service.periods
+                .filter(
+                  (p) =>
+                    techLineStatus(p.line, today) === "Expiré" &&
+                    !service.periods.some(
+                      (next) => next.line.start > p.line.start && next.line.start <= today,
+                    ),
+                )
+                .map((p) => (
+                  <TechContactBadge
+                    key={`${p.order.id}:${p.line.id}`}
+                    line={p.line}
+                    onClick={() => onContact(p.order)}
+                  />
+                ))}
+            </section>
+          );
+        })}
     </div>
   );
 }

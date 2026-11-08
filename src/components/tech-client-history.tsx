@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { groupTechServicePeriods, type TechClientGroup } from "@/lib/tech-client-groups";
 import { lineTotals, techLineStatus, techOrderLabel } from "@/lib/tech-orders";
 import { formatTechMoney as money, formatTechDeadline as date } from "@/lib/tech-order-display";
@@ -8,6 +8,7 @@ import { TechHistoryDisclosure } from "./tech-history-disclosure";
 export { TechHistoryDisclosure } from "./tech-history-disclosure";
 import { TechContactBadge } from "./tech-contact-badge";
 import { TechPaymentButtons } from "./tech-payment-buttons";
+import { primaryTechPeriod } from "@/lib/tech-visible-period";
 import type { TechOrder } from "@/lib/tech-orders";
 
 export function TechClientHistory({
@@ -19,6 +20,7 @@ export function TechClientHistory({
   mobile = false,
   paymentDisabled = false,
   onPaymentChange,
+  rowIndex = 0,
 }: {
   group: TechClientGroup;
   today: string;
@@ -28,10 +30,33 @@ export function TechClientHistory({
   onContact: (order: TechOrder) => void;
   paymentDisabled?: boolean;
   onPaymentChange?: (order: TechOrder, status: NonNullable<TechOrder["paymentStatus"]>) => void;
+  rowIndex?: number;
 }) {
+  const [allServices, setAllServices] = useState(false);
+  const serviceListId = useId();
+  const services = useMemo(() => groupTechServicePeriods(group.periods), [group.periods]);
+  const visibleServices = allServices ? services : services.slice(0, 2);
+  const counts = `${services.length} service${services.length > 1 ? "s" : ""} · ${group.periods.length} période${group.periods.length > 1 ? "s" : ""}`;
+  const band = rowIndex % 2 ? "bg-indigo-50/50" : "bg-white";
+  const hiddenStates = allServices
+    ? []
+    : services.slice(2).map((service) => {
+        const primary = primaryTechPeriod(service.periods, today);
+        return primary ? techLineStatus(primary.line, today) : "";
+      });
+  const hiddenEnding = hiddenStates.filter((state) => state === "Expire sous 3 jours").length;
+  const hiddenExpired = hiddenStates.filter((state) => state === "Expiré").length;
+  const countBadge = (
+    <span className="inline-flex whitespace-nowrap rounded border border-slate-200/80 bg-white/70 px-1.5 py-0.5 text-[10px] text-slate-600">
+      {counts}
+    </span>
+  );
   const client = mobile ? (
     <>
-      <strong className="text-indigo-700">{group.latest.client}</strong>
+      <div className="flex flex-wrap items-center gap-2">
+        <strong className="text-indigo-700">{group.latest.client}</strong>
+        {countBadge}
+      </div>
       <div className="mt-1">
         <TechOrderClientLink client={group.latest.client} url={group.latest.facebookUrl} />
       </div>
@@ -49,9 +74,7 @@ export function TechClientHistory({
         <TechOrderClientLink compact client={group.latest.client} url={group.latest.facebookUrl} />
         <TechOrderNoteButton client={group.latest.client} notes={group.latest.notes} />
       </div>
-      <span className="inline-flex whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
-        {group.periods.length} période(s)
-      </span>
+      {countBadge}
     </div>
   );
   const status = (
@@ -95,10 +118,10 @@ export function TechClientHistory({
       )}
     </div>
   );
-  const history = mobile ? (
+  const historyContent = mobile ? (
     <div className="space-y-2">
       {group.duplicates.size > 0 && <TechDuplicateNotice />}
-      {groupTechServicePeriods(group.periods).map((service) => (
+      {visibleServices.map((service) => (
         <section
           key={service.serviceId}
           aria-label={service.name}
@@ -204,7 +227,38 @@ export function TechClientHistory({
       onContact={onContact}
       paymentDisabled={paymentDisabled}
       onPaymentChange={onPaymentChange}
+      maxServices={allServices ? services.length : 2}
     />
+  );
+  const history = (
+    <div id={serviceListId} className="min-w-0">
+      {historyContent}
+      {services.length > 2 && (
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            aria-expanded={allServices}
+            aria-controls={serviceListId}
+            onClick={() => setAllServices((value) => !value)}
+            className="inline-flex min-h-8 items-center whitespace-nowrap rounded-md border border-indigo-200 bg-white/80 px-2 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+          >
+            {allServices
+              ? "Réduire les services"
+              : `+${services.length - 2} autre${services.length - 2 > 1 ? "s" : ""} service${services.length - 2 > 1 ? "s" : ""}`}
+          </button>
+          {!!hiddenEnding && (
+            <span role="status" className="text-[10px] font-medium text-amber-800">
+              {hiddenEnding} {hiddenEnding > 1 ? "expirent" : "expire"} ≤ 3 j
+            </span>
+          )}
+          {!!hiddenExpired && (
+            <span role="status" className="text-[10px] font-medium text-red-700">
+              {hiddenExpired} {hiddenExpired > 1 ? "services expirés" : "service expiré"}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
   const totals = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums">
@@ -222,7 +276,9 @@ export function TechClientHistory({
   );
   if (mobile)
     return (
-      <article className="space-y-2 rounded-xl border bg-white p-3">
+      <article
+        className={`space-y-2 rounded-xl border border-slate-300/80 p-3 shadow-sm transition-colors focus-within:bg-indigo-100/50 ${band}`}
+      >
         <div className="flex items-start justify-between gap-2">
           <div>{client}</div>
           <div>
@@ -236,8 +292,13 @@ export function TechClientHistory({
       </article>
     );
   return (
-    <tr className="border-t border-slate-100 align-middle hover:bg-slate-50/60">
-      <td className="px-3 py-2">{client}</td>
+    <tr
+      data-client-band={rowIndex % 2 ? "alternate" : "base"}
+      className={`group/client border-t-2 border-slate-300/70 align-middle transition-colors hover:bg-indigo-100/60 focus-within:bg-indigo-100/60 ${band}`}
+    >
+      <td className="border-l-[3px] border-l-transparent px-3 py-2 group-hover/client:border-l-indigo-400 group-focus-within/client:border-l-indigo-500">
+        {client}
+      </td>
       <td className="min-w-[420px] px-3 py-2">{history}</td>
       <td className="whitespace-nowrap px-3 py-2">{status}</td>
       <td className="min-w-[180px] px-3 py-2">{payment}</td>

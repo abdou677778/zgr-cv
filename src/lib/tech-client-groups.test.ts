@@ -71,13 +71,19 @@ test("Service history has one heading per catalog service, chronological dates a
     );
     assert.equal((html.match(/<strong[^>]*>ChatGPT Go<\/strong>/g) || []).length, 1);
     assert.equal((html.match(/<strong[^>]*>ChatGPT Plus<\/strong>/g) || []).length, 1);
-    assert.equal((html.match(/<summary[^>]*>Plus d’infos<\/summary>/g) || []).length, 2);
+    assert.equal(
+      mobile
+        ? (html.match(/<summary[^>]*>Plus d’infos<\/summary>/g) || []).length
+        : (html.match(/aria-label="Plus d’infos — /g) || []).length,
+      2,
+    );
     assert.doesNotMatch(html, /<details[^>]*\bopen[= >]/);
     assert.match(html, /text-emerald-700[^>]*>Actif/);
-    assert.match(html, /text-red-700[^>]*>Expiré/);
+    if (mobile) assert.match(html, /text-red-700[^>]*>Expiré/);
     // Closed histories do not build hidden financial rows; totals remain visible.
     assert.doesNotMatch(html, /<dt>Achat<\/dt>|<dt>Vente<\/dt>|<dt>Marge<\/dt>/);
-    assert.ok(html.indexOf("22/08/2026") < html.indexOf("24/10/2026"));
+    if (mobile) assert.ok(html.indexOf("22/08/2026") < html.indexOf("24/10/2026"));
+    else assert.doesNotMatch(html, /22\/08\/2026/); // Old periods mount on demand.
   }
 });
 test("One client, chronological periods, independent prices and exact ledger totals", () => {

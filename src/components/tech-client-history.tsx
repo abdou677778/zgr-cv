@@ -1,27 +1,14 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { groupTechServicePeriods, type TechClientGroup } from "@/lib/tech-client-groups";
 import { lineTotals, techLineStatus, techOrderLabel } from "@/lib/tech-orders";
 import { formatTechMoney as money, formatTechDeadline as date } from "@/lib/tech-order-display";
-import { TechOrderClientLink, TechOrderNote } from "./tech-order-details";
+import { TechOrderClientLink, TechOrderNote, TechOrderNoteButton } from "./tech-order-details";
+import { TechCompactServiceHistory, TechDuplicateNotice } from "./tech-compact-service-history";
+import { TechHistoryDisclosure } from "./tech-history-disclosure";
+export { TechHistoryDisclosure } from "./tech-history-disclosure";
 import { TechContactBadge } from "./tech-contact-badge";
 import { TechPaymentButtons } from "./tech-payment-buttons";
 import type { TechOrder } from "@/lib/tech-orders";
-
-/** Financial detail DOM is mounted only when the user opens this service. */
-export function TechHistoryDisclosure({ children }: { children: () => ReactNode }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <details
-      className="group mt-1.5 text-xs text-slate-600"
-      onToggle={(event) => setExpanded(event.currentTarget.open)}
-    >
-      <summary className="cursor-pointer rounded py-1 font-medium text-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
-        Plus d’infos
-      </summary>
-      {expanded && children()}
-    </details>
-  );
-}
 
 export function TechClientHistory({
   group,
@@ -42,13 +29,30 @@ export function TechClientHistory({
   paymentDisabled?: boolean;
   onPaymentChange?: (order: TechOrder, status: NonNullable<TechOrder["paymentStatus"]>) => void;
 }) {
-  const client = (
+  const client = mobile ? (
     <>
       <strong className="text-indigo-700">{group.latest.client}</strong>
       <div className="mt-1">
         <TechOrderClientLink client={group.latest.client} url={group.latest.facebookUrl} />
       </div>
     </>
+  ) : (
+    <div className="max-w-56">
+      <div className="flex min-w-0 items-center gap-1">
+        <strong
+          dir="auto"
+          title={group.latest.client}
+          className="min-w-0 flex-1 truncate text-[13px] text-indigo-700"
+        >
+          {group.latest.client}
+        </strong>
+        <TechOrderClientLink compact client={group.latest.client} url={group.latest.facebookUrl} />
+        <TechOrderNoteButton client={group.latest.client} notes={group.latest.notes} />
+      </div>
+      <span className="inline-flex whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+        {group.periods.length} période(s)
+      </span>
+    </div>
   );
   const status = (
     <span
@@ -66,28 +70,34 @@ export function TechClientHistory({
   const payment = (
     <div className="space-y-1">
       {group.orders.length > 1 && (
-        <span className="text-[10px] text-slate-500">Dernière vente</span>
+        <div className="flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-500">
+          <span>Dernière vente</span>
+          {!mobile && olderUnpaid > 0 && (
+            <span
+              className="text-red-700"
+              title={`Historique : ${olderUnpaid} vente(s) non payée(s)`}
+            >
+              · {olderUnpaid} impayée(s)
+            </span>
+          )}
+        </div>
       )}
       <TechPaymentButtons
+        compact={!mobile}
         order={group.latest}
         disabled={paymentDisabled}
         onChange={onPaymentChange ? (status) => onPaymentChange(group.latest, status) : undefined}
       />
-      {olderUnpaid > 0 && (
+      {mobile && olderUnpaid > 0 && (
         <span className="block text-[10px] text-red-700">
           Historique : {olderUnpaid} vente(s) non payée(s)
         </span>
       )}
     </div>
   );
-  const history = (
+  const history = mobile ? (
     <div className="space-y-2">
-      {group.duplicates.size > 0 && (
-        <p role="status" className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
-          Doublons possibles : montants à vérifier avant suppression. Totaux du registre non
-          corrigés automatiquement.
-        </p>
-      )}
+      {group.duplicates.size > 0 && <TechDuplicateNotice />}
       {groupTechServicePeriods(group.periods).map((service) => (
         <section
           key={service.serviceId}
@@ -144,19 +154,23 @@ export function TechClientHistory({
                       <div className="text-[11px] font-semibold tabular-nums">
                         {date(line.start)} → {date(line.end)}
                       </div>
-                      <dl className="grid grid-cols-3 gap-1 text-[11px]">
+                      <dl className="flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
                         <div>
                           <dt>Achat</dt>
-                          <dd className="font-semibold">{money(total.cost)}</dd>
+                          <dd className="whitespace-nowrap font-semibold tabular-nums">
+                            {money(total.cost)}
+                          </dd>
                         </div>
                         <div>
                           <dt>Vente</dt>
-                          <dd className="font-semibold">{money(total.sale)}</dd>
+                          <dd className="whitespace-nowrap font-semibold tabular-nums">
+                            {money(total.sale)}
+                          </dd>
                         </div>
                         <div>
                           <dt>Marge</dt>
                           <dd
-                            className={`font-semibold ${total.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
+                            className={`whitespace-nowrap font-semibold tabular-nums ${total.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
                           >
                             {money(total.margin)}
                           </dd>
@@ -182,13 +196,28 @@ export function TechClientHistory({
         </section>
       ))}
     </div>
+  ) : (
+    <TechCompactServiceHistory
+      group={group}
+      today={today}
+      logo={logo}
+      onContact={onContact}
+      paymentDisabled={paymentDisabled}
+      onPaymentChange={onPaymentChange}
+    />
   );
   const totals = (
-    <div className="text-xs">
-      Ventes <b>{money(group.totals.sale)}</b> · Coûts {money(group.totals.cost)} · Marge{" "}
-      <b className={group.totals.margin < 0 ? "text-red-700" : "text-emerald-700"}>
-        {money(group.totals.margin)}
-      </b>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums">
+      <span className="whitespace-nowrap">
+        Ventes <b>{money(group.totals.sale)}</b>
+      </span>
+      <span className="whitespace-nowrap">Coûts {money(group.totals.cost)}</span>
+      <span className="whitespace-nowrap">
+        Marge{" "}
+        <b className={group.totals.margin < 0 ? "text-red-700" : "text-emerald-700"}>
+          {money(group.totals.margin)}
+        </b>
+      </span>
     </div>
   );
   if (mobile)
@@ -207,23 +236,30 @@ export function TechClientHistory({
       </article>
     );
   return (
-    <tr className="border-t align-top">
-      <td className="px-4 py-4">{group.periods.length} période(s)</td>
-      <td className="px-4 py-4">{client}</td>
-      <td className="px-4 py-4">{status}</td>
-      <td className="min-w-40 px-4 py-4">{payment}</td>
-      <td className="min-w-80 px-4 py-4">{history}</td>
-      <td className="px-4 py-4 text-right">{money(group.totals.cost)}</td>
-      <td className="px-4 py-4 text-right font-bold">{money(group.totals.sale)}</td>
+    <tr className="border-t border-slate-100 align-middle hover:bg-slate-50/60">
+      <td className="px-3 py-2">{client}</td>
+      <td className="min-w-[420px] px-3 py-2">{history}</td>
+      <td className="whitespace-nowrap px-3 py-2">{status}</td>
+      <td className="min-w-[180px] px-3 py-2">{payment}</td>
       <td
-        className={`px-4 py-4 text-right font-bold ${group.totals.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
+        title="Coût cumulé du client"
+        className="whitespace-nowrap px-3 py-2 text-right tabular-nums"
+      >
+        {money(group.totals.cost)}
+      </td>
+      <td
+        title="Ventes cumulées du client"
+        className="whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums"
+      >
+        {money(group.totals.sale)}
+      </td>
+      <td
+        title="Marge brute cumulée du client"
+        className={`whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums ${group.totals.margin < 0 ? "text-red-700" : "text-emerald-700"}`}
       >
         {money(group.totals.margin)}
       </td>
-      <td className="max-w-60 px-4 py-4">
-        <TechOrderNote notes={group.latest.notes} />
-      </td>
-      <td className="px-4 py-4">{menu}</td>
+      <td className="whitespace-nowrap px-2 py-2 text-right">{menu}</td>
     </tr>
   );
 }

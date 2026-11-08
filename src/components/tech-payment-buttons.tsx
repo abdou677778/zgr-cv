@@ -6,10 +6,12 @@ export function TechPaymentButtons({
   order,
   disabled = false,
   onChange,
+  compact = false,
 }: {
   order: TechOrder;
   disabled?: boolean;
   onChange?: (status: NonNullable<TechOrder["paymentStatus"]>) => void;
+  compact?: boolean;
 }) {
   const label = techOrderLabel(order);
   return (
@@ -17,7 +19,7 @@ export function TechPaymentButtons({
       <div
         role="group"
         aria-label={`Paiement de ${label}`}
-        className="inline-flex flex-wrap items-center gap-1"
+        className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap"
       >
         <button
           type="button"
@@ -26,7 +28,7 @@ export function TechPaymentButtons({
           title="Paiement confirmé manuellement — aucune vérification bancaire automatique"
           disabled={disabled || !onChange || order.paymentStatus === "paid"}
           onClick={() => onChange?.("paid")}
-          className={`inline-flex min-h-9 items-center justify-center gap-1 rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-default ${order.paymentStatus === "paid" ? "border-emerald-600 bg-emerald-600 text-white" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"}`}
+          className={`inline-flex shrink-0 ${compact ? "min-h-8" : "min-h-10"} items-center justify-center gap-1 whitespace-nowrap rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-default ${order.paymentStatus === "paid" ? "border-emerald-600 bg-emerald-600 text-white" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"}`}
         >
           <BadgeCheck aria-hidden="true" className="h-4 w-4 shrink-0" />
           Payé
@@ -38,7 +40,7 @@ export function TechPaymentButtons({
           title="Paiement non reçu ou non confirmé : saisie manuelle"
           disabled={disabled || !onChange || order.paymentStatus === "unpaid"}
           onClick={() => onChange?.("unpaid")}
-          className={`inline-flex min-h-9 items-center justify-center gap-1 rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-default ${order.paymentStatus === "unpaid" ? "border-red-600 bg-red-600 text-white" : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-300"}`}
+          className={`inline-flex shrink-0 ${compact ? "min-h-8" : "min-h-10"} items-center justify-center gap-1 whitespace-nowrap rounded-lg border px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-default ${order.paymentStatus === "unpaid" ? "border-red-600 bg-red-600 text-white" : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-300"}`}
         >
           <BadgeX aria-hidden="true" className="h-4 w-4 shrink-0" />
           Non payé

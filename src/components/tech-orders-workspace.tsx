@@ -449,14 +449,18 @@ export function TechOrdersWorkspace({
         <DropdownMenuTrigger asChild>
           <Button
             id={triggerId}
-            size={surface === "mobile" ? "icon" : "sm"}
+            size="icon"
             variant={surface === "mobile" ? "ghost" : "outline"}
             disabled={busy}
-            className={surface === "mobile" ? "h-10 w-10 text-indigo-700" : "gap-1 text-indigo-700"}
+            className={
+              surface === "mobile"
+                ? "h-10 w-10 shrink-0 text-indigo-700"
+                : "h-8 w-8 shrink-0 text-indigo-700"
+            }
+            title={`Actions pour ${item.client}`}
             aria-label={`Actions pour ${item.client}`}
           >
             <MoreVertical className="h-5 w-5" />
-            {surface === "desktop" && <span>Actions</span>}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -1730,22 +1734,37 @@ export function TechOrdersWorkspace({
             className="hidden overflow-x-auto rounded-xl border bg-white md:block"
             aria-busy={filters !== deferredFilters}
           >
-            <table className="w-full min-w-[1050px] text-left text-sm">
+            <table
+              className="w-full min-w-[1480px] table-auto text-left text-xs"
+              aria-label="Commandes Tech — montants cumulés par client, paiement de la dernière vente"
+            >
+              <colgroup>
+                <col className="w-[220px]" />
+                <col />
+                <col className="w-[100px]" />
+                <col className="w-[180px]" />
+                <col className="w-[160px]" />
+                <col className="w-[160px]" />
+                <col className="w-[160px]" />
+                <col className="w-14" />
+              </colgroup>
               <thead className="bg-slate-100 text-xs uppercase text-slate-600">
                 <tr>
                   {[
-                    "Historique",
                     "Client",
+                    "Services / périodes",
                     "État",
                     "Paiement",
-                    "Services / dates / état",
                     "Coût DA",
                     "Total DA",
                     "Marge brute DA",
-                    "Note",
                     "Actions",
                   ].map((h) => (
-                    <th key={h} className="whitespace-nowrap px-4 py-3">
+                    <th
+                      key={h}
+                      scope="col"
+                      className={`whitespace-nowrap px-3 py-2.5 ${["Coût DA", "Total DA", "Marge brute DA", "Actions"].includes(h) ? "text-right" : "text-left"}`}
+                    >
                       {h}
                     </th>
                   ))}
@@ -1770,7 +1789,7 @@ export function TechOrdersWorkspace({
                 ))}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={10} className="p-10 text-center text-slate-500">
+                    <td colSpan={8} className="p-10 text-center text-slate-500">
                       {busy
                         ? "Chargement du cloud…"
                         : loaded

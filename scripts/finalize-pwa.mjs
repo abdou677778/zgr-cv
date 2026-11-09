@@ -86,6 +86,7 @@ const assetUrls = [...indexHtml.matchAll(/(?:src|href)="(\.\/assets\/[^"]+)"/g)]
 );
 const precacheUrls = [
   "./index.html",
+  "./startup-recovery.js",
   "./manifest.webmanifest",
   "./icons/zgr-cv-192.png",
   "./icons/zgr-cv-512.png",

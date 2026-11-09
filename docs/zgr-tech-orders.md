@@ -80,6 +80,15 @@ aucun paiement et ne produit pas de fausse facture fournisseur.
 
 ## Accès mobile privé et APK
 
+Correctif de reprise du 9 novembre 2026 : APK local 1.0.3, code version 4,
+signé avec la clé locale existante. Gestion des erreurs HTTP principales, du
+processus WebView arrêté et du démarrage vide après 35 secondes ; écran natif
+avec version WebView, réessai sans effacer les données et accès au Play Store.
+Le site affiche aussi un écran de démarrage/reprise avant JavaScript et une
+limite d’erreur React. La cause sur le Samsung M31 Android 12 signalé reste
+à confirmer sur le téléphone : aucun appareil Android n’était connecté pour
+un test natif. Aucun compte ni paiement réel n’a été modifié pendant ces tests.
+
 L’adresse dédiée est `https://zgr-cv.pages.dev/?workspace=tech-orders`. Elle utilise
 la connexion existante et ne monte pas l’éditeur CV. Le rôle administrateur reste
 obligatoire côté serveur ; cette adresse n’est pas un lien d’accès sans connexion.

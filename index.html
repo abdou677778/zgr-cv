@@ -22,7 +22,15 @@
     <title>ZGR CV — Modèle Canadien (FR) avec export PDF ATS</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main id="zgr-startup" style="max-width: 420px; margin: 12vh auto; padding: 24px; font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6">
+        <h1 style="color: #4338ca">ZGR</h1>
+        <p id="zgr-startup-message" role="status">Démarrage sécurisé de l’application…</p>
+        <button id="zgr-startup-retry" type="button" hidden style="padding: 12px 18px; border: 0; border-radius: 10px; background: #4338ca; color: white; font-weight: bold">Réessayer</button>
+        <noscript>JavaScript doit être activé pour ouvrir cette application.</noscript>
+      </main>
+    </div>
+    <script src="./startup-recovery.js"></script>
     <script type="module" src="/src/spa-main.tsx"></script>
   </body>
 </html>

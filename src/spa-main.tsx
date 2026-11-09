@@ -5,6 +5,7 @@ import Index from "./routes/index";
 import { startObservability } from "./lib/observability";
 import { registerPwa } from "./lib/pwa-client";
 import "./styles.css";
+import { AppStartupBoundary } from "./components/app-startup-boundary";
 
 const queryClient = new QueryClient();
 
@@ -22,7 +23,9 @@ startObservability();
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <Index />
+      <AppStartupBoundary>
+        <Index />
+      </AppStartupBoundary>
     </QueryClientProvider>
   </React.StrictMode>,
 );

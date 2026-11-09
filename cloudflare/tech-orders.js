@@ -1,4 +1,5 @@
 import { readTechDashboard } from "./tech-dashboard.js";
+import { handleTechCredentials } from "./tech-credentials.js";
 // Separate private namespace: never read or write CV profiles, invitations or MCP data.
 const PREFIX = "tech-orders/v1/";
 const idPattern = /^[a-zA-Z0-9-]{1,80}$/;
@@ -314,6 +315,8 @@ export async function handleTechOrders(request, env, actor, respond) {
   if (actor.role !== "admin")
     return respond({ error: "Espace financier réservé aux administrateurs." }, 403);
   const path = new URL(request.url).pathname;
+  if (/^\/api\/tech-orders\/orders\/[^/]+\/credentials(?:\/reveal)?$/.test(path))
+    return handleTechCredentials(request, env, actor, respond);
   if (path === "/api/tech-orders" && request.method === "GET") {
     return respond(await readTechDashboard(env.CLIENTS_BUCKET), 200);
   }

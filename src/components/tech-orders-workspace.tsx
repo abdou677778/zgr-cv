@@ -28,6 +28,7 @@ import { techOrderError, techServiceError } from "@/lib/tech-orders-validation";
 import { TechSearchSelect } from "./tech-search-select";
 import { TechRenewalMessage } from "./tech-renewal-message";
 import { TechClientHistory } from "./tech-client-history";
+import { TechClientCredentials } from "./tech-client-credentials";
 import { TechPaymentButtons } from "./tech-payment-buttons";
 import { filterTechClientGroups, groupTechClients } from "@/lib/tech-client-groups";
 import { TechFinancePanel } from "./tech-finance-panel";
@@ -227,6 +228,7 @@ export function TechOrdersWorkspace({
   const [financeView, setFinanceView] = useState<"expenses" | "stats">();
   const [financeDirty, setFinanceDirty] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TechOrder>();
+  const [credentialsOrder, setCredentialsOrder] = useState<TechOrder>();
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   useEffect(() => {
     if (financeView)
@@ -473,6 +475,14 @@ export function TechOrdersWorkspace({
               document.getElementById(triggerId)?.focus({ preventScroll: true });
           }}
         >
+          <DropdownMenuItem
+            disabled={disabled}
+            className="min-h-11 rounded-lg"
+            onSelect={() => setCredentialsOrder(item)}
+          >
+            <Receipt /> E-mail et mot de passe
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           {history.length > 1 && (
             <>
               <div className="px-2 py-1 text-xs font-semibold text-slate-500">
@@ -947,6 +957,13 @@ export function TechOrdersWorkspace({
       bodyClassName="overflow-y-auto"
     >
       <div className="w-full space-y-5 p-3 sm:p-5 xl:p-6">
+        {credentialsOrder && (
+          <TechClientCredentials
+            key={credentialsOrder.id}
+            order={credentialsOrder}
+            onClose={() => setCredentialsOrder(undefined)}
+          />
+        )}
         <DialogPrimitive.Root
           open={!!deleteTarget}
           onOpenChange={(open) => {
@@ -1637,7 +1654,7 @@ export function TechOrdersWorkspace({
                   Validation manuelle, indépendante de l’état de l’abonnement.
                 </span>
               </div>
-              <Field label="Notes (ne pas saisir de mot de passe ou de numéro de carte)">
+              <Field label="Notes">
                 <Input
                   maxLength={3000}
                   value={order.notes}

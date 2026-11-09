@@ -1,5 +1,27 @@
 # ZGR Tech Orders
 
+## Mémo des identifiants client — 9 novembre 2026
+
+Actions → E-mail et mot de passe ouvre un mémo administrateur partagé par les
+ventes ayant la même identité client (nom normalisé et lien Facebook), web et APK.
+Le mot de passe est masqué et chargé seulement sur Afficher. Les modifications
+d’e-mail conservent le secret existant ; Effacer puis Enregistrer le supprime.
+Les identifiants ne sont jamais ajoutés aux ventes, au dashboard, aux exports,
+aux messages de renouvellement ou aux outils MCP. Renommer l’identité client
+crée une autre identité de mémo, sans rattachement automatique d’un secret.
+
+Le Worker utilise le secret géré `TECH_CREDENTIALS_KEY` (32 octets en base64),
+distinct des sessions et absent du dépôt. R2 conserve une enveloppe AES-GCM avec
+IV aléatoire et chemin du document authentifié. Le namespace séparé est
+`tech-orders/v1/private-credentials/`. Les écritures vérifient révision et ETag.
+Ne pas remplacer la clé existante : elle est nécessaire pour relire le coffre.
+
+Validation : quatre tests spécifiques de chiffrement, autorisation, concurrence
+et corruption passent ; 219 tests unitaires passent. Suite Worker : 101/102,
+échec antérieur sur `un responsable de validation peut valider puis rouvrir un CV
+sans être administrateur`, reproduit sur le commit de référence 8900c56 dans
+un worktree isolé. Aucun identifiant réel n’a été saisi pour les essais.
+
 Ajout du 25 octobre 2026. Paramètres → ZGR Tech Orders, administrateurs uniquement.
 Ce module est un registre privé de ventes : il ne crée pas d’abonnement, ne prélève
 aucun paiement et ne produit pas de fausse facture fournisseur.
